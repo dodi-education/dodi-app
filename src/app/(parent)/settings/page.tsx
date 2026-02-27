@@ -9,6 +9,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { AIProviderConfig } from "@/components/parent/ai-provider-config";
 import { getAccount } from "@/lib/services/accounts";
 import { createClient } from "@/lib/supabase/server";
 
@@ -59,19 +60,7 @@ export default async function SettingsPage() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("aiConfigTitle")}</CardTitle>
-          <CardDescription>
-            {t("aiConfigDescription")}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
-            {t("aiConfigPlaceholder")}
-          </p>
-        </CardContent>
-      </Card>
+      <AIProviderConfig />
     </div>
   );
 }

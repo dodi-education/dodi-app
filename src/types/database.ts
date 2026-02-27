@@ -53,6 +53,7 @@ export interface Database {
           active_personality_id: string | null;
           memory: string | null;
           language: string;
+          first_interaction: boolean;
           preferences: Json | null;
           created_at: string;
           updated_at: string;
@@ -67,6 +68,7 @@ export interface Database {
           active_personality_id?: string | null;
           memory?: string | null;
           language?: string;
+          first_interaction?: boolean;
           preferences?: Json | null;
           created_at?: string;
           updated_at?: string;
@@ -81,6 +83,7 @@ export interface Database {
           active_personality_id?: string | null;
           memory?: string | null;
           language?: string;
+          first_interaction?: boolean;
           preferences?: Json | null;
           created_at?: string;
           updated_at?: string;

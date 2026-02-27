@@ -397,6 +397,8 @@ The MVP focuses on delivering a functional, delightful core experience:
 - [ ] Profile memory system (auto-update from conversations)
 - [ ] Onboarding conversation flow
 - [ ] First interaction with Dodi should be that the kid can draw itself and use this as an avatar
+- [ ] Active/Sleep mode: When no interaction happens within 10 seconds, Dodi goes into sleep mode.
+- [ ] Sleep mode stops sending voice to AI provider. Dodi can be wakened up with a tap/click on the companion.
 
 ### Phase 3: Voice & Games
 - [ ] Voice interaction (AI provider native TTS/STT)

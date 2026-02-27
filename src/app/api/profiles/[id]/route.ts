@@ -18,6 +18,7 @@ const UpdateProfileSchema = z.object({
     .optional(),
   birthdate: z.string().nullable().optional(),
   language: z.string().min(2).max(5).optional(),
+  first_interaction: z.boolean().optional(),
   avatar_config: z.record(z.string(), z.any()).nullable().optional(),
   preferences: z.record(z.string(), z.any()).nullable().optional(),
 });
