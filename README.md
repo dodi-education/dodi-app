@@ -1,2 +1,2 @@
-# dodi-web
+# dodi
 Web platform for social learning experience.
