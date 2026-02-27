@@ -28,7 +28,8 @@ Dodi is a personalized, AI-powered learning platform that creates fun, targeted 
 - Central to the kid-facing UX — the interface should be as minimal as possible, with Dodi driving navigation and interaction
 - Configurable personality stored as editable markup text (per kid profile)
 - Adapts language, tone, and complexity based on the kid's age (derived from birthdate)
-- Kids can customize Dodi's appearance (colors, accessories, themes — e.g., superhero Dodi, pirate Dodi)
+- Kids can customize Dodi's appearance & behavior (colors, accessories, themes — e.g., superhero Dodi, pirate Dodi)
+- Configuration & storage of MEMORY and PERSONAS should follow the OpenClaw markup schema, but stored in the database instead of files for performance.
 
 ### Games (Exercises)
 - AI-generated educational exercises tailored to each kid's profile
@@ -52,6 +53,7 @@ Dodi is a personalized, AI-powered learning platform that creates fun, targeted 
 - Registers via email/password or Google Auth
 - Manages account settings, kid profiles, and API keys
 - Switches between **Configuration View** (parent-facing) and **App View** (kid-facing)
+- Configuration View can only be accessed with a defined PIN code
 - Creates and manages Dodi personalities (markup text documents)
 - Assigns active personality per kid profile
 - Configures AI providers, model selection, and voice settings
@@ -62,7 +64,6 @@ Dodi is a personalized, AI-powered learning platform that creates fun, targeted 
 - Voice is the primary mode for younger kids (pre-readers)
 - Browses and plays previously created games
 - Creates new games with Dodi's guidance
-- Manages a personal weekly schedule/timetable
 - Can share games and add friends via name tags / QR codes
 
 ---
@@ -153,6 +154,10 @@ Dodi is a personalized, AI-powered learning platform that creates fun, targeted 
 - **F9.5**: Architecture portable to native iOS/Android (React Native / Capacitor in future)
 
 ---
+
+## Design / UI Rules
+- Page layouts should be optimized for Mobile (Tablet and Phone) and PC, depending on screen resolution.
+- All buttons or links should have the cursor: pointer value.
 
 ## Technical Architecture
 
@@ -379,19 +384,19 @@ The MVP focuses on delivering a functional, delightful core experience:
 
 ### Phase 1: Foundation
 - [x] Project setup (Next.js, Supabase, Tailwind, CI/CD)
-- [ ] Authentication (email/password + Google OAuth)
-- [ ] Account and profile management
-- [ ] Parent configuration view (basic)
-- [ ] Responsive layout with parent/kid view toggle
+- [x] Landing page
+- [x] Authentication (email/password)
+- [x] Account and profile management
+- [x] Parent configuration view (basic)
+- [x] Responsive layout with parent/kid view toggle
 
 ### Phase 2: Dodi Companion
-- [ ] Animated Dodi mascot (Lottie, core states)
-- [ ] Text-based chat with Dodi
 - [ ] AI provider configuration (API keys, model selection)
 - [ ] Multi-provider AI abstraction layer
 - [ ] Dodi personality system (create, edit, assign)
 - [ ] Profile memory system (auto-update from conversations)
 - [ ] Onboarding conversation flow
+- [ ] First interaction with Dodi should be that the kid can draw itself and use this as an avatar
 
 ### Phase 3: Voice & Games
 - [ ] Voice interaction (AI provider native TTS/STT)
@@ -399,13 +404,13 @@ The MVP focuses on delivering a functional, delightful core experience:
 - [ ] AI game generation pipeline
 - [ ] Sandboxed game execution
 - [ ] Game metadata and categorization
+- [ ] Built-in default game: Drawing (can also be used for drawing an avatar)
 - [ ] Game library (browse, filter, replay)
 
-### Phase 4: Social & Schedule
+### Phase 4: Social
 - [ ] Name tags and QR code generation
 - [ ] Friend system (add, accept, manage)
 - [ ] Game sharing
-- [ ] Weekly schedule/timetable view
 - [ ] Activity emoji picker
 
 ### Phase 5: Polish & PWA
@@ -429,3 +434,4 @@ The MVP focuses on delivering a functional, delightful core experience:
 - **Advanced analytics**: Learning progress dashboards for parents
 - **Multiplayer games**: Real-time collaborative or competitive games between friends
 - **Parental insights**: AI-generated summaries of learning progress and recommendations
+- **Kid schedule**: Manages a personal weekly schedule/timetable
