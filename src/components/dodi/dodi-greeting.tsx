@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
 
 import { SpeechBubble } from "@/components/dodi/speech-bubble";
+import { DodiVoiceSession } from "@/components/dodi/dodi-voice-session";
 
 interface DodiGreetingProps {
   profileId: string;
@@ -31,13 +32,13 @@ export function DodiGreeting({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ first_interaction: true }),
       }).catch(() => {
-        // Silent failure — the greeting was already shown
+        // Silent failure — the flag update is best-effort
       });
     }
   }, [hasProvider, firstInteraction, profileId]);
 
   if (!hasProvider) {
-    // No AI provider configured
+    // No AI provider configured — text-only fallback
     return (
       <SpeechBubble className="w-full max-w-xs text-center">
         <p className="text-lg font-bold text-dodi-800">
@@ -50,23 +51,12 @@ export function DodiGreeting({
     );
   }
 
-  if (!firstInteraction) {
-    // First time with a voice provider — special greeting
-    return (
-      <SpeechBubble className="w-full max-w-xs text-center">
-        <p className="text-lg font-bold text-dodi-800">
-          {t("firstVoice")}
-        </p>
-      </SpeechBubble>
-    );
-  }
-
-  // Normal session greeting
+  // Provider is configured — start a live voice session
+  // The system instruction includes the greeting, so Dodi will speak on connect
   return (
-    <SpeechBubble className="w-full max-w-xs text-center">
-      <p className="text-lg font-bold text-dodi-800">
-        {t("greetingWithName", { name: profileName })}
-      </p>
-    </SpeechBubble>
+    <DodiVoiceSession
+      profileId={profileId}
+      profileName={profileName}
+    />
   );
 }
