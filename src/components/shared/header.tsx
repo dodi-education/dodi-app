@@ -22,13 +22,15 @@ export function Header() {
   }
 
   async function handleSwitchToKid() {
-    // Fetch profiles to get active profile's language
+    // Fetch profiles to resolve active profile's language
     const response = await fetch("/api/profiles");
     if (response.ok) {
       const profiles = await response.json();
       if (profiles.length > 0) {
-        // Set active profile and kid locale cookies based on first profile
-        const profile = profiles[0];
+        // Keep the last-used profile if it still exists, otherwise default to first
+        const existing = document.cookie.match(/(?:^|; )dodi-active-profile=([^;]*)/);
+        const lastUsedId = existing ? decodeURIComponent(existing[1]) : null;
+        const profile = profiles.find((p: { id: string }) => p.id === lastUsedId) ?? profiles[0];
         document.cookie = `dodi-active-profile=${profile.id}; path=/; max-age=86400`;
         const kidLocale = profile.language ?? "en";
         document.cookie = `dodi-kid-locale=${kidLocale}; path=/; max-age=86400`;

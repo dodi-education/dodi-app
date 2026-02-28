@@ -55,6 +55,7 @@ export function DodiGreeting({
   // The system instruction includes the greeting, so Dodi will speak on connect
   return (
     <DodiVoiceSession
+      key={profileId}
       profileId={profileId}
       profileName={profileName}
     />
