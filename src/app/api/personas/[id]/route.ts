@@ -3,27 +3,14 @@ import { z } from "zod/v4";
 
 import { createClient } from "@/lib/supabase/server";
 import {
-  deleteProfile,
-  getProfile,
-  updateProfile,
-} from "@/lib/services/profiles";
+  deletePersona,
+  getPersona,
+  updatePersona,
+} from "@/lib/services/personas";
 
-const UpdateProfileSchema = z.object({
-  display_name: z.string().min(1).max(50).optional(),
-  name_tag: z
-    .string()
-    .min(3)
-    .max(30)
-    .regex(/^[a-z0-9-]+$/, "Only lowercase letters, numbers, and hyphens")
-    .optional(),
-  birthdate: z.string().nullable().optional(),
-  language: z.string().min(2).max(5).optional(),
-  active_persona_id: z.string().uuid().nullable().optional(),
-  first_interaction: z.boolean().optional(),
-  memory: z.string().max(100000).nullable().optional(),
-  parent_notes: z.string().max(50000).nullable().optional(),
-  avatar_config: z.record(z.string(), z.any()).nullable().optional(),
-  preferences: z.record(z.string(), z.any()).nullable().optional(),
+const UpdatePersonaSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  soul: z.string().min(1).max(50000).optional(),
 });
 
 interface RouteContext {
@@ -45,14 +32,14 @@ export async function GET(
   }
 
   try {
-    const profile = await getProfile(supabase, id);
-    if (!profile || profile.account_id !== user.id) {
+    const persona = await getPersona(supabase, id);
+    if (!persona || (!persona.is_system_default && persona.account_id !== user.id)) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
-    return NextResponse.json(profile);
+    return NextResponse.json(persona);
   } catch {
     return NextResponse.json(
-      { error: "Failed to fetch profile" },
+      { error: "Failed to fetch persona" },
       { status: 500 },
     );
   }
@@ -72,14 +59,20 @@ export async function PATCH(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // Verify ownership
-  const existing = await getProfile(supabase, id);
+  const existing = await getPersona(supabase, id);
   if (!existing || existing.account_id !== user.id) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
+  if (existing.is_system_default) {
+    return NextResponse.json(
+      { error: "Cannot edit the default persona" },
+      { status: 403 },
+    );
+  }
+
   const body: unknown = await request.json();
-  const result = UpdateProfileSchema.safeParse(body);
+  const result = UpdatePersonaSchema.safeParse(body);
 
   if (!result.success) {
     return NextResponse.json(
@@ -89,11 +82,11 @@ export async function PATCH(
   }
 
   try {
-    const profile = await updateProfile(supabase, id, result.data);
-    return NextResponse.json(profile);
+    const persona = await updatePersona(supabase, id, result.data);
+    return NextResponse.json(persona);
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : "Failed to update profile";
+      error instanceof Error ? error.message : "Failed to update persona";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
@@ -112,18 +105,24 @@ export async function DELETE(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // Verify ownership
-  const existing = await getProfile(supabase, id);
+  const existing = await getPersona(supabase, id);
   if (!existing || existing.account_id !== user.id) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
+  if (existing.is_system_default) {
+    return NextResponse.json(
+      { error: "Cannot delete the default persona" },
+      { status: 403 },
+    );
+  }
+
   try {
-    await deleteProfile(supabase, id);
+    await deletePersona(supabase, id);
     return NextResponse.json({ success: true });
   } catch {
     return NextResponse.json(
-      { error: "Failed to delete profile" },
+      { error: "Failed to delete persona" },
       { status: 500 },
     );
   }

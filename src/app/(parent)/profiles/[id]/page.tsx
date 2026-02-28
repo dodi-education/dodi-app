@@ -15,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { PersonaSelector } from "@/components/parent/persona-selector";
 import { locales, type Locale } from "@/i18n/config";
 
 import type { Profile } from "@/types/database";
@@ -34,6 +35,7 @@ export default function EditProfilePage() {
   const [nameTag, setNameTag] = useState("");
   const [birthdate, setBirthdate] = useState("");
   const [language, setLanguage] = useState<string>("en");
+  const [activePersonaId, setActivePersonaId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
@@ -55,6 +57,7 @@ export default function EditProfilePage() {
       setNameTag(data.name_tag);
       setBirthdate(data.birthdate ?? "");
       setLanguage(data.language ?? "en");
+      setActivePersonaId(data.active_persona_id);
       setFetching(false);
     }
     load();
@@ -181,6 +184,11 @@ export default function EditProfilePage() {
                 {t("languageHint")}
               </p>
             </div>
+            <PersonaSelector
+              profileId={params.id}
+              value={activePersonaId}
+              onChange={setActivePersonaId}
+            />
             {error && (
               <p className="text-sm text-destructive">{error}</p>
             )}
@@ -197,6 +205,21 @@ export default function EditProfilePage() {
               </Button>
             </div>
           </form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("memoryTitle")}</CardTitle>
+          <CardDescription>{t("memoryDescription")}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button
+            variant="outline"
+            onClick={() => router.push(`/profiles/${params.id}/memory`)}
+          >
+            {t("viewMemory")}
+          </Button>
         </CardContent>
       </Card>
 

@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { listProfiles } from "@/lib/services/profiles";
+import { listPersonas } from "@/lib/services/personas";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function ProfilesPage() {
@@ -26,6 +27,9 @@ export default async function ProfilesPage() {
 
   const t = await getTranslations("profiles");
   const profiles = await listProfiles(supabase, user.id);
+
+  const personas = await listPersonas(supabase, user.id);
+  const personaMap = new Map(personas.map((p) => [p.id, p.name]));
 
   return (
     <div className="flex flex-col gap-6">
@@ -66,8 +70,8 @@ export default async function ProfilesPage() {
                     <CardDescription>@{profile.name_tag}</CardDescription>
                   </div>
                   <Badge variant="secondary">
-                    {profile.active_personality_id
-                      ? t("personalitySet")
+                    {profile.active_persona_id
+                      ? personaMap.get(profile.active_persona_id) ?? t("default")
                       : t("default")}
                   </Badge>
                 </CardHeader>

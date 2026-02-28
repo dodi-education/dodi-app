@@ -14,6 +14,7 @@ export type GeminiLiveEvent =
   | { type: "setupComplete" }
   | { type: "audio"; data: string } // base64 PCM
   | { type: "text"; text: string }
+  | { type: "inputTranscription"; text: string }
   | { type: "interrupted" }
   | { type: "turnComplete" }
   | { type: "error"; error: string }
@@ -88,6 +89,7 @@ export class GeminiLiveClient {
         systemInstruction: {
           parts: [{ text: this.config.systemInstruction }],
         },
+        inputAudioTranscription: {},
       },
     };
 
@@ -125,6 +127,14 @@ export class GeminiLiveClient {
               this.onEvent({ type: "text", text: part.text });
             }
           }
+        }
+
+        // Input transcription (kid's speech transcribed by Gemini)
+        if (content.inputTranscription?.text) {
+          this.onEvent({
+            type: "inputTranscription",
+            text: content.inputTranscription.text,
+          });
         }
 
         // Turn complete

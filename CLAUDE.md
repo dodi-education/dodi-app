@@ -8,6 +8,39 @@ Dodi is a personalized, AI-powered learning platform for kids. See `PROJECT.md` 
 
 ---
 
+## AI-Agentic First Design Philosophy
+
+When AI is the primary consumer and producer of data, **design the format for AI comprehension first**, human readability second, machine queryability third. This principle guides all data architecture decisions in Dodi where AI companions interact with stored content.
+
+### Markup Over Schema
+
+Prefer markdown/text documents over structured relational tables for AI-consumed data (memory, personas, context). AI models understand narrative documents natively — they don't need data serialized into rows and columns.
+
+**Example — Memory system:**
+
+| Traditional DB approach | AI-native markup approach |
+|------------------------|--------------------------|
+| `confidence: 0.85` (float column) | "observed across 4 sessions, most recently Feb 28" |
+| `category: 'challenge'` (enum) | Lives under a `## Challenges` heading the AI reads naturally |
+| `observed_by: uuid` (FK to personas) | "First noted by Explorer Dodi, confirmed across 12+ sessions" |
+| Requires ORM, serialization, rigid schema | AI reads it as a briefing doc and writes it like a journal |
+
+The markup approach is richer, more contextual, and the AI reasons about it directly without a serialization layer.
+
+### When Structured Data IS Appropriate
+
+Structured relational schemas remain correct for **operational data** — accounts, profiles, games, schedules, friends — data that needs indexing, filtering, joins, and RLS policies. The AI-agentic principle applies specifically to **AI-facing content**: persona `soul` documents, profile `memory` dossiers, and `parent_notes`.
+
+### Implications
+
+- Persona definitions are markdown `soul` documents, not JSONB config objects
+- Kid memory is a markdown dossier the AI reads/writes, not a table of memory entries
+- Parent notes are freeform text, not structured form fields
+- The AI can evolve document structure organically without schema migrations
+- Parents can read and edit these documents directly as plain text
+
+---
+
 ## Directory Structure
 
 ```

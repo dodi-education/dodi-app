@@ -26,10 +26,10 @@ Dodi is a personalized, AI-powered learning platform that creates fun, targeted 
 - A **blue robot dodo bird** mascot visualized as an animated SVG/Lottie character
 - Animated states: idle, talking, happy, thinking, celebrating, sad
 - Central to the kid-facing UX — the interface should be as minimal as possible, with Dodi driving navigation and interaction
-- Configurable personality stored as editable markup text (per kid profile)
+- Configurable personality (persona) stored as editable markdown `soul` document (per account, assignable per profile)
 - Adapts language, tone, and complexity based on the kid's age (derived from birthdate)
 - Kids can customize Dodi's appearance & behavior (colors, accessories, themes — e.g., superhero Dodi, pirate Dodi)
-- Configuration & storage of MEMORY and PERSONAS should follow the OpenClaw markup schema, but stored in the database instead of files for performance.
+- Persona `soul` documents and profile `memory` dossiers follow the **AI-agentic first** design principle: stored as markdown text that AI reads/writes natively (see CLAUDE.md for rationale)
 
 ### Games (Exercises)
 - AI-generated educational exercises tailored to each kid's profile
@@ -40,10 +40,13 @@ Dodi is a personalized, AI-powered learning platform that creates fun, targeted 
 
 ### Profiles & Personalization
 - Each parent account can have multiple kid profiles
-- Each profile stores: birthdate, preferences, skill levels, learning goals
-- A separate **memory** document (markup text) captures what Dodi has learned about the kid
-- AI interactions progressively build this memory to improve personalization
-- Parents can view and edit all stored profile data at any time
+- Each profile stores: birthdate, avatar config, language, UI preferences
+- A separate **memory dossier** (markdown text) captures what the AI companion has learned about the kid — challenges, strengths, interests, learning style, and emotional patterns
+- Memory is **profile-level** (shared across personas) — when a parent switches the kid's companion from playful Dodi to studious Dodi, all learned knowledge transfers. Persona attribution is embedded in the markup ("First noted by [persona_name@persona_id]") rather than in a separate table
+- The companion progressively updates the memory dossier after meaningful interactions
+- A separate **parent notes** field (markdown text) allows parents to provide context the AI reads but does not modify (e.g., "she's going through a tough time at school this week")
+- AI interactions use both memory + parent notes as a briefing document before each session
+- Parents can view and edit all stored profile data (including the AI memory) at any time
 
 ---
 
@@ -55,7 +58,7 @@ Dodi is a personalized, AI-powered learning platform that creates fun, targeted 
 - Switches between **Configuration View** (parent-facing) and **App View** (kid-facing)
 - Configuration View can only be accessed with a defined PIN code
 - Creates and manages Dodi personalities (markup text documents)
-- Assigns active personality per kid profile
+- Assigns active dodi persona per kid profile
 - Configures AI providers, model selection, and voice settings
 - Views and edits all stored kid data (memory, preferences, game history)
 
@@ -80,21 +83,24 @@ Dodi is a personalized, AI-powered learning platform that creates fun, targeted 
 ### F2: Profile Management
 - **F2.1**: Create multiple kid profiles per account
 - **F2.2**: Each profile has: display name, birthdate, avatar/theme, unique name tag
-- **F2.3**: Profile-specific memory (markup text, editable by parents)
-- **F2.4**: Profile-specific Dodi personality assignment
+- **F2.3**: Profile-specific AI memory dossier (markdown, auto-maintained by companion, editable by parents)
+- **F2.4**: Profile-specific Dodi persona assignment
 - **F2.5**: Profile switching from the parent configuration view
+- **F2.6**: Profile-specific parent notes (markdown, parent-authored context that AI reads but does not modify)
 
 ### F3: Dodi Companion
 - **F3.1**: Animated SVG/Lottie mascot with multiple states (idle, talking, happy, thinking, celebrating)
 - **F3.2**: Text-based chat interaction
 - **F3.3**: Voice-based interaction using AI provider native voice/live APIs
 - **F3.4**: Toggle between text and voice mode
-- **F3.5**: Configurable personality as editable markup text
-- **F3.6**: Multiple personality presets — parents can create, edit, and assign per profile
-- **F3.7**: Personality markup includes instructions for information-gathering behavior
+- **F3.5**: Configurable persona as editable markup text
+- **F3.6**: Multiple persona presets — parents can create, edit, and assign per profile
+- **F3.7**: Persona markup includes instructions for information-gathering behavior
 - **F3.8**: Initial onboarding conversation to understand the kid's needs and preferences
 - **F3.9**: Age-adaptive tone and complexity (based on kid's birthdate)
 - **F3.10**: Dodi appearance customization by kids (colors, accessories, themes)
+- **F3.11**: Progressive memory building — companion updates the profile memory dossier after meaningful interactions
+- **F3.12**: Memory-aware context — companion reads memory + parent notes as briefing before each session
 
 ### F4: AI Provider Configuration
 - **F4.1**: Parents enter API keys for supported providers
@@ -139,7 +145,7 @@ Dodi is a personalized, AI-powered learning platform that creates fun, targeted 
 ### F8: Parent Configuration View
 - **F8.1**: Toggle between config view and kid app view
 - **F8.2**: Dashboard overview of all kid profiles
-- **F8.3**: Edit kid memory documents
+- **F8.3**: Edit kid memory dossier and parent notes
 - **F8.4**: Manage Dodi personalities
 - **F8.5**: AI provider and model configuration
 - **F8.6**: View game history and activity per profile
@@ -234,16 +240,18 @@ profiles (kid profiles)
 ├── name_tag (unique, human-readable)
 ├── birthdate (encrypted)
 ├── avatar_config (jsonb) — Dodi customization
-├── active_personality_id (FK → personalities)
-├── memory (text, encrypted) — markup doc of what Dodi knows
-├── preferences (jsonb)
+├── active_persona_id (FK → personas)
+├── memory (text, encrypted) — AI-maintained markdown dossier (see Memory Document Format)
+├── parent_notes (text, encrypted) — parent-authored context for AI (not modified by companion)
+├── preferences (jsonb) — UI preferences (theme, layout, accessibility)
 ├── created_at, updated_at
 
-personalities (Dodi personality presets)
+personas (Dodi personality presets)
 ├── id (uuid, PK)
 ├── account_id (FK → accounts)
 ├── name
-├── content (text) — markup personality definition
+├── soul (text) — markdown personality definition (identity, style, learning approach, boundaries)
+├── is_default (boolean) — one default per account, protected from deletion
 ├── created_at, updated_at
 
 games
@@ -285,6 +293,53 @@ conversations (chat history with Dodi)
 ├── context (text) — summarized context for AI
 ├── created_at, updated_at
 ```
+
+### Memory Document Format
+
+The profile `memory` field is a markdown dossier that the AI companion reads as a briefing document and updates as a journal. The recommended structure:
+
+```markdown
+## Challenges
+- Struggles with fraction division — confuses numerator/denominator
+  roles. Observed across 4 sessions, most recently [date].
+- Gets frustrated with multi-step word problems (3+ steps).
+
+## Strengths
+- Excellent spatial reasoning — solves geometry puzzles quickly.
+- Strong reading comprehension for age. (First noted by Explorer
+  Dodi, confirmed across 12+ sessions)
+
+## Interests
+- Dinosaurs (deep, persistent interest — always engages)
+- Space exploration (moderate, comes and goes)
+- Minecraft (effective as a teaching metaphor)
+
+## Learning Style
+- Responds best to visual explanations and analogies
+- Challenge-driven: "can you figure out..." works better than
+  direct instruction
+- Needs 2-3 warm-up exchanges before focusing
+
+## Emotional Patterns
+- Frustration trigger: being corrected 2+ times on the same
+  concept. Recovery: switch topic briefly, return later.
+- Gets excited discussing interests — good entry point for
+  new topics.
+
+## Recent Updates
+- [date]: Showed improvement in multiplication tables (7s and 8s)
+- [date]: New interest in volcanoes after science video
+```
+
+This structure is a guideline, not enforced — the AI adapts the format as needed. Key design properties:
+
+- **Confidence** is expressed as frequency/recency ("observed across 4 sessions") — not numeric scores
+- **Attribution** is inline ("First noted by Explorer Dodi") — not in a separate table
+- **Temporality** is narrative ("most recently Feb 28", "comes and goes") — not timestamp columns
+- **Actionable context** is embedded ("effective as a teaching metaphor") — not metadata flags
+- **Changelog** is a rotating `## Recent Updates` section — not an audit table
+
+The persona's `soul` document can include instructions on how the companion should observe and record to this dossier.
 
 ### Game Sandboxing
 
@@ -391,17 +446,17 @@ The MVP focuses on delivering a functional, delightful core experience:
 - [x] Responsive layout with parent/kid view toggle
 
 ### Phase 2: Dodi Companion
-- [ ] AI provider configuration (API keys, model selection)
-- [ ] Multi-provider AI abstraction layer
-- [ ] Dodi personality system (create, edit, assign)
-- [ ] Profile memory system (auto-update from conversations)
+- [x] AI provider configuration (API keys, model selection)
+- [x] Multi-provider AI abstraction layer
+- [x] Dodi persona system (create, edit, assign)
+- [ ] Profile memory system (auto-update from conversations).
 - [ ] Onboarding conversation flow
 - [ ] First interaction with Dodi should be that the kid can draw itself and use this as an avatar
 - [ ] Active/Sleep mode: When no interaction happens within 10 seconds, Dodi goes into sleep mode.
 - [ ] Sleep mode stops sending voice to AI provider. Dodi can be wakened up with a tap/click on the companion.
 
 ### Phase 3: Voice & Games
-- [ ] Voice interaction (AI provider native TTS/STT)
+- [x] Voice interaction (AI provider native TTS/STT)
 - [ ] Voice/text mode toggle
 - [ ] AI game generation pipeline
 - [ ] Sandboxed game execution
@@ -422,6 +477,7 @@ The MVP focuses on delivering a functional, delightful core experience:
 - [ ] Onboarding tutorial
 - [ ] Performance optimization
 - [ ] Accessibility audit
+- [ ] Before initially deploying the DB to supabase, merge all migrations into a single schema to avoid unnecessary migration steps.
 
 ---
 

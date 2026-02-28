@@ -13,6 +13,8 @@ export function SidebarNav() {
   const navItems = [
     { href: "/dashboard", label: t("dashboard"), icon: "📊" },
     { href: "/profiles", label: t("profiles"), icon: "👦" },
+    { href: "/personas", label: t("personas"), icon: "🎭" },
+    { href: "/system-logs", label: t("systemLogs"), icon: "🧠" },
     { href: "/settings", label: t("settings"), icon: "⚙️" },
   ];
 
@@ -47,6 +49,8 @@ export function BottomNav() {
   const navItems = [
     { href: "/dashboard", label: t("dashboard"), icon: "📊" },
     { href: "/profiles", label: t("profiles"), icon: "👦" },
+    { href: "/personas", label: t("personas"), icon: "🎭" },
+    { href: "/system-logs", label: t("systemLogs"), icon: "🧠" },
     { href: "/settings", label: t("settings"), icon: "⚙️" },
   ];
 

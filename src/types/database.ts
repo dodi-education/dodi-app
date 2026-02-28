@@ -50,8 +50,9 @@ export interface Database {
           name_tag: string;
           birthdate: string | null;
           avatar_config: Json | null;
-          active_personality_id: string | null;
+          active_persona_id: string | null;
           memory: string | null;
+          parent_notes: string | null;
           language: string;
           first_interaction: boolean;
           preferences: Json | null;
@@ -65,8 +66,9 @@ export interface Database {
           name_tag: string;
           birthdate?: string | null;
           avatar_config?: Json | null;
-          active_personality_id?: string | null;
+          active_persona_id?: string | null;
           memory?: string | null;
+          parent_notes?: string | null;
           language?: string;
           first_interaction?: boolean;
           preferences?: Json | null;
@@ -80,8 +82,9 @@ export interface Database {
           name_tag?: string;
           birthdate?: string | null;
           avatar_config?: Json | null;
-          active_personality_id?: string | null;
+          active_persona_id?: string | null;
           memory?: string | null;
+          parent_notes?: string | null;
           language?: string;
           first_interaction?: boolean;
           preferences?: Json | null;
@@ -90,30 +93,87 @@ export interface Database {
         };
         Relationships: [];
       };
-      personalities: {
+      personas: {
         Row: {
           id: string;
-          account_id: string;
+          account_id: string | null;
           name: string;
-          content: string;
+          soul: string;
+          is_system_default: boolean;
           created_at: string;
           updated_at: string;
         };
         Insert: {
           id?: string;
-          account_id: string;
+          account_id?: string | null;
           name: string;
-          content: string;
+          soul: string;
+          is_system_default?: boolean;
           created_at?: string;
           updated_at?: string;
         };
         Update: {
           id?: string;
-          account_id?: string;
+          account_id?: string | null;
           name?: string;
-          content?: string;
+          soul?: string;
+          is_system_default?: boolean;
           created_at?: string;
           updated_at?: string;
+        };
+        Relationships: [];
+      };
+      transcript_checkpoints: {
+        Row: {
+          profile_id: string;
+          account_id: string;
+          transcript: string;
+          session_started_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          profile_id: string;
+          account_id: string;
+          transcript: string;
+          session_started_at?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          profile_id?: string;
+          account_id?: string;
+          transcript?: string;
+          session_started_at?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      system_logs: {
+        Row: {
+          id: string;
+          profile_id: string;
+          account_id: string;
+          persona_id: string | null;
+          event: string;
+          message: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          profile_id: string;
+          account_id: string;
+          persona_id?: string | null;
+          event: string;
+          message: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          profile_id?: string;
+          account_id?: string;
+          persona_id?: string | null;
+          event?: string;
+          message?: string;
+          created_at?: string;
         };
         Relationships: [];
       };
@@ -130,7 +190,15 @@ export interface Database {
 // Convenience type aliases
 export type Account = Database["public"]["Tables"]["accounts"]["Row"];
 export type Profile = Database["public"]["Tables"]["profiles"]["Row"];
-export type Personality = Database["public"]["Tables"]["personalities"]["Row"];
+export type Persona = Database["public"]["Tables"]["personas"]["Row"];
+export type SystemLog = Database["public"]["Tables"]["system_logs"]["Row"];
+export type SystemLogInsert =
+  Database["public"]["Tables"]["system_logs"]["Insert"];
+export type TranscriptCheckpoint =
+  Database["public"]["Tables"]["transcript_checkpoints"]["Row"];
 
 export type ProfileInsert = Database["public"]["Tables"]["profiles"]["Insert"];
 export type ProfileUpdate = Database["public"]["Tables"]["profiles"]["Update"];
+
+export type PersonaInsert = Database["public"]["Tables"]["personas"]["Insert"];
+export type PersonaUpdate = Database["public"]["Tables"]["personas"]["Update"];
