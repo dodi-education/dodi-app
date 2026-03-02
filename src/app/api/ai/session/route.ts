@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod/v4";
-import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { Database, TranscriptCheckpoint } from "@/types/database";
 import { createClient } from "@/lib/supabase/server";
 import { getProfile } from "@/lib/services/profiles";
 import {
@@ -10,7 +8,7 @@ import {
   getModelConfig,
 } from "@/lib/services/ai-providers";
 import { getGlobalDefaultPersona, getPersona } from "@/lib/services/personas";
-import { getMemory, getParentNotes, EMPTY_MEMORY_HINT, processMemoryUpdate } from "@/lib/services/memory";
+import { getMemory, getParentNotes, EMPTY_MEMORY_HINT } from "@/lib/services/memory";
 import { logMemoryEvent } from "@/lib/services/system-logs";
 
 const SessionRequestSchema = z.object({
@@ -152,18 +150,6 @@ export async function POST(request: Request): Promise<NextResponse> {
       // logging failure is non-critical
     });
 
-    // Check for orphaned checkpoint and recover (non-blocking)
-    recoverOrphanedCheckpoint(
-      supabase,
-      profileId,
-      user.id,
-      persona.id,
-      persona.soul,
-      apiKey,
-    ).catch(() => {
-      // recovery failure is non-critical
-    });
-
     return NextResponse.json({
       apiKey,
       model: modelConfig.voiceModel,
@@ -175,60 +161,5 @@ export async function POST(request: Request): Promise<NextResponse> {
     const message =
       error instanceof Error ? error.message : "Failed to create session";
     return NextResponse.json({ error: message }, { status: 500 });
-  }
-}
-
-/** Recover an orphaned transcript checkpoint for this profile. */
-async function recoverOrphanedCheckpoint(
-  supabase: SupabaseClient<Database>,
-  profileId: string,
-  accountId: string,
-  personaId: string,
-  personaSoul: string,
-  apiKey: string,
-): Promise<void> {
-  // Check for checkpoint
-  const { data: checkpointRow } = await supabase
-    .from("transcript_checkpoints")
-    .select("*")
-    .eq("profile_id", profileId)
-    .single();
-
-  const checkpoint = checkpointRow as unknown as TranscriptCheckpoint | null;
-  if (!checkpoint) return;
-
-  // Delete first to prevent double-processing
-  await supabase
-    .from("transcript_checkpoints")
-    .delete()
-    .eq("profile_id", profileId);
-
-  // Process the recovered transcript
-  try {
-    await processMemoryUpdate({
-      supabase,
-      profileId,
-      accountId,
-      personaId,
-      personaSoul,
-      sessionTranscript: checkpoint.transcript,
-      apiKey,
-    });
-
-    await logMemoryEvent(supabase, {
-      profile_id: profileId,
-      account_id: accountId,
-      persona_id: personaId,
-      event: "checkpoint_recovered",
-      message: `Recovered transcript from interrupted session${checkpoint.session_started_at ? ` (started ${new Date(checkpoint.session_started_at).toLocaleTimeString()})` : ""}`,
-    });
-  } catch (error) {
-    await logMemoryEvent(supabase, {
-      profile_id: profileId,
-      account_id: accountId,
-      persona_id: personaId,
-      event: "error",
-      message: `Checkpoint recovery failed: ${error instanceof Error ? error.message : "unknown error"}`,
-    });
   }
 }
