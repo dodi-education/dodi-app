@@ -16,6 +16,12 @@ interface TranscriptEntry {
   timestamp: string;
 }
 
+interface StoredTranscript {
+  profileId: string;
+  entries: TranscriptEntry[];
+  sessionStartedAt: string;
+}
+
 interface VoiceSessionState {
   status: SessionStatus;
   dodiSpeaking: boolean;
@@ -38,9 +44,15 @@ let currentProfileId: string | null = null;
 let transcript: TranscriptEntry[] = [];
 let sessionStartedAt: string | null = null;
 
-const CHECKPOINT_STORAGE_KEY = "dodi-transcript-checkpoint";
-const MIN_TRANSCRIPT_ENTRIES = 3;
+// Normal session end requires substantive conversation for AI processing
+const MIN_MEMORY_UPDATE_ENTRIES = 3;
+// Beacon/recovery paths save anything — even 1 entry is worth preserving on crash
+const MIN_BEACON_ENTRIES = 1;
 const BEACON_MAX_BYTES = 60000; // ~60KB, leaving headroom under 64KB browser limit
+
+function storageKey(profileId: string): string {
+  return `dodi-transcript-${profileId}`;
+}
 
 function formatTranscript(entries: TranscriptEntry[]): string {
   return entries
@@ -51,50 +63,68 @@ function formatTranscript(entries: TranscriptEntry[]): string {
     .join("\n");
 }
 
-function mirrorToSessionStorage(): void {
+// --- localStorage helpers ---
+
+function persistToLocalStorage(): void {
+  if (!currentProfileId) return;
   try {
-    sessionStorage.setItem(
-      CHECKPOINT_STORAGE_KEY,
-      JSON.stringify({
-        profileId: currentProfileId,
-        transcript,
-        sessionStartedAt,
-      }),
-    );
+    const data: StoredTranscript = {
+      profileId: currentProfileId,
+      entries: transcript,
+      sessionStartedAt: sessionStartedAt ?? new Date().toISOString(),
+    };
+    localStorage.setItem(storageKey(currentProfileId), JSON.stringify(data));
   } catch {
-    // sessionStorage may be unavailable or full — ignore
+    // localStorage may be unavailable or full — ignore
   }
 }
 
-function clearSessionStorage(): void {
+function readLocalStorage(profileId: string): StoredTranscript | null {
   try {
-    sessionStorage.removeItem(CHECKPOINT_STORAGE_KEY);
+    const raw = localStorage.getItem(storageKey(profileId));
+    if (!raw) return null;
+    return JSON.parse(raw) as StoredTranscript;
+  } catch {
+    return null;
+  }
+}
+
+function clearLocalStorage(profileId: string): void {
+  try {
+    localStorage.removeItem(storageKey(profileId));
   } catch {
     // ignore
   }
 }
 
-function handleBeforeUnload(): void {
-  if (!currentProfileId || transcript.length < MIN_TRANSCRIPT_ENTRIES) return;
+// --- Beacon helper ---
 
-  const formatted = formatTranscript(transcript);
+/**
+ * Read localStorage, clear it, send transcript to the learning endpoint via
+ * sendBeacon. If the beacon fails to queue, restore localStorage so the data
+ * survives for recovery on next app load.
+ */
+function sendTranscriptBeacon(): void {
+  if (!currentProfileId) return;
+
+  const stored = readLocalStorage(currentProfileId);
+  if (!stored || stored.entries.length < MIN_BEACON_ENTRIES) return;
+
+  const formatted = formatTranscript(stored.entries);
   const payload = JSON.stringify({
-    profileId: currentProfileId,
-    transcript: formatted,
-    sessionStartedAt,
+    profileId: stored.profileId,
+    sessionTranscript: formatted,
   });
 
-  // Truncate if payload is too large for sendBeacon
+  // Truncate if payload exceeds sendBeacon size limit
   let finalPayload = payload;
   if (new Blob([payload]).size > BEACON_MAX_BYTES) {
-    // Keep the most recent entries that fit
-    const entries = [...transcript];
-    while (entries.length > MIN_TRANSCRIPT_ENTRIES) {
+    const entries = [...stored.entries];
+    while (entries.length > MIN_BEACON_ENTRIES) {
       entries.shift();
       const truncated = JSON.stringify({
-        profileId: currentProfileId,
-        transcript: formatTranscript(entries),
-        sessionStartedAt,
+        profileId: stored.profileId,
+        sessionTranscript: formatTranscript(entries),
       });
       if (new Blob([truncated]).size <= BEACON_MAX_BYTES) {
         finalPayload = truncated;
@@ -103,8 +133,44 @@ function handleBeforeUnload(): void {
     }
   }
 
-  navigator.sendBeacon("/api/ai/transcript-checkpoint", finalPayload);
+  // Clear localStorage BEFORE beacon — minimises double-processing
+  clearLocalStorage(currentProfileId);
+
+  try {
+    const blob = new Blob([finalPayload], { type: "application/json" });
+    const sent = navigator.sendBeacon("/api/ai/memory-update", blob);
+    if (!sent) {
+      // Beacon failed to queue — restore so next session start can recover
+      persistToLocalStorageRaw(currentProfileId, stored);
+    }
+  } catch {
+    // Restore on any error
+    persistToLocalStorageRaw(currentProfileId, stored);
+  }
 }
+
+function persistToLocalStorageRaw(
+  profileId: string,
+  data: StoredTranscript,
+): void {
+  try {
+    localStorage.setItem(storageKey(profileId), JSON.stringify(data));
+  } catch {
+    // ignore
+  }
+}
+
+// --- Page lifecycle handlers ---
+
+function handleBeforeUnload(): void {
+  sendTranscriptBeacon();
+}
+
+function handlePageHide(): void {
+  sendTranscriptBeacon();
+}
+
+// --- Resource cleanup ---
 
 function cleanup(): void {
   abortController?.abort();
@@ -131,12 +197,29 @@ export const useVoiceSessionStore = create<VoiceSessionState>((set, get) => ({
     // Clean up any existing session
     cleanup();
     window.removeEventListener("beforeunload", handleBeforeUnload);
+    window.removeEventListener("pagehide", handlePageHide);
+
+    // Recover unprocessed transcript from a previous crashed session
+    const stored = readLocalStorage(profileId);
+    if (stored && stored.entries.length >= MIN_BEACON_ENTRIES) {
+      const formatted = formatTranscript(stored.entries);
+      fetch("/api/ai/memory-update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          profileId: stored.profileId,
+          sessionTranscript: formatted,
+        }),
+      }).catch(() => {
+        // Recovery failure is non-critical
+      });
+    }
+    clearLocalStorage(profileId);
 
     // Reset transcript state
     currentProfileId = profileId;
     transcript = [];
     sessionStartedAt = new Date().toISOString();
-    clearSessionStorage();
 
     set({ status: "connecting", error: null, dodiSpeaking: false, micActive: false });
 
@@ -193,8 +276,9 @@ export const useVoiceSessionStore = create<VoiceSessionState>((set, get) => ({
         return;
       }
 
-      // Register beforeunload for crash resilience
+      // Register page lifecycle handlers for crash resilience
       window.addEventListener("beforeunload", handleBeforeUnload);
+      window.addEventListener("pagehide", handlePageHide);
 
       // Create audio streamer for playback
       streamer = new AudioStreamer();
@@ -230,7 +314,7 @@ export const useVoiceSessionStore = create<VoiceSessionState>((set, get) => ({
               text: event.text,
               timestamp: new Date().toISOString(),
             });
-            mirrorToSessionStorage();
+            persistToLocalStorage();
             break;
 
           case "inputTranscription":
@@ -240,7 +324,7 @@ export const useVoiceSessionStore = create<VoiceSessionState>((set, get) => ({
               text: event.text,
               timestamp: new Date().toISOString(),
             });
-            mirrorToSessionStorage();
+            persistToLocalStorage();
             break;
 
           case "turnComplete":
@@ -280,14 +364,15 @@ export const useVoiceSessionStore = create<VoiceSessionState>((set, get) => ({
   },
 
   endSession: () => {
-    // Unregister beforeunload
+    // Unregister page lifecycle handlers
     window.removeEventListener("beforeunload", handleBeforeUnload);
-    clearSessionStorage();
+    window.removeEventListener("pagehide", handlePageHide);
 
-    // Fire memory update if we have enough transcript
-    if (currentProfileId && transcript.length >= MIN_TRANSCRIPT_ENTRIES) {
+    const pid = currentProfileId;
+
+    // Fire memory update if we have enough transcript for AI processing
+    if (pid && transcript.length >= MIN_MEMORY_UPDATE_ENTRIES) {
       const formatted = formatTranscript(transcript);
-      const pid = currentProfileId;
 
       // Fire-and-forget — don't block the UI
       fetch("/api/ai/memory-update", {
@@ -300,6 +385,11 @@ export const useVoiceSessionStore = create<VoiceSessionState>((set, get) => ({
       }).catch(() => {
         // Memory update failure is non-critical
       });
+    }
+
+    // Clear localStorage — session ended normally, no recovery needed
+    if (pid) {
+      clearLocalStorage(pid);
     }
 
     // Reset transcript state
