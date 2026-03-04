@@ -232,7 +232,6 @@
     "memoryStored": "Erinnerung gespeichert",
     "memoryDiscarded": "Erinnerung verworfen",
     "memoryUpdated": "Erinnerung aktualisiert",
-    "checkpointRecovered": "Checkpoint wiederhergestellt",
     "error": "Fehler"
   },
   "nav": {

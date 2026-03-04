@@ -129,17 +129,6 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
 
--- Transcript checkpoints: crash resilience for voice sessions
-create table public.transcript_checkpoints (
-  profile_id uuid primary key references public.profiles(id) on delete cascade,
-  account_id uuid not null references public.accounts(id) on delete cascade,
-  transcript text not null,
-  session_started_at timestamptz,
-  created_at timestamptz not null default now()
-);
-
--- reverse: drop table public.transcript_checkpoints;
-
 -- System logs: append-only event log for memory-related activity
 create table public.system_logs (
   id uuid primary key default gen_random_uuid(),
@@ -206,25 +195,6 @@ create policy "Users can update own personas"
 
 create policy "Users can delete own personas"
   on public.personas for delete
-  using (auth.uid() = account_id);
-
--- Transcript checkpoints: users can manage own checkpoints
-alter table public.transcript_checkpoints enable row level security;
-
-create policy "Users can view own checkpoints"
-  on public.transcript_checkpoints for select
-  using (auth.uid() = account_id);
-
-create policy "Users can create own checkpoints"
-  on public.transcript_checkpoints for insert
-  with check (auth.uid() = account_id);
-
-create policy "Users can update own checkpoints"
-  on public.transcript_checkpoints for update
-  using (auth.uid() = account_id);
-
-create policy "Users can delete own checkpoints"
-  on public.transcript_checkpoints for delete
   using (auth.uid() = account_id);
 
 -- System logs: append-only (SELECT + INSERT only)

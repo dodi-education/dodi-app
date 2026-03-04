@@ -123,30 +123,6 @@ export interface Database {
         };
         Relationships: [];
       };
-      transcript_checkpoints: {
-        Row: {
-          profile_id: string;
-          account_id: string;
-          transcript: string;
-          session_started_at: string | null;
-          created_at: string;
-        };
-        Insert: {
-          profile_id: string;
-          account_id: string;
-          transcript: string;
-          session_started_at?: string | null;
-          created_at?: string;
-        };
-        Update: {
-          profile_id?: string;
-          account_id?: string;
-          transcript?: string;
-          session_started_at?: string | null;
-          created_at?: string;
-        };
-        Relationships: [];
-      };
       system_logs: {
         Row: {
           id: string;
@@ -194,9 +170,6 @@ export type Persona = Database["public"]["Tables"]["personas"]["Row"];
 export type SystemLog = Database["public"]["Tables"]["system_logs"]["Row"];
 export type SystemLogInsert =
   Database["public"]["Tables"]["system_logs"]["Insert"];
-export type TranscriptCheckpoint =
-  Database["public"]["Tables"]["transcript_checkpoints"]["Row"];
-
 export type ProfileInsert = Database["public"]["Tables"]["profiles"]["Insert"];
 export type ProfileUpdate = Database["public"]["Tables"]["profiles"]["Update"];
 

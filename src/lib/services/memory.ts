@@ -133,7 +133,7 @@ interface ProcessMemoryUpdateResult {
 
 /**
  * Shared function for processing memory updates.
- * Used by both the API route and orphan checkpoint recovery.
+ * Used by the memory-update API route.
  */
 export async function processMemoryUpdate(
   params: ProcessMemoryUpdateParams,

@@ -29,7 +29,6 @@ const EVENT_TYPES = [
   "memory_stored",
   "memory_discarded",
   "memory_updated",
-  "checkpoint_recovered",
   "error",
 ] as const;
 
@@ -38,7 +37,6 @@ const EVENT_BADGE_STYLES: Record<string, string> = {
   memory_stored: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
   memory_discarded: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
   memory_updated: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
-  checkpoint_recovered: "bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200",
   error: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
 };
 
@@ -50,7 +48,6 @@ function getEventLabel(event: string, t: ReturnType<typeof useTranslations>): st
     memory_stored: t("memoryStored"),
     memory_discarded: t("memoryDiscarded"),
     memory_updated: t("memoryUpdated"),
-    checkpoint_recovered: t("checkpointRecovered"),
     error: t("error"),
   };
   return labelMap[event] ?? event;

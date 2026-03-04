@@ -232,7 +232,6 @@
     "memoryStored": "Memory stored",
     "memoryDiscarded": "Memory discarded",
     "memoryUpdated": "Memory updated",
-    "checkpointRecovered": "Checkpoint recovered",
     "error": "Error"
   },
   "nav": {
