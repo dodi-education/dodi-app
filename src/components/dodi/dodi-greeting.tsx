@@ -1,41 +1,31 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { useTranslations } from "next-intl";
 
 import { SpeechBubble } from "@/components/dodi/speech-bubble";
 import { DodiVoiceSession } from "@/components/dodi/dodi-voice-session";
+import { useVoiceSessionStore } from "@/stores/voice-session-store";
 
 interface DodiGreetingProps {
   profileId: string;
   profileName: string;
   hasProvider: boolean;
-  firstInteraction: boolean;
 }
 
 export function DodiGreeting({
   profileId,
   profileName,
   hasProvider,
-  firstInteraction,
 }: DodiGreetingProps) {
   const t = useTranslations("kid");
-  const markedRef = useRef(false);
+  const prewarmSession = useVoiceSessionStore((state) => state.prewarmSession);
 
-  // If provider was just added and first_interaction is false,
-  // mark it as true in the DB so subsequent visits show the normal greeting
   useEffect(() => {
-    if (hasProvider && !firstInteraction && !markedRef.current) {
-      markedRef.current = true;
-      fetch(`/api/profiles/${profileId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ first_interaction: true }),
-      }).catch(() => {
-        // Silent failure — the flag update is best-effort
-      });
+    if (hasProvider) {
+      void prewarmSession(profileId);
     }
-  }, [hasProvider, firstInteraction, profileId]);
+  }, [hasProvider, prewarmSession, profileId]);
 
   if (!hasProvider) {
     // No AI provider configured — text-only fallback
@@ -51,8 +41,7 @@ export function DodiGreeting({
     );
   }
 
-  // Provider is configured — start a live voice session
-  // The system instruction includes the greeting, so Dodi will speak on connect
+  // Provider is configured — prewarm happens in background and starts on first tap
   return (
     <DodiVoiceSession
       key={profileId}

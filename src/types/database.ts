@@ -123,6 +123,75 @@ export interface Database {
         };
         Relationships: [];
       };
+      games: {
+        Row: {
+          id: string;
+          account_id: string | null;
+          profile_id: string | null;
+          source_game_id: string | null;
+          system_key: string | null;
+          is_system: boolean;
+          title: string;
+          description: string;
+          subject: string;
+          difficulty: string;
+          target_age_min: number;
+          target_age_max: number;
+          estimated_duration_minutes: number;
+          tags: string[];
+          code_bundle: string;
+          markdown: string;
+          metadata: Json;
+          created_by: "system" | "ai" | "kid";
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          account_id?: string | null;
+          profile_id?: string | null;
+          source_game_id?: string | null;
+          system_key?: string | null;
+          is_system?: boolean;
+          title: string;
+          description?: string;
+          subject?: string;
+          difficulty?: string;
+          target_age_min?: number;
+          target_age_max?: number;
+          estimated_duration_minutes?: number;
+          tags?: string[];
+          code_bundle: string;
+          markdown?: string;
+          metadata?: Json;
+          created_by?: "system" | "ai" | "kid";
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          account_id?: string | null;
+          profile_id?: string | null;
+          source_game_id?: string | null;
+          system_key?: string | null;
+          is_system?: boolean;
+          title?: string;
+          description?: string;
+          subject?: string;
+          difficulty?: string;
+          target_age_min?: number;
+          target_age_max?: number;
+          estimated_duration_minutes?: number;
+          tags?: string[];
+          code_bundle?: string;
+          markdown?: string;
+          metadata?: Json;
+          created_by?: "system" | "ai" | "kid";
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       system_logs: {
         Row: {
           id: string;
@@ -167,6 +236,7 @@ export interface Database {
 export type Account = Database["public"]["Tables"]["accounts"]["Row"];
 export type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 export type Persona = Database["public"]["Tables"]["personas"]["Row"];
+export type Game = Database["public"]["Tables"]["games"]["Row"];
 export type SystemLog = Database["public"]["Tables"]["system_logs"]["Row"];
 export type SystemLogInsert =
   Database["public"]["Tables"]["system_logs"]["Insert"];
@@ -175,3 +245,5 @@ export type ProfileUpdate = Database["public"]["Tables"]["profiles"]["Update"];
 
 export type PersonaInsert = Database["public"]["Tables"]["personas"]["Insert"];
 export type PersonaUpdate = Database["public"]["Tables"]["personas"]["Update"];
+export type GameInsert = Database["public"]["Tables"]["games"]["Insert"];
+export type GameUpdate = Database["public"]["Tables"]["games"]["Update"];

@@ -54,6 +54,15 @@ export class AudioStreamer {
     };
   }
 
+  primeFromGesture(): void {
+    const ctx = this.ensureContext();
+    if (ctx.state === "suspended") {
+      void ctx.resume().catch(() => {
+        // Best-effort resume from user gesture
+      });
+    }
+  }
+
   stop(): void {
     for (const source of this.activeSources) {
       try {

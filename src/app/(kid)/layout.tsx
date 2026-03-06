@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 
+import { Icon, type IconName } from "@/components/shared/icon";
 import { cn } from "@/lib/utils";
 import { ProfileSwitcher } from "@/components/kid/profile-switcher";
 
@@ -16,10 +17,10 @@ export default function KidLayout({
   const pathname = usePathname();
   const router = useRouter();
 
-  const kidNavItems = [
-    { href: "/home", label: t("home"), icon: "🏠" },
-    { href: "/games", label: t("games"), icon: "🎮" },
-    { href: "/friends", label: t("friends"), icon: "👫" },
+  const kidNavItems: Array<{ href: string; label: string; icon: IconName }> = [
+    { href: "/home", label: t("home"), icon: "home" },
+    { href: "/games", label: t("games"), icon: "games" },
+    { href: "/friends", label: t("friends"), icon: "friends" },
   ];
 
   function handleSwitchToParent() {
@@ -48,21 +49,21 @@ export default function KidLayout({
       </main>
 
       {/* Bottom navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 flex items-center justify-around border-t bg-white/90 py-2 backdrop-blur-sm">
+      <nav className="fixed bottom-0 left-0 right-0 z-40 flex items-center justify-around border-t bg-white/90 py-2 backdrop-blur-sm">
         {kidNavItems.map((item) => {
           const isActive = pathname.startsWith(item.href);
           return (
             <Link
               key={item.href}
               href={item.href}
-              className={cn(
-                "flex flex-col items-center gap-1 rounded-lg px-4 py-2 text-xs transition-colors",
-                isActive
-                  ? "text-dodi-600"
-                  : "text-muted-foreground hover:text-dodi-500",
-              )}
-            >
-              <span className="text-xl">{item.icon}</span>
+            className={cn(
+              "flex flex-col items-center gap-1 rounded-lg px-4 py-2 text-xs transition-colors",
+              isActive
+                ? "text-dodi-600"
+                : "text-muted-foreground hover:text-dodi-500",
+            )}
+          >
+              <Icon name={item.icon} className="h-6 w-6" />
               <span className="font-medium">{item.label}</span>
             </Link>
           );

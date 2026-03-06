@@ -3,8 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Check } from "lucide-react";
 
+import { Icon } from "@/components/shared/icon";
 import { cn } from "@/lib/utils";
 
 import type { Profile } from "@/types/database";
@@ -120,7 +120,7 @@ export function ProfileSwitcher() {
                   {profile.display_name}
                 </span>
                 {isActive && (
-                  <Check className="h-4 w-4 text-dodi-600" />
+                  <Icon name="check" className="h-4 w-4 text-dodi-600" />
                 )}
               </button>
             );

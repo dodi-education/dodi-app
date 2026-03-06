@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 
+import { Icon, type IconName } from "@/components/shared/icon";
 import { Button } from "@/components/ui/button";
 import { LanguageSwitcher } from "@/components/shared/language-switcher";
 
@@ -71,22 +72,22 @@ export default async function LandingPage() {
           </h2>
           <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-4">
             <FeatureCard
-              icon="🧠"
+              icon="feature_smart"
               title={t("featureSmartTitle")}
               description={t("featureSmartDesc")}
             />
             <FeatureCard
-              icon="🎮"
+              icon="feature_games"
               title={t("featureGamesTitle")}
               description={t("featureGamesDesc")}
             />
             <FeatureCard
-              icon="🛡️"
+              icon="feature_privacy"
               title={t("featurePrivacyTitle")}
               description={t("featurePrivacyDesc")}
             />
             <FeatureCard
-              icon="🎨"
+              icon="feature_personal"
               title={t("featurePersonalTitle")}
               description={t("featurePersonalDesc")}
             />
@@ -131,13 +132,13 @@ function FeatureCard({
   title,
   description,
 }: {
-  icon: string;
+  icon: IconName;
   title: string;
   description: string;
 }) {
   return (
     <div className="rounded-xl border bg-card p-6 text-card-foreground">
-      <div className="mb-3 text-3xl">{icon}</div>
+      <Icon name={icon} className="mb-3 h-8 w-8 text-dodi-700" />
       <h3 className="mb-2 font-bold">{title}</h3>
       <p className="text-sm text-muted-foreground">{description}</p>
     </div>

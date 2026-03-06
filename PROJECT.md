@@ -448,16 +448,15 @@ The MVP focuses on delivering a functional, delightful core experience:
 ### Phase 2: Dodi Companion
 - [x] AI provider configuration (API keys, model selection)
 - [x] Multi-provider AI abstraction layer
+- [x] Voice interaction (AI provider native TTS/STT)
 - [x] Dodi persona system (create, edit, assign)
-- [ ] Profile memory system (auto-update from conversations).
+- [x] Profile memory system (auto-update from conversations).
 - [ ] Onboarding conversation flow
 - [ ] First interaction with Dodi should be that the kid can draw itself and use this as an avatar
 - [ ] Active/Sleep mode: When no interaction happens within 10 seconds, Dodi goes into sleep mode.
 - [ ] Sleep mode stops sending voice to AI provider. Dodi can be wakened up with a tap/click on the companion.
 
-### Phase 3: Voice & Games
-- [x] Voice interaction (AI provider native TTS/STT)
-- [ ] Voice/text mode toggle
+### Phase 3: Games
 - [ ] AI game generation pipeline
 - [ ] Sandboxed game execution
 - [ ] Game metadata and categorization
@@ -478,6 +477,9 @@ The MVP focuses on delivering a functional, delightful core experience:
 - [ ] Performance optimization
 - [ ] Accessibility audit
 - [ ] Before initially deploying the DB to supabase, merge all migrations into a single schema to avoid unnecessary migration steps.
+
+### Phase 6: Misc Improvements
+- [ ] Voice/text mode toggle
 
 ---
 

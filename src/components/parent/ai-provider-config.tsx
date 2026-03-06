@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Plus, Trash2, Eye, EyeOff, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 
+import { Icon } from "@/components/shared/icon";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -41,12 +41,13 @@ interface ProvidersResponse {
   modelConfig: AccountModelConfig | null;
 }
 
+const GAME_PROVIDER_FALLBACK = "__fallback__";
+
 export function AIProviderConfig() {
   const t = useTranslations("settings");
   const tc = useTranslations("common");
 
   const [providers, setProviders] = useState<ConfiguredProvider[]>([]);
-  const [modelConfig, setModelConfig] = useState<AccountModelConfig | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Dialog state
@@ -63,6 +64,8 @@ export function AIProviderConfig() {
   const [voiceProvider, setVoiceProvider] = useState<AIProviderId | "">("");
   const [voiceModel, setVoiceModel] = useState("");
   const [voiceName, setVoiceName] = useState("");
+  const [gameProvider, setGameProvider] = useState<AIProviderId | "">("");
+  const [gameModel, setGameModel] = useState("");
   const [configSaving, setConfigSaving] = useState(false);
   const [configSaved, setConfigSaved] = useState(false);
 
@@ -72,11 +75,18 @@ export function AIProviderConfig() {
       if (response.ok) {
         const data: ProvidersResponse = await response.json();
         setProviders(data.providers);
-        setModelConfig(data.modelConfig);
         if (data.modelConfig) {
           setVoiceProvider(data.modelConfig.voiceProvider);
           setVoiceModel(data.modelConfig.voiceModel);
           setVoiceName(data.modelConfig.voiceName);
+          setGameProvider(data.modelConfig.gameProvider ?? "");
+          setGameModel(data.modelConfig.gameModel ?? "");
+        } else {
+          setVoiceProvider("");
+          setVoiceModel("");
+          setVoiceName("");
+          setGameProvider("");
+          setGameModel("");
         }
       }
     } finally {
@@ -136,11 +146,18 @@ export function AIProviderConfig() {
       if (saveRes.ok) {
         const data: ProvidersResponse = await saveRes.json();
         setProviders(data.providers);
-        setModelConfig(data.modelConfig);
         if (data.modelConfig) {
           setVoiceProvider(data.modelConfig.voiceProvider);
           setVoiceModel(data.modelConfig.voiceModel);
           setVoiceName(data.modelConfig.voiceName);
+          setGameProvider(data.modelConfig.gameProvider ?? "");
+          setGameModel(data.modelConfig.gameModel ?? "");
+        } else {
+          setVoiceProvider("");
+          setVoiceModel("");
+          setVoiceName("");
+          setGameProvider("");
+          setGameModel("");
         }
         setDialogOpen(false);
         resetDialog();
@@ -170,20 +187,23 @@ export function AIProviderConfig() {
     if (res.ok) {
       const data: ProvidersResponse = await res.json();
       setProviders(data.providers);
-      setModelConfig(data.modelConfig);
       if (data.modelConfig) {
         setVoiceProvider(data.modelConfig.voiceProvider);
         setVoiceModel(data.modelConfig.voiceModel);
         setVoiceName(data.modelConfig.voiceName);
+        setGameProvider(data.modelConfig.gameProvider ?? "");
+        setGameModel(data.modelConfig.gameModel ?? "");
       } else {
         setVoiceProvider("");
         setVoiceModel("");
         setVoiceName("");
+        setGameProvider("");
+        setGameModel("");
       }
     }
   }
 
-  async function handleSaveVoiceConfig() {
+  async function handleSaveConfig() {
     if (!voiceProvider || !voiceModel || !voiceName) return;
 
     setConfigSaving(true);
@@ -197,14 +217,15 @@ export function AIProviderConfig() {
           voiceProvider,
           voiceModel,
           voiceName,
-          gameProvider: modelConfig?.gameProvider,
-          gameModel: modelConfig?.gameModel,
+          gameProvider: gameProvider || undefined,
+          gameModel: gameProvider ? gameModel : undefined,
         }),
       });
 
       if (res.ok) {
         const data: AccountModelConfig = await res.json();
-        setModelConfig(data);
+        setGameProvider(data.gameProvider ?? "");
+        setGameModel(data.gameModel ?? "");
         setConfigSaved(true);
         setTimeout(() => setConfigSaved(false), 2000);
       }
@@ -220,6 +241,10 @@ export function AIProviderConfig() {
 
   // Get models/voices for the selected voice provider
   const activeProviderDef = AI_PROVIDERS.find((p) => p.id === voiceProvider);
+  const activeGameProviderDef = AI_PROVIDERS.find((p) => p.id === gameProvider);
+  const voiceFallbackText = voiceProvider && voiceModel
+    ? `${voiceProvider} / ${voiceModel}`
+    : t("gameModelFallbackMissingVoice");
 
   if (loading) {
     return (
@@ -229,7 +254,7 @@ export function AIProviderConfig() {
         </CardHeader>
         <CardContent>
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <Icon name="loading" className="h-4 w-4 animate-spin" />
             Loading...
           </div>
         </CardContent>
@@ -273,7 +298,7 @@ export function AIProviderConfig() {
                     onClick={() => handleRemoveProvider(provider.id)}
                     className="cursor-pointer text-destructive hover:bg-destructive/10 hover:text-destructive"
                   >
-                    <Trash2 className="mr-1 h-4 w-4" />
+                    <Icon name="delete" className="mr-1 h-4 w-4" />
                     {t("removeProvider")}
                   </Button>
                 </div>
@@ -293,7 +318,7 @@ export function AIProviderConfig() {
               >
                 <DialogTrigger asChild>
                   <Button variant="outline" className="cursor-pointer w-fit">
-                    <Plus className="mr-2 h-4 w-4" />
+                    <Icon name="add" className="mr-2 h-4 w-4" />
                     {t("addProvider")}
                   </Button>
                 </DialogTrigger>
@@ -350,9 +375,9 @@ export function AIProviderConfig() {
                           aria-label={showKey ? "Hide API key" : "Show API key"}
                         >
                           {showKey ? (
-                            <EyeOff className="h-4 w-4" />
+                            <Icon name="hide" className="h-4 w-4" />
                           ) : (
-                            <Eye className="h-4 w-4" />
+                            <Icon name="show" className="h-4 w-4" />
                           )}
                         </button>
                       </div>
@@ -360,14 +385,14 @@ export function AIProviderConfig() {
 
                     {validationStatus === "valid" && (
                       <div className="flex items-center gap-2 text-sm text-green-600">
-                        <CheckCircle2 className="h-4 w-4" />
+                        <Icon name="success" className="h-4 w-4" />
                         {t("keyValid")}
                       </div>
                     )}
 
                     {validationStatus === "invalid" && (
                       <div className="flex items-center gap-2 text-sm text-destructive">
-                        <AlertCircle className="h-4 w-4" />
+                        <Icon name="alert" className="h-4 w-4" />
                         {validationError || t("keyInvalid")}
                       </div>
                     )}
@@ -381,7 +406,7 @@ export function AIProviderConfig() {
                     >
                       {validating || saving ? (
                         <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          <Icon name="loading" className="mr-2 h-4 w-4 animate-spin" />
                           {validating ? t("validating") : t("validating")}
                         </>
                       ) : (
@@ -400,6 +425,7 @@ export function AIProviderConfig() {
         <Card>
           <CardHeader>
             <CardTitle>{t("voiceConfig")}</CardTitle>
+            <CardDescription>{t("voiceConfigDescription")}</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             <div className="flex flex-col gap-2">
@@ -468,19 +494,86 @@ export function AIProviderConfig() {
               </>
             )}
 
+            <Separator />
+
+            <div className="flex flex-col gap-2">
+              <Label>{t("gameProvider")}</Label>
+              <Select
+                value={gameProvider || GAME_PROVIDER_FALLBACK}
+                onValueChange={(value) => {
+                  if (value === GAME_PROVIDER_FALLBACK) {
+                    setGameProvider("");
+                    setGameModel("");
+                    return;
+                  }
+
+                  const providerId = value as AIProviderId;
+                  setGameProvider(providerId);
+
+                  const providerDef = AI_PROVIDERS.find((provider) => provider.id === providerId);
+                  const defaultModel = providerDef?.models.find((model) => model.capabilities.includes("text"));
+                  setGameModel(defaultModel?.id ?? "");
+                }}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={GAME_PROVIDER_FALLBACK}>
+                    {t("gameProviderFallback")}
+                  </SelectItem>
+                  {providers.map((provider) => (
+                    <SelectItem key={provider.id} value={provider.id}>
+                      {provider.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {!gameProvider ? (
+              <p className="rounded-lg border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                {t("gameModelFallbackHint", { voiceModel: voiceFallbackText })}
+              </p>
+            ) : activeGameProviderDef ? (
+              <div className="flex flex-col gap-2">
+                <Label>{t("gameModel")}</Label>
+                <Select value={gameModel} onValueChange={setGameModel}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {activeGameProviderDef.models
+                      .filter((model) => model.capabilities.includes("text"))
+                      .map((model) => (
+                        <SelectItem key={model.id} value={model.id}>
+                          {model.name}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
+
             <Button
-              onClick={handleSaveVoiceConfig}
-              disabled={!voiceProvider || !voiceModel || !voiceName || configSaving}
+              onClick={handleSaveConfig}
+              disabled={
+                !voiceProvider ||
+                !voiceModel ||
+                !voiceName ||
+                configSaving ||
+                (Boolean(gameProvider) && !gameModel)
+              }
               className="cursor-pointer w-fit"
             >
               {configSaving ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Icon name="loading" className="mr-2 h-4 w-4 animate-spin" />
                   {tc("save")}
                 </>
               ) : configSaved ? (
                 <>
-                  <CheckCircle2 className="mr-2 h-4 w-4" />
+                  <Icon name="success" className="mr-2 h-4 w-4" />
                   {t("configSaved")}
                 </>
               ) : (

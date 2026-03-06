@@ -9,6 +9,7 @@ import { AudioStreamer } from "@/lib/ai/audio-streamer";
 import { AudioRecorder } from "@/lib/ai/audio-recorder";
 
 type SessionStatus = "idle" | "connecting" | "connected" | "error";
+type WarmState = "cold" | "warming" | "warm_ready" | "active" | "error";
 
 interface TranscriptEntry {
   role: "dodi" | "kid";
@@ -24,11 +25,16 @@ interface StoredTranscript {
 
 interface VoiceSessionState {
   status: SessionStatus;
+  warmState: WarmState;
+  warmReadyAt: string | null;
   dodiSpeaking: boolean;
   micActive: boolean;
   error: string | null;
 
-  startSession: (profileId: string) => Promise<void>;
+  prewarmSession: (profileId: string) => Promise<void>;
+  startSessionFromTap: (profileId: string) => Promise<void>;
+  ensureMicAfterGreeting: () => Promise<void>;
+  teardownWarmSession: () => void;
   endSession: () => void;
   toggleMic: () => void;
 }
@@ -38,11 +44,17 @@ let client: GeminiLiveClient | null = null;
 let streamer: AudioStreamer | null = null;
 let recorder: AudioRecorder | null = null;
 let abortController: AbortController | null = null;
+let warmTimeout: ReturnType<typeof setTimeout> | null = null;
 
 // Transcript state (kept outside Zustand — not needed for UI rendering)
 let currentProfileId: string | null = null;
 let transcript: TranscriptEntry[] = [];
 let sessionStartedAt: string | null = null;
+let tapRequested = false;
+let greetingSent = false;
+let firstTurnCompleteSeen = false;
+let micRequestInFlight = false;
+let tapStartedAtMs: number | null = null;
 
 // Normal session end requires substantive conversation for AI processing
 const MIN_MEMORY_UPDATE_ENTRIES = 3;
@@ -172,6 +184,13 @@ function handlePageHide(): void {
 
 // --- Resource cleanup ---
 
+function clearWarmTimeout(): void {
+  if (warmTimeout) {
+    clearTimeout(warmTimeout);
+    warmTimeout = null;
+  }
+}
+
 function cleanup(): void {
   abortController?.abort();
   abortController = null;
@@ -185,19 +204,81 @@ function cleanup(): void {
 
   client?.disconnect();
   client = null;
+
+  clearWarmTimeout();
+}
+
+function resetFlowFlags(): void {
+  tapRequested = false;
+  greetingSent = false;
+  firstTurnCompleteSeen = false;
+  micRequestInFlight = false;
+  tapStartedAtMs = null;
+}
+
+function scheduleWarmTimeout(profileId: string): void {
+  clearWarmTimeout();
+  warmTimeout = setTimeout(() => {
+    const state = useVoiceSessionStore.getState();
+    if (
+      state.status === "idle" &&
+      state.warmState === "warm_ready" &&
+      currentProfileId === profileId
+    ) {
+      state.teardownWarmSession();
+    }
+  }, 60000);
+}
+
+function activateWarmSession(set: (partial: Partial<VoiceSessionState>) => void): void {
+  if (!client || !currentProfileId || greetingSent) return;
+
+  clearWarmTimeout();
+  greetingSent = true;
+  firstTurnCompleteSeen = false;
+  sessionStartedAt = new Date().toISOString();
+
+  window.addEventListener("beforeunload", handleBeforeUnload);
+  window.addEventListener("pagehide", handlePageHide);
+
+  set({
+    status: "connected",
+    warmState: "active",
+    warmReadyAt: new Date().toISOString(),
+    error: null,
+  });
+
+  client.sendGreeting();
 }
 
 export const useVoiceSessionStore = create<VoiceSessionState>((set, get) => ({
   status: "idle",
+  warmState: "cold",
+  warmReadyAt: null,
   dodiSpeaking: false,
   micActive: false,
   error: null,
 
-  startSession: async (profileId: string) => {
-    // Clean up any existing session
-    cleanup();
+  prewarmSession: async (profileId: string) => {
+    if (!profileId) return;
+
+    const state = get();
+    if (
+      currentProfileId === profileId &&
+      (state.warmState === "warming" ||
+        state.warmState === "warm_ready" ||
+        state.warmState === "active")
+    ) {
+      return;
+    }
+
+    if (currentProfileId && currentProfileId !== profileId) {
+      get().teardownWarmSession();
+    }
+
     window.removeEventListener("beforeunload", handleBeforeUnload);
     window.removeEventListener("pagehide", handlePageHide);
+    cleanup();
 
     // Recover unprocessed transcript from a previous crashed session
     const stored = readLocalStorage(profileId);
@@ -216,99 +297,85 @@ export const useVoiceSessionStore = create<VoiceSessionState>((set, get) => ({
     }
     clearLocalStorage(profileId);
 
-    // Reset transcript state
     currentProfileId = profileId;
     transcript = [];
-    sessionStartedAt = new Date().toISOString();
-
-    set({ status: "connecting", error: null, dodiSpeaking: false, micActive: false });
+    sessionStartedAt = null;
+    greetingSent = false;
+    firstTurnCompleteSeen = false;
+    micRequestInFlight = false;
 
     const controller = new AbortController();
     abortController = controller;
 
+    set({
+      status: tapRequested ? "connecting" : "idle",
+      warmState: "warming",
+      warmReadyAt: null,
+      dodiSpeaking: false,
+      micActive: false,
+      error: null,
+    });
+
     try {
-      // navigator.mediaDevices requires a secure context (HTTPS or localhost)
-      if (!navigator.mediaDevices?.getUserMedia) {
+      const sessionRes = await fetch("/api/ai/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profileId }),
+        signal: controller.signal,
+      });
+
+      if (controller.signal.aborted) return;
+
+      if (!sessionRes.ok) {
+        const data = await sessionRes
+          .json()
+          .catch(() => ({ error: "Failed to prewarm session" }));
+        const errorMessage = data.error || `Session API returned ${sessionRes.status}`;
         set({
-          status: "error",
-          error: "secureContextRequired",
+          status: tapRequested ? "error" : "idle",
+          warmState: "error",
+          error: tapRequested ? errorMessage : null,
         });
         return;
       }
 
-      // Request mic permission AND fetch session config in parallel.
-      // getUserMedia MUST be called synchronously within the user gesture
-      // (click handler) — if we await the fetch first, the gesture context is lost.
-      const [micStream, sessionRes] = await Promise.all([
-        navigator.mediaDevices.getUserMedia({
-          audio: {
-            sampleRate: 16000,
-            channelCount: 1,
-            echoCancellation: true,
-            noiseSuppression: true,
-          },
-        }),
-        fetch("/api/ai/session", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ profileId }),
-          signal: controller.signal,
-        }),
-      ]);
-
-      if (controller.signal.aborted) {
-        // Clean up the mic stream if aborted
-        for (const track of micStream.getTracks()) track.stop();
-        return;
-      }
-
-      if (!sessionRes.ok) {
-        for (const track of micStream.getTracks()) track.stop();
-        const data = await sessionRes.json().catch(() => ({ error: "Failed to start session" }));
-        set({ status: "error", error: data.error || `Session API returned ${sessionRes.status}` });
-        return;
-      }
-
       const config: GeminiLiveConfig & { language: string } = await sessionRes.json();
+      if (controller.signal.aborted) return;
 
-      if (controller.signal.aborted) {
-        for (const track of micStream.getTracks()) track.stop();
-        return;
-      }
-
-      // Register page lifecycle handlers for crash resilience
-      window.addEventListener("beforeunload", handleBeforeUnload);
-      window.addEventListener("pagehide", handlePageHide);
-
-      // Create audio streamer for playback
       streamer = new AudioStreamer();
 
-      // Create recorder with the already-acquired mic stream
-      recorder = new AudioRecorder((base64Pcm: string) => {
-        client?.sendAudio(base64Pcm);
-      });
-      await recorder.startWithStream(micStream);
-      if (!controller.signal.aborted) {
-        set({ micActive: true });
-      }
-
-      // Create the WebSocket client
       const handleEvent = (event: GeminiLiveEvent): void => {
         if (controller.signal.aborted) return;
+        if (currentProfileId !== profileId) return;
 
         switch (event.type) {
           case "setupComplete":
-            set({ status: "connected" });
-            client?.sendGreeting();
+            if (tapRequested) {
+              activateWarmSession(set);
+            } else {
+              set({
+                status: "idle",
+                warmState: "warm_ready",
+                warmReadyAt: new Date().toISOString(),
+                error: null,
+              });
+              scheduleWarmTimeout(profileId);
+            }
             break;
 
           case "audio":
+            if (!greetingSent) return;
+            if (tapStartedAtMs !== null) {
+              const elapsed = Math.round(performance.now() - tapStartedAtMs);
+              tapStartedAtMs = null;
+              console.info("tap_to_first_audio_ms", elapsed);
+            }
             set({ dodiSpeaking: true });
             streamer?.addPcmChunk(event.data);
             break;
 
           case "text":
-            // Dodi's speech as text — capture for transcript
+            if (!greetingSent) return;
             transcript.push({
               role: "dodi",
               text: event.text,
@@ -318,7 +385,7 @@ export const useVoiceSessionStore = create<VoiceSessionState>((set, get) => ({
             break;
 
           case "inputTranscription":
-            // Kid's speech transcribed by Gemini
+            if (!greetingSent) return;
             transcript.push({
               role: "kid",
               text: event.text,
@@ -328,24 +395,61 @@ export const useVoiceSessionStore = create<VoiceSessionState>((set, get) => ({
             break;
 
           case "turnComplete":
+            if (!greetingSent) return;
             set({ dodiSpeaking: false });
             streamer?.resume();
+            if (!firstTurnCompleteSeen) {
+              firstTurnCompleteSeen = true;
+              void get().ensureMicAfterGreeting();
+            }
             break;
 
           case "interrupted":
+            if (!greetingSent) return;
             set({ dodiSpeaking: false });
             streamer?.stop();
             break;
 
-          case "error":
-            set({ status: "error", error: event.error });
+          case "error": {
+            const wasActive =
+              tapRequested ||
+              get().status === "connecting" ||
+              get().status === "connected" ||
+              get().warmState === "active";
+            window.removeEventListener("beforeunload", handleBeforeUnload);
+            window.removeEventListener("pagehide", handlePageHide);
+            cleanup();
+            resetFlowFlags();
+            set({
+              status: wasActive ? "error" : "idle",
+              warmState: "error",
+              warmReadyAt: null,
+              dodiSpeaking: false,
+              micActive: false,
+              error: wasActive ? event.error : null,
+            });
             break;
+          }
 
-          case "closed":
-            if (get().status === "connected" || get().status === "connecting") {
-              set({ status: "error", error: "Connection closed unexpectedly" });
-            }
+          case "closed": {
+            const wasActive =
+              get().status === "connecting" ||
+              get().status === "connected" ||
+              get().warmState === "active";
+            window.removeEventListener("beforeunload", handleBeforeUnload);
+            window.removeEventListener("pagehide", handlePageHide);
+            cleanup();
+            resetFlowFlags();
+            set({
+              status: wasActive ? "error" : "idle",
+              warmState: wasActive ? "error" : "cold",
+              warmReadyAt: null,
+              dodiSpeaking: false,
+              micActive: false,
+              error: wasActive ? "Connection closed unexpectedly" : null,
+            });
             break;
+          }
         }
       };
 
@@ -353,14 +457,126 @@ export const useVoiceSessionStore = create<VoiceSessionState>((set, get) => ({
       client.connect();
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return;
-      const message = err instanceof Error ? err.message : "Failed to connect";
-      // Map NotAllowedError to a friendlier key
-      if (err instanceof DOMException && err.name === "NotAllowedError") {
-        set({ status: "error", error: "micPermissionNeeded" });
-      } else {
-        set({ status: "error", error: message });
+      const message = err instanceof Error ? err.message : "Failed to prewarm session";
+      if (tapRequested) {
+        tapStartedAtMs = null;
       }
+      set({
+        status: tapRequested ? "error" : "idle",
+        warmState: "error",
+        warmReadyAt: null,
+        dodiSpeaking: false,
+        micActive: false,
+        error: tapRequested ? message : null,
+      });
     }
+  },
+
+  startSessionFromTap: async (profileId: string) => {
+    const state = get();
+    if (state.status === "connecting" || state.status === "connected") return;
+    if (!profileId) return;
+
+    if (currentProfileId && currentProfileId !== profileId) {
+      get().teardownWarmSession();
+    }
+
+    if (!streamer) {
+      streamer = new AudioStreamer();
+    }
+    streamer.primeFromGesture();
+
+    tapRequested = true;
+    tapStartedAtMs = performance.now();
+
+    const latest = get();
+    if (
+      currentProfileId === profileId &&
+      latest.warmState === "warm_ready" &&
+      client
+    ) {
+      activateWarmSession(set);
+      return;
+    }
+
+    set({
+      status: "connecting",
+      error: null,
+      dodiSpeaking: false,
+      micActive: false,
+    });
+
+    if (currentProfileId === profileId && latest.warmState === "warming") {
+      return;
+    }
+
+    void get().prewarmSession(profileId);
+  },
+
+  ensureMicAfterGreeting: async () => {
+    if (get().status !== "connected") return;
+    if (get().micActive || micRequestInFlight) return;
+    if (!currentProfileId) return;
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      set({ error: "secureContextRequired", micActive: false });
+      return;
+    }
+
+    micRequestInFlight = true;
+
+    try {
+      const micStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          sampleRate: 16000,
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+        },
+      });
+
+      if (get().status !== "connected") {
+        for (const track of micStream.getTracks()) track.stop();
+        return;
+      }
+
+      recorder?.stop();
+      const rec = new AudioRecorder((base64Pcm: string) => {
+        client?.sendAudio(base64Pcm);
+      });
+      recorder = rec;
+      await rec.startWithStream(micStream);
+      set({ micActive: true, error: null });
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "NotAllowedError") {
+        set({ micActive: false, error: "micPermissionNeeded" });
+      } else {
+        const message = err instanceof Error ? err.message : "Microphone unavailable";
+        set({ micActive: false, error: message });
+      }
+    } finally {
+      micRequestInFlight = false;
+    }
+  },
+
+  teardownWarmSession: () => {
+    window.removeEventListener("beforeunload", handleBeforeUnload);
+    window.removeEventListener("pagehide", handlePageHide);
+
+    cleanup();
+    resetFlowFlags();
+    currentProfileId = null;
+    transcript = [];
+    sessionStartedAt = null;
+
+    set({
+      status: "idle",
+      warmState: "cold",
+      warmReadyAt: null,
+      dodiSpeaking: false,
+      micActive: false,
+      error: null,
+    });
   },
 
   endSession: () => {
@@ -399,9 +615,12 @@ export const useVoiceSessionStore = create<VoiceSessionState>((set, get) => ({
 
     // Clean up resources
     cleanup();
+    resetFlowFlags();
 
     set({
       status: "idle",
+      warmState: "cold",
+      warmReadyAt: null,
       dodiSpeaking: false,
       micActive: false,
       error: null,
@@ -415,18 +634,7 @@ export const useVoiceSessionStore = create<VoiceSessionState>((set, get) => ({
       recorder = null;
       set({ micActive: false });
     } else {
-      // Re-request mic — this is from a click handler so gesture context is valid
-      const rec = new AudioRecorder((base64Pcm: string) => {
-        client?.sendAudio(base64Pcm);
-      });
-      recorder = rec;
-      rec.start()
-        .then(() => {
-          useVoiceSessionStore.setState({ micActive: true });
-        })
-        .catch(() => {
-          useVoiceSessionStore.setState({ micActive: false });
-        });
+      void get().ensureMicAfterGreeting();
     }
   },
 }));

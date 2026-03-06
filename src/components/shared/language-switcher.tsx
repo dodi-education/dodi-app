@@ -3,8 +3,8 @@
 import { useLocale } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useState, useRef, useEffect } from "react";
-import { Globe } from "lucide-react";
 
+import { Icon } from "@/components/shared/icon";
 import { locales, type Locale } from "@/i18n/config";
 
 const localeLabels: Record<Locale, string> = {
@@ -45,7 +45,7 @@ export function LanguageSwitcher() {
         className="flex items-center gap-1 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
         aria-label="Change language"
       >
-        <Globe className="h-4 w-4" />
+        <Icon name="globe" className="h-4 w-4" />
         <span className="text-xs font-medium">{localeLabels[locale as Locale]}</span>
       </button>
       {open && (

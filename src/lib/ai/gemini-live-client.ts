@@ -1,13 +1,21 @@
 /**
  * WebSocket client for Gemini Live API (BidiGenerateContent).
  * Manages the connection lifecycle, setup handshake, and bidirectional audio streaming.
+ * Supports function calling (tools) for structured game command execution.
  */
+
+export interface GeminiLiveToolDeclaration {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+}
 
 export interface GeminiLiveConfig {
   apiKey: string;
   model: string;
   voiceName: string;
   systemInstruction: string;
+  tools?: GeminiLiveToolDeclaration[];
 }
 
 export type GeminiLiveEvent =
@@ -15,6 +23,7 @@ export type GeminiLiveEvent =
   | { type: "audio"; data: string } // base64 PCM
   | { type: "text"; text: string }
   | { type: "inputTranscription"; text: string }
+  | { type: "toolCall"; id: string; name: string; args: Record<string, unknown> }
   | { type: "interrupted" }
   | { type: "turnComplete" }
   | { type: "error"; error: string }
@@ -73,27 +82,33 @@ export class GeminiLiveClient {
   }
 
   private sendSetup(): void {
-    const setupMessage = {
-      setup: {
-        model: `models/${this.config.model}`,
-        generationConfig: {
-          responseModalities: ["AUDIO"],
-          speechConfig: {
-            voiceConfig: {
-              prebuiltVoiceConfig: {
-                voiceName: this.config.voiceName,
-              },
+    const setup: Record<string, unknown> = {
+      model: `models/${this.config.model}`,
+      generationConfig: {
+        responseModalities: ["AUDIO"],
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: {
+              voiceName: this.config.voiceName,
             },
           },
         },
-        systemInstruction: {
-          parts: [{ text: this.config.systemInstruction }],
-        },
-        inputAudioTranscription: {},
       },
+      systemInstruction: {
+        parts: [{ text: this.config.systemInstruction }],
+      },
+      inputAudioTranscription: {},
     };
 
-    this.ws?.send(JSON.stringify(setupMessage));
+    if (this.config.tools && this.config.tools.length > 0) {
+      setup.tools = [
+        {
+          functionDeclarations: this.config.tools,
+        },
+      ];
+    }
+
+    this.ws?.send(JSON.stringify({ setup }));
   }
 
   private handleMessage(raw: string): void {
@@ -104,6 +119,22 @@ export class GeminiLiveClient {
       if (msg.setupComplete !== undefined) {
         this.setupComplete = true;
         this.onEvent({ type: "setupComplete" });
+        return;
+      }
+
+      // Tool call message
+      if (msg.toolCall) {
+        const functionCalls = msg.toolCall.functionCalls;
+        if (Array.isArray(functionCalls)) {
+          for (const fc of functionCalls) {
+            this.onEvent({
+              type: "toolCall",
+              id: fc.id ?? fc.name ?? "",
+              name: fc.name,
+              args: fc.args ?? {},
+            });
+          }
+        }
         return;
       }
 
@@ -125,6 +156,15 @@ export class GeminiLiveClient {
             }
             if (part.text) {
               this.onEvent({ type: "text", text: part.text });
+            }
+            // Function calls can also appear inside modelTurn parts
+            if (part.functionCall) {
+              this.onEvent({
+                type: "toolCall",
+                id: part.functionCall.id ?? part.functionCall.name ?? "",
+                name: part.functionCall.name,
+                args: part.functionCall.args ?? {},
+              });
             }
           }
         }
@@ -203,6 +243,49 @@ export class GeminiLiveClient {
           },
         ],
         turnComplete: true,
+      },
+    };
+
+    this.ws.send(JSON.stringify(msg));
+  }
+
+  /**
+   * Send context without completing the turn.
+   * The AI sees this text as background context but does not treat it as a conversation message.
+   */
+  sendContext(text: string): void {
+    if (!this.setupComplete || !this.ws) return;
+
+    const msg = {
+      clientContent: {
+        turns: [
+          {
+            role: "user",
+            parts: [{ text }],
+          },
+        ],
+        turnComplete: false,
+      },
+    };
+
+    this.ws.send(JSON.stringify(msg));
+  }
+
+  /**
+   * Send a tool/function call response back to the model.
+   */
+  sendToolResponse(callId: string, name: string, response: Record<string, unknown>): void {
+    if (!this.setupComplete || !this.ws) return;
+
+    const msg = {
+      toolResponse: {
+        functionResponses: [
+          {
+            id: callId,
+            name,
+            response,
+          },
+        ],
       },
     };
 

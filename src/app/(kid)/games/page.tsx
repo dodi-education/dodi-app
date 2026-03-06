@@ -1,17 +1,21 @@
+import { cookies } from "next/headers";
 import { getTranslations } from "next-intl/server";
 
-export default async function GamesPage() {
-  const t = await getTranslations("kid");
+import { GameLibrary } from "@/components/games/game-library";
 
-  return (
-    <div className="flex flex-col items-center gap-6 pt-8">
-      <h1 className="text-2xl font-bold text-dodi-800">{t("gamesTitle")}</h1>
-      <div className="w-full max-w-md rounded-2xl border-2 border-dashed border-dodi-200 bg-white p-8 text-center">
-        <p className="text-4xl">🎮</p>
-        <p className="mt-3 text-sm text-muted-foreground">
-          {t("gamesPlaceholder")}
-        </p>
+export default async function GamesPage() {
+  const t = await getTranslations("games");
+  const cookieStore = await cookies();
+  const profileId = cookieStore.get("dodi-active-profile")?.value;
+
+  if (!profileId) {
+    return (
+      <div className="w-full max-w-xl rounded-2xl border bg-white p-6 text-center shadow-sm">
+        <h1 className="text-xl font-bold text-dodi-800">{t("title")}</h1>
+        <p className="mt-2 text-sm text-muted-foreground">{t("profileRequired")}</p>
       </div>
-    </div>
-  );
+    );
+  }
+
+  return <GameLibrary profileId={profileId} />;
 }

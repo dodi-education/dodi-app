@@ -14,13 +14,11 @@ export default async function KidHomePage() {
 
   let profileName = "";
   let hasProvider = false;
-  let firstInteraction = false;
 
   if (profileId) {
     const profile = await getProfile(supabase, profileId);
     if (profile) {
       profileName = profile.display_name;
-      firstInteraction = profile.first_interaction;
       hasProvider = await hasAnyProvider(supabase, profile.account_id);
     }
   }
@@ -44,7 +42,6 @@ export default async function KidHomePage() {
           profileId={profileId}
           profileName={profileName}
           hasProvider={hasProvider}
-          firstInteraction={firstInteraction}
         />
       ) : (
         <div className="w-full max-w-xs rounded-2xl border border-dodi-200 bg-white p-4 text-center shadow-sm">

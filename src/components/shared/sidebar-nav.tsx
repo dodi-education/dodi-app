@@ -4,18 +4,19 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
 
+import { Icon, type IconName } from "@/components/shared/icon";
 import { cn } from "@/lib/utils";
 
 export function SidebarNav() {
   const t = useTranslations("nav");
   const pathname = usePathname();
 
-  const navItems = [
-    { href: "/dashboard", label: t("dashboard"), icon: "📊" },
-    { href: "/profiles", label: t("profiles"), icon: "👦" },
-    { href: "/personas", label: t("personas"), icon: "🎭" },
-    { href: "/system-logs", label: t("systemLogs"), icon: "🧠" },
-    { href: "/settings", label: t("settings"), icon: "⚙️" },
+  const navItems: Array<{ href: string; label: string; icon: IconName }> = [
+    { href: "/dashboard", label: t("dashboard"), icon: "dashboard" },
+    { href: "/profiles", label: t("profiles"), icon: "profiles" },
+    { href: "/personas", label: t("personas"), icon: "personas" },
+    { href: "/system-logs", label: t("systemLogs"), icon: "system_logs" },
+    { href: "/settings", label: t("settings"), icon: "settings" },
   ];
 
   return (
@@ -33,7 +34,7 @@ export function SidebarNav() {
                 : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
             )}
           >
-            <span>{item.icon}</span>
+            <Icon name={item.icon} className="h-4 w-4" />
             <span>{item.label}</span>
           </Link>
         );
@@ -46,12 +47,12 @@ export function BottomNav() {
   const t = useTranslations("nav");
   const pathname = usePathname();
 
-  const navItems = [
-    { href: "/dashboard", label: t("dashboard"), icon: "📊" },
-    { href: "/profiles", label: t("profiles"), icon: "👦" },
-    { href: "/personas", label: t("personas"), icon: "🎭" },
-    { href: "/system-logs", label: t("systemLogs"), icon: "🧠" },
-    { href: "/settings", label: t("settings"), icon: "⚙️" },
+  const navItems: Array<{ href: string; label: string; icon: IconName }> = [
+    { href: "/dashboard", label: t("dashboard"), icon: "dashboard" },
+    { href: "/profiles", label: t("profiles"), icon: "profiles" },
+    { href: "/personas", label: t("personas"), icon: "personas" },
+    { href: "/system-logs", label: t("systemLogs"), icon: "system_logs" },
+    { href: "/settings", label: t("settings"), icon: "settings" },
   ];
 
   return (
@@ -69,7 +70,7 @@ export function BottomNav() {
                 : "text-muted-foreground hover:text-accent-foreground",
             )}
           >
-            <span className="text-lg">{item.icon}</span>
+            <Icon name={item.icon} className="h-5 w-5" />
             <span>{item.label}</span>
           </Link>
         );

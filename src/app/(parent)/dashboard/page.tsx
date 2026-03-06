@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 
+import { Icon } from "@/components/shared/icon";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -43,7 +44,7 @@ export default async function DashboardPage() {
       {profiles.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center gap-4 py-12">
-            <p className="text-4xl">👦</p>
+            <Icon name="profiles" className="h-10 w-10 text-dodi-700" />
             <div className="text-center">
               <h3 className="font-semibold">{t("noProfilesTitle")}</h3>
               <p className="text-sm text-muted-foreground">
