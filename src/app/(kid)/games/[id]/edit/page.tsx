@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { ensureEditableGame, getGame } from "@/lib/services/games";
 import { getProfile } from "@/lib/services/profiles";
 import { logMemoryEvent } from "@/lib/services/system-logs";
+import { BrowseContext } from "@/components/kid/browse-context";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -66,12 +67,14 @@ export default async function GameEditPage({ params }: RouteContext) {
   }
 
   return (
-    <GameEditView
-      gameId={editable.id}
-      profileId={profile.id}
-      title={editable.title}
-      description={editable.description}
-      codeBundle={editable.code_bundle}
-    />
+    <BrowseContext profileId={profile.id}>
+      <GameEditView
+        gameId={editable.id}
+        profileId={profile.id}
+        title={editable.title}
+        description={editable.description}
+        codeBundle={editable.code_bundle}
+      />
+    </BrowseContext>
   );
 }

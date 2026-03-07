@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { getTranslations } from "next-intl/server";
 
 import { GameLibrary } from "@/components/games/game-library";
+import { BrowseContext } from "@/components/kid/browse-context";
 
 export default async function GamesPage() {
   const t = await getTranslations("games");
@@ -17,5 +18,9 @@ export default async function GamesPage() {
     );
   }
 
-  return <GameLibrary profileId={profileId} />;
+  return (
+    <BrowseContext profileId={profileId}>
+      <GameLibrary profileId={profileId} />
+    </BrowseContext>
+  );
 }

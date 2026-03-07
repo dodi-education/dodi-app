@@ -4,6 +4,7 @@ import { getTranslations } from "next-intl/server";
 
 import { GameRemixControls } from "@/components/games/game-remix-controls";
 import { Button } from "@/components/ui/button";
+import { BrowseContext } from "@/components/kid/browse-context";
 
 export default async function NewGamePage() {
   const t = await getTranslations("games");
@@ -20,18 +21,20 @@ export default async function NewGamePage() {
   }
 
   return (
-    <div className="w-full max-w-3xl space-y-4 pb-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-dodi-800">{t("newGameTitle")}</h1>
-          <p className="text-sm text-muted-foreground">{t("newGameSubtitle")}</p>
+    <BrowseContext profileId={profileId}>
+      <div className="w-full max-w-3xl space-y-4 pb-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold text-dodi-800">{t("newGameTitle")}</h1>
+            <p className="text-sm text-muted-foreground">{t("newGameSubtitle")}</p>
+          </div>
+          <Button asChild variant="outline">
+            <Link href="/games">{t("backToLibrary")}</Link>
+          </Button>
         </div>
-        <Button asChild variant="outline">
-          <Link href="/games">{t("backToLibrary")}</Link>
-        </Button>
-      </div>
 
-      <GameRemixControls mode="create" profileId={profileId} />
-    </div>
+        <GameRemixControls mode="create" profileId={profileId} />
+      </div>
+    </BrowseContext>
   );
 }

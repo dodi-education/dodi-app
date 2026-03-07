@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 
 import { Icon } from "@/components/shared/icon";
 import { cn } from "@/lib/utils";
+import { useDodiSessionStore } from "@/stores/dodi-session-store";
 
 import type { Profile } from "@/types/database";
 
@@ -74,6 +75,8 @@ export function ProfileSwitcher() {
   const activeProfile = profiles.find((p) => p.id === activeProfileId);
 
   function handleSwitch(profile: Profile) {
+    // End Dodi session for outgoing profile (fires memory update)
+    useDodiSessionStore.getState().endSession();
     setCookie("dodi-active-profile", profile.id);
     setCookie("dodi-kid-locale", profile.language ?? "en");
     setActiveProfileId(profile.id);
