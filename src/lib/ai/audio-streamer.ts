@@ -54,12 +54,30 @@ export class AudioStreamer {
     };
   }
 
+  /**
+   * Resume AudioContext from a user gesture (required on mobile).
+   */
   primeFromGesture(): void {
     const ctx = this.ensureContext();
     if (ctx.state === "suspended") {
       void ctx.resume().catch(() => {
         // Best-effort resume from user gesture
       });
+    }
+  }
+
+  /**
+   * Try to resume the AudioContext without a user gesture.
+   * Returns true if audio output is ready (running), false if still suspended.
+   */
+  async tryResume(): Promise<boolean> {
+    const ctx = this.ensureContext();
+    if (ctx.state === "running") return true;
+    try {
+      await ctx.resume();
+      return (ctx.state as string) === "running";
+    } catch {
+      return false;
     }
   }
 

@@ -4,7 +4,7 @@
 
 Dodi is a personalized, AI-powered learning platform for kids. See `PROJECT.md` for full requirements.
 
-**Stack**: Next.js 15 (App Router) · React 19 · TypeScript · Tailwind CSS · shadcn/ui · Supabase · Vercel
+**Stack**: Next.js 15 (App Router) · React 19 · TypeScript · Tailwind CSS · shadcn/ui · Tabler Icons · Supabase · Vercel
 
 ---
 

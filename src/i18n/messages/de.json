@@ -258,6 +258,7 @@
     "voiceMicOff": "Mikrofon ist stumm.",
     "voiceHeard": "Ich habe gehört: {text}",
     "voiceSessionFailed": "Sprachsitzung fehlgeschlagen.",
+    "tapToReconnect": "Tippe auf Dodi zum Verbinden",
     "micUnavailable": "Mikrofon ist nicht verfügbar.",
     "sandboxNotReady": "Spiel lädt noch. Versuch es gleich nochmal.",
     "unsupportedCommand": "Nicht unterstützter Befehl: {command}",

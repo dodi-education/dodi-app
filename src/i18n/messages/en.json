@@ -258,6 +258,7 @@
     "voiceMicOff": "Microphone is muted.",
     "voiceHeard": "I heard: {text}",
     "voiceSessionFailed": "Voice session failed.",
+    "tapToReconnect": "Tap Dodi to reconnect",
     "micUnavailable": "Microphone is unavailable.",
     "sandboxNotReady": "Game is still loading. Try again.",
     "unsupportedCommand": "Unsupported command: {command}",

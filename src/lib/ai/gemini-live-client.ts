@@ -70,6 +70,7 @@ export class GeminiLiveClient {
     };
 
     this.ws.onclose = (event: CloseEvent) => {
+      this.setupComplete = false;
       if (event.code !== 1000) {
         // Abnormal close — include details
         this.onEvent({
@@ -79,6 +80,10 @@ export class GeminiLiveClient {
       }
       this.onEvent({ type: "closed" });
     };
+  }
+
+  private isOpen(): boolean {
+    return this.ws !== null && this.ws.readyState === WebSocket.OPEN;
   }
 
   private sendSetup(): void {
@@ -108,7 +113,8 @@ export class GeminiLiveClient {
       ];
     }
 
-    this.ws?.send(JSON.stringify({ setup }));
+    if (!this.isOpen()) return;
+    this.ws!.send(JSON.stringify({ setup }));
   }
 
   private handleMessage(raw: string): void {
@@ -191,7 +197,7 @@ export class GeminiLiveClient {
    * Send a greeting trigger after setup is complete.
    */
   sendGreeting(): void {
-    if (!this.setupComplete || !this.ws) return;
+    if (!this.setupComplete || !this.isOpen()) return;
 
     const msg = {
       clientContent: {
@@ -205,14 +211,14 @@ export class GeminiLiveClient {
       },
     };
 
-    this.ws.send(JSON.stringify(msg));
+    this.ws!.send(JSON.stringify(msg));
   }
 
   /**
    * Send audio data from the microphone as realtime input.
    */
   sendAudio(base64Pcm: string): void {
-    if (!this.setupComplete || !this.ws) return;
+    if (!this.setupComplete || !this.isOpen()) return;
 
     const msg = {
       realtimeInput: {
@@ -225,14 +231,14 @@ export class GeminiLiveClient {
       },
     };
 
-    this.ws.send(JSON.stringify(msg));
+    this.ws!.send(JSON.stringify(msg));
   }
 
   /**
    * Send a text message as client content.
    */
   sendText(text: string): void {
-    if (!this.setupComplete || !this.ws) return;
+    if (!this.setupComplete || !this.isOpen()) return;
 
     const msg = {
       clientContent: {
@@ -246,7 +252,7 @@ export class GeminiLiveClient {
       },
     };
 
-    this.ws.send(JSON.stringify(msg));
+    this.ws!.send(JSON.stringify(msg));
   }
 
   /**
@@ -254,7 +260,7 @@ export class GeminiLiveClient {
    * The AI sees this text as background context but does not treat it as a conversation message.
    */
   sendContext(text: string): void {
-    if (!this.setupComplete || !this.ws) return;
+    if (!this.setupComplete || !this.isOpen()) return;
 
     const msg = {
       clientContent: {
@@ -268,14 +274,14 @@ export class GeminiLiveClient {
       },
     };
 
-    this.ws.send(JSON.stringify(msg));
+    this.ws!.send(JSON.stringify(msg));
   }
 
   /**
    * Send a tool/function call response back to the model.
    */
   sendToolResponse(callId: string, name: string, response: Record<string, unknown>): void {
-    if (!this.setupComplete || !this.ws) return;
+    if (!this.setupComplete || !this.isOpen()) return;
 
     const msg = {
       toolResponse: {
@@ -289,7 +295,7 @@ export class GeminiLiveClient {
       },
     };
 
-    this.ws.send(JSON.stringify(msg));
+    this.ws!.send(JSON.stringify(msg));
   }
 
   disconnect(): void {

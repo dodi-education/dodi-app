@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { SpeechBubble } from "@/components/dodi/speech-bubble";
 import { useDodiSessionStore } from "@/stores/dodi-session-store";
 import { useDodiContext } from "@/hooks/use-dodi-context";
+import { getDodiImage } from "@/lib/dodi-image";
 
 interface DodiFullHomeProps {
   profileId: string;
@@ -32,6 +33,7 @@ export function DodiFullHome({
   const status = useDodiSessionStore((s) => s.status);
   const dodiSpeaking = useDodiSessionStore((s) => s.dodiSpeaking);
   const micActive = useDodiSessionStore((s) => s.micActive);
+  const audioReady = useDodiSessionStore((s) => s.audioReady);
   const error = useDodiSessionStore((s) => s.error);
   const prewarmSession = useDodiSessionStore((s) => s.prewarmSession);
   const startSessionFromTap = useDodiSessionStore((s) => s.startSessionFromTap);
@@ -50,8 +52,8 @@ export function DodiFullHome({
       <div className="flex flex-col items-center gap-6 pt-8">
         <div className="relative h-48 w-48">
           <Image
-            src="/images/dodi-full.png"
-            alt="Dodi"
+            src={getDodiImage(false, false, false)}
+            alt="Dodi sleeping"
             fill
             className="object-contain"
             priority
@@ -74,8 +76,8 @@ export function DodiFullHome({
       <div className="flex flex-col items-center gap-6 pt-8">
         <div className="relative h-48 w-48">
           <Image
-            src="/images/dodi-full.png"
-            alt="Dodi"
+            src={getDodiImage(false, false, false)}
+            alt="Dodi waking up"
             fill
             className="object-contain"
             priority
@@ -102,8 +104,8 @@ export function DodiFullHome({
       <div className="flex flex-col items-center gap-6 pt-8">
         <div className="relative h-48 w-48">
           <Image
-            src="/images/dodi-full.png"
-            alt="Dodi"
+            src={getDodiImage(false, false, false)}
+            alt="Dodi sleeping"
             fill
             className="object-contain"
             priority
@@ -133,21 +135,39 @@ export function DodiFullHome({
   if (status === "connected") {
     const showMicRecovery = !micActive && error === "micPermissionNeeded";
     const showSecureContextError = !micActive && error === "secureContextRequired";
+    const needsTap = !audioReady;
+
+    // Determine click handler: unlock audio → toggle mic → no-op
+    const handleAvatarClick = needsTap
+      ? () => void startSessionFromTap(profileId)
+      : showSecureContextError
+        ? undefined
+        : toggleMic;
 
     return (
       <div className="flex flex-col items-center gap-6 pt-8">
-        <div className="relative h-48 w-48">
+        <button
+          type="button"
+          onClick={handleAvatarClick}
+          disabled={showSecureContextError && !needsTap}
+          className="relative h-48 w-48 cursor-pointer transition-transform active:scale-95 hover:scale-105 disabled:cursor-not-allowed disabled:opacity-70"
+          aria-label={needsTap ? t("tapToStart") : micActive ? "Mute microphone" : "Unmute microphone"}
+        >
           <Image
-            src="/images/dodi-full.png"
-            alt="Dodi"
+            src={getDodiImage(true, micActive, false)}
+            alt={micActive ? "Dodi listening" : "Dodi can't hear you"}
             fill
             className="object-contain"
             priority
           />
-        </div>
+        </button>
         <div className="flex w-full max-w-xs flex-col items-center gap-3">
           <SpeechBubble className="w-full text-center">
-            {dodiSpeaking ? (
+            {needsTap ? (
+              <p className="text-sm text-dodi-600">
+                {t("tapToTalk")}
+              </p>
+            ) : dodiSpeaking ? (
               <div className="flex items-center justify-center gap-2">
                 <div className="flex gap-1">
                   <span className="inline-block h-2 w-2 animate-bounce rounded-full bg-dodi-500 [animation-delay:0ms]" />
@@ -167,7 +187,7 @@ export function DodiFullHome({
             )}
           </SpeechBubble>
 
-          {showMicRecovery ? (
+          {showMicRecovery && !needsTap && (
             <Button
               variant="outline"
               size="lg"
@@ -177,61 +197,39 @@ export function DodiFullHome({
               <Icon name="refresh" className="mr-2 h-4 w-4" />
               {t("tapToRetry")}
             </Button>
-          ) : (
-            <Button
-              variant={micActive ? "default" : "outline"}
-              size="icon"
-              onClick={toggleMic}
-              disabled={showSecureContextError}
-              className="h-12 w-12 cursor-pointer rounded-full"
-              aria-label={micActive ? "Mute microphone" : "Unmute microphone"}
-            >
-              {micActive ? (
-                <Icon name="mic_on" className="h-5 w-5" />
-              ) : (
-                <Icon name="mic_off" className="h-5 w-5" />
-              )}
-            </Button>
           )}
         </div>
       </div>
     );
   }
 
-  // Idle state — full-screen gesture target to unlock browser audio autoplay
+  // Idle state — tap sleeping Dodi to start
   return (
     <div className="flex flex-col items-center gap-6 pt-8">
-      <div className="relative h-48 w-48">
-        <Image
-          src="/images/dodi-full.png"
-          alt="Dodi"
-          fill
-          className="object-contain"
-          priority
-        />
-      </div>
-
       <button
         type="button"
         onPointerDown={() => void startSessionFromTap(profileId)}
         onClick={() => void startSessionFromTap(profileId)}
-        className="fixed inset-0 z-20 cursor-pointer bg-transparent"
+        className="relative h-48 w-48 cursor-pointer transition-transform active:scale-95 hover:scale-105"
         aria-label={t("tapToStart")}
-      />
+      >
+        <Image
+          src={getDodiImage(false, false, false)}
+          alt="Dodi sleeping — tap to wake"
+          fill
+          className="object-contain"
+          priority
+        />
+      </button>
 
-      <div className="pointer-events-none relative z-30 flex w-full max-w-xs flex-col items-center gap-3 text-center">
-        <SpeechBubble className="w-full text-center">
-          <p className="text-lg font-bold text-dodi-800">
-            {t("greetingWithName", { name: profileName })}
-          </p>
-          <p className="mt-1 text-sm text-dodi-600">
-            {t("tapToStart")}
-          </p>
-        </SpeechBubble>
-        <span className="flex h-20 w-20 animate-pulse items-center justify-center rounded-full bg-dodi-500 shadow-lg">
-          <Icon name="mic_on" className="h-9 w-9 text-white" />
-        </span>
-      </div>
+      <SpeechBubble className="w-full max-w-xs text-center">
+        <p className="text-lg font-bold text-dodi-800">
+          {t("greetingWithName", { name: profileName })}
+        </p>
+        <p className="mt-1 text-sm text-dodi-600">
+          {t("tapToStart")}
+        </p>
+      </SpeechBubble>
     </div>
   );
 }

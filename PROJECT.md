@@ -458,12 +458,14 @@ The MVP focuses on delivering a functional, delightful core experience:
 
 ### Phase 3: Games
 - [ ] AI game generation pipeline
-- [ ] Sandboxed game execution
-- [ ] Game metadata and categorization
+- [x] Sandboxed game execution
+- [x] Game metadata and categorization
 - [ ] Built-in default game: Drawing (can also be used for drawing an avatar)
 - [ ] Game library (browse, filter, replay)
 
 ### Phase 4: Social
+- [ ] Unify date storage (UTC in db) and conversion to local time
+- [ ] Configure date time format
 - [ ] Name tags and QR code generation
 - [ ] Friend system (add, accept, manage)
 - [ ] Game sharing

@@ -64,11 +64,13 @@ export interface DodiSessionState {
   context: DodiContext;
 
   // Voice session
+  profileId: string | null;
   status: SessionStatus;
   warmState: WarmState;
   warmReadyAt: string | null;
   dodiSpeaking: boolean;
   micActive: boolean;
+  audioReady: boolean;
   error: string | null;
 
   // Text chat (for game text mode)
@@ -313,6 +315,13 @@ function activateSession(set: (partial: Partial<DodiSessionState>) => void): voi
     error: null,
   });
 
+  // Probe whether audio output works without a user gesture
+  if (streamer) {
+    void streamer.tryResume().then((ready) => {
+      set({ audioReady: ready });
+    });
+  }
+
   client.sendGreeting();
 }
 
@@ -334,11 +343,13 @@ function scheduleWarmTimeout(profileId: string): void {
       transcript = [];
       sessionStartedAt = null;
       useDodiSessionStore.setState({
+        profileId: null,
         status: "idle",
         warmState: "cold",
         warmReadyAt: null,
         dodiSpeaking: false,
         micActive: false,
+        audioReady: false,
         error: null,
       });
     }
@@ -376,11 +387,13 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
   displayMode: "full",
   context: { type: "home" },
 
+  profileId: null,
   status: "idle",
   warmState: "cold",
   warmReadyAt: null,
   dodiSpeaking: false,
   micActive: false,
+  audioReady: false,
   error: null,
 
   chatMessages: [],
@@ -550,6 +563,7 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
     abortController = controller;
 
     set({
+      profileId,
       status: tapRequested ? "connecting" : "idle",
       warmState: "warming",
       warmReadyAt: null,
@@ -650,23 +664,27 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
       currentProfileId = null;
       transcript = [];
       sessionStartedAt = null;
+      set({ profileId: null });
     }
 
     if (!streamer) {
       streamer = new AudioStreamer();
     }
     streamer.primeFromGesture();
+    set({ audioReady: true });
 
     tapRequested = true;
     tapStartedAtMs = performance.now();
 
     const latest = get();
+
+    // Already connected (prewarmed + activated) — just enable mic
     if (
       currentProfileId === profileId &&
-      latest.warmState === "warm_ready" &&
+      latest.status === "connected" &&
       client
     ) {
-      activateSession(set);
+      void get().ensureMicAfterGreeting();
       return;
     }
 
@@ -762,11 +780,13 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
     resetFlowFlags();
 
     set({
+      profileId: null,
       status: "idle",
       warmState: "cold",
       warmReadyAt: null,
       dodiSpeaking: false,
       micActive: false,
+      audioReady: false,
       error: null,
       chatMessages: [],
       chatSubmitting: false,
@@ -888,17 +908,9 @@ function createEventHandler(
 
     switch (event.type) {
       case "setupComplete":
-        if (tapRequested) {
-          activateSession(set);
-        } else {
-          set({
-            status: "idle",
-            warmState: "warm_ready",
-            warmReadyAt: new Date().toISOString(),
-            error: null,
-          });
-          scheduleWarmTimeout(profileId);
-        }
+        // Always activate (send greeting) so Dodi appears connected.
+        // Mic is only auto-enabled after greeting if tapRequested.
+        activateSession(set);
         break;
 
       case "audio":
@@ -981,7 +993,10 @@ function createEventHandler(
 
         if (!firstTurnCompleteSeen) {
           firstTurnCompleteSeen = true;
-          void get().ensureMicAfterGreeting();
+          // Only auto-enable mic if user explicitly tapped (not from prewarm)
+          if (tapRequested) {
+            void get().ensureMicAfterGreeting();
+          }
         }
 
         // Process turn buffer for game context (extract commands from text markers)
@@ -1031,6 +1046,7 @@ function createEventHandler(
           warmReadyAt: null,
           dodiSpeaking: false,
           micActive: false,
+          audioReady: false,
           error: wasActive ? event.error : null,
         });
         break;
@@ -1051,6 +1067,7 @@ function createEventHandler(
           warmReadyAt: null,
           dodiSpeaking: false,
           micActive: false,
+          audioReady: false,
           error: wasActive ? "Connection closed unexpectedly" : null,
         });
         break;

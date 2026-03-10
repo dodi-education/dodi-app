@@ -17,6 +17,7 @@ interface DodiContextConfig {
 /**
  * Declares the Dodi context for the current page.
  * Call this in each kid page to set display mode and context type.
+ * Automatically prewarms the session if cold.
  */
 export function useDodiContext({
   context,
@@ -25,6 +26,8 @@ export function useDodiContext({
 }: DodiContextConfig): void {
   const setDisplayMode = useDodiSessionStore((s) => s.setDisplayMode);
   const setContext = useDodiSessionStore((s) => s.setContext);
+  const prewarmSession = useDodiSessionStore((s) => s.prewarmSession);
+  const warmState = useDodiSessionStore((s) => s.warmState);
 
   // Stable reference for context object to avoid re-triggering on every render
   const contextRef = useRef(context);
@@ -51,4 +54,11 @@ export function useDodiContext({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contextKey, profileId, setContext]);
+
+  // Auto-prewarm if session is cold (e.g. direct navigation to /games)
+  useEffect(() => {
+    if (profileId && warmState === "cold") {
+      void prewarmSession(profileId);
+    }
+  }, [profileId, warmState, prewarmSession]);
 }

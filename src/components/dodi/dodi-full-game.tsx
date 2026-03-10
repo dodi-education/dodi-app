@@ -8,14 +8,18 @@ import { Icon } from "@/components/shared/icon";
 import { SpeechBubble } from "@/components/dodi/speech-bubble";
 import { useDodiSessionStore, type CompanionMessage } from "@/stores/dodi-session-store";
 import { cn } from "@/lib/utils";
+import { getDodiImage } from "@/lib/dodi-image";
 
 export function DodiFullGame() {
   const t = useTranslations("games");
 
   const status = useDodiSessionStore((s) => s.status);
+  const profileId = useDodiSessionStore((s) => s.profileId);
   const dodiSpeaking = useDodiSessionStore((s) => s.dodiSpeaking);
   const micActive = useDodiSessionStore((s) => s.micActive);
+  const audioReady = useDodiSessionStore((s) => s.audioReady);
   const toggleMic = useDodiSessionStore((s) => s.toggleMic);
+  const startSessionFromTap = useDodiSessionStore((s) => s.startSessionFromTap);
   const chatMessages = useDodiSessionStore((s) => s.chatMessages);
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -30,22 +34,51 @@ export function DodiFullGame() {
   const isConnecting = status === "connecting";
   const isConnected = status === "connected";
   const isError = status === "error";
+  const needsTap = isConnected && !audioReady;
 
   return (
     <section className="flex h-full flex-col rounded-2xl border bg-white shadow-sm">
       {/* Dodi avatar + status */}
       <div className="flex flex-col items-center gap-2 border-b px-4 py-4">
-        <div className="relative h-20 w-20">
+        <button
+          type="button"
+          onClick={() => {
+            if (isConnecting) return;
+            if (needsTap && profileId) {
+              void startSessionFromTap(profileId);
+            } else if (isConnected) {
+              toggleMic();
+            } else if (profileId) {
+              void startSessionFromTap(profileId);
+            }
+          }}
+          disabled={isConnecting}
+          className={cn(
+            "relative h-20 w-20 transition-transform",
+            !isConnecting && "cursor-pointer active:scale-90 hover:scale-110",
+          )}
+          aria-label={
+            isConnecting
+              ? "Dodi connecting"
+              : needsTap
+                ? "Tap to activate Dodi"
+                : isConnected
+                  ? micActive
+                    ? "Mute microphone"
+                    : "Unmute microphone"
+                  : "Tap to reconnect Dodi"
+          }
+        >
           <Image
-            src="/images/dodi-full.png"
-            alt="Dodi"
+            src={getDodiImage(isConnected, micActive, false)}
+            alt={isConnected ? (micActive ? "Dodi listening" : "Dodi can't hear you") : "Dodi sleeping"}
             fill
             className="object-contain"
           />
           {dodiSpeaking && (
             <span className="absolute inset-0 animate-ping rounded-full border-2 border-dodi-400 opacity-30" />
           )}
-        </div>
+        </button>
 
         {isConnecting && (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -54,7 +87,7 @@ export function DodiFullGame() {
           </div>
         )}
 
-        {isConnected && (
+        {isConnected && !needsTap && (
           <SpeechBubble className="w-full text-center">
             {dodiSpeaking ? (
               <div className="flex items-center justify-center gap-2">
@@ -73,28 +106,17 @@ export function DodiFullGame() {
           </SpeechBubble>
         )}
 
-        {isError && (
-          <p className="text-xs text-destructive">{t("voiceSessionFailed")}</p>
+        {needsTap && (
+          <p className="text-xs text-muted-foreground">
+            {t("tapToReconnect")}
+          </p>
         )}
 
-        {isConnected && (
-          <button
-            type="button"
-            onClick={toggleMic}
-            className={cn(
-              "flex h-10 w-10 items-center justify-center rounded-full transition-colors",
-              micActive
-                ? "bg-dodi-600 text-white"
-                : "bg-dodi-100 text-dodi-600",
-            )}
-            aria-label={micActive ? "Mute microphone" : "Unmute microphone"}
-          >
-            {micActive ? (
-              <Icon name="mic_on" className="h-5 w-5" />
-            ) : (
-              <Icon name="mic_off" className="h-5 w-5" />
-            )}
-          </button>
+        {(isError || (!isConnected && !isConnecting)) && (
+          <p className="text-xs text-muted-foreground">
+            {isError ? t("voiceSessionFailed") + " " : ""}
+            {t("tapToReconnect")}
+          </p>
         )}
       </div>
 
