@@ -29,8 +29,7 @@ export type DodiContext =
       gameState: Record<string, unknown>;
     };
 
-type SessionStatus = "idle" | "connecting" | "connected" | "error";
-type WarmState = "cold" | "warming" | "warm_ready" | "active" | "error";
+export type DodiState = "disconnected" | "connecting" | "active" | "deaf" | "sleep";
 
 export interface CompanionMessage {
   id: string;
@@ -63,14 +62,11 @@ export interface DodiSessionState {
   displayMode: DodiDisplayMode;
   context: DodiContext;
 
-  // Voice session
+  // Core state
   profileId: string | null;
-  status: SessionStatus;
-  warmState: WarmState;
-  warmReadyAt: string | null;
+  state: DodiState;
   dodiSpeaking: boolean;
-  micActive: boolean;
-  audioReady: boolean;
+  gestureNeeded: boolean;
   error: string | null;
 
   // Text chat (for game text mode)
@@ -80,14 +76,18 @@ export interface DodiSessionState {
   // Game command callback
   onRunCommands: ((commands: GameCommand[]) => void) | null;
 
+  // Navigation (set by launch_game tool, consumed by layout)
+  pendingNavigation: string | null;
+  clearPendingNavigation: () => void;
+
   // Actions
   setContext: (context: DodiContext, profileId: string) => Promise<void>;
   setDisplayMode: (mode: DodiDisplayMode) => void;
-  prewarmSession: (profileId: string) => Promise<void>;
-  startSessionFromTap: (profileId: string) => Promise<void>;
-  ensureMicAfterGreeting: () => Promise<void>;
+  connect: (profileId: string) => Promise<void>;
+  activate: () => Promise<void>;
+  deactivate: () => void;
+  toggleActive: () => void;
   endSession: () => void;
-  toggleMic: () => void;
   sendTextMessage: (message: string, gameId?: string) => Promise<void>;
   updateGameState: (state: Record<string, unknown>) => void;
   setOnRunCommands: (handler: ((commands: GameCommand[]) => void) | null) => void;
@@ -101,14 +101,11 @@ let client: GeminiLiveClient | null = null;
 let streamer: AudioStreamer | null = null;
 let recorder: AudioRecorder | null = null;
 let abortController: AbortController | null = null;
-let warmTimeout: ReturnType<typeof setTimeout> | null = null;
 
 let currentProfileId: string | null = null;
 let transcript: TranscriptEntry[] = [];
 let sessionStartedAt: string | null = null;
-let tapRequested = false;
 let greetingSent = false;
-let firstTurnCompleteSeen = false;
 let micRequestInFlight = false;
 let tapStartedAtMs: number | null = null;
 
@@ -129,9 +126,93 @@ const MIN_BEACON_ENTRIES = 1;
 const BEACON_MAX_BYTES = 60000;
 const MAX_MESSAGES = 40;
 const STATE_DEBOUNCE_MS = 2000;
+const INACTIVITY_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
 // ---------------------------------------------------------------------------
-// Transcript helpers (ported from voice-session-store)
+// Inactivity timer
+// ---------------------------------------------------------------------------
+
+let inactivityTimer: ReturnType<typeof setTimeout> | null = null;
+
+function clearInactivityTimer(): void {
+  if (inactivityTimer) {
+    clearTimeout(inactivityTimer);
+    inactivityTimer = null;
+  }
+}
+
+function handleInteraction(): void {
+  resetInactivityTimer();
+}
+
+function startInteractionListeners(): void {
+  document.addEventListener("click", handleInteraction, { capture: true });
+  document.addEventListener("touchstart", handleInteraction, { capture: true });
+  document.addEventListener("keydown", handleInteraction, { capture: true });
+}
+
+function stopInteractionListeners(): void {
+  document.removeEventListener("click", handleInteraction, { capture: true });
+  document.removeEventListener("touchstart", handleInteraction, { capture: true });
+  document.removeEventListener("keydown", handleInteraction, { capture: true });
+}
+
+function sleepFromInactivity(): void {
+  // Lazy import to avoid circular ref at module init
+  const store = useDodiSessionStore;
+  const state = store.getState();
+  if (state.state !== "active" && state.state !== "deaf") return;
+
+  const pid = currentProfileId;
+
+  // Fire memory update if enough transcript
+  if (pid && transcript.length >= MIN_MEMORY_UPDATE_ENTRIES) {
+    const formatted = formatTranscript(transcript);
+    fetch("/api/ai/memory-update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        profileId: pid,
+        sessionTranscript: formatted,
+      }),
+    }).catch(() => {
+      // non-critical
+    });
+  }
+
+  if (pid) {
+    clearLocalStorage(pid);
+  }
+
+  window.removeEventListener("beforeunload", handleBeforeUnload);
+  window.removeEventListener("pagehide", handlePageHide);
+  stopInteractionListeners();
+
+  currentProfileId = null;
+  transcript = [];
+  sessionStartedAt = null;
+
+  cleanup();
+  resetFlowFlags();
+
+  store.setState({
+    profileId: null,
+    state: "sleep",
+    dodiSpeaking: false,
+    gestureNeeded: false,
+    error: null,
+    chatMessages: [],
+    chatSubmitting: false,
+  });
+}
+
+function resetInactivityTimer(): void {
+  clearInactivityTimer();
+  inactivityTimer = setTimeout(sleepFromInactivity, INACTIVITY_TIMEOUT_MS);
+}
+
+// ---------------------------------------------------------------------------
+// Transcript helpers
 // ---------------------------------------------------------------------------
 
 function storageKey(profileId: string): string {
@@ -247,13 +328,6 @@ function handlePageHide(): void {
 // Resource cleanup
 // ---------------------------------------------------------------------------
 
-function clearWarmTimeout(): void {
-  if (warmTimeout) {
-    clearTimeout(warmTimeout);
-    warmTimeout = null;
-  }
-}
-
 function clearStateDebounce(): void {
   if (stateDebounceTimer) {
     clearTimeout(stateDebounceTimer);
@@ -275,16 +349,15 @@ function cleanup(): void {
   client?.disconnect();
   client = null;
 
-  clearWarmTimeout();
   clearStateDebounce();
+  clearInactivityTimer();
+  stopInteractionListeners();
   turnBuffer = "";
   lastSentGameState = "";
 }
 
 function resetFlowFlags(): void {
-  tapRequested = false;
   greetingSent = false;
-  firstTurnCompleteSeen = false;
   micRequestInFlight = false;
   tapStartedAtMs = null;
 }
@@ -294,66 +367,97 @@ function createMessageId(): string {
 }
 
 // ---------------------------------------------------------------------------
-// Session activation helper
+// Transition helpers
 // ---------------------------------------------------------------------------
 
-function activateSession(set: (partial: Partial<DodiSessionState>) => void): void {
-  if (!client || !currentProfileId || greetingSent) return;
+function transitionToActive(
+  set: (partial: Partial<DodiSessionState>) => void,
+  get: () => DodiSessionState,
+): void {
+  if (!client || !currentProfileId) return;
 
-  clearWarmTimeout();
-  greetingSent = true;
-  firstTurnCompleteSeen = false;
-  sessionStartedAt = new Date().toISOString();
+  set({ state: "active", gestureNeeded: false, error: null });
 
-  window.addEventListener("beforeunload", handleBeforeUnload);
-  window.addEventListener("pagehide", handlePageHide);
-
-  set({
-    status: "connected",
-    warmState: "active",
-    warmReadyAt: new Date().toISOString(),
-    error: null,
-  });
-
-  // Probe whether audio output works without a user gesture
-  if (streamer) {
-    void streamer.tryResume().then((ready) => {
-      set({ audioReady: ready });
-    });
+  if (!greetingSent) {
+    greetingSent = true;
+    sessionStartedAt = new Date().toISOString();
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    window.addEventListener("pagehide", handlePageHide);
+    client.sendGreeting();
   }
 
-  client.sendGreeting();
+  resetInactivityTimer();
+  startInteractionListeners();
+
+  // Start mic
+  void startMic(set, get);
 }
 
-function scheduleWarmTimeout(profileId: string): void {
-  clearWarmTimeout();
-  warmTimeout = setTimeout(() => {
-    const state = useDodiSessionStore.getState();
-    if (
-      state.status === "idle" &&
-      state.warmState === "warm_ready" &&
-      currentProfileId === profileId
-    ) {
-      // Tear down warm session after 60s idle
-      window.removeEventListener("beforeunload", handleBeforeUnload);
-      window.removeEventListener("pagehide", handlePageHide);
-      cleanup();
-      resetFlowFlags();
-      currentProfileId = null;
-      transcript = [];
-      sessionStartedAt = null;
-      useDodiSessionStore.setState({
-        profileId: null,
-        status: "idle",
-        warmState: "cold",
-        warmReadyAt: null,
-        dodiSpeaking: false,
-        micActive: false,
-        audioReady: false,
-        error: null,
-      });
+function transitionToDeaf(
+  set: (partial: Partial<DodiSessionState>) => void,
+  manual: boolean,
+): void {
+  recorder?.stop();
+  recorder = null;
+  streamer?.stop();
+
+  set({
+    state: "deaf",
+    gestureNeeded: !manual,
+    dodiSpeaking: false,
+  });
+
+  // Keep inactivity timer running — if no interaction for 5 min in deaf mode, sleep
+  resetInactivityTimer();
+}
+
+async function startMic(
+  set: (partial: Partial<DodiSessionState>) => void,
+  get: () => DodiSessionState,
+): Promise<void> {
+  if (get().state !== "active") return;
+  if (micRequestInFlight) return;
+  if (!currentProfileId) return;
+
+  if (!navigator.mediaDevices?.getUserMedia) {
+    set({ error: "secureContextRequired" });
+    return;
+  }
+
+  micRequestInFlight = true;
+
+  try {
+    const micStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        sampleRate: 16000,
+        channelCount: 1,
+        echoCancellation: true,
+        noiseSuppression: true,
+      },
+    });
+
+    if (get().state !== "active") {
+      for (const track of micStream.getTracks()) track.stop();
+      return;
     }
-  }, 60000);
+
+    recorder?.stop();
+    const rec = new AudioRecorder((base64Pcm: string) => {
+      client?.sendAudio(base64Pcm);
+    });
+    recorder = rec;
+    await rec.startWithStream(micStream);
+    set({ error: null });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "NotAllowedError") {
+      set({ error: "micPermissionNeeded" });
+    } else {
+      const message = err instanceof Error ? err.message : "Microphone unavailable";
+      set({ error: message });
+    }
+  } finally {
+    micRequestInFlight = false;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -388,18 +492,20 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
   context: { type: "home" },
 
   profileId: null,
-  status: "idle",
-  warmState: "cold",
-  warmReadyAt: null,
+  state: "disconnected",
   dodiSpeaking: false,
-  micActive: false,
-  audioReady: false,
+  gestureNeeded: false,
   error: null,
 
   chatMessages: [],
   chatSubmitting: false,
 
   onRunCommands: null,
+
+  pendingNavigation: null,
+  clearPendingNavigation: () => {
+    set({ pendingNavigation: null });
+  },
 
   setDisplayMode: (mode: DodiDisplayMode) => {
     set({ displayMode: mode });
@@ -419,6 +525,12 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
       return;
     }
 
+    // Don't reconnect when sleeping — kid must tap Dodi to wake
+    if (state.state === "sleep") {
+      set({ context: newContext });
+      return;
+    }
+
     // Context requires reconnect (e.g., home/browse <-> game, or game <-> different game)
     const gen = ++contextGeneration;
 
@@ -427,7 +539,6 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
     recorder = null;
     client?.disconnect();
     client = null;
-    clearWarmTimeout();
     clearStateDebounce();
     turnBuffer = "";
     lastSentGameState = "";
@@ -435,19 +546,16 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
     // Clear game-specific chat messages when entering a new game or leaving game
     set({
       context: newContext,
-      status: "connecting",
-      warmState: "warming",
+      state: "connecting",
       dodiSpeaking: false,
-      micActive: false,
       error: null,
       chatMessages: [],
       chatSubmitting: false,
+      gestureNeeded: false,
     });
 
     // Reset flow flags for new connection
     greetingSent = false;
-    firstTurnCompleteSeen = false;
-    tapRequested = true; // auto-activate since session was already running
 
     const controller = new AbortController();
     abortController = controller;
@@ -470,7 +578,7 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
 
         if (!res.ok) {
           const data = await res.json().catch(() => ({ error: "Session failed" }));
-          set({ status: "error", warmState: "error", error: data.error || "Session failed" });
+          set({ state: "disconnected", error: data.error || "Session failed" });
           return;
         }
         config = await res.json();
@@ -486,7 +594,7 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
 
         if (!res.ok) {
           const data = await res.json().catch(() => ({ error: "Session failed" }));
-          set({ status: "error", warmState: "error", error: data.error || "Session failed" });
+          set({ state: "disconnected", error: data.error || "Session failed" });
           return;
         }
         config = await res.json();
@@ -505,19 +613,21 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
       if (err instanceof DOMException && err.name === "AbortError") return;
       if (gen !== contextGeneration) return;
       const message = err instanceof Error ? err.message : "Failed to switch context";
-      set({ status: "error", warmState: "error", error: message });
+      set({ state: "disconnected", error: message });
     }
   },
 
-  prewarmSession: async (profileId: string) => {
+  connect: async (profileId: string) => {
     if (!profileId) return;
 
-    const state = get();
+    const currentState = get();
+
+    // Already connecting or connected for this profile
     if (
       currentProfileId === profileId &&
-      (state.warmState === "warming" ||
-        state.warmState === "warm_ready" ||
-        state.warmState === "active")
+      (currentState.state === "connecting" ||
+        currentState.state === "active" ||
+        currentState.state === "deaf")
     ) {
       return;
     }
@@ -555,7 +665,6 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
     transcript = [];
     sessionStartedAt = null;
     greetingSent = false;
-    firstTurnCompleteSeen = false;
     micRequestInFlight = false;
 
     const gen = ++contextGeneration;
@@ -564,11 +673,9 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
 
     set({
       profileId,
-      status: tapRequested ? "connecting" : "idle",
-      warmState: "warming",
-      warmReadyAt: null,
+      state: "connecting",
       dodiSpeaking: false,
-      micActive: false,
+      gestureNeeded: false,
       error: null,
     });
 
@@ -590,13 +697,9 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
         if (gen !== contextGeneration || controller.signal.aborted) return;
 
         if (!res.ok) {
-          const data = await res.json().catch(() => ({ error: "Failed to prewarm session" }));
+          const data = await res.json().catch(() => ({ error: "Failed to connect" }));
           const errorMessage = data.error || `Session API returned ${res.status}`;
-          set({
-            status: tapRequested ? "error" : "idle",
-            warmState: "error",
-            error: tapRequested ? errorMessage : null,
-          });
+          set({ state: "disconnected", error: errorMessage });
           return;
         }
         config = await res.json();
@@ -613,13 +716,9 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
         if (!sessionRes.ok) {
           const data = await sessionRes
             .json()
-            .catch(() => ({ error: "Failed to prewarm session" }));
+            .catch(() => ({ error: "Failed to connect" }));
           const errorMessage = data.error || `Session API returned ${sessionRes.status}`;
-          set({
-            status: tapRequested ? "error" : "idle",
-            warmState: "error",
-            error: tapRequested ? errorMessage : null,
-          });
+          set({ state: "disconnected", error: errorMessage });
           return;
         }
         config = await sessionRes.json();
@@ -636,116 +735,49 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return;
       if (gen !== contextGeneration) return;
-      const message = err instanceof Error ? err.message : "Failed to prewarm session";
-      if (tapRequested) {
-        tapStartedAtMs = null;
-      }
+      const message = err instanceof Error ? err.message : "Failed to connect";
+      tapStartedAtMs = null;
       set({
-        status: tapRequested ? "error" : "idle",
-        warmState: "error",
-        warmReadyAt: null,
+        state: "disconnected",
         dodiSpeaking: false,
-        micActive: false,
-        error: tapRequested ? message : null,
+        gestureNeeded: false,
+        error: message,
       });
     }
   },
 
-  startSessionFromTap: async (profileId: string) => {
-    const state = get();
-    if (state.status === "connecting" || state.status === "connected") return;
-    if (!profileId) return;
+  activate: async () => {
+    const current = get();
+    if (current.state !== "deaf") return;
+    if (!client || !currentProfileId) return;
 
-    if (currentProfileId && currentProfileId !== profileId) {
-      window.removeEventListener("beforeunload", handleBeforeUnload);
-      window.removeEventListener("pagehide", handlePageHide);
-      cleanup();
-      resetFlowFlags();
-      currentProfileId = null;
-      transcript = [];
-      sessionStartedAt = null;
-      set({ profileId: null });
-    }
-
+    // Prime AudioContext from user gesture
     if (!streamer) {
       streamer = new AudioStreamer();
     }
     streamer.primeFromGesture();
-    set({ audioReady: true });
-
-    tapRequested = true;
     tapStartedAtMs = performance.now();
 
-    const latest = get();
-
-    // Already connected (prewarmed + activated) — just enable mic
-    if (
-      currentProfileId === profileId &&
-      latest.status === "connected" &&
-      client
-    ) {
-      void get().ensureMicAfterGreeting();
-      return;
-    }
-
-    set({
-      status: "connecting",
-      error: null,
-      dodiSpeaking: false,
-      micActive: false,
-    });
-
-    if (currentProfileId === profileId && latest.warmState === "warming") {
-      return;
-    }
-
-    void get().prewarmSession(profileId);
+    transitionToActive(set, get);
   },
 
-  ensureMicAfterGreeting: async () => {
-    if (get().status !== "connected") return;
-    if (get().micActive || micRequestInFlight) return;
-    if (!currentProfileId) return;
+  deactivate: () => {
+    const current = get();
+    if (current.state !== "active") return;
 
-    if (!navigator.mediaDevices?.getUserMedia) {
-      set({ error: "secureContextRequired", micActive: false });
-      return;
+    transitionToDeaf(set, true);
+  },
+
+  toggleActive: () => {
+    const current = get();
+    if (current.state === "active") {
+      get().deactivate();
+    } else if (current.state === "deaf") {
+      void get().activate();
+    } else if ((current.state === "disconnected" || current.state === "sleep") && current.profileId) {
+      void get().connect(current.profileId);
     }
-
-    micRequestInFlight = true;
-
-    try {
-      const micStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          sampleRate: 16000,
-          channelCount: 1,
-          echoCancellation: true,
-          noiseSuppression: true,
-        },
-      });
-
-      if (get().status !== "connected") {
-        for (const track of micStream.getTracks()) track.stop();
-        return;
-      }
-
-      recorder?.stop();
-      const rec = new AudioRecorder((base64Pcm: string) => {
-        client?.sendAudio(base64Pcm);
-      });
-      recorder = rec;
-      await rec.startWithStream(micStream);
-      set({ micActive: true, error: null });
-    } catch (err) {
-      if (err instanceof DOMException && err.name === "NotAllowedError") {
-        set({ micActive: false, error: "micPermissionNeeded" });
-      } else {
-        const message = err instanceof Error ? err.message : "Microphone unavailable";
-        set({ micActive: false, error: message });
-      }
-    } finally {
-      micRequestInFlight = false;
-    }
+    // connecting: no-op
   },
 
   endSession: () => {
@@ -781,27 +813,14 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
 
     set({
       profileId: null,
-      status: "idle",
-      warmState: "cold",
-      warmReadyAt: null,
+      state: "disconnected",
       dodiSpeaking: false,
-      micActive: false,
-      audioReady: false,
+      gestureNeeded: false,
       error: null,
       chatMessages: [],
       chatSubmitting: false,
+      pendingNavigation: null,
     });
-  },
-
-  toggleMic: () => {
-    const { micActive } = get();
-    if (micActive) {
-      recorder?.stop();
-      recorder = null;
-      set({ micActive: false });
-    } else {
-      void get().ensureMicAfterGreeting();
-    }
   },
 
   sendTextMessage: async (message: string, gameId?: string) => {
@@ -876,7 +895,7 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
     });
 
     // Debounced sendContext for voice sessions
-    if (!client || current.status !== "connected") return;
+    if (!client || current.state !== "active") return;
 
     const stateJson = JSON.stringify(state);
     if (stateJson === lastSentGameState) return;
@@ -907,14 +926,30 @@ function createEventHandler(
     if (currentProfileId !== profileId) return;
 
     switch (event.type) {
-      case "setupComplete":
-        // Always activate (send greeting) so Dodi appears connected.
-        // Mic is only auto-enabled after greeting if tapRequested.
-        activateSession(set);
+      case "setupComplete": {
+        // Try to resume AudioContext without a gesture
+        if (streamer) {
+          void streamer.tryResume().then((audioOk) => {
+            // Guard against stale callback
+            if (generation !== contextGeneration) return;
+            if (currentProfileId !== profileId) return;
+
+            if (audioOk) {
+              transitionToActive(set, get);
+            } else {
+              transitionToDeaf(set, false);
+            }
+          });
+        } else {
+          transitionToDeaf(set, false);
+        }
         break;
+      }
 
       case "audio":
         if (!greetingSent) return;
+        // Drop audio in deaf mode
+        if (get().state !== "active") return;
         if (tapStartedAtMs !== null) {
           const elapsed = Math.round(performance.now() - tapStartedAtMs);
           tapStartedAtMs = null;
@@ -940,6 +975,7 @@ function createEventHandler(
 
       case "inputTranscription":
         if (!greetingSent) return;
+        resetInactivityTimer();
         transcript.push({
           role: "kid",
           text: event.text,
@@ -949,11 +985,38 @@ function createEventHandler(
         break;
 
       case "toolCall":
-        if (!isGameContext) return;
-
         gameDebug("voice", `Tool call: ${event.name}(${JSON.stringify(event.args)})`);
 
-        if (event.name === "execute_game_command") {
+        if (event.name === "launch_game" && !isGameContext) {
+          // Navigate to a game or filtered game library
+          const gameId = typeof event.args.game_id === "string" ? event.args.game_id : "";
+          const searchQuery = typeof event.args.search_query === "string" ? event.args.search_query : "";
+          const subject = typeof event.args.subject === "string" ? event.args.subject : "";
+
+          let navPath: string;
+          let action: string;
+
+          if (gameId) {
+            navPath = `/games/${gameId}`;
+            action = "navigating_to_game";
+          } else if (searchQuery || subject) {
+            const params = new URLSearchParams();
+            if (searchQuery) params.set("search", searchQuery);
+            if (subject) params.set("subject", subject);
+            navPath = `/games?${params.toString()}`;
+            action = "showing_matching_games";
+          } else {
+            navPath = "/games";
+            action = "showing_all_games";
+          }
+
+          set({ pendingNavigation: navPath });
+
+          client?.sendToolResponse(event.id, event.name, {
+            ok: true,
+            action,
+          });
+        } else if (event.name === "execute_game_command" && isGameContext) {
           const commandType = typeof event.args.type === "string" ? event.args.type : "";
           if (!commandType) {
             gameDebugWarn("voice", "Tool call missing command type");
@@ -978,10 +1041,10 @@ function createEventHandler(
             command: commandType,
           });
         } else {
-          gameDebugWarn("voice", `Unknown tool: ${event.name}`);
+          gameDebugWarn("voice", `Unknown or unavailable tool: ${event.name}`);
           client?.sendToolResponse(event.id, event.name, {
             ok: false,
-            error: `Unknown tool: ${event.name}`,
+            error: `Tool not available in current context`,
           });
         }
         break;
@@ -990,14 +1053,6 @@ function createEventHandler(
         if (!greetingSent) return;
         set({ dodiSpeaking: false });
         streamer?.resume();
-
-        if (!firstTurnCompleteSeen) {
-          firstTurnCompleteSeen = true;
-          // Only auto-enable mic if user explicitly tapped (not from prewarm)
-          if (tapRequested) {
-            void get().ensureMicAfterGreeting();
-          }
-        }
 
         // Process turn buffer for game context (extract commands from text markers)
         if (isGameContext) {
@@ -1031,44 +1086,37 @@ function createEventHandler(
         break;
 
       case "error": {
-        const wasActive =
-          tapRequested ||
-          get().status === "connecting" ||
-          get().status === "connected" ||
-          get().warmState === "active";
+        const wasConnected =
+          get().state === "connecting" ||
+          get().state === "active" ||
+          get().state === "deaf";
         window.removeEventListener("beforeunload", handleBeforeUnload);
         window.removeEventListener("pagehide", handlePageHide);
         cleanup();
         resetFlowFlags();
         set({
-          status: wasActive ? "error" : "idle",
-          warmState: "error",
-          warmReadyAt: null,
+          state: "disconnected",
           dodiSpeaking: false,
-          micActive: false,
-          audioReady: false,
-          error: wasActive ? event.error : null,
+          gestureNeeded: false,
+          error: wasConnected ? event.error : null,
         });
         break;
       }
 
       case "closed": {
-        const wasActive =
-          get().status === "connecting" ||
-          get().status === "connected" ||
-          get().warmState === "active";
+        const wasConnected =
+          get().state === "connecting" ||
+          get().state === "active" ||
+          get().state === "deaf";
         window.removeEventListener("beforeunload", handleBeforeUnload);
         window.removeEventListener("pagehide", handlePageHide);
         cleanup();
         resetFlowFlags();
         set({
-          status: wasActive ? "error" : "idle",
-          warmState: wasActive ? "error" : "cold",
-          warmReadyAt: null,
+          state: "disconnected",
           dodiSpeaking: false,
-          micActive: false,
-          audioReady: false,
-          error: wasActive ? "Connection closed unexpectedly" : null,
+          gestureNeeded: false,
+          error: wasConnected ? "Connection closed unexpectedly" : null,
         });
         break;
       }

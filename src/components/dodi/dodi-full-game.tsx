@@ -13,13 +13,11 @@ import { getDodiImage } from "@/lib/dodi-image";
 export function DodiFullGame() {
   const t = useTranslations("games");
 
-  const status = useDodiSessionStore((s) => s.status);
+  const dodiState = useDodiSessionStore((s) => s.state);
   const profileId = useDodiSessionStore((s) => s.profileId);
   const dodiSpeaking = useDodiSessionStore((s) => s.dodiSpeaking);
-  const micActive = useDodiSessionStore((s) => s.micActive);
-  const audioReady = useDodiSessionStore((s) => s.audioReady);
-  const toggleMic = useDodiSessionStore((s) => s.toggleMic);
-  const startSessionFromTap = useDodiSessionStore((s) => s.startSessionFromTap);
+  const toggleActive = useDodiSessionStore((s) => s.toggleActive);
+  const connect = useDodiSessionStore((s) => s.connect);
   const chatMessages = useDodiSessionStore((s) => s.chatMessages);
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -31,10 +29,8 @@ export function DodiFullGame() {
     }
   }, [chatMessages]);
 
-  const isConnecting = status === "connecting";
-  const isConnected = status === "connected";
-  const isError = status === "error";
-  const needsTap = isConnected && !audioReady;
+  const isConnecting = dodiState === "connecting";
+  const isConnected = dodiState === "active" || dodiState === "deaf";
 
   return (
     <section className="flex h-full flex-col rounded-2xl border bg-white shadow-sm">
@@ -44,12 +40,10 @@ export function DodiFullGame() {
           type="button"
           onClick={() => {
             if (isConnecting) return;
-            if (needsTap && profileId) {
-              void startSessionFromTap(profileId);
-            } else if (isConnected) {
-              toggleMic();
+            if (isConnected) {
+              toggleActive();
             } else if (profileId) {
-              void startSessionFromTap(profileId);
+              void connect(profileId);
             }
           }}
           disabled={isConnecting}
@@ -60,18 +54,16 @@ export function DodiFullGame() {
           aria-label={
             isConnecting
               ? "Dodi connecting"
-              : needsTap
-                ? "Tap to activate Dodi"
-                : isConnected
-                  ? micActive
-                    ? "Mute microphone"
-                    : "Unmute microphone"
+              : dodiState === "active"
+                ? "Mute Dodi"
+                : dodiState === "deaf"
+                  ? "Unmute Dodi"
                   : "Tap to reconnect Dodi"
           }
         >
           <Image
-            src={getDodiImage(isConnected, micActive, false)}
-            alt={isConnected ? (micActive ? "Dodi listening" : "Dodi can't hear you") : "Dodi sleeping"}
+            src={getDodiImage(dodiState, false)}
+            alt={dodiState === "active" ? "Dodi listening" : dodiState === "deaf" ? "Dodi can't hear you" : "Dodi sleeping"}
             fill
             className="object-contain"
           />
@@ -87,7 +79,7 @@ export function DodiFullGame() {
           </div>
         )}
 
-        {isConnected && !needsTap && (
+        {dodiState === "active" && (
           <SpeechBubble className="w-full text-center">
             {dodiSpeaking ? (
               <div className="flex items-center justify-center gap-2">
@@ -100,21 +92,20 @@ export function DodiFullGame() {
               </div>
             ) : (
               <p className="text-sm text-dodi-600">
-                {micActive ? t("voiceListening") : t("voiceMicOff")}
+                {t("voiceListening")}
               </p>
             )}
           </SpeechBubble>
         )}
 
-        {needsTap && (
+        {dodiState === "deaf" && (
           <p className="text-xs text-muted-foreground">
             {t("tapToReconnect")}
           </p>
         )}
 
-        {(isError || (!isConnected && !isConnecting)) && (
+        {(dodiState === "disconnected" || dodiState === "sleep") && (
           <p className="text-xs text-muted-foreground">
-            {isError ? t("voiceSessionFailed") + " " : ""}
             {t("tapToReconnect")}
           </p>
         )}

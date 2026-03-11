@@ -6,43 +6,30 @@ import { useDodiSessionStore } from "@/stores/dodi-session-store";
 import { getDodiImage } from "@/lib/dodi-image";
 
 export function DodiCompact() {
-  const status = useDodiSessionStore((s) => s.status);
-  const profileId = useDodiSessionStore((s) => s.profileId);
+  const dodiState = useDodiSessionStore((s) => s.state);
   const dodiSpeaking = useDodiSessionStore((s) => s.dodiSpeaking);
-  const micActive = useDodiSessionStore((s) => s.micActive);
-  const audioReady = useDodiSessionStore((s) => s.audioReady);
-  const toggleMic = useDodiSessionStore((s) => s.toggleMic);
-  const startSessionFromTap = useDodiSessionStore((s) => s.startSessionFromTap);
+  const error = useDodiSessionStore((s) => s.error);
+  const toggleActive = useDodiSessionStore((s) => s.toggleActive);
 
-  const isConnected = status === "connected";
-  const isConnecting = status === "connecting";
-  const isError = status === "error";
-  // Audio output needs a user tap to unlock (AudioContext suspended)
-  const needsTap = isConnected && !audioReady;
+  const isConnected = dodiState === "active" || dodiState === "deaf";
+  const isConnecting = dodiState === "connecting";
 
   function handleClick() {
-    if (isConnecting) return;
-    if (needsTap && profileId) {
-      // Unlock audio output via user gesture
-      void startSessionFromTap(profileId);
-    } else if (isConnected) {
-      toggleMic();
-    } else if (profileId) {
-      void startSessionFromTap(profileId);
-    }
+    toggleActive();
   }
 
-  const ariaLabel = isConnecting
-    ? "Dodi connecting"
-    : needsTap
-      ? "Tap to activate Dodi"
-      : isConnected
-        ? micActive
-          ? "Mute microphone"
-          : "Unmute microphone"
-        : isError
-          ? "Tap to reconnect Dodi"
-          : "Tap to start Dodi";
+  const ariaLabel =
+    dodiState === "connecting"
+      ? "Dodi connecting"
+      : dodiState === "active"
+        ? "Mute Dodi"
+        : dodiState === "deaf"
+          ? "Unmute Dodi"
+          : dodiState === "sleep"
+            ? "Tap to wake Dodi"
+            : error
+              ? "Tap to reconnect Dodi"
+              : "Tap to start Dodi";
 
   return (
     <button
@@ -53,7 +40,7 @@ export function DodiCompact() {
       aria-label={ariaLabel}
     >
       <Image
-        src={getDodiImage(isConnected, micActive, true)}
+        src={getDodiImage(dodiState, true)}
         alt="Dodi"
         width={32}
         height={32}
@@ -71,7 +58,7 @@ export function DodiCompact() {
       {isConnected && (
         <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white bg-green-500" />
       )}
-      {isError && (
+      {dodiState === "disconnected" && error && (
         <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white bg-red-500" />
       )}
     </button>

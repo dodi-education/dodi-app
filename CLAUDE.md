@@ -132,6 +132,10 @@ dodi-web/
 
 ## Code Conventions
 
+### Bugfixing
+
+When I report a bug, don't start by trying to fix it. Instead, start by writing a test that reproduces the bug. Then, have subagents try to fix the bug and prove it with a passing test
+
 ### TypeScript
 - **Strict mode** enabled (`"strict": true` in tsconfig)
 - Prefer `interface` over `type` for object shapes that may be extended

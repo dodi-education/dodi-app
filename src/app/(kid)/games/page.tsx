@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { cookies } from "next/headers";
 import { getTranslations } from "next-intl/server";
 
@@ -20,7 +21,9 @@ export default async function GamesPage() {
 
   return (
     <BrowseContext profileId={profileId}>
-      <GameLibrary profileId={profileId} />
+      <Suspense>
+        <GameLibrary profileId={profileId} />
+      </Suspense>
     </BrowseContext>
   );
 }

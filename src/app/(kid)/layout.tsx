@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 
@@ -22,6 +23,32 @@ export default function KidLayout({
 
   const displayMode = useDodiSessionStore((s) => s.displayMode);
   const context = useDodiSessionStore((s) => s.context);
+  const pendingNavigation = useDodiSessionStore((s) => s.pendingNavigation);
+  const clearPendingNavigation = useDodiSessionStore((s) => s.clearPendingNavigation);
+  const dodiState = useDodiSessionStore((s) => s.state);
+  const gestureNeeded = useDodiSessionStore((s) => s.gestureNeeded);
+  const activate = useDodiSessionStore((s) => s.activate);
+
+  useEffect(() => {
+    if (pendingNavigation) {
+      router.push(pendingNavigation);
+      clearPendingNavigation();
+    }
+  }, [pendingNavigation, router, clearPendingNavigation]);
+
+  // Global gesture listener: when Dodi is deaf because AudioContext needs a
+  // user gesture, any click on the page activates her. The handler does NOT
+  // call preventDefault/stopPropagation so navigation and buttons still work.
+  useEffect(() => {
+    if (dodiState !== "deaf" || !gestureNeeded) return;
+
+    function handleGlobalClick() {
+      void activate();
+    }
+
+    document.addEventListener("click", handleGlobalClick, { capture: true, once: true });
+    return () => document.removeEventListener("click", handleGlobalClick, { capture: true });
+  }, [dodiState, gestureNeeded, activate]);
 
   const isGameFull = context.type === "game" && displayMode === "full";
 

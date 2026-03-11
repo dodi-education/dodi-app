@@ -49,6 +49,35 @@ export function getGameMetadata(game: Pick<Game, "metadata">): GameMetadata {
   return metadata as GameMetadata;
 }
 
+export interface GameCatalogEntry {
+  id: string;
+  title: string;
+  subject: string;
+  description: string;
+  tags: string[];
+}
+
+export async function listGameCatalog(
+  supabase: Client,
+  profileId?: string,
+): Promise<GameCatalogEntry[]> {
+  let query = supabase
+    .from("games")
+    .select("id, title, subject, description, tags")
+    .order("title", { ascending: true });
+
+  if (profileId) {
+    query = query.or(`is_system.eq.true,profile_id.eq.${profileId}`);
+  } else {
+    query = query.eq("is_system", true);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  return (data ?? []) as unknown as GameCatalogEntry[];
+}
+
 export async function listGames(
   supabase: Client,
   options: ListGamesOptions,

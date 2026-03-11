@@ -27,7 +27,7 @@ export default async function ParentLayout({
         <div className="flex h-14 items-center gap-2 border-b px-4">
           <Link href="/dashboard" className="flex items-center gap-2">
             <Image
-              src="/images/dodi-head.png"
+              src="/images/dodi-head-active.png"
               alt="Dodi"
               width={28}
               height={28}

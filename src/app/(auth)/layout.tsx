@@ -10,7 +10,7 @@ export default function AuthLayout({
     <div className="flex min-h-screen flex-col items-center justify-center px-4 py-12">
       <Link href="/" className="mb-8 flex items-center gap-2">
         <Image
-          src="/images/dodi-head.png"
+          src="/images/dodi-head-active.png"
           alt="Dodi"
           width={48}
           height={48}

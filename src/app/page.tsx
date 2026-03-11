@@ -16,7 +16,7 @@ export default async function LandingPage() {
       <header className="flex items-center justify-between px-6 py-4">
         <div className="flex items-center gap-2">
           <Image
-            src="/images/dodi-head.png"
+            src="/images/dodi-head-active.png"
             alt="Dodi"
             width={40}
             height={40}
@@ -39,7 +39,7 @@ export default async function LandingPage() {
         <section className="flex w-full max-w-5xl flex-col items-center gap-8 py-16 md:py-24">
           <div className="relative h-48 w-48 md:h-64 md:w-64">
             <Image
-              src="/images/dodi-full.png"
+              src="/images/dodi-active.png"
               alt="Dodi — your AI learning companion"
               fill
               className="object-contain"

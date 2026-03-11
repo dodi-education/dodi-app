@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 
 import { Button } from "@/components/ui/button";
@@ -22,12 +23,13 @@ interface GameLibraryProps {
 
 export function GameLibrary({ profileId }: GameLibraryProps) {
   const t = useTranslations("games");
+  const searchParams = useSearchParams();
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [games, setGames] = useState<Game[]>([]);
-  const [search, setSearch] = useState("");
-  const [subjectFilter, setSubjectFilter] = useState<string>("all");
+  const [search, setSearch] = useState(searchParams.get("search") ?? "");
+  const [subjectFilter, setSubjectFilter] = useState<string>(searchParams.get("subject") ?? "all");
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const fetchGames = useCallback(async () => {

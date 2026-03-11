@@ -101,6 +101,20 @@ Dodi is a personalized, AI-powered learning platform that creates fun, targeted 
 - **F3.10**: Dodi appearance customization by kids (colors, accessories, themes)
 - **F3.11**: Progressive memory building — companion updates the profile memory dossier after meaningful interactions
 - **F3.12**: Memory-aware context — companion reads memory + parent notes as briefing before each session
+- **F3.13**: Dodi connection states — four clear states with corresponding avatars:
+
+  | State | Description | Avatar (full / head) |
+  |---|---|---|
+  | **Disconnected** (Sleep) | No WebSocket connection | `dodi-sleep.png` / `dodi-head-sleep.png` |
+  | **Connecting** | WebSocket connecting (show sleep avatar) | `dodi-sleep.png` / `dodi-head-sleep.png` |
+  | **Connected Active** | Full bidirectional voice — mic on, audio playing | `dodi-active.png` / `dodi-head-active.png` |
+  | **Connected Deaf** | Connected but no voice I/O — mic off, audio muted | `dodi-deaf.png` / `dodi-head-deaf.png` |
+
+  **Default page load**: Auto-connect → if AudioContext runs without gesture → Active; if gesture needed → Deaf (`gestureNeeded` flag). Any page click activates when `gestureNeeded` is true (without blocking navigation).
+
+  **Avatar click**: Disconnected → reconnect; Connecting → no-op; Active → Deaf (mute); Deaf → Active (unmute).
+
+  **Deaf mode rules**: No mic audio forwarded to AI. Incoming audio chunks dropped. WebSocket stays alive. Greeting deferred until first activation.
 
 ### F4: AI Provider Configuration
 - **F4.1**: Parents enter API keys for supported providers
@@ -453,8 +467,7 @@ The MVP focuses on delivering a functional, delightful core experience:
 - [x] Profile memory system (auto-update from conversations).
 - [ ] Onboarding conversation flow
 - [ ] First interaction with Dodi should be that the kid can draw itself and use this as an avatar
-- [ ] Active/Sleep mode: When no interaction happens within 10 seconds, Dodi goes into sleep mode.
-- [ ] Sleep mode stops sending voice to AI provider. Dodi can be wakened up with a tap/click on the companion.
+- [x] Dodi connection states: Disconnected (Sleep), Connecting, Active, Deaf — with avatar images and click behaviors (see F3.13)
 
 ### Phase 3: Games
 - [ ] AI game generation pipeline

@@ -45,7 +45,7 @@ export function Header() {
     <header className="flex h-14 items-center justify-between border-b bg-background px-4 md:px-6">
       <Link href="/dashboard" className="flex items-center gap-2 md:hidden">
         <Image
-          src="/images/dodi-head.png"
+          src="/images/dodi-head-active.png"
           alt="Dodi"
           width={28}
           height={28}
