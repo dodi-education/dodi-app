@@ -93,10 +93,6 @@ export class AudioStreamer {
     this.scheduledTime = 0;
   }
 
-  resume(): void {
-    this.scheduledTime = 0;
-  }
-
   async destroy(): Promise<void> {
     this.stop();
     if (this.context) {

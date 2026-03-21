@@ -5,11 +5,16 @@ import { createClient } from "@/lib/supabase/server";
 import { getModelConfig, updateModelConfig } from "@/lib/services/ai-providers";
 import type { AccountModelConfig } from "@/types/ai";
 
+const providerEnum = z.enum(["gemini", "openai", "anthropic", "xai"]);
+
 const UpdateConfigSchema = z.object({
-  voiceProvider: z.enum(["gemini", "openai", "anthropic", "xai"]),
+  voiceProvider: providerEnum,
   voiceModel: z.string().min(1),
   voiceName: z.string().min(1),
-  gameProvider: z.enum(["gemini", "openai", "anthropic", "xai"]).optional(),
+  thinkingProvider: providerEnum.optional(),
+  thinkingModel: z.string().min(1).optional(),
+  // Legacy fields accepted for backward compat
+  gameProvider: providerEnum.optional(),
   gameModel: z.string().min(1).optional(),
 });
 
@@ -59,8 +64,8 @@ export async function PATCH(request: Request): Promise<NextResponse> {
       voiceProvider: result.data.voiceProvider,
       voiceModel: result.data.voiceModel,
       voiceName: result.data.voiceName,
-      gameProvider: result.data.gameProvider,
-      gameModel: result.data.gameModel,
+      thinkingProvider: result.data.thinkingProvider ?? result.data.gameProvider,
+      thinkingModel: result.data.thinkingModel ?? result.data.gameModel,
     };
     await updateModelConfig(supabase, user.id, config);
     return NextResponse.json(config);

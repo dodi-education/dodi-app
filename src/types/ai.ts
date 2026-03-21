@@ -5,6 +5,7 @@ export interface AIProviderDefinition {
   name: string;
   supportsVoice: boolean;
   supportsLiveStreaming: boolean;
+  supportsThinking: boolean;
   models: AIModel[];
   voices: AIVoice[];
 }
@@ -12,7 +13,7 @@ export interface AIProviderDefinition {
 export interface AIModel {
   id: string;
   name: string;
-  capabilities: ("voice" | "text" | "live")[];
+  capabilities: ("voice" | "text" | "live" | "thinking")[];
 }
 
 export interface AIVoice {
@@ -37,6 +38,9 @@ export interface AccountModelConfig {
   voiceProvider: AIProviderId;
   voiceModel: string;
   voiceName: string;
+  thinkingProvider?: AIProviderId;
+  thinkingModel?: string;
+  // Legacy fields — normalizeModelConfig() maps these to thinking*
   gameProvider?: AIProviderId;
   gameModel?: string;
 }

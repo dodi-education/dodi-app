@@ -2,7 +2,10 @@ import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 
 import { createClient } from "@/lib/supabase/server";
+import { createLogger } from "@/lib/logger";
 import { getProfile } from "@/lib/services/profiles";
+
+const log = createLogger("game-create");
 import { getGame } from "@/lib/services/games";
 import {
   createCustomGame,
@@ -10,6 +13,11 @@ import {
 } from "@/lib/services/games";
 import { generateCustomGame } from "@/lib/services/game-generation";
 import { logMemoryEvent } from "@/lib/services/system-logs";
+import {
+  getTranslation,
+  getTranslationsForGames,
+  applyTranslation,
+} from "@/lib/services/game-translations";
 
 const CreateGameSchema = z.object({
   profileId: z.string().uuid(),
@@ -49,11 +57,13 @@ export async function GET(request: Request): Promise<NextResponse> {
   const includeSystem = searchParams.get("includeSystem") !== "false";
   const tags = searchParams.getAll("tag").filter(Boolean);
 
+  let locale = "en";
   if (profileId) {
     const profile = await getProfile(supabase, profileId);
     if (!profile || profile.account_id !== user.id) {
       return NextResponse.json({ error: "Profile not found" }, { status: 404 });
     }
+    locale = profile.language;
   }
 
   try {
@@ -65,7 +75,17 @@ export async function GET(request: Request): Promise<NextResponse> {
       tags,
     });
 
-    return NextResponse.json(games);
+    const translations = await getTranslationsForGames(
+      supabase,
+      games.map((g) => g.id),
+      locale,
+    );
+
+    const translatedGames = games.map((game) =>
+      applyTranslation(game, translations.get(game.id)),
+    );
+
+    return NextResponse.json(translatedGames);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to fetch games";
     return NextResponse.json({ error: message }, { status: 500 });
@@ -93,6 +113,8 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
 
   const { profileId, prompt, baseGameId } = parsed.data;
+  log.info("creation_requested", { profileId, promptLength: prompt.length, baseGameId });
+  log.debug("creation_prompt", { profileId, prompt });
 
   try {
     const profile = await getProfile(supabase, profileId);
@@ -106,9 +128,11 @@ export async function POST(request: Request): Promise<NextResponse> {
       if (!baseGame) {
         return NextResponse.json({ error: "Base game not found" }, { status: 404 });
       }
+      const baseTranslation = await getTranslation(supabase, baseGame.id, profile.language);
+      const translatedBase = applyTranslation(baseGame, baseTranslation);
       generationPrompt = [
-        `Create a remix inspired by the base game \"${baseGame.title}\".`,
-        `Base game description: ${baseGame.description}`,
+        `Create a remix inspired by the base game \"${translatedBase.title}\".`,
+        `Base game description: ${translatedBase.description}`,
         "",
         `Kid request: ${prompt}`,
       ].join("\n");
@@ -124,6 +148,12 @@ export async function POST(request: Request): Promise<NextResponse> {
         language: profile.language,
       },
     );
+
+    log.info("game_generated", {
+      profileId,
+      title: generated.title,
+      codeSizeChars: generated.codeBundle.length,
+    });
 
     const created = await createCustomGame(supabase, {
       accountId: user.id,
@@ -143,6 +173,8 @@ export async function POST(request: Request): Promise<NextResponse> {
       createdBy: "ai",
     });
 
+    log.info("game_created", { profileId, gameId: created.id, title: created.title });
+
     logMemoryEvent(supabase, {
       profile_id: profile.id,
       account_id: user.id,
@@ -156,6 +188,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json(created, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to create game";
+    log.error("creation_failed", { profileId, error: message });
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

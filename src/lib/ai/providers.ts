@@ -6,11 +6,17 @@ export const AI_PROVIDERS: AIProviderDefinition[] = [
     name: "Google Gemini",
     supportsVoice: true,
     supportsLiveStreaming: true,
+    supportsThinking: true,
     models: [
       {
         id: "gemini-2.5-flash-native-audio-preview-12-2025",
         name: "Gemini 2.5 Flash (Native Audio)",
         capabilities: ["voice", "text", "live"],
+      },
+      {
+        id: "gemini-2.5-flash",
+        name: "Gemini 2.5 Flash",
+        capabilities: ["text", "thinking"],
       },
     ],
     voices: [
@@ -24,9 +30,33 @@ export const AI_PROVIDERS: AIProviderDefinition[] = [
       { id: "Zephyr", name: "Zephyr" },
     ],
   },
-  // Future providers will be added here:
+  {
+    id: "anthropic",
+    name: "Anthropic Claude",
+    supportsVoice: false,
+    supportsLiveStreaming: false,
+    supportsThinking: true,
+    models: [
+      {
+        id: "claude-opus-4-6",
+        name: "Claude Opus 4.6",
+        capabilities: ["text", "thinking"],
+      },
+      {
+        id: "claude-sonnet-4-20250514",
+        name: "Claude Sonnet 4",
+        capabilities: ["text", "thinking"],
+      },
+      {
+        id: "claude-haiku-4-5-20251001",
+        name: "Claude Haiku 4.5",
+        capabilities: ["text", "thinking"],
+      },
+    ],
+    voices: [],
+  },
+  // Future providers:
   // { id: "openai", name: "OpenAI", ... },
-  // { id: "anthropic", name: "Anthropic Claude", ... },
   // { id: "xai", name: "xAI Grok", ... },
 ];
 

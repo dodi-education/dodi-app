@@ -2,12 +2,12 @@ import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 
-import { GameEditView } from "@/components/games/game-edit-view";
+import { GameVoiceCreator } from "@/components/games/game-voice-creator";
 import { createClient } from "@/lib/supabase/server";
 import { ensureEditableGame, getGame } from "@/lib/services/games";
 import { getProfile } from "@/lib/services/profiles";
 import { logMemoryEvent } from "@/lib/services/system-logs";
-import { BrowseContext } from "@/components/kid/browse-context";
+import { getTranslation, applyTranslation } from "@/lib/services/game-translations";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -52,7 +52,12 @@ export default async function GameEditPage({ params }: RouteContext) {
     notFound();
   }
 
-  const editable = await ensureEditableGame(supabase, id, user.id, profile.id);
+  const sourceTranslation = await getTranslation(supabase, sourceGame.id, profile.language);
+  const translatedSource = applyTranslation(sourceGame, sourceTranslation);
+
+  const editable = await ensureEditableGame(supabase, id, user.id, profile.id, {
+    remixTitle: `${translatedSource.title} (Remix)`,
+  });
 
   if (editable.id !== id) {
     void logMemoryEvent(supabase, {
@@ -60,21 +65,23 @@ export default async function GameEditPage({ params }: RouteContext) {
       account_id: user.id,
       persona_id: profile.active_persona_id,
       event: "game_cloned",
-      message: `Cloned game "${sourceGame.title}" for remix as "${editable.title}"`,
+      message: `Cloned game "${translatedSource.title}" for remix as "${editable.title}"`,
     });
 
     redirect(`/games/${editable.id}/edit`);
   }
 
+  const editTranslation = await getTranslation(supabase, editable.id, profile.language);
+  const translatedEditable = applyTranslation(editable, editTranslation);
+
   return (
-    <BrowseContext profileId={profile.id}>
-      <GameEditView
-        gameId={editable.id}
-        profileId={profile.id}
-        title={editable.title}
-        description={editable.description}
-        codeBundle={editable.code_bundle}
-      />
-    </BrowseContext>
+    <GameVoiceCreator
+      profileId={profile.id}
+      gameId={translatedEditable.id}
+      title={translatedEditable.title}
+      description={translatedEditable.description}
+      codeBundle={translatedEditable.code_bundle}
+      markdown={translatedEditable.markdown}
+    />
   );
 }

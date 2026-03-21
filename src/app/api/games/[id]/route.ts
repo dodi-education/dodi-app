@@ -9,6 +9,7 @@ import {
   getGame,
   updateCustomGame,
 } from "@/lib/services/games";
+import { getTranslation, applyTranslation } from "@/lib/services/game-translations";
 
 const UpdateGameSchema = z.object({
   title: z.string().min(1).max(120).optional(),
@@ -28,7 +29,7 @@ interface RouteContext {
 }
 
 export async function GET(
-  _request: Request,
+  request: Request,
   context: RouteContext,
 ): Promise<NextResponse> {
   const { id } = await context.params;
@@ -42,13 +43,17 @@ export async function GET(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const { searchParams } = new URL(request.url);
+  const locale = searchParams.get("locale") ?? "en";
+
   try {
     const game = await getGame(supabase, id);
     if (!game) {
       return NextResponse.json({ error: "Game not found" }, { status: 404 });
     }
 
-    return NextResponse.json(game);
+    const translation = await getTranslation(supabase, game.id, locale);
+    return NextResponse.json(applyTranslation(game, translation));
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to fetch game";
     return NextResponse.json({ error: message }, { status: 500 });

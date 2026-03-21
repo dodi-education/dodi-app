@@ -2,86 +2,23 @@ import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 
 import { createClient } from "@/lib/supabase/server";
+import { createLogger } from "@/lib/logger";
 import { getProfile } from "@/lib/services/profiles";
+
+const log = createLogger("voice-session");
 import {
   decryptProviderKey,
   getModelConfig,
 } from "@/lib/services/ai-providers";
 import { getGlobalDefaultPersona, getPersona } from "@/lib/services/personas";
-import { getMemory, getParentNotes, EMPTY_MEMORY_HINT } from "@/lib/services/memory";
+import { getMemory, getParentNotes } from "@/lib/services/memory";
 import { logMemoryEvent } from "@/lib/services/system-logs";
-import { listGameCatalog, type GameCatalogEntry } from "@/lib/services/games";
+import { listGameCatalog } from "@/lib/services/games";
+import { buildHomeVoiceContext, isTodayBirthday } from "@/lib/services/dodi-context";
 
 const SessionRequestSchema = z.object({
   profileId: z.string().uuid(),
 });
-
-function buildSystemInstruction(
-  soul: string,
-  memory: string | null,
-  parentNotes: string | null,
-  name: string,
-  birthdate: string | null,
-  language: string,
-  gameCatalog: GameCatalogEntry[],
-): string {
-  let ageClause = "";
-  if (birthdate) {
-    const birth = new Date(birthdate);
-    const now = new Date();
-    let age = now.getFullYear() - birth.getFullYear();
-    const monthDiff = now.getMonth() - birth.getMonth();
-    if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < birth.getDate())) {
-      age--;
-    }
-    if (age > 0) {
-      ageClause = ` (${age} years old)`;
-    }
-  }
-
-  const languageName =
-    language === "de" ? "German" : "English";
-
-  const sections: string[] = [soul];
-
-  // Kid memory (or first-meeting hint)
-  if (memory) {
-    sections.push("", "## What You Know About This Child", memory);
-  } else {
-    sections.push("", "## First Meeting", EMPTY_MEMORY_HINT);
-  }
-
-  // Parent notes (read-only context)
-  if (parentNotes) {
-    sections.push("", "## Parent Notes", parentNotes);
-  }
-
-  // Session context
-  sections.push(
-    "",
-    "## Current Session Context",
-    `- Child's name: ${name}${ageClause}`,
-    `- Language: ${languageName}`,
-    `- Start by greeting ${name} by name`,
-  );
-
-  // Available games
-  if (gameCatalog.length > 0) {
-    sections.push(
-      "",
-      "## Available Games",
-      "When the child asks to play a game, use the `launch_game` tool with the `game_id` from this catalog. If you're unsure which game they mean, use `search_query` or `subject` to show them matching options.",
-      "",
-      "| id | title | subject | tags |",
-      "|----|-------|---------|------|",
-      ...gameCatalog.map(
-        (g) => `| ${g.id} | ${g.title} | ${g.subject} | ${g.tags.join(", ")} |`,
-      ),
-    );
-  }
-
-  return sections.join("\n");
-}
 
 export async function POST(request: Request): Promise<NextResponse> {
   const supabase = await createClient();
@@ -104,6 +41,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
 
   const { profileId } = result.data;
+  log.info("session_requested", { profileId });
 
   try {
     // Fetch the profile and verify ownership
@@ -142,6 +80,13 @@ export async function POST(request: Request): Promise<NextResponse> {
       );
     }
 
+    log.debug("persona_resolved", {
+      profileId,
+      personaId: persona.id,
+      personaName: persona.name,
+      isGlobalDefault: !profile.active_persona_id,
+    });
+
     // Fetch memory, parent notes, and game catalog
     const [memory, parentNotes, gameCatalog] = await Promise.all([
       getMemory(supabase, profileId),
@@ -149,16 +94,24 @@ export async function POST(request: Request): Promise<NextResponse> {
       listGameCatalog(supabase, profileId),
     ]);
 
-    // Build the system instruction with persona soul + memory + kid context + games
-    const systemInstruction = buildSystemInstruction(
-      persona.soul,
+    // Build system instruction + tools via centralized builder
+    const { systemInstruction, tools } = buildHomeVoiceContext({
+      personaSoul: persona.soul,
+      childName: profile.display_name,
+      childBirthdate: profile.birthdate,
+      childLanguage: profile.language,
       memory,
       parentNotes,
-      profile.display_name,
-      profile.birthdate,
-      profile.language,
       gameCatalog,
-    );
+    });
+
+    log.debug("context_built", {
+      profileId,
+      systemInstructionLength: systemInstruction.length,
+      toolCount: tools.length,
+      hasMemory: !!memory,
+      gameCatalogCount: gameCatalog.length,
+    });
 
     // Log session_start (non-blocking)
     logMemoryEvent(supabase, {
@@ -171,33 +124,13 @@ export async function POST(request: Request): Promise<NextResponse> {
       // logging failure is non-critical
     });
 
-    // Build launch_game tool declaration if games are available
-    const tools = gameCatalog.length > 0
-      ? [
-          {
-            name: "launch_game",
-            description:
-              "Navigate the child to a game or show matching games. Use game_id for a specific game, or search_query/subject to filter the game library.",
-            parameters: {
-              type: "object",
-              properties: {
-                game_id: {
-                  type: "string",
-                  description: "The UUID of a specific game from the catalog",
-                },
-                search_query: {
-                  type: "string",
-                  description: "Free-text search to filter games",
-                },
-                subject: {
-                  type: "string",
-                  description: "Subject filter (e.g. math, creativity, science)",
-                },
-              },
-            },
-          },
-        ]
-      : [];
+    const isBirthday = isTodayBirthday(profile.birthdate);
+    log.info("session_created", {
+      profileId,
+      model: modelConfig.voiceModel,
+      voiceName: modelConfig.voiceName,
+      isBirthday,
+    });
 
     return NextResponse.json({
       apiKey,
@@ -206,10 +139,12 @@ export async function POST(request: Request): Promise<NextResponse> {
       systemInstruction,
       language: profile.language,
       ...(tools.length > 0 ? { tools } : {}),
+      isBirthday,
     });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to create session";
+    log.error("session_failed", { profileId, error: message });
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

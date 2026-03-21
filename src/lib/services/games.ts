@@ -269,6 +269,7 @@ export async function ensureEditableGame(
   gameId: string,
   accountId: string,
   profileId: string,
+  options?: { remixTitle?: string },
 ): Promise<Game> {
   const game = await getGame(supabase, gameId);
   if (!game) {
@@ -280,7 +281,7 @@ export async function ensureEditableGame(
   }
 
   return cloneGameToCustom(supabase, gameId, accountId, profileId, {
-    title: `${game.title} (Remix)`,
+    title: options?.remixTitle ?? `${game.title} (Remix)`,
     createdBy: "kid",
   });
 }

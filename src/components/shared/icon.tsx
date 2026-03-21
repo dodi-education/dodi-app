@@ -7,6 +7,7 @@ import {
   IconChevronDown,
   IconChevronUp,
   IconCircleCheck,
+  IconCode,
   IconDeviceGamepad2,
   IconEye,
   IconEyeOff,
@@ -19,6 +20,7 @@ import {
   IconPalette,
   IconPlus,
   IconRefresh,
+  IconRobot,
   IconSend,
   IconSettings,
   IconShieldLock,
@@ -40,6 +42,7 @@ export type IconName =
   | "chevron_down"
   | "chevron_up"
   | "close"
+  | "code"
   | "dashboard"
   | "delete"
   | "feature_games"
@@ -62,6 +65,7 @@ export type IconName =
   | "show"
   | "stop"
   | "success"
+  | "agent_sessions"
   | "system_logs"
   | "volume";
 
@@ -72,6 +76,7 @@ const ICONS: Record<IconName, ComponentType<TablerIconProps>> = {
   chevron_down: IconChevronDown,
   chevron_up: IconChevronUp,
   close: IconX,
+  code: IconCode,
   dashboard: IconChartBar,
   delete: IconTrash,
   feature_games: IconDeviceGamepad2,
@@ -94,6 +99,7 @@ const ICONS: Record<IconName, ComponentType<TablerIconProps>> = {
   show: IconEye,
   stop: IconSquare,
   success: IconCircleCheck,
+  agent_sessions: IconRobot,
   system_logs: IconBrain,
   volume: IconVolume,
 };

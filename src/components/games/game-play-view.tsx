@@ -38,10 +38,16 @@ export function GamePlayView({
   });
 
   const sandboxRef = useRef<GameSandboxHandle | null>(null);
+  const snapshotResolverRef = useRef<((data: string | null) => void) | null>(null);
   const [gameError, setGameError] = useState<string | null>(null);
 
   const updateGameState = useDodiSessionStore((s) => s.updateGameState);
   const setOnRunCommands = useDodiSessionStore((s) => s.setOnRunCommands);
+  const setOnRequestSnapshot = useDodiSessionStore((s) => s.setOnRequestSnapshot);
+
+  const handleCommandResult = useCallback((state: Record<string, unknown>) => {
+    updateGameState(state, true);
+  }, [updateGameState]);
 
   const logEvent = useCallback(async (event: string, message: string) => {
     try {
@@ -79,11 +85,40 @@ export function GamePlayView({
     }
   }, [t]);
 
-  // Register command handler with the Dodi session store
+  // Request a canvas snapshot from the sandbox (used by read_game_state)
+  const requestSnapshot = useCallback((): Promise<string | null> => {
+    return new Promise<string | null>((resolve) => {
+      if (!sandboxRef.current) {
+        resolve(null);
+        return;
+      }
+      snapshotResolverRef.current = resolve;
+      sandboxRef.current.sendCommand({ type: "get_snapshot" });
+      // Timeout after 3 seconds
+      const timer = setTimeout(() => {
+        if (snapshotResolverRef.current === resolve) {
+          snapshotResolverRef.current = null;
+          resolve(null);
+        }
+      }, 3000);
+      // Store cleanup ref so resolver can cancel the timeout
+      const origResolve = resolve;
+      snapshotResolverRef.current = (data: string | null) => {
+        clearTimeout(timer);
+        origResolve(data);
+      };
+    });
+  }, []);
+
+  // Register command + snapshot handlers with the Dodi session store
   useEffect(() => {
     setOnRunCommands(runCommands);
-    return () => setOnRunCommands(null);
-  }, [runCommands, setOnRunCommands]);
+    setOnRequestSnapshot(requestSnapshot);
+    return () => {
+      setOnRunCommands(null);
+      setOnRequestSnapshot(null);
+    };
+  }, [runCommands, requestSnapshot, setOnRunCommands, setOnRequestSnapshot]);
 
   const handleSandboxMessage = useCallback((message: GameToParentMessage): void => {
     gameDebug("playview", `Received message from sandbox: ${message.type}`, message);
@@ -91,6 +126,17 @@ export function GamePlayView({
     if (message.type === "game:error") {
       gameDebugWarn("playview", `Game error: ${message.payload.error}`);
       setGameError(message.payload.error);
+      return;
+    }
+
+    // Handle snapshot events from get_snapshot command
+    if (message.type === "game:event" && message.payload.event === "snapshot") {
+      const snapshot = (message.payload as Record<string, unknown>).snapshot as string | null;
+      gameDebug("playview", `Received snapshot (${snapshot ? snapshot.length : 0} chars)`);
+      if (snapshotResolverRef.current) {
+        snapshotResolverRef.current(snapshot ?? null);
+        snapshotResolverRef.current = null;
+      }
       return;
     }
 
@@ -139,6 +185,7 @@ export function GamePlayView({
           codeBundle={codeBundle}
           className="h-[66vh] min-h-[440px] w-full rounded-xl border bg-white"
           onStateChange={updateGameState}
+          onCommandResult={handleCommandResult}
           onMessage={handleSandboxMessage}
         />
       </div>

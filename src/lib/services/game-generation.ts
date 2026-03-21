@@ -8,6 +8,7 @@ import { sanitizeGameBundle } from "@/lib/game-sanitizer";
 import {
   decryptProviderKey,
   getModelConfig,
+  normalizeModelConfig,
 } from "@/lib/services/ai-providers";
 
 type Client = SupabaseClient<Database>;
@@ -98,20 +99,22 @@ async function resolveGameModel(
   supabase: Client,
   accountId: string,
 ): Promise<ResolvedGameModel> {
-  const modelConfig = await getModelConfig(supabase, accountId);
-  if (!modelConfig) {
+  const rawConfig = await getModelConfig(supabase, accountId);
+  if (!rawConfig) {
     throw new Error("No AI model configuration found");
   }
 
-  const providerId = modelConfig.gameProvider ?? modelConfig.voiceProvider;
-  const modelId = modelConfig.gameModel ?? modelConfig.voiceModel;
+  const modelConfig = normalizeModelConfig(rawConfig);
+
+  const providerId = modelConfig.thinkingProvider ?? modelConfig.voiceProvider;
+  const modelId = modelConfig.thinkingModel ?? modelConfig.voiceModel;
 
   if (!providerId || !modelId) {
     throw new Error("No game model configured");
   }
 
   if (providerId !== "gemini") {
-    throw new Error(`Provider "${providerId}" is not yet supported for games`);
+    throw new Error(`Provider "${providerId}" is not yet supported for single-shot game generation`);
   }
 
   const apiKey = await decryptProviderKey(supabase, accountId, providerId);
@@ -123,7 +126,7 @@ async function resolveGameModel(
   };
 }
 
-const BRIDGE_INTERFACE_TEMPLATE = `
+export const BRIDGE_INTERFACE_TEMPLATE = `
 ## Dodi Game Bridge Interface (REQUIRED)
 
 The game MUST implement this postMessage bridge pattern:
@@ -137,8 +140,11 @@ The game MUST implement this postMessage bridge pattern:
    - Send 'game:result' to parent with { command, result: { ok: boolean, error?: string }, state }
 4. On receiving 'dodi:get_state' message:
    - Send 'game:state' to parent with the full current state object
-5. On any significant state change (score, level, player action):
-   - Proactively send 'game:state' to parent
+5. Proactively send 'game:state' to parent:
+   - After any user interaction that changes state (click, tap, drag end, key press)
+   - After score, level, or progress changes
+   - After timed events that change state (animation complete, countdown tick, round end)
+   - Always send AFTER the change is applied, with the COMPLETE state object
 
 Sending messages to parent:
   parent.postMessage({ type: 'game:ready|game:result|game:state|game:event|game:error', token: bridgeToken, payload: {...} }, '*');
@@ -147,7 +153,7 @@ The capabilities array in game:ready MUST list ALL command types the game suppor
 The state object MUST include ALL meaningful game state (score, level, positions, selections, etc).
 `.trim();
 
-const MARKDOWN_GENERATION_INSTRUCTION = `
+export const MARKDOWN_GENERATION_INSTRUCTION = `
 Also generate a "markdown" key containing a markdown document for the AI companion. This document should include:
 - Game Overview: what the game is about and how to play
 - Rules: win/lose conditions, scoring, progression
@@ -279,6 +285,63 @@ export async function remixCustomGame(
   const model = await resolveGameModel(supabase, accountId);
   const prompt = buildRemixPrompt(context);
   const raw = await runGeminiJson(model.apiKey, model.modelId, prompt);
+
+  return toGameDefinition(raw);
+}
+
+function buildRegenerationPrompt(
+  instruction: string,
+  existingCode: string,
+  existingMarkdown: string,
+  context: GenerationContext,
+): string {
+  const ageLine = context.age ? `- Child age: ${context.age}` : "- Child age: unknown";
+
+  return [
+    "You are updating an existing kid-safe HTML/CSS/JS game based on a change instruction.",
+    "Return only JSON with keys:",
+    "title, description, subject, difficulty, targetAgeMin, targetAgeMax, estimatedDurationMinutes, tags, codeBundle, markdown, metadata",
+    "",
+    "Hard requirements:",
+    "- Keep it sandbox-safe: no external scripts, no network APIs, no dynamic imports",
+    "- Keep code under 200KB",
+    "",
+    BRIDGE_INTERFACE_TEMPLATE,
+    "",
+    MARKDOWN_GENERATION_INSTRUCTION,
+    "",
+    "Current game markdown:",
+    existingMarkdown || "(none)",
+    "",
+    "Current game code:",
+    existingCode,
+    "",
+    "Change instruction:",
+    instruction,
+    "",
+    "Child context:",
+    `- Child name: ${context.profileName}`,
+    ageLine,
+    `- Language: ${context.language}`,
+  ].join("\n");
+}
+
+export async function regenerateGame(
+  supabase: Client,
+  accountId: string,
+  instruction: string,
+  existingCode: string,
+  existingMarkdown: string,
+  context: GenerationContext,
+): Promise<GeneratedGameDefinition> {
+  const model = await resolveGameModel(supabase, accountId);
+  const fullPrompt = buildRegenerationPrompt(
+    instruction,
+    existingCode,
+    existingMarkdown,
+    context,
+  );
+  const raw = await runGeminiJson(model.apiKey, model.modelId, fullPrompt);
 
   return toGameDefinition(raw);
 }

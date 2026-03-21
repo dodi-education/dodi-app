@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getGame } from "@/lib/services/games";
 import { getProfile } from "@/lib/services/profiles";
 import { logMemoryEvent } from "@/lib/services/system-logs";
+import { getTranslation, applyTranslation } from "@/lib/services/game-translations";
 
 const LogGameEventSchema = z.object({
   profileId: z.string().uuid(),
@@ -48,10 +49,13 @@ export async function POST(
       return NextResponse.json({ error: "Profile not found" }, { status: 404 });
     }
 
-    const game = await getGame(supabase, id);
-    if (!game) {
+    const rawGame = await getGame(supabase, id);
+    if (!rawGame) {
       return NextResponse.json({ error: "Game not found" }, { status: 404 });
     }
+
+    const gameTranslation = await getTranslation(supabase, rawGame.id, profile.language);
+    const game = applyTranslation(rawGame, gameTranslation);
 
     await logMemoryEvent(supabase, {
       profile_id: profile.id,

@@ -34,11 +34,14 @@ export function useDodiContext({
   const contextKey =
     context.type === "game"
       ? `game:${context.gameId}`
-      : context.type;
+      : context.type === "creating"
+        ? context.gameId ? `creating:${context.gameId}` : "creating"
+        : context.type;
 
   // Update ref when context key changes
   if (
     (context.type === "game" && contextRef.current.type === "game" && context.gameId !== contextRef.current.gameId) ||
+    (context.type === "creating" && contextRef.current.type === "creating" && context.gameId !== contextRef.current.gameId) ||
     context.type !== contextRef.current.type
   ) {
     contextRef.current = context;

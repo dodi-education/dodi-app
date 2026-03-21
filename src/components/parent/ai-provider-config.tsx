@@ -41,7 +41,7 @@ interface ProvidersResponse {
   modelConfig: AccountModelConfig | null;
 }
 
-const GAME_PROVIDER_FALLBACK = "__fallback__";
+const THINKING_PROVIDER_FALLBACK = "__fallback__";
 
 export function AIProviderConfig() {
   const t = useTranslations("settings");
@@ -64,8 +64,8 @@ export function AIProviderConfig() {
   const [voiceProvider, setVoiceProvider] = useState<AIProviderId | "">("");
   const [voiceModel, setVoiceModel] = useState("");
   const [voiceName, setVoiceName] = useState("");
-  const [gameProvider, setGameProvider] = useState<AIProviderId | "">("");
-  const [gameModel, setGameModel] = useState("");
+  const [thinkingProvider, setThinkingProvider] = useState<AIProviderId | "">("");
+  const [thinkingModel, setThinkingModel] = useState("");
   const [configSaving, setConfigSaving] = useState(false);
   const [configSaved, setConfigSaved] = useState(false);
 
@@ -79,14 +79,15 @@ export function AIProviderConfig() {
           setVoiceProvider(data.modelConfig.voiceProvider);
           setVoiceModel(data.modelConfig.voiceModel);
           setVoiceName(data.modelConfig.voiceName);
-          setGameProvider(data.modelConfig.gameProvider ?? "");
-          setGameModel(data.modelConfig.gameModel ?? "");
+          // Support both old (gameProvider) and new (thinkingProvider) shapes
+          setThinkingProvider(data.modelConfig.thinkingProvider ?? data.modelConfig.gameProvider ?? "");
+          setThinkingModel(data.modelConfig.thinkingModel ?? data.modelConfig.gameModel ?? "");
         } else {
           setVoiceProvider("");
           setVoiceModel("");
           setVoiceName("");
-          setGameProvider("");
-          setGameModel("");
+          setThinkingProvider("");
+          setThinkingModel("");
         }
       }
     } finally {
@@ -150,14 +151,14 @@ export function AIProviderConfig() {
           setVoiceProvider(data.modelConfig.voiceProvider);
           setVoiceModel(data.modelConfig.voiceModel);
           setVoiceName(data.modelConfig.voiceName);
-          setGameProvider(data.modelConfig.gameProvider ?? "");
-          setGameModel(data.modelConfig.gameModel ?? "");
+          setThinkingProvider(data.modelConfig.thinkingProvider ?? data.modelConfig.gameProvider ?? "");
+          setThinkingModel(data.modelConfig.thinkingModel ?? data.modelConfig.gameModel ?? "");
         } else {
           setVoiceProvider("");
           setVoiceModel("");
           setVoiceName("");
-          setGameProvider("");
-          setGameModel("");
+          setThinkingProvider("");
+          setThinkingModel("");
         }
         setDialogOpen(false);
         resetDialog();
@@ -191,14 +192,14 @@ export function AIProviderConfig() {
         setVoiceProvider(data.modelConfig.voiceProvider);
         setVoiceModel(data.modelConfig.voiceModel);
         setVoiceName(data.modelConfig.voiceName);
-        setGameProvider(data.modelConfig.gameProvider ?? "");
-        setGameModel(data.modelConfig.gameModel ?? "");
+        setThinkingProvider(data.modelConfig.thinkingProvider ?? data.modelConfig.gameProvider ?? "");
+        setThinkingModel(data.modelConfig.thinkingModel ?? data.modelConfig.gameModel ?? "");
       } else {
         setVoiceProvider("");
         setVoiceModel("");
         setVoiceName("");
-        setGameProvider("");
-        setGameModel("");
+        setThinkingProvider("");
+        setThinkingModel("");
       }
     }
   }
@@ -217,15 +218,15 @@ export function AIProviderConfig() {
           voiceProvider,
           voiceModel,
           voiceName,
-          gameProvider: gameProvider || undefined,
-          gameModel: gameProvider ? gameModel : undefined,
+          thinkingProvider: thinkingProvider || undefined,
+          thinkingModel: thinkingProvider ? thinkingModel : undefined,
         }),
       });
 
       if (res.ok) {
         const data: AccountModelConfig = await res.json();
-        setGameProvider(data.gameProvider ?? "");
-        setGameModel(data.gameModel ?? "");
+        setThinkingProvider(data.thinkingProvider ?? "");
+        setThinkingModel(data.thinkingModel ?? "");
         setConfigSaved(true);
         setTimeout(() => setConfigSaved(false), 2000);
       }
@@ -241,7 +242,7 @@ export function AIProviderConfig() {
 
   // Get models/voices for the selected voice provider
   const activeProviderDef = AI_PROVIDERS.find((p) => p.id === voiceProvider);
-  const activeGameProviderDef = AI_PROVIDERS.find((p) => p.id === gameProvider);
+  const activeThinkingProviderDef = AI_PROVIDERS.find((p) => p.id === thinkingProvider);
   const voiceFallbackText = voiceProvider && voiceModel
     ? `${voiceProvider} / ${voiceModel}`
     : t("gameModelFallbackMissingVoice");
@@ -497,54 +498,59 @@ export function AIProviderConfig() {
             <Separator />
 
             <div className="flex flex-col gap-2">
-              <Label>{t("gameProvider")}</Label>
+              <Label>{t("thinkingProvider")}</Label>
               <Select
-                value={gameProvider || GAME_PROVIDER_FALLBACK}
+                value={thinkingProvider || THINKING_PROVIDER_FALLBACK}
                 onValueChange={(value) => {
-                  if (value === GAME_PROVIDER_FALLBACK) {
-                    setGameProvider("");
-                    setGameModel("");
+                  if (value === THINKING_PROVIDER_FALLBACK) {
+                    setThinkingProvider("");
+                    setThinkingModel("");
                     return;
                   }
 
                   const providerId = value as AIProviderId;
-                  setGameProvider(providerId);
+                  setThinkingProvider(providerId);
 
                   const providerDef = AI_PROVIDERS.find((provider) => provider.id === providerId);
-                  const defaultModel = providerDef?.models.find((model) => model.capabilities.includes("text"));
-                  setGameModel(defaultModel?.id ?? "");
+                  const defaultModel = providerDef?.models.find((model) => model.capabilities.includes("thinking"));
+                  setThinkingModel(defaultModel?.id ?? "");
                 }}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={GAME_PROVIDER_FALLBACK}>
-                    {t("gameProviderFallback")}
+                  <SelectItem value={THINKING_PROVIDER_FALLBACK}>
+                    {t("thinkingProviderFallback")}
                   </SelectItem>
-                  {providers.map((provider) => (
-                    <SelectItem key={provider.id} value={provider.id}>
-                      {provider.name}
-                    </SelectItem>
-                  ))}
+                  {providers
+                    .filter((provider) => {
+                      const def = AI_PROVIDERS.find((p) => p.id === provider.id);
+                      return def?.supportsThinking;
+                    })
+                    .map((provider) => (
+                      <SelectItem key={provider.id} value={provider.id}>
+                        {provider.name}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
             </div>
 
-            {!gameProvider ? (
+            {!thinkingProvider ? (
               <p className="rounded-lg border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-                {t("gameModelFallbackHint", { voiceModel: voiceFallbackText })}
+                {t("thinkingModelFallbackHint", { voiceModel: voiceFallbackText })}
               </p>
-            ) : activeGameProviderDef ? (
+            ) : activeThinkingProviderDef ? (
               <div className="flex flex-col gap-2">
-                <Label>{t("gameModel")}</Label>
-                <Select value={gameModel} onValueChange={setGameModel}>
+                <Label>{t("thinkingModel")}</Label>
+                <Select value={thinkingModel} onValueChange={setThinkingModel}>
                   <SelectTrigger className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {activeGameProviderDef.models
-                      .filter((model) => model.capabilities.includes("text"))
+                    {activeThinkingProviderDef.models
+                      .filter((model) => model.capabilities.includes("thinking"))
                       .map((model) => (
                         <SelectItem key={model.id} value={model.id}>
                           {model.name}
@@ -562,7 +568,7 @@ export function AIProviderConfig() {
                 !voiceModel ||
                 !voiceName ||
                 configSaving ||
-                (Boolean(gameProvider) && !gameModel)
+                (Boolean(thinkingProvider) && !thinkingModel)
               }
               className="cursor-pointer w-fit"
             >

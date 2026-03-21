@@ -159,6 +159,12 @@ export async function removeProvider(
       configChanged = true;
     }
 
+    if (modelConfig.thinkingProvider === providerId) {
+      newConfig.thinkingProvider = undefined;
+      newConfig.thinkingModel = undefined;
+      configChanged = true;
+    }
+
     if (configChanged && updates.model_config !== null) {
       updates.model_config = newConfig;
     }
@@ -184,6 +190,25 @@ export async function getModelConfig(
 
   if (error) throw error;
   return (data.model_config as unknown as AccountModelConfig) ?? null;
+}
+
+/**
+ * Normalize old config shape (gameProvider/gameModel) to new shape
+ * (thinkingProvider/thinkingModel). Applied at read time — no SQL migration needed.
+ */
+export function normalizeModelConfig(config: AccountModelConfig): AccountModelConfig {
+  if (config.thinkingProvider) return config;
+
+  // Migrate old gameProvider/gameModel to thinkingProvider/thinkingModel
+  if (config.gameProvider || config.gameModel) {
+    return {
+      ...config,
+      thinkingProvider: config.thinkingProvider ?? config.gameProvider,
+      thinkingModel: config.thinkingModel ?? config.gameModel,
+    };
+  }
+
+  return config;
 }
 
 export async function updateModelConfig(

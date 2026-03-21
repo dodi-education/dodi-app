@@ -29,6 +29,13 @@ export default function KidLayout({
   const gestureNeeded = useDodiSessionStore((s) => s.gestureNeeded);
   const activate = useDodiSessionStore((s) => s.activate);
 
+  // Tear down Dodi voice session when leaving the kid view entirely
+  useEffect(() => {
+    return () => {
+      useDodiSessionStore.getState().endSession();
+    };
+  }, []);
+
   useEffect(() => {
     if (pendingNavigation) {
       router.push(pendingNavigation);
@@ -50,7 +57,7 @@ export default function KidLayout({
     return () => document.removeEventListener("click", handleGlobalClick, { capture: true });
   }, [dodiState, gestureNeeded, activate]);
 
-  const isGameFull = context.type === "game" && displayMode === "full";
+  const isFullMode = (context.type === "game" || context.type === "creating") && displayMode === "full";
 
   const kidNavItems: Array<{ href: string; label: string; icon: IconName }> = [
     { href: "/home", label: t("home"), icon: "home" },
@@ -84,7 +91,7 @@ export default function KidLayout({
       </header>
 
       {/* Main content — game gets side-by-side layout with Dodi */}
-      {isGameFull ? (
+      {isFullMode ? (
         <main className="flex flex-1 px-4 pb-20">
           <div className="mx-auto grid w-full max-w-6xl gap-4 lg:grid-cols-[300px_1fr]">
             <DodiFullGame />

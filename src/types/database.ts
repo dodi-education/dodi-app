@@ -192,6 +192,90 @@ export interface Database {
         };
         Relationships: [];
       };
+      game_translations: {
+        Row: {
+          id: string;
+          game_id: string;
+          locale: string;
+          title: string;
+          description: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          game_id: string;
+          locale: string;
+          title: string;
+          description?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          game_id?: string;
+          locale?: string;
+          title?: string;
+          description?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      agent_sessions: {
+        Row: {
+          id: string;
+          account_id: string;
+          profile_id: string;
+          task_type: string;
+          task_prompt: string;
+          dodi_context: string;
+          status: string;
+          progress: string;
+          result: Json | null;
+          error: string | null;
+          game_id: string | null;
+          created_at: string;
+          updated_at: string;
+          finished_at: string | null;
+          deactivated_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          account_id: string;
+          profile_id: string;
+          task_type: string;
+          task_prompt?: string;
+          dodi_context?: string;
+          status?: string;
+          progress?: string;
+          result?: Json | null;
+          error?: string | null;
+          game_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          finished_at?: string | null;
+          deactivated_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          account_id?: string;
+          profile_id?: string;
+          task_type?: string;
+          task_prompt?: string;
+          dodi_context?: string;
+          status?: string;
+          progress?: string;
+          result?: Json | null;
+          error?: string | null;
+          game_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          finished_at?: string | null;
+          deactivated_at?: string | null;
+        };
+        Relationships: [];
+      };
       system_logs: {
         Row: {
           id: string;
@@ -247,3 +331,26 @@ export type PersonaInsert = Database["public"]["Tables"]["personas"]["Insert"];
 export type PersonaUpdate = Database["public"]["Tables"]["personas"]["Update"];
 export type GameInsert = Database["public"]["Tables"]["games"]["Insert"];
 export type GameUpdate = Database["public"]["Tables"]["games"]["Update"];
+export type GameTranslation =
+  Database["public"]["Tables"]["game_translations"]["Row"];
+
+export type AgentSessionRow =
+  Database["public"]["Tables"]["agent_sessions"]["Row"];
+export type AgentSessionInsert =
+  Database["public"]["Tables"]["agent_sessions"]["Insert"];
+export type AgentSessionUpdate =
+  Database["public"]["Tables"]["agent_sessions"]["Update"];
+
+/** Shape of the `result` JSONB column on agent_sessions. */
+export interface AgentSessionResult {
+  title: string;
+  description: string;
+  subject: string;
+  difficulty: string;
+  tags: string[];
+  codeBundle: string;
+  markdown: string;
+  metadata: Record<string, unknown>;
+  validationPassed: boolean;
+  iterationCount: number;
+}

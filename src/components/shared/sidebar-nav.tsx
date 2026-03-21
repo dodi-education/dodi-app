@@ -16,6 +16,7 @@ export function SidebarNav() {
     { href: "/profiles", label: t("profiles"), icon: "profiles" },
     { href: "/personas", label: t("personas"), icon: "personas" },
     { href: "/system-logs", label: t("systemLogs"), icon: "system_logs" },
+    { href: "/agent-sessions", label: t("agentSessions"), icon: "agent_sessions" },
     { href: "/settings", label: t("settings"), icon: "settings" },
   ];
 
@@ -52,6 +53,7 @@ export function BottomNav() {
     { href: "/profiles", label: t("profiles"), icon: "profiles" },
     { href: "/personas", label: t("personas"), icon: "personas" },
     { href: "/system-logs", label: t("systemLogs"), icon: "system_logs" },
+    { href: "/agent-sessions", label: t("agentSessions"), icon: "agent_sessions" },
     { href: "/settings", label: t("settings"), icon: "settings" },
   ];
 

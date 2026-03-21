@@ -2,7 +2,10 @@ import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 
 import { createClient } from "@/lib/supabase/server";
+import { createLogger } from "@/lib/logger";
 import { getProfile } from "@/lib/services/profiles";
+
+const log = createLogger("game-assistant");
 import { getGame } from "@/lib/services/games";
 import { getMemory, getParentNotes } from "@/lib/services/memory";
 import { getGlobalDefaultPersona, getPersona } from "@/lib/services/personas";
@@ -10,6 +13,7 @@ import {
   generateGameAssistantResponse,
 } from "@/lib/services/game-assistant";
 import { logMemoryEvent } from "@/lib/services/system-logs";
+import { getTranslation, applyTranslation } from "@/lib/services/game-translations";
 
 const AssistantRequestSchema = z.object({
   profileId: z.string().uuid(),
@@ -47,6 +51,7 @@ export async function POST(
   }
 
   const { profileId, message, gameState } = parsed.data;
+  log.info("chat_requested", { profileId, gameId: id, messageLength: message.length, hasGameState: !!gameState });
 
   try {
     const profile = await getProfile(supabase, profileId);
@@ -54,10 +59,13 @@ export async function POST(
       return NextResponse.json({ error: "Profile not found" }, { status: 404 });
     }
 
-    const game = await getGame(supabase, id);
-    if (!game) {
+    const rawGame = await getGame(supabase, id);
+    if (!rawGame) {
       return NextResponse.json({ error: "Game not found" }, { status: 404 });
     }
+
+    const translation = await getTranslation(supabase, rawGame.id, profile.language);
+    const game = applyTranslation(rawGame, translation);
 
     let persona = profile.active_persona_id
       ? await getPersona(supabase, profile.active_persona_id)
@@ -80,17 +88,35 @@ export async function POST(
       supabase,
       user.id,
       {
-        profile,
         personaSoul: persona.soul,
+        childName: profile.display_name,
+        childBirthdate: profile.birthdate,
+        childLanguage: profile.language,
         memory,
         parentNotes,
-        game,
+        gameTitle: game.title,
+        gameDescription: game.description,
+        gameMarkdown: game.markdown,
+        gameCodeBundle: game.code_bundle,
         gameState,
-        markdown: game.markdown,
-        codeBundle: game.code_bundle,
       },
       message,
     );
+
+    log.debug("chat_exchange", {
+      profileId,
+      gameId: id,
+      message,
+      reply: response.reply,
+      commands: response.commands,
+    });
+    log.info("chat_responded", {
+      profileId,
+      gameId: id,
+      replyLength: response.reply.length,
+      commandCount: response.commands.length,
+      commandTypes: response.commands.map((c) => c.type),
+    });
 
     if (response.commands.length > 0) {
       logMemoryEvent(supabase, {
@@ -106,7 +132,8 @@ export async function POST(
 
     return NextResponse.json(response);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to generate assistant reply";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const errMsg = error instanceof Error ? error.message : "Failed to generate assistant reply";
+    log.error("chat_failed", { profileId, gameId: id, error: errMsg });
+    return NextResponse.json({ error: errMsg }, { status: 500 });
   }
 }

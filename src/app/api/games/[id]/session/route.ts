@@ -2,18 +2,21 @@ import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 
 import { createClient } from "@/lib/supabase/server";
+import { createLogger } from "@/lib/logger";
 import { getProfile } from "@/lib/services/profiles";
+
+const log = createLogger("game-voice-session");
 import { getGame } from "@/lib/services/games";
 import { getMemory, getParentNotes } from "@/lib/services/memory";
 import { getGlobalDefaultPersona, getPersona } from "@/lib/services/personas";
-import {
-  buildGameVoiceSystemInstruction,
-  buildGameVoiceToolDeclarations,
-} from "@/lib/services/game-assistant";
+import { buildGameVoiceContext, isTodayBirthday } from "@/lib/services/dodi-context";
 import {
   decryptProviderKey,
   getModelConfig,
+  normalizeModelConfig,
 } from "@/lib/services/ai-providers";
+import { getTranslation, applyTranslation } from "@/lib/services/game-translations";
+import { getOrCreateSession } from "@/lib/ai/agent-session";
 
 const SessionRequestSchema = z.object({
   profileId: z.string().uuid(),
@@ -50,6 +53,7 @@ export async function POST(
   }
 
   const { profileId, gameState } = parsed.data;
+  log.info("session_requested", { profileId, gameId: id });
 
   try {
     const profile = await getProfile(supabase, profileId);
@@ -57,10 +61,13 @@ export async function POST(
       return NextResponse.json({ error: "Profile not found" }, { status: 404 });
     }
 
-    const game = await getGame(supabase, id);
-    if (!game) {
+    const rawGame = await getGame(supabase, id);
+    if (!rawGame) {
       return NextResponse.json({ error: "Game not found" }, { status: 404 });
     }
+
+    const translation = await getTranslation(supabase, rawGame.id, profile.language);
+    const game = applyTranslation(rawGame, translation);
 
     const modelConfig = await getModelConfig(supabase, user.id);
     if (!modelConfig) {
@@ -100,18 +107,48 @@ export async function POST(
       getParentNotes(supabase, profile.id),
     ]);
 
-    const systemInstruction = buildGameVoiceSystemInstruction({
-      profile,
-      personaSoul: persona.soul,
-      memory,
-      parentNotes,
-      game,
-      gameState,
-      markdown: game.markdown,
-      codeBundle: game.code_bundle,
+    log.debug("persona_resolved", {
+      profileId,
+      personaId: persona.id,
+      personaName: persona.name,
+      isGlobalDefault: !profile.active_persona_id,
     });
 
-    const tools = buildGameVoiceToolDeclarations();
+    const { systemInstruction, tools } = buildGameVoiceContext({
+      personaSoul: persona.soul,
+      childName: profile.display_name,
+      childBirthdate: profile.birthdate,
+      childLanguage: profile.language,
+      memory,
+      parentNotes,
+      gameTitle: game.title,
+      gameDescription: game.description,
+      gameMarkdown: game.markdown,
+      gameCodeBundle: game.code_bundle,
+      gameState,
+    });
+
+    log.debug("context_built", {
+      profileId,
+      gameId: id,
+      gameTitle: game.title,
+      systemInstructionLength: systemInstruction.length,
+      toolCount: tools.length,
+    });
+
+    // Pre-warm agent session (non-blocking)
+    const normalized = normalizeModelConfig(modelConfig);
+    const thinkingProviderId = normalized.thinkingProvider ?? normalized.voiceProvider;
+    const thinkingModel = normalized.thinkingModel ?? normalized.voiceModel;
+    if (thinkingProviderId && thinkingModel) {
+      decryptProviderKey(supabase, user.id, thinkingProviderId)
+        .then((thinkingKey) => {
+          getOrCreateSession(profile.id, thinkingKey, thinkingModel);
+        })
+        .catch(() => { /* log, don't block voice session */ });
+    }
+
+    log.info("session_created", { profileId, gameId: id, model: modelConfig.voiceModel });
 
     return NextResponse.json({
       apiKey,
@@ -120,9 +157,11 @@ export async function POST(
       systemInstruction,
       tools,
       language: profile.language,
+      isBirthday: isTodayBirthday(profile.birthdate),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to create game voice session";
+    log.error("session_failed", { profileId, gameId: id, error: message });
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

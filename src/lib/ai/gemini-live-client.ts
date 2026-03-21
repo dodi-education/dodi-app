@@ -195,16 +195,26 @@ export class GeminiLiveClient {
 
   /**
    * Send a greeting trigger after setup is complete.
+   * "long" = name + suggestions; "short" = single creative word.
    */
-  sendGreeting(): void {
+  sendGreeting(mode: "long" | "short" | "birthday" = "long"): void {
     if (!this.setupComplete || !this.isOpen()) return;
+
+    let text: string;
+    if (mode === "birthday") {
+      text = "It's my birthday today! Wish me a big happy birthday, say my name, and offer to sing me the Happy Birthday song!";
+    } else if (mode === "long") {
+      text = "Greet me! Say hello to me by name and suggest what we could do together today.";
+    } else {
+      text = "Give me just a single quick, creative, funny greeting word — no name, no suggestions, just one fun word like 'Yooo!' or 'Hola!' or something playful!";
+    }
 
     const msg = {
       clientContent: {
         turns: [
           {
             role: "user",
-            parts: [{ text: "Greet me!" }],
+            parts: [{ text }],
           },
         ],
         turnComplete: true,

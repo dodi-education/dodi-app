@@ -470,17 +470,18 @@ The MVP focuses on delivering a functional, delightful core experience:
 - [x] Dodi connection states: Disconnected (Sleep), Connecting, Active, Deaf — with avatar images and click behaviors (see F3.13)
 
 ### Phase 3: Games
-- [ ] AI game generation pipeline
+- [x] AI game generation pipeline
 - [x] Sandboxed game execution
 - [x] Game metadata and categorization
-- [ ] Built-in default game: Drawing (can also be used for drawing an avatar)
-- [ ] Game library (browse, filter, replay)
+- [x] Built-in default game: Drawing
+- [x] Game library (browse, filter, replay)
 
 ### Phase 4: Social
 - [ ] Unify date storage (UTC in db) and conversion to local time
 - [ ] Configure date time format
 - [ ] Name tags and QR code generation
 - [ ] Friend system (add, accept, manage)
+- [ ] Drawing game: Let the kid save drawings and share them with friends
 - [ ] Game sharing
 - [ ] Activity emoji picker
 
@@ -510,3 +511,12 @@ The MVP focuses on delivering a functional, delightful core experience:
 - **Multiplayer games**: Real-time collaborative or competitive games between friends
 - **Parental insights**: AI-generated summaries of learning progress and recommendations
 - **Kid schedule**: Manages a personal weekly schedule/timetable
+
+## Ideas
+
+- Lock the game window size and include it in the game creation boilerplate so the game creation agent can optimize for the window size.
+- After game creation forward to /edit window
+- Add a little agent icon to the game creation and edit window (in the left sidebar). When clicked it adds a text input and output element to the sidebar which lets you interact with the game agent session directly (e.g. send game editing prompts which modify the game code.) The output shows the agent output. This can be collapsed too again (which is the default).
+- Add costs to agent_sessions table
+- Sometimes dodi says it does something without calling the actual tool, this should be fixed.
+- Add counter to a game to show how often it got started

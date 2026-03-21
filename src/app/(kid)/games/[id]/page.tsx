@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getGame } from "@/lib/services/games";
 import { getProfile } from "@/lib/services/profiles";
 import { logMemoryEvent } from "@/lib/services/system-logs";
+import { getTranslation, applyTranslation } from "@/lib/services/game-translations";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -46,10 +47,13 @@ export default async function GamePlayPage({ params }: RouteContext) {
     );
   }
 
-  const game = await getGame(supabase, id);
-  if (!game) {
+  const rawGame = await getGame(supabase, id);
+  if (!rawGame) {
     notFound();
   }
+
+  const translation = await getTranslation(supabase, rawGame.id, profile.language);
+  const game = applyTranslation(rawGame, translation);
 
   void logMemoryEvent(supabase, {
     profile_id: profile.id,

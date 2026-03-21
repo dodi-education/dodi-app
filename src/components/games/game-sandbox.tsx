@@ -32,6 +32,8 @@ interface GameSandboxProps {
   className?: string;
   onMessage?: (message: GameToParentMessage) => void;
   onStateChange?: (state: Record<string, unknown>) => void;
+  /** Called with state from command results (game:result). Use for immediate (non-debounced) state delivery. */
+  onCommandResult?: (state: Record<string, unknown>) => void;
 }
 
 const SANDBOX_CSP =
@@ -97,7 +99,7 @@ function buildSandboxSrcDoc(codeBundle: string): string {
 
 export const GameSandbox = forwardRef<GameSandboxHandle, GameSandboxProps>(
   function GameSandbox(
-    { gameId, codeBundle, className, onMessage, onStateChange }: GameSandboxProps,
+    { gameId, codeBundle, className, onMessage, onStateChange, onCommandResult }: GameSandboxProps,
     ref,
   ) {
     const iframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -105,6 +107,7 @@ export const GameSandbox = forwardRef<GameSandboxHandle, GameSandboxProps>(
     const srcDoc = useMemo(() => buildSandboxSrcDoc(codeBundle), [codeBundle]);
     const gameReadyRef = useRef(false);
     const initRetryRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const pendingCommandsRef = useRef<GameCommand[]>([]);
 
     const postEnvelope = useCallback(
       (message: ParentToGameMessage) => {
@@ -128,6 +131,7 @@ export const GameSandbox = forwardRef<GameSandboxHandle, GameSandboxProps>(
 
     const sendInitMessage = useCallback(() => {
       gameReadyRef.current = false;
+      pendingCommandsRef.current = [];
       clearInitRetry();
 
       const initPayload: ParentToGameMessage = {
@@ -159,6 +163,11 @@ export const GameSandbox = forwardRef<GameSandboxHandle, GameSandboxProps>(
       () => ({
         sendCommand(command: GameCommand) {
           gameDebug("sandbox", `sendCommand called:`, command);
+          if (!gameReadyRef.current) {
+            gameDebug("sandbox", `Game not ready — queuing command: ${command.type}`);
+            pendingCommandsRef.current.push(command);
+            return;
+          }
           postEnvelope({
             type: "dodi:command",
             token: bridgeToken,
@@ -208,6 +217,20 @@ export const GameSandbox = forwardRef<GameSandboxHandle, GameSandboxProps>(
           if (message.payload.state) {
             onStateChange?.(message.payload.state as Record<string, unknown>);
           }
+
+          // Flush any commands that arrived before the game was ready
+          const pending = pendingCommandsRef.current;
+          if (pending.length > 0) {
+            gameDebug("sandbox", `Flushing ${pending.length} queued commands`);
+            pendingCommandsRef.current = [];
+            for (const cmd of pending) {
+              postEnvelope({
+                type: "dodi:command",
+                token: bridgeToken,
+                payload: { command: cmd },
+              });
+            }
+          }
         }
 
         if (message.type === "game:state") {
@@ -216,7 +239,12 @@ export const GameSandbox = forwardRef<GameSandboxHandle, GameSandboxProps>(
 
         if (message.type === "game:result" && message.payload.state) {
           gameDebug("sandbox", `Command result (ok=${message.payload.result.ok}):`, message.payload);
-          onStateChange?.(message.payload.state as Record<string, unknown>);
+          const resultState = message.payload.state as Record<string, unknown>;
+          if (onCommandResult) {
+            onCommandResult(resultState);
+          } else {
+            onStateChange?.(resultState);
+          }
         }
 
         onMessage?.(message as GameToParentMessage);
@@ -236,7 +264,7 @@ export const GameSandbox = forwardRef<GameSandboxHandle, GameSandboxProps>(
         window.removeEventListener("message", handleMessage);
         clearInitRetry();
       };
-    }, [bridgeToken, onMessage, onStateChange, clearInitRetry, sendInitMessage]);
+    }, [bridgeToken, onMessage, onStateChange, onCommandResult, clearInitRetry, sendInitMessage]);
 
     return (
       <iframe

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import Anthropic from "@anthropic-ai/sdk";
 
 import { createClient } from "@/lib/supabase/server";
 
@@ -19,6 +20,24 @@ async function validateGeminiKey(apiKey: string): Promise<{ valid: boolean; erro
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     if (message.includes("API_KEY_INVALID") || message.includes("401") || message.includes("403")) {
+      return { valid: false, error: "Invalid API key" };
+    }
+    return { valid: false, error: message };
+  }
+}
+
+async function validateAnthropicKey(apiKey: string): Promise<{ valid: boolean; error?: string }> {
+  try {
+    const client = new Anthropic({ apiKey });
+    // Lightweight call: count tokens on a tiny message to validate the key
+    await client.messages.countTokens({
+      model: "claude-sonnet-4-20250514",
+      messages: [{ role: "user", content: "test" }],
+    });
+    return { valid: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    if (message.includes("invalid") || message.includes("401") || message.includes("authentication")) {
       return { valid: false, error: "Invalid API key" };
     }
     return { valid: false, error: message };
@@ -50,6 +69,10 @@ export async function POST(request: Request): Promise<NextResponse> {
   switch (provider) {
     case "gemini": {
       const validation = await validateGeminiKey(apiKey);
+      return NextResponse.json(validation);
+    }
+    case "anthropic": {
+      const validation = await validateAnthropicKey(apiKey);
       return NextResponse.json(validation);
     }
     default:

@@ -1,9 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 
+import { createLogger } from "@/lib/logger";
 import type { Database, SystemLogInsert } from "@/types/database";
+import type { AIProviderId } from "@/types/ai";
 import { DEFAULT_DODI_SOUL } from "@/lib/services/personas";
 import { logMemoryEvents } from "@/lib/services/system-logs";
+import { createThinkingProvider } from "@/lib/ai/thinking-providers/factory";
+
+const log = createLogger("memory-service");
 
 type Client = SupabaseClient<Database>;
 
@@ -123,6 +127,8 @@ interface ProcessMemoryUpdateParams {
   personaSoul: string;
   sessionTranscript: string;
   apiKey: string;
+  providerId?: AIProviderId;
+  model?: string;
 }
 
 interface ProcessMemoryUpdateResult {
@@ -146,7 +152,14 @@ export async function processMemoryUpdate(
     personaSoul,
     sessionTranscript,
     apiKey,
+    providerId = "gemini",
+    model: modelId = "gemini-2.0-flash",
   } = params;
+
+  log.debug("processing_started", {
+    profileId,
+    transcriptLength: sessionTranscript.length,
+  });
 
   // Fetch current memory
   const currentMemory = await getMemory(supabase, profileId);
@@ -160,20 +173,23 @@ export async function processMemoryUpdate(
     sessionTranscript,
   ].join("\n");
 
-  // Call Gemini for memory update
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({
-    model: "gemini-2.0-flash",
-    systemInstruction: buildMemoryUpdateInstruction(personaSoul),
-    generationConfig: {
-      responseMimeType: "application/json",
-    },
-  });
+  // Call thinking provider for memory update
+  const provider = createThinkingProvider(providerId, apiKey, modelId);
+  const systemInstruction = buildMemoryUpdateInstruction(personaSoul);
 
-  const response = await model.generateContent(prompt);
-  const responseText = response.response.text().trim();
+  let responseText: string;
+  try {
+    const json = await provider.generateJson(systemInstruction, prompt);
+    responseText = JSON.stringify(json);
+  } catch {
+    // Fallback: try as text
+    responseText = await provider.generateText(systemInstruction, prompt);
+  }
+
+  log.debug("ai_response_received", { profileId, responseLength: responseText?.length ?? 0 });
 
   if (!responseText) {
+    log.error("empty_ai_response", { profileId });
     // Log the error and bail
     await logMemoryEvents(supabase, [
       {
@@ -189,6 +205,12 @@ export async function processMemoryUpdate(
 
   // Parse the structured response
   const result = parseMemoryUpdateResponse(responseText);
+  log.info("update_parsed", {
+    profileId,
+    storedCount: result.stored.length,
+    discardedCount: result.discarded.length,
+    newMemoryLength: result.memory.length,
+  });
 
   // Write updated memory
   await updateMemory(supabase, profileId, result.memory);
