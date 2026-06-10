@@ -74,38 +74,39 @@ export default function KidLayout({
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-dodi-50">
+    <div className="flex min-h-screen flex-col font-kid">
       {/* Kid header */}
-      <header className="flex items-center justify-between px-4 py-3">
+      <header className="flex items-center justify-between px-4 py-3 md:px-6 md:py-4">
         <div className="flex items-center gap-3">
           <ProfileSwitcher />
           {displayMode === "compact" && <DodiCompact />}
         </div>
         <button
           onClick={handleSwitchToParent}
-          className="rounded-md px-2 py-1 text-xs text-dodi-400 transition-colors hover:bg-dodi-100 hover:text-dodi-600"
+          className="flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-sm font-bold text-faint transition-colors hover:text-muted-foreground"
           aria-label="Switch to parent view"
         >
+          <Icon name="lock" size={15} />
           {t("parent")}
         </button>
       </header>
 
       {/* Main content — game gets side-by-side layout with Dodi */}
       {isFullMode ? (
-        <main className="flex flex-1 px-4 pb-20">
+        <main className="flex flex-1 px-4 pb-24">
           <div className="mx-auto grid w-full max-w-6xl gap-4 lg:grid-cols-[300px_1fr]">
             <DodiFullGame />
             <div>{children}</div>
           </div>
         </main>
       ) : (
-        <main className="flex flex-1 flex-col items-center px-4 pb-20">
+        <main className="flex flex-1 flex-col items-center px-4 pb-24">
           {children}
         </main>
       )}
 
       {/* Bottom navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 z-40 flex items-center justify-around border-t bg-white/90 py-2 backdrop-blur-sm">
+      <nav className="fixed bottom-0 left-0 right-0 z-40 flex items-center justify-center gap-3 border-t bg-white/85 px-4 pt-2.5 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] backdrop-blur-md">
         {kidNavItems.map((item) => {
           const isActive = pathname.startsWith(item.href);
           return (
@@ -113,14 +114,14 @@ export default function KidLayout({
               key={item.href}
               href={item.href}
               className={cn(
-                "flex flex-col items-center gap-1 rounded-lg px-4 py-2 text-xs transition-colors",
+                "flex min-w-[88px] flex-col items-center gap-1 rounded-2xl px-5 py-2 text-[13.5px] font-extrabold transition-colors sm:min-w-[110px]",
                 isActive
-                  ? "text-dodi-600"
-                  : "text-muted-foreground hover:text-dodi-500",
+                  ? "bg-primary-soft text-primary"
+                  : "text-faint hover:text-muted-foreground",
               )}
             >
-              <Icon name={item.icon} className="h-6 w-6" />
-              <span className="font-medium">{item.label}</span>
+              <Icon name={item.icon} className="h-6 w-6" stroke={2} />
+              <span>{item.label}</span>
             </Link>
           );
         })}

@@ -85,23 +85,34 @@ export function ProfileSwitcher() {
   }
 
   if (profiles.length === 0) {
-    return <div className="h-10 w-10 rounded-full bg-dodi-200" />;
+    return <div className="h-10 w-10 rounded-full bg-primary-soft-2" />;
   }
 
   return (
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen(!open)}
-        className={cn(
-          "flex h-10 w-10 items-center justify-center rounded-full bg-dodi-200 font-bold text-dodi-700 transition-colors hover:bg-dodi-300",
-          activeProfile ? getAvatarTextSize(activeProfile.display_name) : "text-xs",
-        )}
+        className="flex items-center gap-2.5 rounded-full bg-white/70 py-1.5 pl-1.5 pr-4 text-[15px] font-extrabold text-ink transition-colors hover:bg-white"
         aria-label={t("switchProfile")}
       >
-        {activeProfile ? getAvatarLabel(activeProfile.display_name) : "?"}
+        <span
+          className={cn(
+            "flex size-[34px] items-center justify-center rounded-full bg-primary-soft-2 font-extrabold text-primary",
+            activeProfile
+              ? getAvatarTextSize(activeProfile.display_name)
+              : "text-xs",
+          )}
+        >
+          {activeProfile ? getAvatarLabel(activeProfile.display_name) : "?"}
+        </span>
+        {activeProfile ? (
+          <span className="max-w-[120px] truncate">
+            {activeProfile.display_name}
+          </span>
+        ) : null}
       </button>
       {open && profiles.length > 1 && (
-        <div className="absolute left-0 top-full z-50 mt-2 min-w-[180px] rounded-xl border bg-popover p-1 shadow-lg">
+        <div className="absolute left-0 top-full z-50 mt-2 min-w-[190px] rounded-2xl border bg-popover p-1.5 shadow-lg">
           {profiles.map((profile) => {
             const isActive = profile.id === activeProfileId;
             return (
@@ -109,21 +120,21 @@ export function ProfileSwitcher() {
                 key={profile.id}
                 onClick={() => handleSwitch(profile)}
                 className={cn(
-                  "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-accent",
+                  "flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm font-bold transition-colors hover:bg-accent",
                   isActive && "bg-accent/50",
                 )}
               >
                 <span className={cn(
-                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-dodi-200 font-bold text-dodi-700",
+                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-soft-2 font-extrabold text-primary",
                   getAvatarTextSize(profile.display_name),
                 )}>
                   {getAvatarLabel(profile.display_name)}
                 </span>
-                <span className="flex-1 text-left font-medium">
+                <span className="flex-1 text-left">
                   {profile.display_name}
                 </span>
                 {isActive && (
-                  <Icon name="check" className="h-4 w-4 text-dodi-600" />
+                  <Icon name="check" className="h-4 w-4 text-primary" />
                 )}
               </button>
             );

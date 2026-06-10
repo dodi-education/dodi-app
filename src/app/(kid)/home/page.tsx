@@ -24,8 +24,8 @@ export default async function KidHomePage() {
 
   if (!profileId) {
     return (
-      <div className="w-full max-w-xs rounded-2xl border border-dodi-200 bg-white p-4 text-center shadow-sm">
-        <p className="text-sm text-muted-foreground">
+      <div className="my-auto w-full max-w-xs rounded-[20px] bg-white p-5 text-center shadow-[0_2px_10px_rgba(34,56,78,0.05)]">
+        <p className="text-sm font-bold text-muted-foreground">
           No profile selected
         </p>
       </div>
