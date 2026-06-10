@@ -5,15 +5,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Icon } from "@/components/shared/icon";
+import { KidButton } from "@/components/kid/kid-button";
 import { GameCard } from "@/components/games/game-card";
 import type { Game } from "@/types/database";
 
@@ -109,75 +102,80 @@ export function GameLibrary({ profileId }: GameLibraryProps) {
   }
 
   return (
-    <div className="w-full max-w-5xl space-y-6">
+    <div className="w-full max-w-5xl">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-dodi-800">{t("title")}</h1>
-          <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
+          <h1 className="text-[27px] font-extrabold tracking-tight text-ink">
+            {t("title")}
+          </h1>
+          <p className="mt-0.5 text-sm font-semibold text-muted-foreground">
+            {t("subtitle")}
+          </p>
         </div>
-        <Button asChild>
-          <Link href="/games/new">{t("newGame")}</Link>
-        </Button>
+        <KidButton asChild>
+          <Link href="/games/new">
+            <Icon name="sparkles" size={17} stroke={2} />
+            {t("newGame")}
+          </Link>
+        </KidButton>
       </div>
 
-      <div className="grid gap-3 rounded-2xl border bg-white p-4 shadow-sm md:grid-cols-[1fr_220px]">
-        <Input
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder={t("searchPlaceholder")}
-        />
-        <Select value={subjectFilter} onValueChange={setSubjectFilter}>
-          <SelectTrigger>
-            <SelectValue placeholder={t("filterSubject")} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{t("allSubjects")}</SelectItem>
-            {subjectOptions.map((subject) => (
-              <SelectItem key={subject} value={subject}>
-                {subject}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="mt-4 mb-6 flex flex-wrap items-center gap-2">
+        <label className="flex w-[280px] items-center gap-2 rounded-full bg-white px-4 py-2 text-faint shadow-[inset_0_0_0_1.5px_var(--border)] focus-within:shadow-[inset_0_0_0_2px_var(--color-primary-soft-2)]">
+          <Icon name="search" size={16} stroke={2.2} />
+          <input
+            type="text"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder={t("searchPlaceholder")}
+            className="min-w-0 flex-1 border-0 bg-transparent text-sm font-bold text-ink outline-none placeholder:font-semibold placeholder:text-faint"
+          />
+        </label>
+        <KidButton
+          variant="chip"
+          size="sm"
+          active={subjectFilter === "all"}
+          onClick={() => setSubjectFilter("all")}
+        >
+          {t("allSubjects")}
+        </KidButton>
+        {subjectOptions.map((subject) => (
+          <KidButton
+            key={subject}
+            variant="chip"
+            size="sm"
+            active={subjectFilter === subject}
+            onClick={() => setSubjectFilter(subject)}
+          >
+            {subject}
+          </KidButton>
+        ))}
       </div>
 
       {loading && (
-        <div className="rounded-2xl border bg-white p-6 text-sm text-muted-foreground">
+        <div className="rounded-[20px] bg-white p-6 text-sm font-semibold text-muted-foreground shadow-[0_2px_10px_rgba(34,56,78,0.05)]">
           {t("loading")}
         </div>
       )}
 
       {!loading && error && (
-        <div className="rounded-2xl border border-destructive/40 bg-destructive/5 p-6 text-sm text-destructive">
+        <div className="rounded-[20px] bg-danger-soft p-6 text-sm font-semibold text-danger">
           {error}
         </div>
       )}
 
       {!loading && !error && (
         <>
-          <section className="space-y-3">
-            <h2 className="text-lg font-bold text-dodi-700">{t("systemGames")}</h2>
-            {systemGames.length === 0 ? (
-              <div className="rounded-2xl border bg-white p-5 text-sm text-muted-foreground">
-                {t("noSystemGames")}
-              </div>
-            ) : (
-              <div className="grid gap-3 md:grid-cols-2">
-                {systemGames.map((game) => (
-                  <GameCard key={game.id} game={game} />
-                ))}
-              </div>
-            )}
-          </section>
-
-          <section className="space-y-3">
-            <h2 className="text-lg font-bold text-dodi-700">{t("customGames")}</h2>
+          <section>
+            <h2 className="mb-3 mt-5 text-[13px] font-extrabold tracking-[0.07em] text-faint uppercase">
+              {t("customGames")}
+            </h2>
             {customGames.length === 0 ? (
-              <div className="rounded-2xl border bg-white p-5 text-sm text-muted-foreground">
+              <div className="rounded-[20px] bg-white/70 p-5 text-sm font-semibold text-muted-foreground">
                 {t("noCustomGames")}
               </div>
             ) : (
-              <div className="grid gap-3 md:grid-cols-2">
+              <div className="grid gap-3.5 sm:grid-cols-[repeat(auto-fill,minmax(310px,1fr))]">
                 {customGames.map((game) => (
                   <GameCard
                     key={game.id}
@@ -185,6 +183,23 @@ export function GameLibrary({ profileId }: GameLibraryProps) {
                     onDelete={handleDelete}
                     isDeleting={deletingId === game.id}
                   />
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section>
+            <h2 className="mb-3 mt-6 text-[13px] font-extrabold tracking-[0.07em] text-faint uppercase">
+              {t("systemGames")}
+            </h2>
+            {systemGames.length === 0 ? (
+              <div className="rounded-[20px] bg-white/70 p-5 text-sm font-semibold text-muted-foreground">
+                {t("noSystemGames")}
+              </div>
+            ) : (
+              <div className="grid gap-3.5 sm:grid-cols-[repeat(auto-fill,minmax(310px,1fr))]">
+                {systemGames.map((game) => (
+                  <GameCard key={game.id} game={game} />
                 ))}
               </div>
             )}

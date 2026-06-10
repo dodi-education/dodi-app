@@ -5,7 +5,7 @@ import Image from "next/image";
 import { useTranslations } from "next-intl";
 
 import { Icon } from "@/components/shared/icon";
-import { SpeechBubble } from "@/components/dodi/speech-bubble";
+import { ListeningPulse } from "@/components/kid/listening-pulse";
 import { useDodiSessionStore, type CompanionMessage } from "@/stores/dodi-session-store";
 import { cn } from "@/lib/utils";
 import { getDodiImage } from "@/lib/dodi-image";
@@ -32,10 +32,18 @@ export function DodiFullGame() {
   const isConnecting = dodiState === "connecting";
   const isConnected = dodiState === "active" || dodiState === "deaf";
 
+  const stateLine = isConnecting
+    ? t("voiceConnecting")
+    : dodiState === "active"
+      ? dodiSpeaking
+        ? t("voiceSpeaking")
+        : t("voiceListening")
+      : t("tapToReconnect");
+
   return (
-    <section className="flex h-full flex-col rounded-2xl border bg-white shadow-sm">
+    <section className="flex h-full flex-col rounded-[20px] bg-white p-[18px] shadow-[0_2px_10px_rgba(34,56,78,0.05)]">
       {/* Dodi avatar + status */}
-      <div className="flex flex-col items-center gap-2 border-b px-4 py-4">
+      <div className="flex items-center gap-3 border-b border-border pb-3.5">
         <button
           type="button"
           onClick={() => {
@@ -48,8 +56,8 @@ export function DodiFullGame() {
           }}
           disabled={isConnecting}
           className={cn(
-            "relative h-20 w-20 transition-transform",
-            !isConnecting && "cursor-pointer active:scale-90 hover:scale-110",
+            "relative size-14 shrink-0 transition-transform duration-200 ease-[cubic-bezier(0.34,1.56,0.64,1)]",
+            !isConnecting && "cursor-pointer active:scale-90",
           )}
           aria-label={
             isConnecting
@@ -61,63 +69,41 @@ export function DodiFullGame() {
                   : "Tap to reconnect Dodi"
           }
         >
+          {dodiState === "active" && !dodiSpeaking && (
+            <ListeningPulse className="-inset-2" />
+          )}
           <Image
             src={getDodiImage(dodiState, false)}
             alt={dodiState === "active" ? "Dodi listening" : dodiState === "deaf" ? "Dodi can't hear you" : "Dodi sleeping"}
             fill
-            className="object-contain"
+            className="relative z-[1] object-contain"
           />
-          {dodiSpeaking && (
-            <span className="absolute inset-0 animate-ping rounded-full border-2 border-dodi-400 opacity-30" />
-          )}
         </button>
 
-        {isConnecting && (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Icon name="loading" className="h-3 w-3 animate-spin" />
-            {t("voiceConnecting")}
-          </div>
-        )}
-
-        {dodiState === "active" && (
-          <SpeechBubble className="w-full text-center">
-            {dodiSpeaking ? (
-              <div className="flex items-center justify-center gap-2">
-                <div className="flex gap-1">
-                  <span className="inline-block h-2 w-2 animate-bounce rounded-full bg-dodi-500 [animation-delay:0ms]" />
-                  <span className="inline-block h-2 w-2 animate-bounce rounded-full bg-dodi-500 [animation-delay:150ms]" />
-                  <span className="inline-block h-2 w-2 animate-bounce rounded-full bg-dodi-500 [animation-delay:300ms]" />
-                </div>
-                <p className="text-sm text-dodi-600">{t("voiceSpeaking")}</p>
-              </div>
-            ) : (
-              <p className="text-sm text-dodi-600">
-                {t("voiceListening")}
-              </p>
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 text-[14.5px] font-extrabold text-ink">
+            {isConnecting && (
+              <Icon name="loading" className="h-3.5 w-3.5 animate-spin text-primary" />
             )}
-          </SpeechBubble>
-        )}
-
-        {dodiState === "deaf" && (
-          <p className="text-xs text-muted-foreground">
-            {t("tapToReconnect")}
-          </p>
-        )}
-
-        {(dodiState === "disconnected" || dodiState === "sleep") && (
-          <p className="text-xs text-muted-foreground">
-            {t("tapToReconnect")}
-          </p>
-        )}
+            {dodiSpeaking && dodiState === "active" && (
+              <span className="flex gap-1">
+                <span className="animate-kdot inline-block size-1.5 rounded-full bg-primary" />
+                <span className="animate-kdot inline-block size-1.5 rounded-full bg-primary [animation-delay:200ms]" />
+                <span className="animate-kdot inline-block size-1.5 rounded-full bg-primary [animation-delay:400ms]" />
+              </span>
+            )}
+            <span className="truncate">{stateLine}</span>
+          </div>
+        </div>
       </div>
 
       {/* Dodi's spoken text output */}
       <div
         ref={scrollRef}
-        className="flex-1 space-y-2 overflow-y-auto p-3"
+        className="flex flex-1 flex-col gap-2 overflow-y-auto pt-3.5"
       >
         {chatMessages.length === 0 ? (
-          <p className="py-4 text-center text-sm text-muted-foreground">
+          <p className="m-auto px-3 text-center text-[13px] font-bold leading-relaxed text-faint">
             {t("companionEmptyState")}
           </p>
         ) : (
@@ -125,10 +111,10 @@ export function DodiFullGame() {
             <div
               key={msg.id}
               className={cn(
-                "max-w-[90%] rounded-xl px-3 py-2 text-sm",
+                "max-w-[85%] rounded-[14px] px-3 py-2 text-[13.5px] font-bold leading-snug",
                 msg.role === "dodi"
-                  ? "bg-dodi-50 text-dodi-800"
-                  : "ml-auto bg-dodi-100 text-dodi-700 italic",
+                  ? "self-start rounded-bl-[4px] bg-muted text-ink-2"
+                  : "self-end rounded-br-[4px] bg-primary text-white",
               )}
             >
               {msg.text}

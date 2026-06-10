@@ -6,7 +6,8 @@ import { useTranslations } from "next-intl";
 
 import { GameRemixControls } from "@/components/games/game-remix-controls";
 import { GameSandbox } from "@/components/games/game-sandbox";
-import { Button } from "@/components/ui/button";
+import { Icon } from "@/components/shared/icon";
+import { KidButton } from "@/components/kid/kid-button";
 
 interface GameEditViewProps {
   gameId: string;
@@ -29,13 +30,22 @@ export function GameEditView({
   return (
     <div className="w-full max-w-6xl space-y-4 pb-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-dodi-800">{t("editTitle", { title })}</h1>
-          <p className="text-sm text-muted-foreground">{description}</p>
+        <div className="flex min-w-0 items-center gap-3.5">
+          <KidButton asChild variant="back" size="sm">
+            <Link href={`/games/${gameId}`}>
+              <Icon name="arrow_left" size={15} stroke={2.2} />
+              {t("backToPlay")}
+            </Link>
+          </KidButton>
+          <div className="min-w-0">
+            <h1 className="truncate text-[21px] font-extrabold text-ink">
+              {t("editTitle", { title })}
+            </h1>
+            <p className="truncate text-sm font-semibold text-muted-foreground">
+              {description}
+            </p>
+          </div>
         </div>
-        <Button asChild variant="outline">
-          <Link href={`/games/${gameId}`}>{t("backToPlay")}</Link>
-        </Button>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[420px_1fr]">
@@ -46,7 +56,7 @@ export function GameEditView({
           gameState={gameState}
         />
 
-        <div className="rounded-2xl border bg-white p-2 shadow-sm">
+        <div className="rounded-[20px] bg-white p-2 shadow-[0_2px_10px_rgba(34,56,78,0.05)]">
           <GameSandbox
             gameId={gameId}
             codeBundle={codeBundle}

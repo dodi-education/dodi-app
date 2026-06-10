@@ -67,7 +67,7 @@ function StepIndicator({ currentStep }: { currentStep: AgentStep }) {
             {i > 0 && (
               <div
                 className={`h-0.5 w-6 rounded-full transition-colors duration-300 ${
-                  i <= activeIdx ? "bg-dodi-400" : "bg-dodi-200"
+                  i <= activeIdx ? "bg-primary/50" : "bg-primary-soft-2"
                 }`}
               />
             )}
@@ -75,10 +75,10 @@ function StepIndicator({ currentStep }: { currentStep: AgentStep }) {
               <div
                 className={`flex h-9 w-9 items-center justify-center rounded-full transition-all duration-300 ${
                   done
-                    ? "bg-dodi-500 text-white"
+                    ? "bg-primary text-white"
                     : active
-                      ? "bg-dodi-100 text-dodi-600 animate-pulse"
-                      : "bg-gray-100 text-gray-400"
+                      ? "bg-primary-soft-2 text-primary animate-pulse"
+                      : "bg-muted text-faint"
                 }`}
               >
                 {done ? (
@@ -92,12 +92,12 @@ function StepIndicator({ currentStep }: { currentStep: AgentStep }) {
                 )}
               </div>
               <span
-                className={`text-xs font-medium ${
+                className={`text-xs font-bold ${
                   done
-                    ? "text-dodi-600"
+                    ? "text-primary"
                     : active
-                      ? "text-dodi-700"
-                      : "text-gray-400"
+                      ? "text-ink-2"
+                      : "text-faint"
                 }`}
               >
                 {s.label}
@@ -122,9 +122,9 @@ function BookIcon() {
   );
 }
 
-function SparkleIcon() {
+function SparkleIcon({ large = false }: { large?: boolean }) {
   return (
-    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <svg className={large ? "h-9 w-9" : "h-4 w-4"} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={large ? 1.5 : 2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
     </svg>
   );
@@ -154,20 +154,28 @@ function GeneratingView({ currentStep, active }: { currentStep: AgentStep; activ
   const elapsed = useElapsed(active);
 
   return (
-    <div className="flex flex-1 items-center justify-center rounded-2xl border border-dodi-200 bg-dodi-50/50 p-8">
-      <div className="flex flex-col items-center gap-6">
-        <StepIndicator currentStep={currentStep} />
-        <div className="text-center">
-          <h3 className="text-lg font-bold text-dodi-800">
-            Dodi is building your game...
-          </h3>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Keep chatting with Dodi while you wait!
-          </p>
-          {elapsed > 0 && (
-            <p className="mt-2 text-xs tabular-nums text-dodi-500">{elapsed}s</p>
-          )}
+    <div className="flex flex-1 items-center justify-center rounded-[20px] border-2 border-dashed border-border-strong p-6">
+      <div className="flex flex-col items-center gap-5 text-center">
+        <div className="flex size-[76px] items-center justify-center rounded-full bg-primary-soft-2 text-primary">
+          <span className="animate-kspin flex">
+            <SparkleIcon large />
+          </span>
         </div>
+        <h3 className="text-[21px] font-extrabold text-ink">
+          Dodi is building your game&hellip;
+        </h3>
+        <p className="-mt-3 max-w-[380px] text-sm font-semibold leading-relaxed text-muted-foreground">
+          Keep chatting with Dodi while you wait!
+        </p>
+        <StepIndicator currentStep={currentStep} />
+        <div className="flex gap-1.5">
+          <span className="animate-kdot size-2 rounded-full bg-primary" />
+          <span className="animate-kdot size-2 rounded-full bg-primary [animation-delay:200ms]" />
+          <span className="animate-kdot size-2 rounded-full bg-primary [animation-delay:400ms]" />
+        </div>
+        {elapsed > 0 && (
+          <p className="text-xs font-bold tabular-nums text-faint">{elapsed}s</p>
+        )}
       </div>
     </div>
   );
@@ -184,9 +192,9 @@ function UpdatingOverlay({ currentStep, active }: { currentStep: AgentStep; acti
     <div className="absolute inset-0 flex items-center justify-center bg-white/60 backdrop-blur-[2px]">
       <div className="flex flex-col items-center gap-4">
         <StepIndicator currentStep={currentStep} />
-        <p className="text-sm font-semibold text-dodi-700">Updating your game...</p>
+        <p className="text-sm font-bold text-ink-2">Updating your game...</p>
         {elapsed > 0 && (
-          <p className="text-xs tabular-nums text-dodi-500">{elapsed}s</p>
+          <p className="text-xs font-bold tabular-nums text-faint">{elapsed}s</p>
         )}
       </div>
     </div>
@@ -309,7 +317,7 @@ export function GameVoiceCreator({
     <div className="flex h-full w-full flex-col gap-3">
       {currentCode ? (
         <div className="flex flex-1 gap-1">
-          <div className="relative flex-1 overflow-hidden rounded-2xl border bg-white shadow-sm">
+          <div className="relative flex-1 overflow-hidden rounded-[20px] bg-white shadow-[0_2px_10px_rgba(34,56,78,0.05)]">
             <GameSandbox
               key={`creating-${iterationCount}`}
               ref={sandboxRef}
@@ -343,10 +351,10 @@ export function GameVoiceCreator({
             <div className="flex pt-1">
               <button
                 onClick={() => setCodeEditorOpen(!codeEditorOpen)}
-                className={`flex h-9 w-9 items-center justify-center rounded-lg transition-colors ${
+                className={`flex h-9 w-9 items-center justify-center rounded-full transition-colors ${
                   codeEditorOpen
-                    ? "bg-dodi-100 text-dodi-600"
-                    : "text-gray-400 hover:bg-gray-100 hover:text-dodi-600"
+                    ? "bg-primary-soft text-primary"
+                    : "text-faint hover:bg-muted hover:text-primary"
                 }`}
                 aria-label={codeEditorOpen ? "Close code editor" : "Open code editor"}
               >
@@ -361,27 +369,15 @@ export function GameVoiceCreator({
           active={generating}
         />
       ) : (
-        <div className="flex flex-1 items-center justify-center rounded-2xl border border-dashed border-dodi-300 bg-white/50 p-8">
-          <div className="text-center">
-            <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-dodi-100">
-              <svg
-                className="h-10 w-10 text-dodi-500"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={1.5}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z"
-                />
-              </svg>
+        <div className="flex flex-1 items-center justify-center rounded-[20px] border-2 border-dashed border-border-strong p-6">
+          <div className="flex flex-col items-center gap-3.5 text-center">
+            <div className="flex size-[76px] items-center justify-center rounded-full bg-primary-soft-2 text-primary">
+              <SparkleIcon large />
             </div>
-            <h3 className="text-lg font-bold text-dodi-800">
+            <h3 className="text-[21px] font-extrabold text-ink">
               {gameId ? "Ready to remix!" : "Tell Dodi about your dream game!"}
             </h3>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <p className="max-w-[380px] text-sm font-semibold leading-relaxed text-muted-foreground">
               {isConnected
                 ? "Talk to Dodi and describe what kind of game you want to create."
                 : "Tap Dodi to start talking about your game idea."}

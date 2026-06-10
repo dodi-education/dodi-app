@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Icon, type IconName } from "@/components/shared/icon";
+import { KidButton } from "@/components/kid/kid-button";
 import type { Game } from "@/types/database";
 
 interface GameCardProps {
@@ -13,62 +13,102 @@ interface GameCardProps {
   onDelete?: (game: Game) => void;
 }
 
+interface SubjectStyle {
+  bg: string;
+  fg: string;
+  icon: IconName;
+}
+
+const SUBJECT_STYLES: Record<string, SubjectStyle> = {
+  creativity: { bg: "#FDF1DC", fg: "#B0782A", icon: "feature_personal" },
+  art: { bg: "#FDF1DC", fg: "#B0782A", icon: "feature_personal" },
+  math: { bg: "#E8F0FC", fg: "#2F6BD8", icon: "feature_smart" },
+  counting: { bg: "#EFE9FA", fg: "#7456C4", icon: "feature_smart" },
+  stories: { bg: "#E9F5F0", fg: "#2E8B6A", icon: "feature_games" },
+  reading: { bg: "#E9F5F0", fg: "#2E8B6A", icon: "feature_games" },
+};
+
+const FALLBACK_STYLE: SubjectStyle = {
+  bg: "#EAF1FC",
+  fg: "#2F6BD8",
+  icon: "games",
+};
+
+function subjectStyle(subject: string): SubjectStyle {
+  return SUBJECT_STYLES[subject.toLowerCase()] ?? FALLBACK_STYLE;
+}
+
 export function GameCard({
   game,
   isDeleting = false,
   onDelete,
 }: GameCardProps) {
   const t = useTranslations("games");
+  const style = subjectStyle(game.subject);
 
   return (
-    <div className="rounded-2xl border bg-white p-4 shadow-sm">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h3 className="text-base font-bold text-dodi-800">{game.title}</h3>
-          <p className="mt-1 text-sm text-muted-foreground">{game.description}</p>
+    <div className="flex flex-col gap-2.5 rounded-[20px] bg-white p-[18px] pb-4 shadow-[0_2px_10px_rgba(34,56,78,0.05)]">
+      <div className="flex items-center gap-3">
+        <div
+          className="flex size-[46px] shrink-0 items-center justify-center rounded-[14px]"
+          style={{ background: style.bg, color: style.fg }}
+        >
+          <Icon name={style.icon} size={24} stroke={1.7} />
         </div>
-        {game.is_system ? (
-          <Badge variant="secondary">{t("systemLabel")}</Badge>
-        ) : (
-          <Badge variant="outline">{t("customLabel")}</Badge>
-        )}
+        <div className="min-w-0">
+          <h3 className="text-[16.5px] font-extrabold leading-tight text-ink">
+            {game.title}
+          </h3>
+          <p className="mt-0.5 text-[12.5px] font-bold text-faint">
+            {game.is_system ? t("systemLabel") : t("customLabel")}
+          </p>
+        </div>
       </div>
 
-      <div className="mt-3 flex flex-wrap gap-2">
-        <Badge variant="outline">{game.subject}</Badge>
-        <Badge variant="outline">{game.difficulty}</Badge>
-        <Badge variant="outline">{game.estimated_duration_minutes} min</Badge>
+      <p className="line-clamp-2 text-[13.5px] font-semibold leading-snug text-muted-foreground">
+        {game.description}
+      </p>
+
+      <div className="flex flex-wrap gap-1.5">
+        <span
+          className="rounded-full px-2.5 py-0.5 text-[11.5px] font-extrabold"
+          style={{ background: style.bg, color: style.fg }}
+        >
+          {game.subject}
+        </span>
+        <span className="rounded-full bg-muted px-2.5 py-0.5 text-[11.5px] font-extrabold text-muted-foreground">
+          {game.difficulty}
+        </span>
+        <span className="rounded-full bg-muted px-2.5 py-0.5 text-[11.5px] font-extrabold text-muted-foreground">
+          {game.estimated_duration_minutes} min
+        </span>
       </div>
 
-      {game.tags.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {game.tags.slice(0, 5).map((tag) => (
-            <span
-              key={`${game.id}-${tag}`}
-              className="rounded-full bg-dodi-100 px-2 py-0.5 text-xs font-medium text-dodi-700"
-            >
-              #{tag}
-            </span>
-          ))}
-        </div>
-      )}
-
-      <div className="mt-4 flex flex-wrap gap-2">
-        <Button asChild size="sm">
-          <Link href={`/games/${game.id}`}>{t("playAction")}</Link>
-        </Button>
-        <Button asChild variant="outline" size="sm">
-          <Link href={`/games/${game.id}/edit`}>{t("remixAction")}</Link>
-        </Button>
+      <div className="mt-1 flex items-center gap-2">
+        <KidButton asChild size="sm" className="px-6">
+          <Link href={`/games/${game.id}`}>
+            <Icon name="play" size={13} />
+            {t("playAction")}
+          </Link>
+        </KidButton>
+        <KidButton asChild variant="ghost" size="sm">
+          <Link href={`/games/${game.id}/edit`}>
+            <Icon name="refresh" size={14} />
+            {t("remixAction")}
+          </Link>
+        </KidButton>
         {!game.is_system && onDelete && (
-          <Button
-            variant="destructive"
-            size="sm"
+          <KidButton
+            variant="icon"
+            size="none"
+            className="ml-auto"
             disabled={isDeleting}
             onClick={() => onDelete(game)}
+            title={t("deleteAction")}
+            aria-label={t("deleteAction")}
           >
-            {t("deleteAction")}
-          </Button>
+            <Icon name="delete" size={16} />
+          </KidButton>
         )}
       </div>
     </div>

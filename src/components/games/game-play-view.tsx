@@ -5,7 +5,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 
 import { GameSandbox, type GameSandboxHandle } from "@/components/games/game-sandbox";
-import { Button } from "@/components/ui/button";
+import { Icon } from "@/components/shared/icon";
+import { KidButton } from "@/components/kid/kid-button";
 import { gameDebug, gameDebugWarn } from "@/lib/games/debug";
 import { useDodiContext } from "@/hooks/use-dodi-context";
 import { useDodiSessionStore } from "@/stores/dodi-session-store";
@@ -163,22 +164,37 @@ export function GamePlayView({
   return (
     <div className="w-full space-y-4 pb-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-dodi-800">{title}</h1>
-          <p className="text-sm text-muted-foreground">{description}</p>
+        <div className="flex min-w-0 items-center gap-3.5">
+          <KidButton asChild variant="back" size="sm">
+            <Link href="/games">
+              <Icon name="arrow_left" size={15} stroke={2.2} />
+              {t("title")}
+            </Link>
+          </KidButton>
+          <div className="min-w-0">
+            <h1 className="truncate text-[21px] font-extrabold text-ink">
+              {title}
+            </h1>
+            <p className="truncate text-sm font-semibold text-muted-foreground">
+              {description}
+            </p>
+          </div>
         </div>
-        <Button asChild variant="outline">
-          <Link href={`/games/${gameId}/edit`}>{t("remixAction")}</Link>
-        </Button>
+        <KidButton asChild variant="ghost" size="sm">
+          <Link href={`/games/${gameId}/edit`}>
+            <Icon name="refresh" size={14} />
+            {t("remixAction")}
+          </Link>
+        </KidButton>
       </div>
 
       {gameError && (
-        <div className="rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+        <div className="rounded-[14px] bg-danger-soft px-3 py-2 text-xs font-semibold text-danger">
           {t("gameCommandFailedLabel")}: {gameError}
         </div>
       )}
 
-      <div className="rounded-2xl border bg-white p-2 shadow-sm">
+      <div className="rounded-[20px] bg-white p-2 shadow-[0_2px_10px_rgba(34,56,78,0.05)]">
         <GameSandbox
           ref={sandboxRef}
           gameId={gameId}
