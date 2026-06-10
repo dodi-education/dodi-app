@@ -86,6 +86,8 @@ export interface DodiSessionState {
   dodiSpeaking: boolean;
   gestureNeeded: boolean;
   error: string | null;
+  // Set when a close is unrecoverable (quota, auth). Suppresses auto-reconnect.
+  fatalError: boolean;
 
   // Text chat (for game text mode)
   chatMessages: CompanionMessage[];
@@ -598,6 +600,7 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
   dodiSpeaking: false,
   gestureNeeded: false,
   error: null,
+  fatalError: false,
 
   chatMessages: [],
   chatSubmitting: false,
@@ -851,6 +854,7 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
       dodiSpeaking: false,
       gestureNeeded: false,
       error: null,
+      fatalError: false,
     });
 
     try {
@@ -2005,7 +2009,13 @@ function createEventHandler(
           state: "disconnected",
           dodiSpeaking: false,
           gestureNeeded: false,
-          error: wasConnected ? "Connection closed unexpectedly" : null,
+          // Fatal closes (quota, auth) surface their message and block auto-reconnect.
+          fatalError: event.fatal,
+          error: event.fatal
+            ? event.message
+            : wasConnected
+              ? event.message
+              : null,
         });
         break;
       }

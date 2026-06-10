@@ -153,7 +153,7 @@ export async function processMemoryUpdate(
     sessionTranscript,
     apiKey,
     providerId = "gemini",
-    model: modelId = "gemini-2.0-flash",
+    model: modelId = "gemini-3.5-flash",
   } = params;
 
   log.debug("processing_started", {

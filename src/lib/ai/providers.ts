@@ -9,13 +9,13 @@ export const AI_PROVIDERS: AIProviderDefinition[] = [
     supportsThinking: true,
     models: [
       {
-        id: "gemini-2.5-flash-native-audio-preview-12-2025",
-        name: "Gemini 2.5 Flash (Native Audio)",
+        id: "gemini-3.1-flash-live-preview",
+        name: "Gemini 3.1 Flash Live (Native Audio)",
         capabilities: ["voice", "text", "live"],
       },
       {
-        id: "gemini-2.5-flash",
-        name: "Gemini 2.5 Flash",
+        id: "gemini-3.5-flash",
+        name: "Gemini 3.5 Flash",
         capabilities: ["text", "thinking"],
       },
     ],
@@ -38,13 +38,13 @@ export const AI_PROVIDERS: AIProviderDefinition[] = [
     supportsThinking: true,
     models: [
       {
-        id: "claude-opus-4-6",
-        name: "Claude Opus 4.6",
+        id: "claude-opus-4-8",
+        name: "Claude Opus 4.8",
         capabilities: ["text", "thinking"],
       },
       {
-        id: "claude-sonnet-4-20250514",
-        name: "Claude Sonnet 4",
+        id: "claude-sonnet-4-6",
+        name: "Claude Sonnet 4.6",
         capabilities: ["text", "thinking"],
       },
       {

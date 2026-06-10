@@ -494,9 +494,6 @@ The MVP focuses on delivering a functional, delightful core experience:
 - [ ] Accessibility audit
 - [ ] Before initially deploying the DB to supabase, merge all migrations into a single schema to avoid unnecessary migration steps.
 
-### Phase 6: Misc Improvements
-- [ ] Voice/text mode toggle
-
 ---
 
 ## Future Roadmap
@@ -512,11 +509,9 @@ The MVP focuses on delivering a functional, delightful core experience:
 - **Parental insights**: AI-generated summaries of learning progress and recommendations
 - **Kid schedule**: Manages a personal weekly schedule/timetable
 
-## Ideas
+## TODO
 
-- Lock the game window size and include it in the game creation boilerplate so the game creation agent can optimize for the window size.
-- After game creation forward to /edit window
-- Add a little agent icon to the game creation and edit window (in the left sidebar). When clicked it adds a text input and output element to the sidebar which lets you interact with the game agent session directly (e.g. send game editing prompts which modify the game code.) The output shows the agent output. This can be collapsed too again (which is the default).
-- Add costs to agent_sessions table
-- Sometimes dodi says it does something without calling the actual tool, this should be fixed.
-- Add counter to a game to show how often it got started
+- Add "Hand-off to agent" share functionality (similar to claude design) where you get a link which an agent can access (read/write) + simple instruction how to interact with the link so an agent can change the code (expires after e.g. 24 hours).
+- Add game creation and editing via text/prompts in parent view with interactive feedback mode (e.g. if agent asks questions
+- Check encryption (user data should be encrypted)
+- Handle pw change in regard of encryption

@@ -63,7 +63,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     // Use thinking provider for memory updates (falls back to voice provider)
     const memoryProviderId = normalized.thinkingProvider ?? normalized.voiceProvider;
-    const memoryModel = normalized.thinkingModel ?? "gemini-2.0-flash";
+    const memoryModel = normalized.thinkingModel ?? "gemini-3.5-flash";
 
     log.debug("provider_resolved", { profileId, providerId: memoryProviderId, model: memoryModel });
 

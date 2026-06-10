@@ -27,7 +27,46 @@ export type GeminiLiveEvent =
   | { type: "interrupted" }
   | { type: "turnComplete" }
   | { type: "error"; error: string }
-  | { type: "closed" };
+  | { type: "closed"; code: number; reason: string; fatal: boolean; message: string };
+
+/**
+ * Classify a WebSocket close. `fatal` means reconnecting will not help — the
+ * caller should stop retrying and surface `message` to the user.
+ */
+function classifyClose(
+  code: number,
+  reason: string,
+): { fatal: boolean; message: string } {
+  const r = reason.toLowerCase();
+
+  if (r.includes("quota") || r.includes("exceeded") || r.includes("resource_exhausted")) {
+    return {
+      fatal: true,
+      message:
+        "Dodi has used up the AI provider's quota for now. Please check your plan and billing details for the configured API key, then reconnect.",
+    };
+  }
+
+  if (
+    code === 1008 ||
+    r.includes("api key") ||
+    r.includes("api_key") ||
+    r.includes("permission") ||
+    r.includes("unauthenticated") ||
+    r.includes("unauthorized")
+  ) {
+    return {
+      fatal: true,
+      message:
+        "Dodi couldn't authenticate with the AI provider. Please check the API key in parent settings, then reconnect.",
+    };
+  }
+
+  return {
+    fatal: false,
+    message: `Connection closed unexpectedly${code ? ` (code ${code})` : ""}.`,
+  };
+}
 
 const GEMINI_WS_BASE =
   "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent";
@@ -66,19 +105,30 @@ export class GeminiLiveClient {
     };
 
     this.ws.onerror = () => {
+      console.error("[GeminiLive] WebSocket error", {
+        model: this.config.model,
+        setupComplete: this.setupComplete,
+      });
       this.onEvent({ type: "error", error: "WebSocket connection error" });
     };
 
     this.ws.onclose = (event: CloseEvent) => {
+      console.warn("[GeminiLive] WebSocket closed", {
+        code: event.code,
+        reason: event.reason,
+        wasClean: event.wasClean,
+        model: this.config.model,
+        setupComplete: this.setupComplete,
+      });
       this.setupComplete = false;
-      if (event.code !== 1000) {
-        // Abnormal close — include details
-        this.onEvent({
-          type: "error",
-          error: `WebSocket closed: ${event.code}${event.reason ? ` — ${event.reason}` : ""}`,
-        });
-      }
-      this.onEvent({ type: "closed" });
+      const { fatal, message } = classifyClose(event.code, event.reason || "");
+      this.onEvent({
+        type: "closed",
+        code: event.code,
+        reason: event.reason || "",
+        fatal,
+        message,
+      });
     };
   }
 
@@ -120,6 +170,14 @@ export class GeminiLiveClient {
   private handleMessage(raw: string): void {
     try {
       const msg = JSON.parse(raw);
+
+      // Server-side error or session-ending signals (otherwise silently dropped)
+      if (msg.goAway) {
+        console.warn("[GeminiLive] goAway received", msg.goAway);
+      }
+      if (msg.error) {
+        console.warn("[GeminiLive] server error message", raw.slice(0, 500));
+      }
 
       // Setup complete response
       if (msg.setupComplete !== undefined) {
@@ -230,14 +288,14 @@ export class GeminiLiveClient {
   sendAudio(base64Pcm: string): void {
     if (!this.setupComplete || !this.isOpen()) return;
 
+    // Newer Live models require the singular `audio` Blob field;
+    // `realtimeInput.mediaChunks` is deprecated and rejected (close 1007).
     const msg = {
       realtimeInput: {
-        mediaChunks: [
-          {
-            mimeType: "audio/pcm;rate=16000",
-            data: base64Pcm,
-          },
-        ],
+        audio: {
+          mimeType: "audio/pcm;rate=16000",
+          data: base64Pcm,
+        },
       },
     };
 

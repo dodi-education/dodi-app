@@ -13,7 +13,7 @@ const ValidateKeySchema = z.object({
 async function validateGeminiKey(apiKey: string): Promise<{ valid: boolean; error?: string }> {
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-native-audio-preview-12-2025" });
+    const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash" });
     // Lightweight call: count tokens on a tiny string to validate the key
     await model.countTokens("test");
     return { valid: true };
@@ -31,7 +31,7 @@ async function validateAnthropicKey(apiKey: string): Promise<{ valid: boolean; e
     const client = new Anthropic({ apiKey });
     // Lightweight call: count tokens on a tiny message to validate the key
     await client.messages.countTokens({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-4-6",
       messages: [{ role: "user", content: "test" }],
     });
     return { valid: true };
