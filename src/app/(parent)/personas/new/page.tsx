@@ -4,16 +4,12 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 
+import { BackLink } from "@/components/parent/back-link";
+import { FieldRow, StackField } from "@/components/parent/rows";
+import { SaveRow } from "@/components/parent/save-row";
+import { PageHead, Section } from "@/components/parent/section";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 
 export default function NewPersonaPage() {
   const t = useTranslations("personas");
@@ -81,84 +77,84 @@ export default function NewPersonaPage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl flex flex-col gap-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            {isImport ? t("importTitle") : t("createTitle")}
-          </CardTitle>
-          <CardDescription>
-            {isImport ? t("importDescription") : t("createDescription")}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="name">{t("nameLabel")}</Label>
+    <div>
+      <BackLink href="/personas">{t("title")}</BackLink>
+      <PageHead
+        title={isImport ? t("importTitle") : t("createTitle")}
+        sub={isImport ? t("importDescription") : t("createDescription")}
+      />
+
+      <form onSubmit={handleSubmit}>
+        <Section>
+          <FieldRow label={t("nameLabel")} htmlFor="name">
+            <Input
+              id="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder={t("namePlaceholder")}
+              required
+              maxLength={100}
+              className="sm:w-[260px]"
+            />
+          </FieldRow>
+          {isImport ? (
+            <FieldRow label={t("fileLabel")} htmlFor="file">
               <Input
-                id="name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder={t("namePlaceholder")}
+                ref={fileInputRef}
+                id="file"
+                type="file"
+                accept=".md"
+                onChange={handleFileSelect}
                 required
-                maxLength={100}
+                className="sm:w-[260px]"
               />
-            </div>
+            </FieldRow>
+          ) : null}
+        </Section>
 
-            {isImport ? (
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="file">{t("fileLabel")}</Label>
-                <Input
-                  ref={fileInputRef}
-                  id="file"
-                  type="file"
-                  accept=".md"
-                  onChange={handleFileSelect}
-                  required
-                />
-                {soul && (
-                  <div className="mt-2 max-h-64 overflow-auto rounded-md border bg-muted/50 p-3">
-                    <pre className="whitespace-pre-wrap font-mono text-xs">
-                      {soul}
-                    </pre>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="soul">{t("soulLabel")}</Label>
-                <textarea
-                  id="soul"
-                  value={soul}
-                  onChange={(e) => setSoul(e.target.value)}
-                  placeholder={t("soulPlaceholder")}
-                  required
-                  rows={20}
-                  className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 font-mono text-sm shadow-xs transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                />
-                <p className="text-xs text-muted-foreground">
-                  {t("soulHint")}
-                </p>
-              </div>
-            )}
+        <Section title={t("soulLabel")} desc={t("soulHint")}>
+          {isImport ? (
+            soul ? (
+              <StackField>
+                <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-md bg-background p-3.5 font-mono text-xs leading-relaxed text-ink-2">
+                  {soul}
+                </pre>
+              </StackField>
+            ) : null
+          ) : (
+            <StackField>
+              <textarea
+                id="soul"
+                value={soul}
+                onChange={(e) => setSoul(e.target.value)}
+                placeholder={t("soulPlaceholder")}
+                required
+                rows={20}
+                className="min-h-[320px] w-full resize-y rounded-md border border-border-strong bg-card px-3 py-2.5 font-mono text-xs leading-relaxed transition-colors placeholder:text-muted-foreground focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-soft-2"
+              />
+            </StackField>
+          )}
 
-            {error && <p className="text-sm text-destructive">{error}</p>}
+          {error ? (
+            <StackField>
+              <p className="text-sm text-danger">{error}</p>
+            </StackField>
+          ) : null}
 
-            <div className="flex gap-3 pt-2">
-              <Button type="submit" disabled={loading}>
-                {loading ? tc("loading") : isImport ? t("import") : t("createPersona")}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => router.back()}
-              >
-                {tc("cancel")}
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
+          <SaveRow>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => router.back()}
+            >
+              {tc("cancel")}
+            </Button>
+            <Button type="submit" disabled={loading}>
+              {loading ? tc("loading") : isImport ? t("import") : t("createPersona")}
+            </Button>
+          </SaveRow>
+        </Section>
+      </form>
     </div>
   );
 }

@@ -4,17 +4,19 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 
-import { Button } from "@/components/ui/button";
+import { BackLink } from "@/components/parent/back-link";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+  FieldRow,
+  Row,
+  RowMain,
+  RowMeta,
+  RowTitle,
+} from "@/components/parent/rows";
+import { SaveRow } from "@/components/parent/save-row";
+import { PageHead, Section } from "@/components/parent/section";
+import { Icon } from "@/components/shared/icon";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
 import { PersonaSelector } from "@/components/parent/persona-selector";
 import { locales, type Locale } from "@/i18n/config";
 
@@ -25,9 +27,13 @@ const localeNames: Record<Locale, string> = {
   de: "Deutsch",
 };
 
+const selectClassName =
+  "h-9 w-full rounded-md border border-input bg-card px-3 text-sm outline-none transition-[color,box-shadow,border-color] hover:border-faint focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary-soft-2 sm:w-[250px]";
+
 export default function EditProfilePage() {
   const t = useTranslations("profiles");
   const tc = useTranslations("common");
+  const tp = useTranslations("personas");
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -126,117 +132,121 @@ export default function EditProfilePage() {
   }
 
   return (
-    <div className="mx-auto max-w-lg flex flex-col gap-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("editTitle")}</CardTitle>
-          <CardDescription>
-            {t("editDescription", { name: profile.display_name })}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleUpdate} className="flex flex-col gap-4">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="display-name">{t("displayName")}</Label>
-              <Input
-                id="display-name"
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                required
-                maxLength={50}
-              />
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="name-tag">{t("nameTag")}</Label>
-              <Input
-                id="name-tag"
-                value={nameTag}
-                onChange={(e) => setNameTag(e.target.value)}
-                required
-                maxLength={30}
-                pattern="[a-z0-9-]+"
-              />
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="birthdate">{t("birthdate")}</Label>
-              <Input
-                id="birthdate"
-                type="date"
-                value={birthdate}
-                onChange={(e) => setBirthdate(e.target.value)}
-              />
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="language">{t("language")}</Label>
-              <select
-                id="language"
-                value={language}
-                onChange={(e) => setLanguage(e.target.value)}
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              >
-                {locales.map((l) => (
-                  <option key={l} value={l}>
-                    {localeNames[l]}
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-muted-foreground">
-                {t("languageHint")}
-              </p>
-            </div>
+    <div>
+      <BackLink href="/profiles">{t("title")}</BackLink>
+      <PageHead
+        title={profile.display_name}
+        sub={t("editDescription", { name: profile.display_name })}
+      />
+
+      <form onSubmit={handleUpdate}>
+        <Section title={t("editTitle")}>
+          <FieldRow label={t("displayName")} htmlFor="display-name">
+            <Input
+              id="display-name"
+              className="sm:w-[250px]"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              required
+              maxLength={50}
+            />
+          </FieldRow>
+          <FieldRow
+            label={t("nameTag")}
+            hint={t("nameTagHint")}
+            htmlFor="name-tag"
+          >
+            <Input
+              id="name-tag"
+              className="sm:w-[250px]"
+              value={nameTag}
+              onChange={(e) => setNameTag(e.target.value)}
+              required
+              maxLength={30}
+              pattern="[a-z0-9-]+"
+            />
+          </FieldRow>
+          <FieldRow label={t("birthdate")} htmlFor="birthdate">
+            <Input
+              id="birthdate"
+              className="sm:w-[250px]"
+              type="date"
+              value={birthdate}
+              onChange={(e) => setBirthdate(e.target.value)}
+            />
+          </FieldRow>
+          <FieldRow
+            label={t("language")}
+            hint={t("languageHint")}
+            htmlFor="language"
+          >
+            <select
+              id="language"
+              value={language}
+              onChange={(e) => setLanguage(e.target.value)}
+              className={selectClassName}
+            >
+              {locales.map((l) => (
+                <option key={l} value={l}>
+                  {localeNames[l]}
+                </option>
+              ))}
+            </select>
+          </FieldRow>
+          <FieldRow
+            label={tp("selectorLabel")}
+            hint={tp("selectorHint")}
+            htmlFor="persona"
+          >
             <PersonaSelector
               profileId={params.id}
               value={activePersonaId}
               onChange={setActivePersonaId}
             />
-            {error && (
-              <p className="text-sm text-destructive">{error}</p>
-            )}
-            <div className="flex gap-3 pt-2">
-              <Button type="submit" disabled={loading}>
-                {loading ? t("saving") : tc("save")}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => router.back()}
-              >
-                {tc("cancel")}
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
+          </FieldRow>
+          {error && (
+            <div className="px-5 py-3 text-sm text-danger">{error}</div>
+          )}
+          <SaveRow>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => router.back()}
+            >
+              {tc("cancel")}
+            </Button>
+            <Button type="submit" disabled={loading}>
+              {loading ? t("saving") : tc("save")}
+            </Button>
+          </SaveRow>
+        </Section>
+      </form>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("memoryTitle")}</CardTitle>
-          <CardDescription>{t("memoryDescription")}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button
-            variant="outline"
-            onClick={() => router.push(`/profiles/${params.id}/memory`)}
-          >
-            {t("viewMemory")}
-          </Button>
-        </CardContent>
-      </Card>
+      <Section title={t("memoryTitle")} desc={t("memoryDescription")}>
+        <Row
+          clickable
+          className="cursor-pointer"
+          onClick={() => router.push(`/profiles/${params.id}/memory`)}
+        >
+          <RowMain>
+            <RowTitle>{t("viewMemory")}</RowTitle>
+          </RowMain>
+          <Icon name="chevron_right" size={16} className="text-faint" />
+        </Row>
+      </Section>
 
-      <Card className="border-destructive/50">
-        <CardHeader>
-          <CardTitle className="text-destructive">{t("dangerZone")}</CardTitle>
-          <CardDescription>
-            {t("dangerZoneDescription")}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Separator className="mb-4" />
+      <Section title={t("dangerZone")}>
+        <Row>
+          <RowMain>
+            <RowTitle>{t("deleteProfile")}</RowTitle>
+            <RowMeta>{t("dangerZoneDescription")}</RowMeta>
+          </RowMain>
           <Button variant="destructive" onClick={handleDelete}>
+            <Icon name="delete" size={14} />
             {t("deleteProfile")}
           </Button>
-        </CardContent>
-      </Card>
+        </Row>
+      </Section>
     </div>
   );
 }

@@ -4,18 +4,20 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 
 import { Icon } from "@/components/shared/icon";
-import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+  FieldRow,
+  Row,
+  RowMain,
+  RowMeta,
+  RowTitle,
+  StackField,
+} from "@/components/parent/rows";
+import { SaveRow } from "@/components/parent/save-row";
+import { Section } from "@/components/parent/section";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import {
   Dialog,
   DialogContent,
@@ -249,188 +251,168 @@ export function AIProviderConfig() {
 
   if (loading) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("aiConfigTitle")}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Icon name="loading" className="h-4 w-4 animate-spin" />
-            Loading...
-          </div>
-        </CardContent>
-      </Card>
+      <Section title={t("aiConfigTitle")}>
+        <div className="flex items-center gap-2 px-5 py-3.5 text-sm text-muted-foreground">
+          <Icon name="loading" className="h-4 w-4 animate-spin" />
+          Loading...
+        </div>
+      </Section>
     );
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("aiConfigTitle")}</CardTitle>
-          <CardDescription>{t("aiConfigDescription")}</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          {providers.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{t("noProviders")}</p>
-          ) : (
-            <div className="flex flex-col gap-3">
-              {providers.map((provider) => (
-                <div
-                  key={provider.id}
-                  className="flex items-center justify-between rounded-lg border p-3"
-                >
-                  <div className="flex flex-col gap-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">{provider.name}</span>
-                      <Badge variant="secondary" className="text-xs">
-                        ...{provider.keyPreview}
-                      </Badge>
-                    </div>
-                    <span className="text-xs text-muted-foreground">
-                      {t("added", {
-                        date: new Date(provider.addedAt).toLocaleDateString(),
-                      })}
-                    </span>
+    <>
+      <Section
+        title={t("aiConfigTitle")}
+        desc={t("aiConfigDescription")}
+        action={
+          availableProviders.length > 0 ? (
+            <Dialog
+              open={dialogOpen}
+              onOpenChange={(open) => {
+                setDialogOpen(open);
+                if (!open) resetDialog();
+              }}
+            >
+              <DialogTrigger asChild>
+                <Button variant="outline" size="sm" className="cursor-pointer">
+                  <Icon name="add" className="h-4 w-4" />
+                  {t("addProvider")}
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>{t("addProviderTitle")}</DialogTitle>
+                  <DialogDescription>
+                    {t("addProviderDescription")}
+                  </DialogDescription>
+                </DialogHeader>
+
+                <div className="flex flex-col gap-4">
+                  <div className="flex flex-col gap-2">
+                    <Label>{t("selectProvider")}</Label>
+                    <Select
+                      value={selectedProvider}
+                      onValueChange={(value) => {
+                        setSelectedProvider(value as AIProviderId);
+                        setValidationStatus("idle");
+                        setValidationError("");
+                      }}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder={t("selectProvider")} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableProviders.map((p) => (
+                          <SelectItem key={p.id} value={p.id}>
+                            {p.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleRemoveProvider(provider.id)}
-                    className="cursor-pointer text-destructive hover:bg-destructive/10 hover:text-destructive"
-                  >
-                    <Icon name="delete" className="mr-1 h-4 w-4" />
-                    {t("removeProvider")}
-                  </Button>
-                </div>
-              ))}
-            </div>
-          )}
 
-          {availableProviders.length > 0 && (
-            <>
-              {providers.length > 0 && <Separator />}
-              <Dialog
-                open={dialogOpen}
-                onOpenChange={(open) => {
-                  setDialogOpen(open);
-                  if (!open) resetDialog();
-                }}
-              >
-                <DialogTrigger asChild>
-                  <Button variant="outline" className="cursor-pointer w-fit">
-                    <Icon name="add" className="mr-2 h-4 w-4" />
-                    {t("addProvider")}
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>{t("addProviderTitle")}</DialogTitle>
-                    <DialogDescription>
-                      {t("addProviderDescription")}
-                    </DialogDescription>
-                  </DialogHeader>
-
-                  <div className="flex flex-col gap-4">
-                    <div className="flex flex-col gap-2">
-                      <Label>{t("selectProvider")}</Label>
-                      <Select
-                        value={selectedProvider}
-                        onValueChange={(value) => {
-                          setSelectedProvider(value as AIProviderId);
+                  <div className="flex flex-col gap-2">
+                    <Label>{t("apiKey")}</Label>
+                    <div className="relative">
+                      <Input
+                        type={showKey ? "text" : "password"}
+                        placeholder={t("apiKeyPlaceholder")}
+                        value={apiKey}
+                        onChange={(e) => {
+                          setApiKey(e.target.value);
                           setValidationStatus("idle");
                           setValidationError("");
                         }}
+                        className="pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowKey(!showKey)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer text-muted-foreground hover:text-foreground"
+                        aria-label={showKey ? "Hide API key" : "Show API key"}
                       >
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder={t("selectProvider")} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {availableProviders.map((p) => (
-                            <SelectItem key={p.id} value={p.id}>
-                              {p.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        {showKey ? (
+                          <Icon name="hide" className="h-4 w-4" />
+                        ) : (
+                          <Icon name="show" className="h-4 w-4" />
+                        )}
+                      </button>
                     </div>
-
-                    <div className="flex flex-col gap-2">
-                      <Label>{t("apiKey")}</Label>
-                      <div className="relative">
-                        <Input
-                          type={showKey ? "text" : "password"}
-                          placeholder={t("apiKeyPlaceholder")}
-                          value={apiKey}
-                          onChange={(e) => {
-                            setApiKey(e.target.value);
-                            setValidationStatus("idle");
-                            setValidationError("");
-                          }}
-                          className="pr-10"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowKey(!showKey)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer text-muted-foreground hover:text-foreground"
-                          aria-label={showKey ? "Hide API key" : "Show API key"}
-                        >
-                          {showKey ? (
-                            <Icon name="hide" className="h-4 w-4" />
-                          ) : (
-                            <Icon name="show" className="h-4 w-4" />
-                          )}
-                        </button>
-                      </div>
-                    </div>
-
-                    {validationStatus === "valid" && (
-                      <div className="flex items-center gap-2 text-sm text-green-600">
-                        <Icon name="success" className="h-4 w-4" />
-                        {t("keyValid")}
-                      </div>
-                    )}
-
-                    {validationStatus === "invalid" && (
-                      <div className="flex items-center gap-2 text-sm text-destructive">
-                        <Icon name="alert" className="h-4 w-4" />
-                        {validationError || t("keyInvalid")}
-                      </div>
-                    )}
                   </div>
 
-                  <DialogFooter>
-                    <Button
-                      onClick={handleValidateAndSave}
-                      disabled={!selectedProvider || !apiKey || validating || saving}
-                      className="cursor-pointer"
-                    >
-                      {validating || saving ? (
-                        <>
-                          <Icon name="loading" className="mr-2 h-4 w-4 animate-spin" />
-                          {validating ? t("validating") : t("validating")}
-                        </>
-                      ) : (
-                        t("validateAndSave")
-                      )}
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-            </>
-          )}
-        </CardContent>
-      </Card>
+                  {validationStatus === "valid" && (
+                    <div className="flex items-center gap-2 text-sm text-success">
+                      <Icon name="success" className="h-4 w-4" />
+                      {t("keyValid")}
+                    </div>
+                  )}
+
+                  {validationStatus === "invalid" && (
+                    <div className="flex items-center gap-2 text-sm text-danger">
+                      <Icon name="alert" className="h-4 w-4" />
+                      {validationError || t("keyInvalid")}
+                    </div>
+                  )}
+                </div>
+
+                <DialogFooter>
+                  <Button
+                    onClick={handleValidateAndSave}
+                    disabled={!selectedProvider || !apiKey || validating || saving}
+                    className="cursor-pointer"
+                  >
+                    {validating || saving ? (
+                      <>
+                        <Icon name="loading" className="mr-2 h-4 w-4 animate-spin" />
+                        {validating ? t("validating") : t("validating")}
+                      </>
+                    ) : (
+                      t("validateAndSave")
+                    )}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          ) : undefined
+        }
+      >
+        {providers.length === 0 ? (
+          <p className="px-5 py-3.5 text-sm text-muted-foreground">
+            {t("noProviders")}
+          </p>
+        ) : (
+          providers.map((provider) => (
+            <Row key={provider.id}>
+              <RowMain>
+                <RowTitle>
+                  {provider.name}
+                  <Badge variant="key">...{provider.keyPreview}</Badge>
+                </RowTitle>
+                <RowMeta>
+                  {t("added", {
+                    date: new Date(provider.addedAt).toLocaleDateString(),
+                  })}
+                </RowMeta>
+              </RowMain>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleRemoveProvider(provider.id)}
+                className="cursor-pointer text-danger hover:bg-danger-soft hover:text-danger"
+              >
+                <Icon name="delete" className="mr-1 h-4 w-4" />
+                {t("removeProvider")}
+              </Button>
+            </Row>
+          ))
+        )}
+      </Section>
 
       {providers.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("voiceConfig")}</CardTitle>
-            <CardDescription>{t("voiceConfigDescription")}</CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-4">
-            <div className="flex flex-col gap-2">
-              <Label>{t("voiceProvider")}</Label>
+        <>
+          <Section title={t("voiceConfig")} desc={t("voiceConfigDescription")}>
+            <FieldRow label={t("voiceProvider")}>
               <Select
                 value={voiceProvider}
                 onValueChange={(value) => {
@@ -444,7 +426,7 @@ export function AIProviderConfig() {
                   }
                 }}
               >
-                <SelectTrigger className="w-full">
+                <SelectTrigger className="w-full sm:w-[260px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -455,14 +437,13 @@ export function AIProviderConfig() {
                   ))}
                 </SelectContent>
               </Select>
-            </div>
+            </FieldRow>
 
             {activeProviderDef && (
               <>
-                <div className="flex flex-col gap-2">
-                  <Label>{t("voiceModel")}</Label>
+                <FieldRow label={t("voiceModel")}>
                   <Select value={voiceModel} onValueChange={setVoiceModel}>
-                    <SelectTrigger className="w-full">
+                    <SelectTrigger className="w-full sm:w-[260px]">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -475,12 +456,11 @@ export function AIProviderConfig() {
                         ))}
                     </SelectContent>
                   </Select>
-                </div>
+                </FieldRow>
 
-                <div className="flex flex-col gap-2">
-                  <Label>{t("voiceName")}</Label>
+                <FieldRow label={t("voiceName")}>
                   <Select value={voiceName} onValueChange={setVoiceName}>
-                    <SelectTrigger className="w-full">
+                    <SelectTrigger className="w-full sm:w-[260px]">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -491,14 +471,13 @@ export function AIProviderConfig() {
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
+                </FieldRow>
               </>
             )}
+          </Section>
 
-            <Separator />
-
-            <div className="flex flex-col gap-2">
-              <Label>{t("thinkingProvider")}</Label>
+          <Section title={t("thinkingModel")}>
+            <FieldRow label={t("thinkingProvider")}>
               <Select
                 value={thinkingProvider || THINKING_PROVIDER_FALLBACK}
                 onValueChange={(value) => {
@@ -516,7 +495,7 @@ export function AIProviderConfig() {
                   setThinkingModel(defaultModel?.id ?? "");
                 }}
               >
-                <SelectTrigger className="w-full">
+                <SelectTrigger className="w-full sm:w-[260px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -535,17 +514,18 @@ export function AIProviderConfig() {
                     ))}
                 </SelectContent>
               </Select>
-            </div>
+            </FieldRow>
 
             {!thinkingProvider ? (
-              <p className="rounded-lg border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-                {t("thinkingModelFallbackHint", { voiceModel: voiceFallbackText })}
-              </p>
+              <StackField>
+                <p className="text-[12.5px] text-muted-foreground">
+                  {t("thinkingModelFallbackHint", { voiceModel: voiceFallbackText })}
+                </p>
+              </StackField>
             ) : activeThinkingProviderDef ? (
-              <div className="flex flex-col gap-2">
-                <Label>{t("thinkingModel")}</Label>
+              <FieldRow label={t("thinkingModel")}>
                 <Select value={thinkingModel} onValueChange={setThinkingModel}>
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger className="w-full sm:w-[260px]">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -558,37 +538,34 @@ export function AIProviderConfig() {
                       ))}
                   </SelectContent>
                 </Select>
-              </div>
+              </FieldRow>
             ) : null}
 
-            <Button
-              onClick={handleSaveConfig}
-              disabled={
-                !voiceProvider ||
-                !voiceModel ||
-                !voiceName ||
-                configSaving ||
-                (Boolean(thinkingProvider) && !thinkingModel)
-              }
-              className="cursor-pointer w-fit"
-            >
-              {configSaving ? (
-                <>
-                  <Icon name="loading" className="mr-2 h-4 w-4 animate-spin" />
-                  {tc("save")}
-                </>
-              ) : configSaved ? (
-                <>
-                  <Icon name="success" className="mr-2 h-4 w-4" />
-                  {t("configSaved")}
-                </>
-              ) : (
-                tc("save")
-              )}
-            </Button>
-          </CardContent>
-        </Card>
+            <SaveRow note={configSaved ? t("configSaved") : undefined}>
+              <Button
+                onClick={handleSaveConfig}
+                disabled={
+                  !voiceProvider ||
+                  !voiceModel ||
+                  !voiceName ||
+                  configSaving ||
+                  (Boolean(thinkingProvider) && !thinkingModel)
+                }
+                className="cursor-pointer"
+              >
+                {configSaving ? (
+                  <>
+                    <Icon name="loading" className="mr-2 h-4 w-4 animate-spin" />
+                    {tc("save")}
+                  </>
+                ) : (
+                  tc("save")
+                )}
+              </Button>
+            </SaveRow>
+          </Section>
+        </>
       )}
-    </div>
+    </>
   );
 }

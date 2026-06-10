@@ -3,8 +3,6 @@
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 
-import { Label } from "@/components/ui/label";
-
 import type { Persona } from "@/types/database";
 
 interface PersonaSelectorProps {
@@ -44,22 +42,18 @@ export function PersonaSelector({ profileId, value, onChange }: PersonaSelectorP
   if (loading) return null;
 
   return (
-    <div className="flex flex-col gap-2">
-      <Label htmlFor="persona">{t("selectorLabel")}</Label>
-      <select
-        id="persona"
-        value={value ?? ""}
-        onChange={(e) => handleChange(e.target.value)}
-        className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-      >
-        <option value="">{t("useDefault")}</option>
-        {personas.map((p) => (
-          <option key={p.id} value={p.id}>
-            {p.name}{p.is_system_default ? ` (${t("default")})` : ""}
-          </option>
-        ))}
-      </select>
-      <p className="text-xs text-muted-foreground">{t("selectorHint")}</p>
-    </div>
+    <select
+      id="persona"
+      value={value ?? ""}
+      onChange={(e) => handleChange(e.target.value)}
+      className="h-9 w-full rounded-md border border-input bg-card px-3 text-sm outline-none transition-[color,box-shadow,border-color] hover:border-faint focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary-soft-2 sm:w-[250px]"
+    >
+      <option value="">{t("useDefault")}</option>
+      {personas.map((p) => (
+        <option key={p.id} value={p.id}>
+          {p.name}{p.is_system_default ? ` (${t("default")})` : ""}
+        </option>
+      ))}
+    </select>
   );
 }

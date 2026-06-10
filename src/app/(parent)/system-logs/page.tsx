@@ -12,6 +12,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { PageHead, Section } from "@/components/parent/section";
+import { DotSep, Row, RowMain, RowMeta, RowTitle } from "@/components/parent/rows";
 import type { SystemLog } from "@/types/database";
 
 interface ProfileOption {
@@ -32,12 +34,9 @@ const EVENT_TYPES = [
   "error",
 ] as const;
 
-const EVENT_BADGE_STYLES: Record<string, string> = {
-  session_start: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
-  memory_stored: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
-  memory_discarded: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
-  memory_updated: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
-  error: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+const EVENT_BADGE_VARIANTS: Record<string, "blue" | "destructive" | "gray"> = {
+  session_start: "blue",
+  error: "destructive",
 };
 
 const PAGE_SIZE = 50;
@@ -118,14 +117,11 @@ export default function SystemLogsPage() {
   const profileNameMap = new Map(profiles.map((p) => [p.id, p.display_name]));
 
   return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">{t("title")}</h1>
-        <p className="text-muted-foreground">{t("subtitle")}</p>
-      </div>
+    <div>
+      <PageHead title={t("title")} sub={t("subtitle")} />
 
       {/* Filter bar */}
-      <div className="flex flex-wrap gap-3">
+      <div className="mb-6 flex flex-wrap gap-3">
         <Select value={filterProfile} onValueChange={setFilterProfile}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder={t("filterProfile")} />
@@ -171,38 +167,35 @@ export default function SystemLogsPage() {
 
       {/* Log list */}
       {logs.length === 0 && !loading ? (
-        <div className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">
+        <div className="rounded-lg border border-dashed border-border-strong px-5 py-8 text-center text-sm text-muted-foreground">
           {filterProfile === "all" && filterPersona === "all" && filterEvent === "all"
             ? t("noLogs")
             : t("noResults")}
         </div>
       ) : (
-        <div className="flex flex-col gap-2">
+        <Section>
           {logs.map((log) => (
-            <div
-              key={log.id}
-              className="flex items-start gap-3 rounded-lg border p-3"
-            >
-              <Badge
-                variant="secondary"
-                className={EVENT_BADGE_STYLES[log.event] ?? ""}
-              >
+            <Row key={log.id}>
+              <RowMain>
+                <RowTitle>
+                  <span className="line-clamp-1 font-medium">{log.message}</span>
+                </RowTitle>
+                <RowMeta>
+                  {filterProfile === "all" && profileNameMap.get(log.profile_id) && (
+                    <>
+                      {profileNameMap.get(log.profile_id)}
+                      <DotSep />
+                    </>
+                  )}
+                  {new Date(log.created_at).toLocaleString()}
+                </RowMeta>
+              </RowMain>
+              <Badge variant={EVENT_BADGE_VARIANTS[log.event] ?? "gray"}>
                 {getEventLabel(log.event, t)}
               </Badge>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm">{log.message}</p>
-                <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-                  {filterProfile === "all" && profileNameMap.get(log.profile_id) && (
-                    <span>{profileNameMap.get(log.profile_id)}</span>
-                  )}
-                  <span>
-                    {new Date(log.created_at).toLocaleString()}
-                  </span>
-                </div>
-              </div>
-            </div>
+            </Row>
           ))}
-        </div>
+        </Section>
       )}
 
       {/* Load more */}

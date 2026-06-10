@@ -4,22 +4,21 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 
+import { BackLink } from "@/components/parent/back-link";
+import { FieldRow } from "@/components/parent/rows";
+import { SaveRow } from "@/components/parent/save-row";
+import { PageHead, Section } from "@/components/parent/section";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { locales, type Locale } from "@/i18n/config";
 
 const localeNames: Record<Locale, string> = {
   en: "English",
   de: "Deutsch",
 };
+
+const selectClassName =
+  "h-9 w-full rounded-md border border-input bg-card px-3 text-sm outline-none transition-[color,box-shadow,border-color] hover:border-faint focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary-soft-2 sm:w-[250px]";
 
 export default function NewProfilePage() {
   const t = useTranslations("profiles");
@@ -75,90 +74,87 @@ export default function NewProfilePage() {
   }
 
   return (
-    <div className="mx-auto max-w-lg">
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("createTitle")}</CardTitle>
-          <CardDescription>
-            {t("createDescription")}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="display-name">{t("displayName")}</Label>
-              <Input
-                id="display-name"
-                placeholder={t("displayNamePlaceholder")}
-                value={displayName}
-                onChange={(e) => handleNameChange(e.target.value)}
-                required
-                maxLength={50}
-              />
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="name-tag">{t("nameTag")}</Label>
-              <Input
-                id="name-tag"
-                placeholder={t("nameTagPlaceholder")}
-                value={nameTag}
-                onChange={(e) => setNameTag(e.target.value)}
-                required
-                maxLength={30}
-                pattern="[a-z0-9-]+"
-              />
-              <p className="text-xs text-muted-foreground">
-                {t("nameTagHint")}
-              </p>
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="birthdate">{t("birthdateOptional")}</Label>
-              <Input
-                id="birthdate"
-                type="date"
-                value={birthdate}
-                onChange={(e) => setBirthdate(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                {t("birthdateHint")}
-              </p>
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="language">{t("language")}</Label>
-              <select
-                id="language"
-                value={language}
-                onChange={(e) => setLanguage(e.target.value)}
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              >
-                {locales.map((l) => (
-                  <option key={l} value={l}>
-                    {localeNames[l]}
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-muted-foreground">
-                {t("languageHint")}
-              </p>
-            </div>
-            {error && (
-              <p className="text-sm text-destructive">{error}</p>
-            )}
-            <div className="flex gap-3 pt-2">
-              <Button type="submit" disabled={loading}>
-                {loading ? t("creating") : t("createProfile")}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => router.back()}
-              >
-                {tc("cancel")}
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
+    <div>
+      <BackLink href="/profiles">{t("title")}</BackLink>
+      <PageHead title={t("createTitle")} sub={t("createDescription")} />
+
+      <form onSubmit={handleSubmit}>
+        <Section>
+          <FieldRow label={t("displayName")} htmlFor="display-name">
+            <Input
+              id="display-name"
+              className="sm:w-[250px]"
+              placeholder={t("displayNamePlaceholder")}
+              value={displayName}
+              onChange={(e) => handleNameChange(e.target.value)}
+              required
+              maxLength={50}
+            />
+          </FieldRow>
+          <FieldRow
+            label={t("nameTag")}
+            hint={t("nameTagHint")}
+            htmlFor="name-tag"
+          >
+            <Input
+              id="name-tag"
+              className="sm:w-[250px]"
+              placeholder={t("nameTagPlaceholder")}
+              value={nameTag}
+              onChange={(e) => setNameTag(e.target.value)}
+              required
+              maxLength={30}
+              pattern="[a-z0-9-]+"
+            />
+          </FieldRow>
+          <FieldRow
+            label={t("birthdateOptional")}
+            hint={t("birthdateHint")}
+            htmlFor="birthdate"
+          >
+            <Input
+              id="birthdate"
+              className="sm:w-[250px]"
+              type="date"
+              value={birthdate}
+              onChange={(e) => setBirthdate(e.target.value)}
+            />
+          </FieldRow>
+          <FieldRow
+            label={t("language")}
+            hint={t("languageHint")}
+            htmlFor="language"
+          >
+            <select
+              id="language"
+              value={language}
+              onChange={(e) => setLanguage(e.target.value)}
+              className={selectClassName}
+            >
+              {locales.map((l) => (
+                <option key={l} value={l}>
+                  {localeNames[l]}
+                </option>
+              ))}
+            </select>
+          </FieldRow>
+          {error && (
+            <div className="px-5 py-3 text-sm text-danger">{error}</div>
+          )}
+          <SaveRow>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => router.back()}
+            >
+              {tc("cancel")}
+            </Button>
+            <Button type="submit" disabled={loading}>
+              {loading ? t("creating") : t("createProfile")}
+            </Button>
+          </SaveRow>
+        </Section>
+      </form>
     </div>
   );
 }

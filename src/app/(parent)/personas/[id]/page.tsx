@@ -4,18 +4,21 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 
-import { Button } from "@/components/ui/button";
+import { Icon } from "@/components/shared/icon";
+import { BackLink } from "@/components/parent/back-link";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
+  FieldRow,
+  Row,
+  RowMain,
+  RowMeta,
+  RowTitle,
+  StackField,
+} from "@/components/parent/rows";
+import { SaveRow } from "@/components/parent/save-row";
+import { PageHead, Section } from "@/components/parent/section";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 import type { Persona } from "@/types/database";
 
@@ -136,32 +139,24 @@ export default function PersonaDetailPage() {
 
   if (persona.is_system_default) {
     return (
-      <div className="mx-auto max-w-2xl flex flex-col gap-6">
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>{persona.name}</CardTitle>
-                <CardDescription>{t("defaultHint")}</CardDescription>
-              </div>
-              <Badge variant="secondary">{t("default")}</Badge>
-            </div>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-4">
-            <div className="max-h-96 overflow-auto rounded-md border bg-muted/50 p-4">
-              <pre className="whitespace-pre-wrap font-mono text-sm">
-                {persona.soul}
-              </pre>
-            </div>
+      <div>
+        <BackLink href="/personas">{t("title")}</BackLink>
+        <PageHead
+          title={persona.name}
+          sub={t("defaultHint")}
+          action={<Badge variant="blue">{t("default")}</Badge>}
+        />
 
-            {error && <p className="text-sm text-destructive">{error}</p>}
-
-            <div className="flex gap-3">
-              <Button variant="outline" onClick={handleExport}>
+        <Section
+          title={t("soulLabel")}
+          action={
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={handleExport}>
                 {t("export")}
               </Button>
               <Button
                 variant="outline"
+                size="sm"
                 onClick={() => {
                   setCloneName(`${persona.name} (Copy)`);
                   setShowClone(true);
@@ -169,103 +164,131 @@ export default function PersonaDetailPage() {
               >
                 {t("clone")}
               </Button>
-              <Button variant="outline" onClick={() => router.back()}>
-                {tc("cancel")}
-              </Button>
             </div>
+          }
+        >
+          <StackField>
+            <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-md bg-background p-3.5 font-mono text-xs leading-relaxed text-ink-2">
+              {persona.soul}
+            </pre>
+          </StackField>
 
-            {showClone && (
-              <form onSubmit={handleClone} className="flex items-end gap-3 rounded-md border p-4">
-                <div className="flex flex-1 flex-col gap-2">
-                  <Label htmlFor="clone-name">{t("cloneNameLabel")}</Label>
-                  <Input
-                    id="clone-name"
-                    value={cloneName}
-                    onChange={(e) => setCloneName(e.target.value)}
-                    required
-                    maxLength={100}
-                  />
-                </div>
+          {error ? (
+            <StackField>
+              <p className="text-sm text-danger">{error}</p>
+            </StackField>
+          ) : null}
+
+          <SaveRow>
+            <Button variant="outline" onClick={() => router.back()}>
+              {tc("cancel")}
+            </Button>
+          </SaveRow>
+        </Section>
+
+        {showClone ? (
+          <Section>
+            <form onSubmit={handleClone}>
+              <FieldRow label={t("cloneNameLabel")} htmlFor="clone-name">
+                <Input
+                  id="clone-name"
+                  value={cloneName}
+                  onChange={(e) => setCloneName(e.target.value)}
+                  required
+                  maxLength={100}
+                  className="sm:w-[260px]"
+                />
                 <Button type="submit" disabled={loading}>
                   {loading ? tc("loading") : t("clone")}
                 </Button>
-              </form>
-            )}
-          </CardContent>
-        </Card>
+              </FieldRow>
+            </form>
+          </Section>
+        ) : null}
       </div>
     );
   }
 
   return (
-    <div className="mx-auto max-w-2xl flex flex-col gap-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("editTitle")}</CardTitle>
-          <CardDescription>
-            {t("editDescription", { name: persona.name })}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleUpdate} className="flex flex-col gap-4">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="name">{t("nameLabel")}</Label>
-              <Input
-                id="name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                maxLength={100}
-              />
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="soul">{t("soulLabel")}</Label>
-              <textarea
-                id="soul"
-                value={soul}
-                onChange={(e) => setSoul(e.target.value)}
-                required
-                rows={20}
-                className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 font-mono text-sm shadow-xs transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              />
-              <p className="text-xs text-muted-foreground">
-                {t("soulHint")}
-              </p>
-            </div>
+    <div>
+      <BackLink href="/personas">{t("title")}</BackLink>
+      <PageHead
+        title={t("editTitle")}
+        sub={t("editDescription", { name: persona.name })}
+      />
 
-            {error && <p className="text-sm text-destructive">{error}</p>}
+      <form onSubmit={handleUpdate}>
+        <Section>
+          <FieldRow label={t("nameLabel")} htmlFor="name">
+            <Input
+              id="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+              maxLength={100}
+              className="sm:w-[260px]"
+            />
+          </FieldRow>
+        </Section>
 
-            <div className="flex gap-3 pt-2">
-              <Button type="submit" disabled={loading}>
-                {loading ? t("saving") : tc("save")}
-              </Button>
-              <Button type="button" variant="outline" onClick={handleExport}>
-                {t("export")}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => router.back()}
-              >
-                {tc("cancel")}
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
+        <Section
+          title={t("soulLabel")}
+          desc={t("soulHint")}
+          action={
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleExport}
+            >
+              {t("export")}
+            </Button>
+          }
+        >
+          <StackField>
+            <textarea
+              id="soul"
+              value={soul}
+              onChange={(e) => setSoul(e.target.value)}
+              required
+              rows={20}
+              className="min-h-[320px] w-full resize-y rounded-md border border-border-strong bg-card px-3 py-2.5 font-mono text-xs leading-relaxed transition-colors placeholder:text-muted-foreground focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-soft-2"
+            />
+          </StackField>
 
-      <Card className="border-destructive/50">
-        <CardHeader>
-          <CardTitle className="text-destructive">{t("dangerZone")}</CardTitle>
-          <CardDescription>{t("dangerZoneDescription")}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Separator className="mb-4" />
+          {error ? (
+            <StackField>
+              <p className="text-sm text-danger">{error}</p>
+            </StackField>
+          ) : null}
+
+          <SaveRow>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => router.back()}
+            >
+              {tc("cancel")}
+            </Button>
+            <Button type="submit" disabled={loading}>
+              {loading ? t("saving") : tc("save")}
+            </Button>
+          </SaveRow>
+        </Section>
+      </form>
+
+      <Section title={t("dangerZone")}>
+        <Row>
+          <RowMain>
+            <RowTitle>{t("deletePersona")}</RowTitle>
+            <RowMeta>{t("dangerZoneDescription")}</RowMeta>
+          </RowMain>
           <Button variant="destructive" onClick={handleDelete}>
+            <Icon name="delete" size={16} />
             {t("deletePersona")}
           </Button>
-        </CardContent>
-      </Card>
+        </Row>
+      </Section>
     </div>
   );
 }

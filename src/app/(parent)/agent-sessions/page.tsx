@@ -12,6 +12,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { PageHead, Section } from "@/components/parent/section";
+import { DotSep, Row, RowMain, RowMeta, RowTitle } from "@/components/parent/rows";
 import type { AgentSessionRow } from "@/types/database";
 
 interface ProfileOption {
@@ -21,18 +23,14 @@ interface ProfileOption {
 
 const STATUS_OPTIONS = ["active", "completed", "failed", "deactivated"] as const;
 
-const STATUS_BADGE_STYLES: Record<string, string> = {
-  active: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
-  completed: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
-  failed: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
-  deactivated: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
-};
-
-const PROGRESS_BADGE_STYLES: Record<string, string> = {
-  planning: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
-  building: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200",
-  testing: "bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200",
-  done: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+const STATUS_BADGE_VARIANTS: Record<
+  string,
+  "blue" | "success" | "destructive" | "gray"
+> = {
+  active: "blue",
+  completed: "success",
+  failed: "destructive",
+  deactivated: "gray",
 };
 
 const PAGE_SIZE = 50;
@@ -159,14 +157,11 @@ export default function AgentSessionsPage() {
   };
 
   return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">{t("title")}</h1>
-        <p className="text-muted-foreground">{t("subtitle")}</p>
-      </div>
+    <div>
+      <PageHead title={t("title")} sub={t("subtitle")} />
 
       {/* Filter bar */}
-      <div className="flex flex-wrap gap-3">
+      <div className="mb-6 flex flex-wrap gap-3">
         <Select value={filterProfile} onValueChange={setFilterProfile}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder={t("filterProfile")} />
@@ -198,79 +193,64 @@ export default function AgentSessionsPage() {
 
       {/* Session list */}
       {sessions.length === 0 && !loading ? (
-        <div className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">
+        <div className="rounded-lg border border-dashed border-border-strong px-5 py-8 text-center text-sm text-muted-foreground">
           {filterProfile === "all" && filterStatus === "all"
             ? t("noSessions")
             : t("noResults")}
         </div>
       ) : (
-        <div className="flex flex-col gap-2">
+        <Section>
           {sessions.map((session) => (
-            <div
-              key={session.id}
-              className="flex items-start gap-3 rounded-lg border p-3"
-            >
-              <div className="flex flex-col gap-1">
-                <Badge
-                  variant="secondary"
-                  className={STATUS_BADGE_STYLES[session.status] ?? ""}
-                >
-                  {session.status === "active" && (
-                    <span className="mr-1 inline-block h-2 w-2 animate-pulse rounded-full bg-blue-500" />
-                  )}
-                  {getStatusLabel(session.status)}
-                </Badge>
-                <Badge
-                  variant="outline"
-                  className={PROGRESS_BADGE_STYLES[session.progress] ?? ""}
-                >
-                  {getProgressLabel(session.progress)}
-                </Badge>
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium">
-                    {getTaskLabel(session.task_type)}
+            <Row key={session.id}>
+              <RowMain>
+                <RowTitle>
+                  <span className="line-clamp-1">
+                    {session.task_prompt || getTaskLabel(session.task_type)}
                   </span>
-                  {filterProfile === "all" && profileNameMap.get(session.profile_id) && (
-                    <span className="text-xs text-muted-foreground">
-                      {profileNameMap.get(session.profile_id)}
-                    </span>
-                  )}
-                </div>
-                {session.task_prompt && (
-                  <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
-                    {session.task_prompt}
-                  </p>
-                )}
+                </RowTitle>
                 {session.error && (
-                  <p className="mt-1 text-sm text-red-600 dark:text-red-400">
+                  <p className="mt-0.5 text-[12.5px] text-danger">
                     {session.error}
                   </p>
                 )}
-                <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
-                  <span>
-                    {new Date(session.created_at).toLocaleString()}
-                  </span>
-                  <span>
-                    {t("elapsed")}: {formatElapsed(session.created_at, session.finished_at)}
-                  </span>
-                </div>
-              </div>
+                <RowMeta>
+                  {getTaskLabel(session.task_type)}
+                  {filterProfile === "all" &&
+                    profileNameMap.get(session.profile_id) && (
+                      <>
+                        <DotSep />
+                        {profileNameMap.get(session.profile_id)}
+                      </>
+                    )}
+                  <DotSep />
+                  {new Date(session.created_at).toLocaleString()}
+                  <DotSep />
+                  {t("elapsed")}: {formatElapsed(session.created_at, session.finished_at)}
+                </RowMeta>
+              </RowMain>
+              <Badge variant={session.progress === "done" ? "success" : "gray"}>
+                {getProgressLabel(session.progress)}
+              </Badge>
+              <Badge variant={STATUS_BADGE_VARIANTS[session.status] ?? "gray"}>
+                {session.status === "active" && (
+                  <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-primary" />
+                )}
+                {getStatusLabel(session.status)}
+              </Badge>
               {session.status === "active" && (
                 <Button
-                  variant="outline"
+                  variant="destructive"
                   size="sm"
-                  className="shrink-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                  className="shrink-0"
                   disabled={deactivating === session.id}
                   onClick={() => handleDeactivate(session.id)}
                 >
                   {deactivating === session.id ? "..." : t("deactivate")}
                 </Button>
               )}
-            </div>
+            </Row>
           ))}
-        </div>
+        </Section>
       )}
 
       {/* Load more */}

@@ -4,17 +4,17 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 
+import { BackLink } from "@/components/parent/back-link";
+import { StackField } from "@/components/parent/rows";
+import { SaveRow } from "@/components/parent/save-row";
+import { PageHead, Section } from "@/components/parent/section";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 
 import type { Profile } from "@/types/database";
+
+const textareaClassName =
+  "block w-full resize-y rounded-md border border-input bg-card px-3 py-2 font-mono text-[12.5px] leading-relaxed outline-none transition-[color,box-shadow,border-color] placeholder:text-faint hover:border-faint focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary-soft-2";
 
 export default function ProfileMemoryPage() {
   const t = useTranslations("memory");
@@ -96,85 +96,75 @@ export default function ProfileMemoryPage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">
-          {t("title", { name: profile.display_name })}
-        </h1>
-        <p className="text-muted-foreground">{t("subtitle")}</p>
-      </div>
+    <div>
+      <BackLink href={`/profiles/${params.id}`}>
+        {profile.display_name}
+      </BackLink>
+      <PageHead
+        title={t("title", { name: profile.display_name })}
+        sub={t("subtitle")}
+      />
 
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>{t("memoryTitle")}</CardTitle>
-              <CardDescription>{t("memoryHint")}</CardDescription>
-            </div>
-            {!editingMemory && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setEditingMemory(true)}
-              >
-                {t("edit")}
-              </Button>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent>
+      <Section
+        title={t("memoryTitle")}
+        desc={t("memoryHint")}
+        action={
+          !editingMemory ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setEditingMemory(true)}
+            >
+              {t("edit")}
+            </Button>
+          ) : undefined
+        }
+      >
+        <StackField>
           {editingMemory ? (
             <textarea
               value={memory}
               onChange={(e) => setMemory(e.target.value)}
               rows={16}
-              className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 font-mono text-sm shadow-xs transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              className={textareaClassName}
               placeholder={t("memoryPlaceholder")}
             />
           ) : memory ? (
-            <div className="max-h-96 overflow-auto rounded-md border bg-muted/50 p-4">
-              <pre className="whitespace-pre-wrap font-mono text-sm">
-                {memory}
-              </pre>
+            <div className="max-h-96 overflow-auto whitespace-pre-wrap rounded-md bg-muted p-3.5 text-sm leading-relaxed text-ink-2">
+              {memory}
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">{t("emptyMemory")}</p>
+            <div className="whitespace-pre-wrap rounded-md bg-muted p-3.5 text-sm leading-relaxed text-faint">
+              {t("emptyMemory")}
+            </div>
           )}
-        </CardContent>
-      </Card>
+        </StackField>
+      </Section>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("parentNotesTitle")}</CardTitle>
-          <CardDescription>{t("parentNotesHint")}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="parent-notes" className="sr-only">
-              {t("parentNotesTitle")}
-            </Label>
-            <textarea
-              id="parent-notes"
-              value={parentNotes}
-              onChange={(e) => setParentNotes(e.target.value)}
-              rows={8}
-              className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 font-mono text-sm shadow-xs transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              placeholder={t("parentNotesPlaceholder")}
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      {error && <p className="text-sm text-destructive">{error}</p>}
-
-      <div className="flex gap-3">
-        <Button onClick={handleSave} disabled={saving}>
-          {saving ? tc("loading") : tc("save")}
-        </Button>
-        <Button variant="outline" onClick={() => router.back()}>
-          {tc("cancel")}
-        </Button>
-      </div>
+      <Section title={t("parentNotesTitle")} desc={t("parentNotesHint")}>
+        <StackField>
+          <Label htmlFor="parent-notes" className="sr-only">
+            {t("parentNotesTitle")}
+          </Label>
+          <textarea
+            id="parent-notes"
+            value={parentNotes}
+            onChange={(e) => setParentNotes(e.target.value)}
+            rows={8}
+            className={textareaClassName}
+            placeholder={t("parentNotesPlaceholder")}
+          />
+        </StackField>
+        {error && <div className="px-5 py-3 text-sm text-danger">{error}</div>}
+        <SaveRow>
+          <Button variant="outline" onClick={() => router.back()}>
+            {tc("cancel")}
+          </Button>
+          <Button onClick={handleSave} disabled={saving}>
+            {saving ? tc("loading") : tc("save")}
+          </Button>
+        </SaveRow>
+      </Section>
     </div>
   );
 }
