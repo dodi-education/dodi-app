@@ -62,13 +62,22 @@
   },
   "dashboard": {
     "title": "Dashboard",
-    "subtitle": "Manage your children's profiles and settings",
+    "subtitle": "What your kids have been up to with Dodi",
     "addProfile": "Add profile",
     "noProfilesTitle": "No profiles yet",
     "noProfilesDescription": "Create a kid profile to get started with Dodi",
     "createFirstProfile": "Create first profile",
     "born": "Born: {date}",
-    "birthdateNotSet": "Birthdate not set"
+    "birthdateNotSet": "Birthdate not set",
+    "statSessionsToday": "Voice sessions today",
+    "statSessionsWeek": "Sessions this week",
+    "statGamesCreated": "Games created",
+    "recentSessions": "Recent sessions",
+    "recentSessionsDesc": "Game tasks Dodi worked on recently",
+    "noRecentSessions": "No sessions yet. They appear when kids create games with Dodi.",
+    "profilesGlance": "Profiles at a glance",
+    "viewAll": "View all",
+    "ageYears": "{age} yrs"
   },
   "profiles": {
     "title": "Kid Profiles",

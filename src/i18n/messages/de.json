@@ -62,13 +62,22 @@
   },
   "dashboard": {
     "title": "Dashboard",
-    "subtitle": "Verwalte die Profile und Einstellungen deiner Kinder",
+    "subtitle": "Was deine Kinder mit Dodi gemacht haben",
     "addProfile": "Profil hinzufügen",
     "noProfilesTitle": "Noch keine Profile",
     "noProfilesDescription": "Erstelle ein Kinderprofil, um mit Dodi zu starten",
     "createFirstProfile": "Erstes Profil erstellen",
     "born": "Geboren: {date}",
-    "birthdateNotSet": "Geburtsdatum nicht gesetzt"
+    "birthdateNotSet": "Geburtsdatum nicht gesetzt",
+    "statSessionsToday": "Sprachsitzungen heute",
+    "statSessionsWeek": "Sitzungen diese Woche",
+    "statGamesCreated": "Erstellte Spiele",
+    "recentSessions": "Letzte Sitzungen",
+    "recentSessionsDesc": "Spielaufgaben, an denen Dodi zuletzt gearbeitet hat",
+    "noRecentSessions": "Noch keine Sitzungen. Sie erscheinen, wenn Kinder mit Dodi Spiele erstellen.",
+    "profilesGlance": "Profile im Überblick",
+    "viewAll": "Alle anzeigen",
+    "ageYears": "{age} J."
   },
   "profiles": {
     "title": "Kinderprofile",
