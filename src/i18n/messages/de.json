@@ -336,6 +336,10 @@
     "friends": "Freunde",
     "kidView": "Kinderansicht",
     "parent": "Eltern",
-    "switchProfile": "Profil wechseln"
+    "switchProfile": "Profil wechseln",
+    "navGroupFamily": "Familie",
+    "navGroupActivity": "Aktivität",
+    "navGroupAccount": "Konto",
+    "openKidView": "Kinderansicht öffnen"
   }
 }

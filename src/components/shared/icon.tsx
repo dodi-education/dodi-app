@@ -1,29 +1,37 @@
 import type { ComponentType } from "react";
 import {
   IconAlertCircle,
+  IconArrowLeft,
   IconBrain,
   IconChartBar,
   IconCheck,
   IconChevronDown,
+  IconChevronRight,
   IconChevronUp,
   IconCircleCheck,
   IconCode,
+  IconCopy,
   IconDeviceGamepad2,
   IconEye,
   IconEyeOff,
   IconHome,
   IconLanguage,
   IconLoader2,
+  IconLock,
+  IconLogout,
   IconMasksTheater,
   IconMicrophone,
   IconMicrophoneOff,
   IconPalette,
+  IconPlayerPlayFilled,
   IconPlus,
   IconRefresh,
   IconRobot,
+  IconSearch,
   IconSend,
   IconSettings,
   IconShieldLock,
+  IconSparkles,
   IconSquare,
   IconTrash,
   IconUser,
@@ -38,11 +46,14 @@ import { cn } from "@/lib/utils";
 export type IconName =
   | "add"
   | "alert"
+  | "arrow_left"
   | "check"
   | "chevron_down"
+  | "chevron_right"
   | "chevron_up"
   | "close"
   | "code"
+  | "copy"
   | "dashboard"
   | "delete"
   | "feature_games"
@@ -55,14 +66,19 @@ export type IconName =
   | "hide"
   | "home"
   | "loading"
+  | "lock"
+  | "logout"
   | "mic_off"
   | "mic_on"
   | "personas"
+  | "play"
   | "profiles"
   | "refresh"
+  | "search"
   | "send"
   | "settings"
   | "show"
+  | "sparkles"
   | "stop"
   | "success"
   | "agent_sessions"
@@ -72,11 +88,14 @@ export type IconName =
 const ICONS: Record<IconName, ComponentType<TablerIconProps>> = {
   add: IconPlus,
   alert: IconAlertCircle,
+  arrow_left: IconArrowLeft,
   check: IconCheck,
   chevron_down: IconChevronDown,
+  chevron_right: IconChevronRight,
   chevron_up: IconChevronUp,
   close: IconX,
   code: IconCode,
+  copy: IconCopy,
   dashboard: IconChartBar,
   delete: IconTrash,
   feature_games: IconDeviceGamepad2,
@@ -89,14 +108,19 @@ const ICONS: Record<IconName, ComponentType<TablerIconProps>> = {
   hide: IconEyeOff,
   home: IconHome,
   loading: IconLoader2,
+  lock: IconLock,
+  logout: IconLogout,
   mic_off: IconMicrophoneOff,
   mic_on: IconMicrophone,
   personas: IconMasksTheater,
+  play: IconPlayerPlayFilled,
   profiles: IconUser,
   refresh: IconRefresh,
+  search: IconSearch,
   send: IconSend,
   settings: IconSettings,
   show: IconEye,
+  sparkles: IconSparkles,
   stop: IconSquare,
   success: IconCircleCheck,
   agent_sessions: IconRobot,

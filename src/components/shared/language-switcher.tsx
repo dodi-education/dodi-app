@@ -16,7 +16,7 @@ function setLocaleCookie(locale: Locale) {
   document.cookie = `NEXT_LOCALE=${locale}; path=/; max-age=31536000`;
 }
 
-export function LanguageSwitcher() {
+export function LanguageSwitcher({ dropUp = false }: { dropUp?: boolean }) {
   const locale = useLocale();
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -49,7 +49,11 @@ export function LanguageSwitcher() {
         <span className="text-xs font-medium">{localeLabels[locale as Locale]}</span>
       </button>
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-1 min-w-[80px] rounded-md border bg-popover p-1 shadow-md">
+        <div
+          className={`absolute right-0 z-50 min-w-[80px] rounded-md border bg-popover p-1 shadow-md ${
+            dropUp ? "bottom-full mb-1" : "top-full mt-1"
+          }`}
+        >
           {locales.map((l) => (
             <button
               key={l}

@@ -336,6 +336,10 @@
     "friends": "Friends",
     "kidView": "Kid View",
     "parent": "Parent",
-    "switchProfile": "Switch profile"
+    "switchProfile": "Switch profile",
+    "navGroupFamily": "Family",
+    "navGroupActivity": "Activity",
+    "navGroupAccount": "Account",
+    "openKidView": "Open Kid View"
   }
 }
