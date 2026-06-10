@@ -55,10 +55,19 @@ export default async function LandingPage() {
               {t("heroSubtitle")}
             </p>
             <div className="flex gap-3 pt-4">
-              <Button size="lg" asChild>
+              <Button
+                size="lg"
+                asChild
+                className="rounded-full px-7 font-bold shadow-[0_4px_12px_rgba(47,107,216,0.3)]"
+              >
                 <Link href="/register">{t("getStarted")}</Link>
               </Button>
-              <Button size="lg" variant="outline" asChild>
+              <Button
+                size="lg"
+                variant="outline"
+                asChild
+                className="rounded-full px-7 font-bold"
+              >
                 <Link href="/login">{t("haveAccount")}</Link>
               </Button>
             </div>
@@ -137,8 +146,8 @@ function FeatureCard({
   description: string;
 }) {
   return (
-    <div className="rounded-xl border bg-card p-6 text-card-foreground">
-      <Icon name={icon} className="mb-3 h-8 w-8 text-dodi-700" />
+    <div className="rounded-lg border bg-card p-6 text-card-foreground shadow-card">
+      <Icon name={icon} className="mb-3 h-8 w-8 text-primary" />
       <h3 className="mb-2 font-bold">{title}</h3>
       <p className="text-sm text-muted-foreground">{description}</p>
     </div>
