@@ -1,9 +1,15 @@
 import type { Metadata } from "next";
-import { Nunito } from "next/font/google";
+import { Hanken_Grotesk, Nunito } from "next/font/google";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
 
 import "./globals.css";
+
+const hanken = Hanken_Grotesk({
+  variable: "--font-hanken",
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+});
 
 const nunito = Nunito({
   variable: "--font-nunito",
@@ -27,7 +33,9 @@ export default async function RootLayout({
 
   return (
     <html lang={locale}>
-      <body className={`${nunito.variable} font-sans antialiased`}>
+      <body
+        className={`${hanken.variable} ${nunito.variable} font-sans antialiased`}
+      >
         <NextIntlClientProvider messages={messages}>
           {children}
         </NextIntlClientProvider>
