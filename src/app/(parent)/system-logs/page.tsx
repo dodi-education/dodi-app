@@ -14,12 +14,8 @@ import {
 } from "@/components/ui/select";
 import { PageHead, Section } from "@/components/parent/section";
 import { DotSep, Row, RowMain, RowMeta, RowTitle } from "@/components/parent/rows";
+import { useProfiles } from "@/hooks/use-profiles";
 import type { SystemLog } from "@/types/database";
-
-interface ProfileOption {
-  id: string;
-  display_name: string;
-}
 
 interface PersonaOption {
   id: string;
@@ -59,7 +55,8 @@ export default function SystemLogsPage() {
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(false);
 
-  const [profiles, setProfiles] = useState<ProfileOption[]>([]);
+  const { profiles: profileList } = useProfiles();
+  const profiles = profileList ?? [];
   const [personas, setPersonas] = useState<PersonaOption[]>([]);
 
   const [filterProfile, setFilterProfile] = useState<string>("all");
@@ -68,13 +65,6 @@ export default function SystemLogsPage() {
 
   // Fetch filter options on mount
   useEffect(() => {
-    fetch("/api/profiles")
-      .then((r) => r.json())
-      .then((data: ProfileOption[]) => {
-        if (Array.isArray(data)) setProfiles(data);
-      })
-      .catch(() => {});
-
     fetch("/api/personas")
       .then((r) => r.json())
       .then((data: PersonaOption[]) => {

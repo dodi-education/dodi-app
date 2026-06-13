@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 
 import { Icon } from "@/components/shared/icon";
@@ -36,12 +36,9 @@ import {
 } from "@/components/ui/select";
 
 import { AI_PROVIDERS } from "@/lib/ai/providers";
-import type { AIProviderId, AccountModelConfig, ConfiguredProvider } from "@/types/ai";
-
-interface ProvidersResponse {
-  providers: ConfiguredProvider[];
-  modelConfig: AccountModelConfig | null;
-}
+import { validateProviderKey } from "@/lib/ai/validate-key";
+import { useProvidersStore } from "@/stores/providers-store";
+import type { AIProviderId, AccountModelConfig } from "@/types/ai";
 
 const THINKING_PROVIDER_FALLBACK = "__fallback__";
 
@@ -49,7 +46,9 @@ export function AIProviderConfig() {
   const t = useTranslations("settings");
   const tc = useTranslations("common");
 
-  const [providers, setProviders] = useState<ConfiguredProvider[]>([]);
+  // API keys are E2EE: decrypted client-side from the vault (the server never
+  // sees them). The providers map lives in the providers store.
+  const providersMap = useProvidersStore((s) => s.providers);
   const [loading, setLoading] = useState(true);
 
   // Dialog state
@@ -62,7 +61,7 @@ export function AIProviderConfig() {
   const [validationError, setValidationError] = useState("");
   const [saving, setSaving] = useState(false);
 
-  // Voice config state
+  // Voice/thinking config state (model_config is plaintext — not a secret)
   const [voiceProvider, setVoiceProvider] = useState<AIProviderId | "">("");
   const [voiceModel, setVoiceModel] = useState("");
   const [voiceName, setVoiceName] = useState("");
@@ -71,35 +70,41 @@ export function AIProviderConfig() {
   const [configSaving, setConfigSaving] = useState(false);
   const [configSaved, setConfigSaved] = useState(false);
 
-  const fetchProviders = useCallback(async () => {
-    try {
-      const response = await fetch("/api/ai/providers");
-      if (response.ok) {
-        const data: ProvidersResponse = await response.json();
-        setProviders(data.providers);
-        if (data.modelConfig) {
-          setVoiceProvider(data.modelConfig.voiceProvider);
-          setVoiceModel(data.modelConfig.voiceModel);
-          setVoiceName(data.modelConfig.voiceName);
-          // Support both old (gameProvider) and new (thinkingProvider) shapes
-          setThinkingProvider(data.modelConfig.thinkingProvider ?? data.modelConfig.gameProvider ?? "");
-          setThinkingModel(data.modelConfig.thinkingModel ?? data.modelConfig.gameModel ?? "");
-        } else {
-          setVoiceProvider("");
-          setVoiceModel("");
-          setVoiceName("");
-          setThinkingProvider("");
-          setThinkingModel("");
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        await useProvidersStore.getState().load();
+        const res = await fetch("/api/ai/config");
+        if (cancelled) return;
+        if (res.ok) {
+          const cfg: AccountModelConfig | null = await res.json();
+          if (cfg) {
+            setVoiceProvider(cfg.voiceProvider);
+            setVoiceModel(cfg.voiceModel);
+            setVoiceName(cfg.voiceName);
+            setThinkingProvider(cfg.thinkingProvider ?? cfg.gameProvider ?? "");
+            setThinkingModel(cfg.thinkingModel ?? cfg.gameModel ?? "");
+          }
         }
+      } catch {
+        // Vault may be locked; the gate handles unlocking.
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-    } finally {
-      setLoading(false);
     }
+    void load();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  useEffect(() => {
-    fetchProviders();
-  }, [fetchProviders]);
+  const providers = Object.entries(providersMap ?? {}).map(([id, entry]) => ({
+    id: id as AIProviderId,
+    name: AI_PROVIDERS.find((p) => p.id === id)?.name ?? id,
+    keyPreview: entry?.keyPreview ?? "",
+    addedAt: entry?.addedAt ?? "",
+  }));
 
   function resetDialog() {
     setSelectedProvider("");
@@ -114,64 +119,63 @@ export function AIProviderConfig() {
   async function handleValidateAndSave() {
     if (!selectedProvider || !apiKey) return;
 
-    // Step 1: Validate the key
     setValidating(true);
     setValidationStatus("idle");
     setValidationError("");
 
     try {
-      const validateRes = await fetch("/api/ai/validate-key", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider: selectedProvider, apiKey }),
-      });
+      const def = AI_PROVIDERS.find((p) => p.id === selectedProvider);
+      // Validate with a generateContent-capable model — NOT a Live (voice)
+      // model, which only works over the Live WebSocket and 404s generateContent.
+      const validateModel =
+        (def?.models.find((m) => !m.capabilities.includes("live")) ??
+          def?.models[0])?.id ?? "";
 
-      const validateData = await validateRes.json();
-
-      if (!validateData.valid) {
+      // Validate client-side (server never sees the plaintext key).
+      const result = await validateProviderKey(selectedProvider, apiKey, validateModel);
+      if (!result.valid) {
         setValidationStatus("invalid");
-        setValidationError(validateData.error || t("keyInvalid"));
+        setValidationError(result.error || t("keyInvalid"));
         setValidating(false);
         return;
       }
 
       setValidationStatus("valid");
       setValidating(false);
-
-      // Step 2: Save the provider
       setSaving(true);
-      const saveRes = await fetch("/api/ai/providers", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider: selectedProvider, apiKey }),
-      });
 
-      if (saveRes.ok) {
-        const data: ProvidersResponse = await saveRes.json();
-        setProviders(data.providers);
-        if (data.modelConfig) {
-          setVoiceProvider(data.modelConfig.voiceProvider);
-          setVoiceModel(data.modelConfig.voiceModel);
-          setVoiceName(data.modelConfig.voiceName);
-          setThinkingProvider(data.modelConfig.thinkingProvider ?? data.modelConfig.gameProvider ?? "");
-          setThinkingModel(data.modelConfig.thinkingModel ?? data.modelConfig.gameModel ?? "");
-        } else {
-          setVoiceProvider("");
-          setVoiceModel("");
-          setVoiceName("");
-          setThinkingProvider("");
-          setThinkingModel("");
+      const isFirst = Object.keys(providersMap ?? {}).length === 0;
+      // Encrypt + store under the vault.
+      await useProvidersStore.getState().addKey(selectedProvider, apiKey);
+
+      // First provider → seed a default voice config (model_config is plaintext).
+      if (isFirst && def) {
+        const defaultModel =
+          def.models.find((m) => m.capabilities.includes("voice")) ?? def.models[0];
+        const defaultVoice = def.voices[0];
+        if (defaultModel && defaultVoice) {
+          await fetch("/api/ai/config", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              voiceProvider: selectedProvider,
+              voiceModel: defaultModel.id,
+              voiceName: defaultVoice.id,
+            }),
+          });
+          setVoiceProvider(selectedProvider);
+          setVoiceModel(defaultModel.id);
+          setVoiceName(defaultVoice.id);
         }
-        setDialogOpen(false);
-        resetDialog();
-      } else {
-        const errorData = await saveRes.json().catch(() => ({ error: "Failed to save provider" }));
-        setValidationStatus("invalid");
-        setValidationError(errorData.error || "Failed to save provider");
       }
-    } catch {
+
+      setDialogOpen(false);
+      resetDialog();
+    } catch (error) {
       setValidationStatus("invalid");
-      setValidationError("An unexpected error occurred");
+      setValidationError(
+        error instanceof Error ? error.message : "An unexpected error occurred",
+      );
     } finally {
       setValidating(false);
       setSaving(false);
@@ -180,29 +184,10 @@ export function AIProviderConfig() {
 
   async function handleRemoveProvider(providerId: AIProviderId) {
     if (!confirm(t("confirmRemoveProvider"))) return;
-
-    const res = await fetch("/api/ai/providers", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ provider: providerId }),
-    });
-
-    if (res.ok) {
-      const data: ProvidersResponse = await res.json();
-      setProviders(data.providers);
-      if (data.modelConfig) {
-        setVoiceProvider(data.modelConfig.voiceProvider);
-        setVoiceModel(data.modelConfig.voiceModel);
-        setVoiceName(data.modelConfig.voiceName);
-        setThinkingProvider(data.modelConfig.thinkingProvider ?? data.modelConfig.gameProvider ?? "");
-        setThinkingModel(data.modelConfig.thinkingModel ?? data.modelConfig.gameModel ?? "");
-      } else {
-        setVoiceProvider("");
-        setVoiceModel("");
-        setVoiceName("");
-        setThinkingProvider("");
-        setThinkingModel("");
-      }
+    try {
+      await useProvidersStore.getState().removeKey(providerId);
+    } catch {
+      // non-critical
     }
   }
 
@@ -237,17 +222,16 @@ export function AIProviderConfig() {
     }
   }
 
-  // Available providers not yet configured
   const availableProviders = AI_PROVIDERS.filter(
     (p) => !providers.some((cp) => cp.id === p.id),
   );
 
-  // Get models/voices for the selected voice provider
   const activeProviderDef = AI_PROVIDERS.find((p) => p.id === voiceProvider);
   const activeThinkingProviderDef = AI_PROVIDERS.find((p) => p.id === thinkingProvider);
-  const voiceFallbackText = voiceProvider && voiceModel
-    ? `${voiceProvider} / ${voiceModel}`
-    : t("gameModelFallbackMissingVoice");
+  const voiceFallbackText =
+    voiceProvider && voiceModel
+      ? `${voiceProvider} / ${voiceModel}`
+      : t("gameModelFallbackMissingVoice");
 
   if (loading) {
     return (
@@ -365,7 +349,7 @@ export function AIProviderConfig() {
                     {validating || saving ? (
                       <>
                         <Icon name="loading" className="mr-2 h-4 w-4 animate-spin" />
-                        {validating ? t("validating") : t("validating")}
+                        {t("validating")}
                       </>
                     ) : (
                       t("validateAndSave")
@@ -418,7 +402,6 @@ export function AIProviderConfig() {
                 onValueChange={(value) => {
                   const pid = value as AIProviderId;
                   setVoiceProvider(pid);
-                  // Reset model/voice to first available
                   const def = AI_PROVIDERS.find((p) => p.id === pid);
                   if (def) {
                     setVoiceModel(def.models[0]?.id ?? "");
@@ -486,12 +469,12 @@ export function AIProviderConfig() {
                     setThinkingModel("");
                     return;
                   }
-
                   const providerId = value as AIProviderId;
                   setThinkingProvider(providerId);
-
                   const providerDef = AI_PROVIDERS.find((provider) => provider.id === providerId);
-                  const defaultModel = providerDef?.models.find((model) => model.capabilities.includes("thinking"));
+                  const defaultModel = providerDef?.models.find((model) =>
+                    model.capabilities.includes("thinking"),
+                  );
                   setThinkingModel(defaultModel?.id ?? "");
                 }}
               >

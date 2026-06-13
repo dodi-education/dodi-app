@@ -11,13 +11,12 @@ export default async function KidHomePage() {
 
   const profileId = cookieStore.get("dodi-active-profile")?.value;
 
-  let profileName = "";
   let hasProvider = false;
 
   if (profileId) {
     const profile = await getProfile(supabase, profileId);
     if (profile) {
-      profileName = profile.display_name;
+      // display_name is decrypted client-side in DodiFullHome (E2EE).
       hasProvider = await hasAnyProvider(supabase, profile.account_id);
     }
   }
@@ -35,7 +34,6 @@ export default async function KidHomePage() {
   return (
     <DodiFullHome
       profileId={profileId}
-      profileName={profileName}
       hasProvider={hasProvider}
     />
   );

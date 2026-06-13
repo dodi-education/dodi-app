@@ -7,6 +7,7 @@ import { KidViewButton } from "@/components/parent/kid-view-button";
 import { SignOutButton } from "@/components/parent/sign-out-button";
 import { LanguageSwitcher } from "@/components/shared/language-switcher";
 import { BottomNav, SidebarNav } from "@/components/shared/sidebar-nav";
+import { VaultGate } from "@/components/vault/vault-gate";
 import { getAccount } from "@/lib/services/accounts";
 import { createClient } from "@/lib/supabase/server";
 
@@ -92,7 +93,7 @@ export default async function ParentLayout({
       <div className="flex min-w-0 flex-1 flex-col">
         <main className="flex-1">
           <div className="max-w-[880px] px-5 py-7 pb-20 md:px-12 md:py-9">
-            {children}
+            <VaultGate>{children}</VaultGate>
           </div>
         </main>
         {/* Mobile bottom nav */}

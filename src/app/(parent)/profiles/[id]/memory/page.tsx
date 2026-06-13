@@ -10,6 +10,8 @@ import { SaveRow } from "@/components/parent/save-row";
 import { PageHead, Section } from "@/components/parent/section";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { useProfileStore } from "@/stores/profile-store";
+import { useVaultStore } from "@/stores/vault-store";
 
 import type { Profile } from "@/types/database";
 
@@ -32,19 +34,24 @@ export default function ProfileMemoryPage() {
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      const response = await fetch(`/api/profiles/${params.id}`);
-      if (cancelled) return;
-      if (!response.ok) {
-        setError(t("profileNotFound"));
+      try {
+        const data = await useProfileStore.getState().loadOne(params.id);
+        if (cancelled) return;
+        if (!data) {
+          setError(t("profileNotFound"));
+          setFetching(false);
+          return;
+        }
+        setProfile(data);
+        setMemory(data.memory ?? "");
+        setParentNotes(data.parent_notes ?? "");
         setFetching(false);
-        return;
+      } catch {
+        if (!cancelled) {
+          setError(t("profileNotFound"));
+          setFetching(false);
+        }
       }
-      const data: Profile = await response.json();
-      if (cancelled) return;
-      setProfile(data);
-      setMemory(data.memory ?? "");
-      setParentNotes(data.parent_notes ?? "");
-      setFetching(false);
     }
     load();
     return () => { cancelled = true; };
@@ -54,8 +61,17 @@ export default function ProfileMemoryPage() {
     setError(null);
     setSaving(true);
 
+    const session = useVaultStore.getState().session;
+    if (!session) {
+      setError("Your secure vault is locked. Please reload and try again.");
+      setSaving(false);
+      return;
+    }
+
+    // parent_notes is encrypted; memory stays plaintext until the AI memory
+    // update moves client-side (P2), otherwise the server would overwrite it.
     const updates: Record<string, string | null> = {
-      parent_notes: parentNotes || null,
+      parent_notes: parentNotes ? session.encryptField(parentNotes) : null,
     };
     if (editingMemory) {
       updates.memory = memory || null;
@@ -74,6 +90,7 @@ export default function ProfileMemoryPage() {
       return;
     }
 
+    useProfileStore.getState().invalidate();
     setSaving(false);
     setEditingMemory(false);
     router.refresh();

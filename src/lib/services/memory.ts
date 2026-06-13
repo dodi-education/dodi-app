@@ -11,10 +11,6 @@ const log = createLogger("memory-service");
 
 type Client = SupabaseClient<Database>;
 
-/** Hint injected when memory is empty (first session with this child). */
-export const EMPTY_MEMORY_HINT =
-  "This is your first time meeting this child. Focus on getting to know them — ask about their interests, favorite things, and what they'd like to explore together.";
-
 /**
  * Build the system instruction for end-of-session memory update.
  * Takes the full persona soul — the AI reads the ## Memory section naturally.

@@ -1,10 +1,8 @@
-import Link from "next/link";
 import { cookies } from "next/headers";
 import { getTranslations } from "next-intl/server";
 
-import { Icon } from "@/components/shared/icon";
-import { KidButton } from "@/components/kid/kid-button";
 import { GameVoiceCreator } from "@/components/games/game-voice-creator";
+import { GameViewShell } from "@/components/games/game-view-shell";
 
 export default async function NewGamePage() {
   const t = await getTranslations("games");
@@ -23,19 +21,12 @@ export default async function NewGamePage() {
   }
 
   return (
-    <div className="flex h-full w-full flex-col gap-3.5">
-      <div className="flex items-center gap-3.5">
-        <KidButton asChild variant="back" size="sm">
-          <Link href="/games">
-            <Icon name="arrow_left" size={15} stroke={2.2} />
-            {t("title")}
-          </Link>
-        </KidButton>
-        <h1 className="text-[21px] font-extrabold text-ink">
-          {t("newGameTitle")}
-        </h1>
-      </div>
+    <GameViewShell
+      backHref="/games"
+      backLabel={t("title")}
+      title={t("newGameTitle")}
+    >
       <GameVoiceCreator profileId={profileId} />
-    </div>
+    </GameViewShell>
   );
 }

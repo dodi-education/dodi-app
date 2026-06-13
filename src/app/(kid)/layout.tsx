@@ -7,10 +7,10 @@ import { useTranslations } from "next-intl";
 
 import { Icon, type IconName } from "@/components/shared/icon";
 import { DodiCompact } from "@/components/dodi/dodi-compact";
-import { DodiFullGame } from "@/components/dodi/dodi-full-game";
 import { cn } from "@/lib/utils";
 import { ProfileSwitcher } from "@/components/kid/profile-switcher";
 import { useDodiSessionStore } from "@/stores/dodi-session-store";
+import { useVaultStore } from "@/stores/vault-store";
 
 export default function KidLayout({
   children,
@@ -28,6 +28,13 @@ export default function KidLayout({
   const dodiState = useDodiSessionStore((s) => s.state);
   const gestureNeeded = useDodiSessionStore((s) => s.gestureNeeded);
   const activate = useDodiSessionStore((s) => s.activate);
+
+  // Ensure the vault is unlocked in kid view (kids enter after the parent has
+  // unlocked; silently re-unlocks via the device key on a fresh load).
+  useEffect(() => {
+    const { status, unlockSilently } = useVaultStore.getState();
+    if (status !== "unlocked") void unlockSilently();
+  }, []);
 
   // Tear down Dodi voice session when leaving the kid view entirely
   useEffect(() => {
@@ -91,13 +98,12 @@ export default function KidLayout({
         </button>
       </header>
 
-      {/* Main content — game gets side-by-side layout with Dodi */}
+      {/* Main content — full-mode game views (play/edit/create) own their own
+          layout via GameViewShell: a full-width title bar above the Dodi panel
+          and the game content. */}
       {isFullMode ? (
-        <main className="flex flex-1 px-4 pb-24">
-          <div className="mx-auto grid w-full max-w-6xl gap-4 lg:grid-cols-[300px_1fr]">
-            <DodiFullGame />
-            <div>{children}</div>
-          </div>
+        <main className="flex flex-1 flex-col px-4 pb-24">
+          <div className="mx-auto w-full max-w-6xl">{children}</div>
         </main>
       ) : (
         <main className="flex flex-1 flex-col items-center px-4 pb-24">

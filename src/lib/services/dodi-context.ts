@@ -6,9 +6,14 @@
  */
 
 import type { GeminiLiveToolDeclaration } from "@/lib/ai/gemini-live-client";
-import { EMPTY_MEMORY_HINT } from "@/lib/services/memory";
-// BRIDGE_INTERFACE_TEMPLATE and MARKDOWN_GENERATION_INSTRUCTION are no longer
-// needed here — server-side generation handles those concerns.
+
+/**
+ * Hint injected when memory is empty (first session with this child). Defined
+ * here rather than in the server-only memory service so these builders stay
+ * browser-importable for client-side prompt assembly under E2EE.
+ */
+export const EMPTY_MEMORY_HINT =
+  "This is your first time meeting this child. Focus on getting to know them — ask about their interests, favorite things, and what they'd like to explore together.";
 
 // ---------------------------------------------------------------------------
 // Shared input interfaces

@@ -76,6 +76,7 @@ export function DodiFullGame() {
             src={getDodiImage(dodiState, false)}
             alt={dodiState === "active" ? "Dodi listening" : dodiState === "deaf" ? "Dodi can't hear you" : "Dodi sleeping"}
             fill
+            sizes="300px"
             className="relative z-[1] object-contain"
           />
         </button>

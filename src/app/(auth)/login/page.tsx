@@ -17,6 +17,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
+import { useVaultStore } from "@/stores/vault-store";
 
 export default function LoginPage() {
   const t = useTranslations("auth");
@@ -44,18 +45,18 @@ export default function LoginPage() {
       return;
     }
 
-    router.push("/dashboard");
-    router.refresh();
-  }
-
-  async function handleGoogleLogin() {
-    const supabase = createClient();
-    await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
-    });
+    // Unlock the E2EE vault with the same password (bootstraps one if this
+    // account predates the vault).
+    try {
+      const { created } = await useVaultStore.getState().unlockOrBootstrap(password);
+      router.push(created ? "/vault-setup" : "/dashboard");
+      router.refresh();
+    } catch {
+      setError(
+        "Signed in, but we couldn't unlock your encrypted data. If you recently changed your password, you'll need your recovery phrase.",
+      );
+      setLoading(false);
+    }
   }
 
   return (
@@ -94,20 +95,6 @@ export default function LoginPage() {
             {loading ? t("signingIn") : tc("signIn")}
           </Button>
         </form>
-
-        <div className="my-4 flex items-center gap-3">
-          <div className="h-px flex-1 bg-border" />
-          <span className="text-xs text-muted-foreground">{tc("or")}</span>
-          <div className="h-px flex-1 bg-border" />
-        </div>
-
-        <Button
-          variant="outline"
-          className="w-full"
-          onClick={handleGoogleLogin}
-        >
-          {t("continueWithGoogle")}
-        </Button>
       </CardContent>
       <CardFooter className="flex flex-col gap-2 text-sm">
         <Link

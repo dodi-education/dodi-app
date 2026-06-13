@@ -14,12 +14,8 @@ import {
 } from "@/components/ui/select";
 import { PageHead, Section } from "@/components/parent/section";
 import { DotSep, Row, RowMain, RowMeta, RowTitle } from "@/components/parent/rows";
+import { useProfiles } from "@/hooks/use-profiles";
 import type { AgentSessionRow } from "@/types/database";
-
-interface ProfileOption {
-  id: string;
-  display_name: string;
-}
 
 const STATUS_OPTIONS = ["active", "completed", "failed", "deactivated"] as const;
 
@@ -51,20 +47,11 @@ export default function AgentSessionsPage() {
   const [sessions, setSessions] = useState<AgentSessionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(false);
-  const [profiles, setProfiles] = useState<ProfileOption[]>([]);
+  const { profiles: profileList } = useProfiles();
+  const profiles = profileList ?? [];
   const [filterProfile, setFilterProfile] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [deactivating, setDeactivating] = useState<string | null>(null);
-
-  // Fetch profile options on mount
-  useEffect(() => {
-    fetch("/api/profiles")
-      .then((r) => r.json())
-      .then((data: ProfileOption[]) => {
-        if (Array.isArray(data)) setProfiles(data);
-      })
-      .catch(() => {});
-  }, []);
 
   const fetchSessions = useCallback(
     async (offset: number, append: boolean) => {

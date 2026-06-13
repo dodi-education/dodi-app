@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 
 import { AIProviderConfig } from "@/components/parent/ai-provider-config";
+import { ChangePassword } from "@/components/parent/change-password";
 import { FieldRow } from "@/components/parent/rows";
 import { PageHead, Section } from "@/components/parent/section";
 import { Badge } from "@/components/ui/badge";
@@ -40,6 +41,8 @@ export default async function SettingsPage() {
           </span>
         </FieldRow>
       </Section>
+
+      <ChangePassword />
 
       <AIProviderConfig />
     </div>

@@ -10,11 +10,11 @@ import { SpeechBubble } from "@/components/dodi/speech-bubble";
 import { ListeningPulse } from "@/components/kid/listening-pulse";
 import { useDodiSessionStore } from "@/stores/dodi-session-store";
 import { useDodiContext } from "@/hooks/use-dodi-context";
+import { useProfiles } from "@/hooks/use-profiles";
 import { getDodiImage } from "@/lib/dodi-image";
 
 interface DodiFullHomeProps {
   profileId: string;
-  profileName: string;
   hasProvider: boolean;
 }
 
@@ -44,10 +44,13 @@ function MascotWrap({
 
 export function DodiFullHome({
   profileId,
-  profileName,
   hasProvider,
 }: DodiFullHomeProps) {
   const t = useTranslations("kid");
+
+  const { profiles } = useProfiles();
+  const profileName =
+    profiles?.find((p) => p.id === profileId)?.display_name ?? "";
 
   useDodiContext({
     context: { type: "home" },
@@ -83,6 +86,7 @@ export function DodiFullHome({
               src={getDodiImage("disconnected", false)}
               alt="Dodi sleeping"
               fill
+              sizes="300px"
               className="object-contain"
               priority
             />
@@ -108,6 +112,7 @@ export function DodiFullHome({
               src={getDodiImage("connecting", false)}
               alt="Dodi waking up"
               fill
+              sizes="300px"
               className="object-contain"
               priority
             />
@@ -140,6 +145,7 @@ export function DodiFullHome({
               src={getDodiImage(dodiState, false)}
               alt={dodiState === "active" ? "Dodi listening" : "Dodi can't hear you"}
               fill
+              sizes="300px"
               className="object-contain"
               priority
             />
@@ -191,6 +197,7 @@ export function DodiFullHome({
               src={getDodiImage("sleep", false)}
               alt="Dodi sleeping — tap to wake"
               fill
+              sizes="300px"
               className="object-contain"
               priority
             />
@@ -219,6 +226,7 @@ export function DodiFullHome({
               src={getDodiImage("disconnected", false)}
               alt="Dodi sleeping"
               fill
+              sizes="300px"
               className="object-contain"
               priority
             />
@@ -259,6 +267,7 @@ export function DodiFullHome({
             src={getDodiImage("disconnected", false)}
             alt="Dodi sleeping — tap to wake"
             fill
+            sizes="300px"
             className="object-contain"
             priority
           />

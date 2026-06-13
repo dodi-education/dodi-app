@@ -19,6 +19,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PersonaSelector } from "@/components/parent/persona-selector";
 import { locales, type Locale } from "@/i18n/config";
+import { generateSocialId } from "@/lib/social-id";
+import { encryptProfileFields } from "@/lib/vault";
+import { useProfileStore } from "@/stores/profile-store";
+import { useVaultStore } from "@/stores/vault-store";
 
 import type { Profile } from "@/types/database";
 
@@ -38,7 +42,7 @@ export default function EditProfilePage() {
   const router = useRouter();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [displayName, setDisplayName] = useState("");
-  const [nameTag, setNameTag] = useState("");
+  const [socialId, setSocialId] = useState("");
   const [birthdate, setBirthdate] = useState("");
   const [language, setLanguage] = useState<string>("en");
   const [activePersonaId, setActivePersonaId] = useState<string | null>(null);
@@ -49,22 +53,27 @@ export default function EditProfilePage() {
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      const response = await fetch(`/api/profiles/${params.id}`);
-      if (cancelled) return;
-      if (!response.ok) {
-        setError(t("profileNotFound"));
+      try {
+        const data = await useProfileStore.getState().loadOne(params.id);
+        if (cancelled) return;
+        if (!data) {
+          setError(t("profileNotFound"));
+          setFetching(false);
+          return;
+        }
+        setProfile(data);
+        setDisplayName(data.display_name);
+        setSocialId(data.social_id);
+        setBirthdate(data.birthdate ?? "");
+        setLanguage(data.language ?? "en");
+        setActivePersonaId(data.active_persona_id);
         setFetching(false);
-        return;
+      } catch {
+        if (!cancelled) {
+          setError(t("profileNotFound"));
+          setFetching(false);
+        }
       }
-      const data: Profile = await response.json();
-      if (cancelled) return;
-      setProfile(data);
-      setDisplayName(data.display_name);
-      setNameTag(data.name_tag);
-      setBirthdate(data.birthdate ?? "");
-      setLanguage(data.language ?? "en");
-      setActivePersonaId(data.active_persona_id);
-      setFetching(false);
     }
     load();
     return () => { cancelled = true; };
@@ -75,13 +84,25 @@ export default function EditProfilePage() {
     setError(null);
     setLoading(true);
 
+    const session = useVaultStore.getState().session;
+    if (!session) {
+      setError("Your secure vault is locked. Please reload and try again.");
+      setLoading(false);
+      return;
+    }
+
+    const enc = encryptProfileFields(session, {
+      display_name: displayName,
+      birthdate: birthdate || null,
+    });
+
     const response = await fetch(`/api/profiles/${params.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        display_name: displayName,
-        name_tag: nameTag,
-        birthdate: birthdate || null,
+        display_name: enc.display_name,
+        social_id: socialId,
+        birthdate: enc.birthdate,
         language,
       }),
     });
@@ -93,6 +114,7 @@ export default function EditProfilePage() {
       return;
     }
 
+    useProfileStore.getState().invalidate();
     router.push("/profiles");
     router.refresh();
   }
@@ -152,19 +174,28 @@ export default function EditProfilePage() {
             />
           </FieldRow>
           <FieldRow
-            label={t("nameTag")}
-            hint={t("nameTagHint")}
-            htmlFor="name-tag"
+            label={t("socialId")}
+            hint={t("socialIdHint")}
+            htmlFor="social-id"
           >
-            <Input
-              id="name-tag"
-              className="sm:w-[250px]"
-              value={nameTag}
-              onChange={(e) => setNameTag(e.target.value)}
-              required
-              maxLength={30}
-              pattern="[a-z0-9-]+"
-            />
+            <div className="flex items-center gap-2">
+              <Input
+                id="social-id"
+                className="sm:w-[250px]"
+                value={socialId}
+                onChange={(e) => setSocialId(e.target.value)}
+                required
+                maxLength={30}
+                pattern="[a-z0-9\-]+"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setSocialId(generateSocialId())}
+              >
+                {t("regenerate")}
+              </Button>
+            </div>
           </FieldRow>
           <FieldRow label={t("birthdate")} htmlFor="birthdate">
             <Input

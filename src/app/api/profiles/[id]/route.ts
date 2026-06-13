@@ -9,19 +9,21 @@ import {
 } from "@/lib/services/profiles";
 
 const UpdateProfileSchema = z.object({
-  display_name: z.string().min(1).max(50).optional(),
-  name_tag: z
+  // Personal fields (display_name, birthdate, parent_notes) arrive as opaque
+  // client-encrypted ciphertext. social_id stays plaintext (public handle).
+  display_name: z.string().min(1).max(2000).optional(),
+  social_id: z
     .string()
     .min(3)
     .max(30)
     .regex(/^[a-z0-9-]+$/, "Only lowercase letters, numbers, and hyphens")
     .optional(),
-  birthdate: z.string().nullable().optional(),
+  birthdate: z.string().max(2000).nullable().optional(),
   language: z.string().min(2).max(5).optional(),
   active_persona_id: z.string().uuid().nullable().optional(),
   first_interaction: z.boolean().optional(),
   memory: z.string().max(100000).nullable().optional(),
-  parent_notes: z.string().max(50000).nullable().optional(),
+  parent_notes: z.string().max(200000).nullable().optional(),
   avatar_config: z.record(z.string(), z.any()).nullable().optional(),
   preferences: z.record(z.string(), z.any()).nullable().optional(),
 });

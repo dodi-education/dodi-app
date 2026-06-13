@@ -18,6 +18,7 @@ export interface Database {
           email: string;
           encrypted_api_keys: Json | null;
           model_config: Json | null;
+          vault_keys: Json | null;
           subscription_tier: string;
           created_at: string;
           updated_at: string;
@@ -27,6 +28,7 @@ export interface Database {
           email: string;
           encrypted_api_keys?: Json | null;
           model_config?: Json | null;
+          vault_keys?: Json | null;
           subscription_tier?: string;
           created_at?: string;
           updated_at?: string;
@@ -36,6 +38,7 @@ export interface Database {
           email?: string;
           encrypted_api_keys?: Json | null;
           model_config?: Json | null;
+          vault_keys?: Json | null;
           subscription_tier?: string;
           created_at?: string;
           updated_at?: string;
@@ -47,7 +50,7 @@ export interface Database {
           id: string;
           account_id: string;
           display_name: string;
-          name_tag: string;
+          social_id: string;
           birthdate: string | null;
           avatar_config: Json | null;
           active_persona_id: string | null;
@@ -63,7 +66,7 @@ export interface Database {
           id?: string;
           account_id: string;
           display_name: string;
-          name_tag: string;
+          social_id: string;
           birthdate?: string | null;
           avatar_config?: Json | null;
           active_persona_id?: string | null;
@@ -79,7 +82,7 @@ export interface Database {
           id?: string;
           account_id?: string;
           display_name?: string;
-          name_tag?: string;
+          social_id?: string;
           birthdate?: string | null;
           avatar_config?: Json | null;
           active_persona_id?: string | null;

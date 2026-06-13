@@ -6,8 +6,7 @@
     "cancel": "Cancel",
     "save": "Save changes",
     "delete": "Delete",
-    "loading": "Loading...",
-    "or": "or"
+    "loading": "Loading..."
   },
   "landing": {
     "heroTitle": "Hi, I'm Dodi!",
@@ -42,7 +41,6 @@
     "confirmPassword": "Confirm password",
     "passwordPlaceholder": "At least 8 characters",
     "signingIn": "Signing in...",
-    "continueWithGoogle": "Continue with Google",
     "forgotPassword": "Forgot your password?",
     "noAccount": "Don't have an account?",
     "createAccountTitle": "Create your account",
@@ -58,7 +56,17 @@
     "sendResetLink": "Send reset link",
     "backToSignIn": "Back to sign in",
     "checkEmailTitle": "Check your email",
-    "checkEmailDescription": "We sent a password reset link to <bold>{email}</bold>. Click the link to reset your password."
+    "checkEmailDescription": "We sent a password reset link to <bold>{email}</bold>. Click the link to reset your password.",
+    "updatePasswordTitle": "Set a new password",
+    "updatePasswordDescription": "Choose a new password for your account.",
+    "updatePasswordWithPhraseHint": "Choose a new password. Because your data is end-to-end encrypted, enter your 12-word recovery phrase so we can re-encrypt it under the new password.",
+    "newPassword": "New password",
+    "recoveryPhrase": "Recovery phrase",
+    "recoveryPhrasePlaceholder": "twelve words separated by spaces",
+    "invalidPhrase": "That doesn't look like a valid 12-word recovery phrase.",
+    "updatePassword": "Update password",
+    "updatingPassword": "Updating...",
+    "updatePasswordFailed": "We couldn't update your password. Please try again."
   },
   "dashboard": {
     "title": "Dashboard",
@@ -93,9 +101,10 @@
     "createDescription": "Add a new profile for your child to use with Dodi",
     "displayName": "Display name",
     "displayNamePlaceholder": "e.g., Emma",
-    "nameTag": "Name tag",
-    "nameTagPlaceholder": "e.g., emma",
-    "nameTagHint": "Lowercase letters, numbers, and hyphens only. Used for sharing and friend requests.",
+    "socialId": "Social ID",
+    "socialIdPlaceholder": "auto-generated",
+    "socialIdHint": "A public handle for friend requests — randomly generated and safe to share. It isn't your child's name.",
+    "regenerate": "Regenerate",
     "birthdate": "Birthdate",
     "birthdateOptional": "Birthdate (optional)",
     "birthdateHint": "Helps Dodi adapt language and content to your child's age.",
@@ -157,7 +166,17 @@
     "gameModelFallbackMissingVoice": "your voice model",
     "configSaved": "Configuration saved",
     "keyEnding": "Key ending in ...{preview}",
-    "added": "Added {date}"
+    "added": "Added {date}",
+    "changePasswordTitle": "Password",
+    "changePasswordDescription": "Change the password that unlocks your encrypted data.",
+    "newPassword": "New password",
+    "confirmNewPassword": "Confirm new password",
+    "updatePassword": "Update password",
+    "updatingPassword": "Updating...",
+    "passwordChanged": "Password updated",
+    "passwordsNoMatch": "Passwords do not match",
+    "passwordTooShort": "Password must be at least 8 characters",
+    "changePasswordFailed": "We couldn't update your password. Please try again."
   },
   "personas": {
     "title": "Personas",

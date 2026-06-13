@@ -17,6 +17,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
+import { useVaultStore } from "@/stores/vault-store";
 
 export default function RegisterPage() {
   const t = useTranslations("auth");
@@ -26,11 +27,13 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   async function handleRegister(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setInfo(null);
 
     if (password !== confirmPassword) {
       setError(t("passwordsNoMatch"));
@@ -45,7 +48,7 @@ export default function RegisterPage() {
     setLoading(true);
 
     const supabase = createClient();
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -59,18 +62,33 @@ export default function RegisterPage() {
       return;
     }
 
-    router.push("/dashboard");
-    router.refresh();
-  }
+    // If the project requires email confirmation, signUp returns NO session, so
+    // we can't set up the encrypted vault yet (it needs an authenticated
+    // request). Tell the user to confirm + sign in; the vault is then
+    // bootstrapped on first authenticated entry (login / the gate's setup step).
+    if (!data.session) {
+      setInfo(
+        "Account created. Check your email to confirm your address, then sign in — you'll get your recovery phrase right after.",
+      );
+      setLoading(false);
+      return;
+    }
 
-  async function handleGoogleSignUp() {
-    const supabase = createClient();
-    await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
-    });
+    // We have a session — bootstrap the E2EE vault (generates the recovery
+    // phrase) before entering.
+    try {
+      await useVaultStore.getState().bootstrap(password);
+    } catch (err) {
+      console.error("[register] vault bootstrap failed", err);
+      setError(
+        "Account created, but we couldn't set up your secure vault. Please sign in to finish setup.",
+      );
+      setLoading(false);
+      return;
+    }
+
+    router.push("/vault-setup");
+    router.refresh();
   }
 
   return (
@@ -115,6 +133,7 @@ export default function RegisterPage() {
               required
             />
           </div>
+          {info && <p className="text-sm text-success">{info}</p>}
           {error && (
             <p className="text-sm text-destructive">{error}</p>
           )}
@@ -122,20 +141,6 @@ export default function RegisterPage() {
             {loading ? t("creatingAccount") : t("createAccount")}
           </Button>
         </form>
-
-        <div className="my-4 flex items-center gap-3">
-          <div className="h-px flex-1 bg-border" />
-          <span className="text-xs text-muted-foreground">{tc("or")}</span>
-          <div className="h-px flex-1 bg-border" />
-        </div>
-
-        <Button
-          variant="outline"
-          className="w-full"
-          onClick={handleGoogleSignUp}
-        >
-          {t("continueWithGoogle")}
-        </Button>
       </CardContent>
       <CardFooter className="text-sm">
         <p className="text-muted-foreground">

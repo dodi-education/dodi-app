@@ -12,6 +12,41 @@ import { getProviderDefinition } from "@/lib/ai/providers";
 
 type Client = SupabaseClient<Database>;
 
+// ---------------------------------------------------------------------------
+// E2EE provider keys: `accounts.encrypted_api_keys` now holds a single opaque
+// blob the CLIENT sealed under the account VMK. The server stores/returns it
+// verbatim and can never read a key. (Replaces the server-side ENCRYPTION_SECRET
+// path; see src/lib/vault/api-keys-crypto.ts.)
+// ---------------------------------------------------------------------------
+
+export async function getEncryptedProviders(
+  supabase: Client,
+  accountId: string,
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("accounts")
+    .select("encrypted_api_keys")
+    .eq("id", accountId)
+    .single();
+  if (error) throw error;
+  return (data.encrypted_api_keys as unknown as string | null) ?? null;
+}
+
+export async function setEncryptedProviders(
+  supabase: Client,
+  accountId: string,
+  blob: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from("accounts")
+    .update({
+      encrypted_api_keys:
+        blob as unknown as Database["public"]["Tables"]["accounts"]["Update"]["encrypted_api_keys"],
+    })
+    .eq("id", accountId);
+  if (error) throw error;
+}
+
 export async function getConfiguredProviders(
   supabase: Client,
   accountId: string,

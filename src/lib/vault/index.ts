@@ -1,0 +1,11 @@
+/**
+ * Provider-agnostic vault storage port (interfaces only at P0).
+ * Adapters land in later phases (Supabase → SQLite → Vitonomi).
+ */
+export * from "./types";
+export * from "./account-keys";
+export * from "./device-keystore";
+export * from "./session";
+export * from "./profile-crypto";
+export * from "./persona-crypto";
+export * from "./api-keys-crypto";

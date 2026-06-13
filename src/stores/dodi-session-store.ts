@@ -7,6 +7,8 @@ import {
 } from "@/lib/ai/gemini-live-client";
 import { AudioStreamer } from "@/lib/ai/audio-streamer";
 import { AudioRecorder } from "@/lib/ai/audio-recorder";
+import { buildGameVoiceConfig, buildHomeVoiceConfig } from "@/lib/ai/voice-session";
+import { runClientMemoryUpdate } from "@/lib/ai/client-memory-update";
 import { extractCommandMarkers } from "@/lib/games/command-markers";
 import { gameDebug, gameDebugWarn } from "@/lib/games/debug";
 import type { GameAssistantResponse, GameCommand } from "@/types/games";
@@ -211,14 +213,7 @@ function sleepFromInactivity(): void {
   // Fire memory update if enough transcript
   if (pid && transcript.length >= MIN_MEMORY_UPDATE_ENTRIES) {
     const formatted = formatTranscript(transcript);
-    fetch("/api/ai/memory-update", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        profileId: pid,
-        sessionTranscript: formatted,
-      }),
-    }).catch(() => {
+    void runClientMemoryUpdate(pid, formatted).catch(() => {
       // non-critical
     });
   }
@@ -715,24 +710,14 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
       let config: GameVoiceSessionConfig;
 
       if (newContext.type === "game") {
-        const res = await fetch(`/api/games/${newContext.gameId}/session`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            profileId,
-            gameState: newContext.gameState,
-          }),
-          signal: controller.signal,
-        });
-
+        // Build the voice session client-side from the vault (E2EE): the server
+        // can no longer decrypt the provider key. Mirrors connect().
+        config = await buildGameVoiceConfig(
+          profileId,
+          newContext.gameId,
+          newContext.gameState,
+        );
         if (gen !== contextGeneration || controller.signal.aborted) return;
-
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({ error: "Session failed" }));
-          set({ state: "disconnected", error: data.error || "Session failed" });
-          return;
-        }
-        config = await res.json();
       } else if (newContext.type === "creating") {
         const body: Record<string, string> = { profileId };
         if (newContext.gameId) body.gameId = newContext.gameId;
@@ -756,21 +741,9 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
         }
         config = await res.json();
       } else {
-        const res = await fetch("/api/ai/session", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ profileId }),
-          signal: controller.signal,
-        });
-
+        // Home/browse context — build client-side from the vault (E2EE).
+        config = await buildHomeVoiceConfig(profileId);
         if (gen !== contextGeneration || controller.signal.aborted) return;
-
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({ error: "Session failed" }));
-          set({ state: "disconnected", error: data.error || "Session failed" });
-          return;
-        }
-        config = await res.json();
       }
 
       if (gen !== contextGeneration || controller.signal.aborted) return;
@@ -825,14 +798,7 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
     const stored = readLocalStorage(profileId);
     if (stored && stored.entries.length >= MIN_BEACON_ENTRIES) {
       const formatted = formatTranscript(stored.entries);
-      fetch("/api/ai/memory-update", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          profileId: stored.profileId,
-          sessionTranscript: formatted,
-        }),
-      }).catch(() => {
+      void runClientMemoryUpdate(stored.profileId, formatted).catch(() => {
         // Recovery failure is non-critical
       });
     }
@@ -862,25 +828,12 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
       let config: GameVoiceSessionConfig;
 
       if (currentContext.type === "game") {
-        const res = await fetch(`/api/games/${currentContext.gameId}/session`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            profileId,
-            gameState: currentContext.gameState,
-          }),
-          signal: controller.signal,
-        });
-
+        config = await buildGameVoiceConfig(
+          profileId,
+          currentContext.gameId,
+          currentContext.gameState,
+        );
         if (gen !== contextGeneration || controller.signal.aborted) return;
-
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({ error: "Failed to connect" }));
-          const errorMessage = data.error || `Session API returned ${res.status}`;
-          set({ state: "disconnected", error: errorMessage });
-          return;
-        }
-        config = await res.json();
       } else if (currentContext.type === "creating") {
         const body: Record<string, string> = { profileId };
         if (currentContext.gameId) body.gameId = currentContext.gameId;
@@ -905,24 +858,8 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
         }
         config = await res.json();
       } else {
-        const sessionRes = await fetch("/api/ai/session", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ profileId }),
-          signal: controller.signal,
-        });
-
+        config = await buildHomeVoiceConfig(profileId);
         if (gen !== contextGeneration || controller.signal.aborted) return;
-
-        if (!sessionRes.ok) {
-          const data = await sessionRes
-            .json()
-            .catch(() => ({ error: "Failed to connect" }));
-          const errorMessage = data.error || `Session API returned ${sessionRes.status}`;
-          set({ state: "disconnected", error: errorMessage });
-          return;
-        }
-        config = await sessionRes.json();
       }
 
       if (gen !== contextGeneration || controller.signal.aborted) return;
@@ -992,14 +929,7 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
 
     if (pid && transcript.length >= MIN_MEMORY_UPDATE_ENTRIES) {
       const formatted = formatTranscript(transcript);
-      fetch("/api/ai/memory-update", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          profileId: pid,
-          sessionTranscript: formatted,
-        }),
-      }).catch(() => {
+      void runClientMemoryUpdate(pid, formatted).catch(() => {
         // non-critical
       });
     }

@@ -25,6 +25,12 @@
 .DS_Store
 *.pem
 
+# claude code (local agent config + memory — not versioned)
+.claude/
+
+# editor (local workspace config — not versioned)
+.vscode/
+
 # debug
 /logs
 npm-debug.log*

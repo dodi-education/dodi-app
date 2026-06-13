@@ -1,0 +1,265 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  bytesToUtf8,
+  constantTimeEqual,
+  fromBase64Url,
+  toBase64Url,
+  utf8ToBytes,
+} from "./encoding";
+import {
+  type Argon2Params,
+  generateKemKeyPair,
+  generateSignKeyPair,
+  generateSymmetricKey,
+  open,
+  seal,
+  sign,
+  verify,
+} from "./primitives";
+import {
+  DEFAULT_KEY_ID,
+  decryptField,
+  encryptField,
+  fieldKeyId,
+  isEncryptedField,
+} from "./record";
+import {
+  rewrapKeyWithNewPassword,
+  unwrapKeyWithDevice,
+  unwrapKeyWithPassword,
+  wrapKeyForDevice,
+  wrapKeyWithPassword,
+} from "./keys";
+import {
+  deriveVaultMasterKeyFromPhrase,
+  generateBackupPhrase,
+  isValidBackupPhrase,
+  normalizeBackupPhrase,
+} from "./mnemonic";
+
+// Fast Argon2id params for tests (NOT production strength).
+const TEST_ARGON2: Argon2Params = { t: 2, m: 8192, p: 1, dkLen: 32 };
+
+describe("encoding", () => {
+  it("round-trips base64url for all trailing-byte cases", () => {
+    for (let len = 0; len <= 32; len++) {
+      const bytes = new Uint8Array(len).map((_, i) => (i * 37 + 11) & 0xff);
+      expect(fromBase64Url(toBase64Url(bytes))).toEqual(bytes);
+    }
+  });
+
+  it("base64url output is URL/JSON safe (no + / =)", () => {
+    const s = toBase64Url(new Uint8Array([251, 255, 191, 254, 0, 1, 2]));
+    expect(s).not.toMatch(/[+/=]/);
+  });
+
+  it("round-trips unicode utf8", () => {
+    const s = "Héllo 🦕 dinosaur — naïve café";
+    expect(bytesToUtf8(utf8ToBytes(s))).toBe(s);
+  });
+
+  it("constantTimeEqual", () => {
+    expect(constantTimeEqual(new Uint8Array([1, 2, 3]), new Uint8Array([1, 2, 3]))).toBe(true);
+    expect(constantTimeEqual(new Uint8Array([1, 2, 3]), new Uint8Array([1, 2, 4]))).toBe(false);
+    expect(constantTimeEqual(new Uint8Array([1]), new Uint8Array([1, 2]))).toBe(false);
+  });
+});
+
+describe("symmetric seal/open (XChaCha20-Poly1305)", () => {
+  it("round-trips", () => {
+    const key = generateSymmetricKey();
+    const msg = utf8ToBytes("secret payload");
+    const sealed = seal(key, msg);
+    expect(bytesToUtf8(open(key, sealed))).toBe("secret payload");
+  });
+
+  it("uses a fresh nonce each call (no nonce reuse)", () => {
+    const key = generateSymmetricKey();
+    const a = seal(key, utf8ToBytes("x"));
+    const b = seal(key, utf8ToBytes("x"));
+    expect(toBase64Url(a.nonce)).not.toBe(toBase64Url(b.nonce));
+  });
+
+  it("fails on a wrong key", () => {
+    const sealed = seal(generateSymmetricKey(), utf8ToBytes("hi"));
+    expect(() => open(generateSymmetricKey(), sealed)).toThrow();
+  });
+
+  it("fails on tampered ciphertext (auth tag)", () => {
+    const key = generateSymmetricKey();
+    const sealed = seal(key, utf8ToBytes("hi"));
+    sealed.ciphertext[0] ^= 0xff;
+    expect(() => open(key, sealed)).toThrow();
+  });
+
+  it("authenticates additional data", () => {
+    const key = generateSymmetricKey();
+    const sealed = seal(key, utf8ToBytes("hi"), utf8ToBytes("aad-1"));
+    expect(bytesToUtf8(open(key, sealed, utf8ToBytes("aad-1")))).toBe("hi");
+    expect(() => open(key, sealed, utf8ToBytes("aad-2"))).toThrow();
+  });
+});
+
+describe("versioned field encryption", () => {
+  const key = generateSymmetricKey();
+
+  it("round-trips ASCII, unicode, multiline, ISO date, empty", () => {
+    for (const value of [
+      "Emma",
+      "2018-04-05",
+      "## About\n- loves dinosaurs 🦕\n- naïve café",
+      "",
+    ]) {
+      const enc = encryptField(key, value);
+      expect(isEncryptedField(enc)).toBe(true);
+      expect(decryptField(key, enc)).toBe(value);
+    }
+  });
+
+  it("has the expected self-describing format", () => {
+    const enc = encryptField(key, "x");
+    expect(enc).toMatch(/^enc:v1:k1:[A-Za-z0-9_-]+:[A-Za-z0-9_-]+$/);
+    expect(fieldKeyId(enc)).toBe(DEFAULT_KEY_ID);
+  });
+
+  it("passes through legacy plaintext untouched", () => {
+    expect(decryptField(key, "2018-04-05")).toBe("2018-04-05");
+    expect(decryptField(key, "plain memory text")).toBe("plain memory text");
+    expect(isEncryptedField("2018-04-05")).toBe(false);
+    expect(fieldKeyId("2018-04-05")).toBeNull();
+  });
+
+  it("handles null/undefined", () => {
+    expect(decryptField(key, null)).toBeNull();
+    expect(decryptField(key, undefined)).toBeNull();
+    expect(isEncryptedField(null)).toBe(false);
+  });
+
+  it("throws on a tampered enc:v1 value (not silent passthrough)", () => {
+    const enc = encryptField(key, "secret");
+    const parts = enc.split(":");
+    parts[4] = parts[4].slice(0, -2) + "AA";
+    expect(() => decryptField(key, parts.join(":"))).toThrow();
+  });
+
+  it("throws on a malformed enc:v1 value", () => {
+    expect(() => decryptField(key, "enc:v1:k1:onlythree")).toThrow();
+  });
+});
+
+describe("ML-DSA-65 signatures", () => {
+  it("signs and verifies", () => {
+    const { publicKey, secretKey } = generateSignKeyPair();
+    const msg = utf8ToBytes("device-pairing-challenge");
+    const sig = sign(secretKey, msg);
+    expect(verify(publicKey, msg, sig)).toBe(true);
+  });
+
+  it("rejects a tampered message", () => {
+    const { publicKey, secretKey } = generateSignKeyPair();
+    const sig = sign(secretKey, utf8ToBytes("original"));
+    expect(verify(publicKey, utf8ToBytes("tampered"), sig)).toBe(false);
+  });
+
+  it("rejects a signature from another key", () => {
+    const a = generateSignKeyPair();
+    const b = generateSignKeyPair();
+    const msg = utf8ToBytes("m");
+    expect(verify(b.publicKey, msg, sign(a.secretKey, msg))).toBe(false);
+  });
+});
+
+describe("wallet-style backup phrase (BIP-39)", () => {
+  it("generates a valid, unique 12-word phrase", () => {
+    const phrase = generateBackupPhrase();
+    expect(phrase.split(" ")).toHaveLength(12);
+    expect(isValidBackupPhrase(phrase)).toBe(true);
+    expect(generateBackupPhrase()).not.toBe(generateBackupPhrase());
+  });
+
+  it("validates checksum and rejects garbage", () => {
+    expect(isValidBackupPhrase("abandon abandon abandon")).toBe(false);
+    expect(isValidBackupPhrase("not real bip39 words at all here please")).toBe(false);
+  });
+
+  it("normalizes case and whitespace", () => {
+    const phrase = generateBackupPhrase();
+    const messy = "  " + phrase.toUpperCase().replace(/ /g, "   ") + "  ";
+    expect(normalizeBackupPhrase(messy)).toBe(phrase);
+    expect(isValidBackupPhrase(messy)).toBe(true);
+  });
+
+  it("derives a deterministic VMK from the phrase (wallet root)", () => {
+    const phrase = generateBackupPhrase();
+    const a = deriveVaultMasterKeyFromPhrase(phrase);
+    const b = deriveVaultMasterKeyFromPhrase(phrase);
+    expect(a).toHaveLength(32);
+    expect(constantTimeEqual(a, b)).toBe(true);
+  });
+
+  it("messy input recovers the same VMK", () => {
+    const phrase = generateBackupPhrase();
+    const messy = "  " + phrase.toUpperCase() + " ";
+    expect(
+      constantTimeEqual(
+        deriveVaultMasterKeyFromPhrase(messy),
+        deriveVaultMasterKeyFromPhrase(phrase),
+      ),
+    ).toBe(true);
+  });
+
+  it("different phrases derive different VMKs", () => {
+    const a = deriveVaultMasterKeyFromPhrase(generateBackupPhrase());
+    const b = deriveVaultMasterKeyFromPhrase(generateBackupPhrase());
+    expect(constantTimeEqual(a, b)).toBe(false);
+  });
+
+  it("throws on an invalid phrase", () => {
+    expect(() => deriveVaultMasterKeyFromPhrase("abandon abandon abandon")).toThrow();
+  });
+});
+
+describe("VMK wrapping (convenience unlock paths)", () => {
+  it("wraps to a device ML-KEM key and unwraps", () => {
+    const vmk = deriveVaultMasterKeyFromPhrase(generateBackupPhrase());
+    const device = generateKemKeyPair();
+    const wrapped = wrapKeyForDevice(device.publicKey, vmk);
+    expect(constantTimeEqual(unwrapKeyWithDevice(device.secretKey, wrapped), vmk)).toBe(true);
+  });
+
+  it("a different device cannot unwrap", () => {
+    const vmk = deriveVaultMasterKeyFromPhrase(generateBackupPhrase());
+    const device = generateKemKeyPair();
+    const attacker = generateKemKeyPair();
+    const wrapped = wrapKeyForDevice(device.publicKey, vmk);
+    expect(() => unwrapKeyWithDevice(attacker.secretKey, wrapped)).toThrow();
+  });
+
+  it("wraps with a password and unwraps; wrong password fails", () => {
+    const vmk = deriveVaultMasterKeyFromPhrase(generateBackupPhrase());
+    const wrapped = wrapKeyWithPassword("correct horse", vmk, TEST_ARGON2);
+    expect(constantTimeEqual(unwrapKeyWithPassword("correct horse", wrapped), vmk)).toBe(true);
+    expect(() => unwrapKeyWithPassword("wrong horse", wrapped)).toThrow();
+  });
+
+  it("password change re-wraps the SAME vmk (fixes the lockout)", () => {
+    const vmk = deriveVaultMasterKeyFromPhrase(generateBackupPhrase());
+    const wrapped = wrapKeyWithPassword("old-pw", vmk, TEST_ARGON2);
+    const rewrapped = rewrapKeyWithNewPassword("old-pw", wrapped, "new-pw", TEST_ARGON2);
+    expect(constantTimeEqual(unwrapKeyWithPassword("new-pw", rewrapped), vmk)).toBe(true);
+    expect(() => unwrapKeyWithPassword("old-pw", rewrapped)).toThrow();
+  });
+
+  it("phrase, password, and device all recover one identical vmk", () => {
+    const phrase = generateBackupPhrase();
+    const vmk = deriveVaultMasterKeyFromPhrase(phrase);
+    const device = generateKemKeyPair();
+    const viaPhrase = deriveVaultMasterKeyFromPhrase(phrase);
+    const viaPassword = unwrapKeyWithPassword("pw", wrapKeyWithPassword("pw", vmk, TEST_ARGON2));
+    const viaDevice = unwrapKeyWithDevice(device.secretKey, wrapKeyForDevice(device.publicKey, vmk));
+    expect(constantTimeEqual(viaPhrase, vmk)).toBe(true);
+    expect(constantTimeEqual(viaPassword, vmk)).toBe(true);
+    expect(constantTimeEqual(viaDevice, vmk)).toBe(true);
+  });
+});

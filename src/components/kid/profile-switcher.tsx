@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 
 import { Icon } from "@/components/shared/icon";
+import { useProfiles } from "@/hooks/use-profiles";
 import { cn } from "@/lib/utils";
 import { useDodiSessionStore } from "@/stores/dodi-session-store";
 
@@ -33,34 +34,29 @@ function setCookie(name: string, value: string) {
 export function ProfileSwitcher() {
   const t = useTranslations("nav");
   const router = useRouter();
-  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const { profiles: profileList } = useProfiles();
+  const profiles = profileList ?? [];
   const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let cancelled = false;
-    async function loadProfiles() {
+    async function resolveActive() {
       const currentId = getCookie("dodi-active-profile") ?? null;
-      const response = await fetch("/api/profiles");
       if (cancelled) return;
-      if (response.ok) {
-        const data: Profile[] = await response.json();
-        if (cancelled) return;
-        setProfiles(data);
-        if (currentId) {
-          setActiveProfileId(currentId);
-        } else if (data.length > 0) {
-          // No active profile cookie — default to first profile
-          setCookie("dodi-active-profile", data[0].id);
-          setCookie("dodi-kid-locale", data[0].language ?? "en");
-          setActiveProfileId(data[0].id);
-        }
+      if (currentId) {
+        setActiveProfileId(currentId);
+      } else if (profileList && profileList.length > 0) {
+        // No active profile cookie — default to the first profile
+        setCookie("dodi-active-profile", profileList[0].id);
+        setCookie("dodi-kid-locale", profileList[0].language ?? "en");
+        setActiveProfileId(profileList[0].id);
       }
     }
-    loadProfiles();
+    void resolveActive();
     return () => { cancelled = true; };
-  }, []);
+  }, [profileList]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {

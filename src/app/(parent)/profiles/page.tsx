@@ -1,6 +1,7 @@
+"use client";
+
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { getTranslations } from "next-intl/server";
+import { useTranslations } from "next-intl";
 
 import {
   DotSep,
@@ -13,9 +14,8 @@ import { PageHead, Section } from "@/components/parent/section";
 import { Icon } from "@/components/shared/icon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { listProfiles } from "@/lib/services/profiles";
-import { listPersonas } from "@/lib/services/personas";
-import { createClient } from "@/lib/supabase/server";
+import { usePersonas } from "@/hooks/use-personas";
+import { useProfiles } from "@/hooks/use-profiles";
 
 const AVATAR_PALETTE = [
   { bg: "bg-primary-soft-2", fg: "text-primary" },
@@ -41,22 +41,12 @@ function ageFromBirthdate(birthdate: string | null): number | null {
   return age;
 }
 
-export default async function ProfilesPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/login");
-  }
-
-  const t = await getTranslations("profiles");
-  const td = await getTranslations("dashboard");
-  const profiles = await listProfiles(supabase, user.id);
-
-  const personas = await listPersonas(supabase, user.id);
-  const personaMap = new Map(personas.map((p) => [p.id, p.name]));
+export default function ProfilesPage() {
+  const t = useTranslations("profiles");
+  const td = useTranslations("dashboard");
+  const tc = useTranslations("common");
+  const { profiles, loading, error } = useProfiles();
+  const { nameById: personaNames } = usePersonas();
 
   return (
     <div>
@@ -70,7 +60,19 @@ export default async function ProfilesPage() {
         }
       />
 
-      {profiles.length === 0 ? (
+      {loading ? (
+        <Section>
+          <div className="px-5 py-12 text-center text-sm text-muted-foreground">
+            {tc("loading")}
+          </div>
+        </Section>
+      ) : error ? (
+        <Section>
+          <div className="px-5 py-12 text-center text-sm text-danger">
+            {error}
+          </div>
+        </Section>
+      ) : !profiles || profiles.length === 0 ? (
         <Section>
           <div className="flex flex-col items-center gap-4 px-5 py-12">
             <Icon name="profiles" className="h-10 w-10 text-primary" />
@@ -105,10 +107,10 @@ export default async function ProfilesPage() {
                       ) : null}
                     </RowTitle>
                     <RowMeta>
-                      @{profile.name_tag}
+                      @{profile.social_id}
                       <DotSep />
                       {profile.active_persona_id
-                        ? (personaMap.get(profile.active_persona_id) ??
+                        ? (personaNames.get(profile.active_persona_id) ??
                           t("default"))
                         : t("default")}
                       <DotSep />

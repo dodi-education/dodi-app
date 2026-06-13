@@ -42,6 +42,7 @@ export default async function LandingPage() {
               src="/images/dodi-active.png"
               alt="Dodi — your AI learning companion"
               fill
+              sizes="(max-width: 768px) 192px, 256px"
               className="object-contain"
               priority
             />

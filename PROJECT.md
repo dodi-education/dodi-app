@@ -250,7 +250,7 @@ accounts
 profiles (kid profiles)
 ├── id (uuid, PK)
 ├── account_id (FK → accounts)
-├── display_name
+├── display_name (encrypted)
 ├── name_tag (unique, human-readable)
 ├── birthdate (encrypted)
 ├── avatar_config (jsonb) — Dodi customization
@@ -465,8 +465,6 @@ The MVP focuses on delivering a functional, delightful core experience:
 - [x] Voice interaction (AI provider native TTS/STT)
 - [x] Dodi persona system (create, edit, assign)
 - [x] Profile memory system (auto-update from conversations).
-- [ ] Onboarding conversation flow
-- [ ] First interaction with Dodi should be that the kid can draw itself and use this as an avatar
 - [x] Dodi connection states: Disconnected (Sleep), Connecting, Active, Deaf — with avatar images and click behaviors (see F3.13)
 
 ### Phase 3: Games
@@ -508,10 +506,10 @@ The MVP focuses on delivering a functional, delightful core experience:
 - **Multiplayer games**: Real-time collaborative or competitive games between friends
 - **Parental insights**: AI-generated summaries of learning progress and recommendations
 - **Kid schedule**: Manages a personal weekly schedule/timetable
+- **Daily challenges**: E.g. Complete 2 math games, 1 reading games
 
 ## TODO
 
-- Add "Hand-off to agent" share functionality (similar to claude design) where you get a link which an agent can access (read/write) + simple instruction how to interact with the link so an agent can change the code (expires after e.g. 24 hours).
 - Add game creation and editing via text/prompts in parent view with interactive feedback mode (e.g. if agent asks questions
-- Check encryption (user data should be encrypted)
-- Handle pw change in regard of encryption
+- Define standardized "progress" interface for games e.g. 0-100% (necessary for progress tracking and challenges)
+- 

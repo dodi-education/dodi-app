@@ -11,6 +11,9 @@ import { PageHead, Section } from "@/components/parent/section";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { locales, type Locale } from "@/i18n/config";
+import { encryptProfileFields } from "@/lib/vault";
+import { useProfileStore } from "@/stores/profile-store";
+import { useVaultStore } from "@/stores/vault-store";
 
 const localeNames: Record<Locale, string> = {
   en: "English",
@@ -25,39 +28,36 @@ export default function NewProfilePage() {
   const tc = useTranslations("common");
   const router = useRouter();
   const [displayName, setDisplayName] = useState("");
-  const [nameTag, setNameTag] = useState("");
   const [birthdate, setBirthdate] = useState("");
   const [language, setLanguage] = useState<string>("en");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-
-  function generateNameTag(name: string): string {
-    return name
-      .toLowerCase()
-      .replace(/[^a-z0-9\s-]/g, "")
-      .replace(/\s+/g, "-")
-      .slice(0, 30);
-  }
-
-  function handleNameChange(value: string) {
-    setDisplayName(value);
-    if (!nameTag || nameTag === generateNameTag(displayName)) {
-      setNameTag(generateNameTag(value));
-    }
-  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setLoading(true);
 
+    const session = useVaultStore.getState().session;
+    if (!session) {
+      setError("Your secure vault is locked. Please reload and try again.");
+      setLoading(false);
+      return;
+    }
+
+    // Encrypt personal fields client-side. social_id (the public friend handle)
+    // is assigned randomly server-side and the parent manages it on the profile.
+    const enc = encryptProfileFields(session, {
+      display_name: displayName,
+      ...(birthdate ? { birthdate } : {}),
+    });
+
     const response = await fetch("/api/profiles", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        display_name: displayName,
-        name_tag: nameTag,
-        birthdate: birthdate || undefined,
+        display_name: enc.display_name,
+        birthdate: enc.birthdate,
         language,
       }),
     });
@@ -69,6 +69,7 @@ export default function NewProfilePage() {
       return;
     }
 
+    useProfileStore.getState().invalidate();
     router.push("/profiles");
     router.refresh();
   }
@@ -86,25 +87,9 @@ export default function NewProfilePage() {
               className="sm:w-[250px]"
               placeholder={t("displayNamePlaceholder")}
               value={displayName}
-              onChange={(e) => handleNameChange(e.target.value)}
+              onChange={(e) => setDisplayName(e.target.value)}
               required
               maxLength={50}
-            />
-          </FieldRow>
-          <FieldRow
-            label={t("nameTag")}
-            hint={t("nameTagHint")}
-            htmlFor="name-tag"
-          >
-            <Input
-              id="name-tag"
-              className="sm:w-[250px]"
-              placeholder={t("nameTagPlaceholder")}
-              value={nameTag}
-              onChange={(e) => setNameTag(e.target.value)}
-              required
-              maxLength={30}
-              pattern="[a-z0-9-]+"
             />
           </FieldRow>
           <FieldRow
