@@ -11,7 +11,7 @@ import {
   listGames,
   replaceGameSharings,
 } from "@dodi/platform/services/games";
-import { UNBUILT_GAME_PLACEHOLDER } from "@/lib/games/placeholder";
+import { UNBUILT_GAME_PLACEHOLDER } from "@dodi/games/placeholder";
 import {
   getTranslationsForGames,
   applyTranslation,

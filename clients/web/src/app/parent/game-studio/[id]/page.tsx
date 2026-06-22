@@ -7,7 +7,7 @@ import {
 import { createClient } from "@/lib/supabase/server";
 import { getGame, getGameSharing } from "@dodi/platform/services/games";
 import { coerceProgressKind } from "@/lib/services/game-generation";
-import { isUnbuiltBundle } from "@/lib/games/placeholder";
+import { isUnbuiltBundle } from "@dodi/games/placeholder";
 
 interface RouteContext {
   params: Promise<{ id: string }>;

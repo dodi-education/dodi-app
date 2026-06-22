@@ -6,8 +6,8 @@
  */
 
 import { BRIDGE_INTERFACE_TEMPLATE } from "@/lib/services/game-generation";
-import { GAME_CANVAS_TEMPLATE } from "@/lib/games/stage";
-import { SUCCESS_SYSTEM_TEMPLATE } from "@/lib/games/success";
+import { GAME_CANVAS_TEMPLATE } from "@dodi/games/stage";
+import { SUCCESS_SYSTEM_TEMPLATE } from "@dodi/games/success";
 
 export interface AgentPromptContext {
   age?: number;

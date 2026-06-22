@@ -24,7 +24,7 @@ import type {
   SuccessEvaluation,
 } from "@dodi/types/success";
 
-// Re-export the shared type contracts so existing `@/lib/games/success`
+// Re-export the shared type contracts so existing `./success`
 // importers keep working; the single source of truth is @dodi/types/success.
 export type {
   Comparator,

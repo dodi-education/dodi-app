@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getGame, isGameVisibleToProfile } from "@dodi/platform/services/games";
 import { getProfile } from "@dodi/platform/services/profiles";
 import { startPlay } from "@dodi/platform/services/game-plays";
-import type { ProgressKind } from "@/lib/games/success";
+import type { ProgressKind } from "@dodi/games/success";
 
 const StartPlaySchema = z.object({
   profileId: z.string().uuid(),

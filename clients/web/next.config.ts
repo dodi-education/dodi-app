@@ -8,6 +8,7 @@ const nextConfig: NextConfig = {
   transpilePackages: [
     "@dodi/ai",
     "@dodi/crypto",
+    "@dodi/games",
     "@dodi/platform",
     "@dodi/protocol",
     "@dodi/types",

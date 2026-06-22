@@ -5,7 +5,7 @@
  * correctly implements the bridge protocol.
  */
 
-import type { MetricKey, ProgressKind } from "@/lib/games/success";
+import type { MetricKey, ProgressKind } from "@dodi/games/success";
 
 const MAX_BUNDLE_BYTES = 200 * 1024;
 

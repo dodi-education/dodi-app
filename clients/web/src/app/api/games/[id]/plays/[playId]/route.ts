@@ -3,7 +3,7 @@ import { z } from "zod/v4";
 
 import { createClient } from "@/lib/supabase/server";
 import { getPlay, updatePlay } from "@dodi/platform/services/game-plays";
-import { MetricsSummarySchema } from "@/lib/games/success";
+import { MetricsSummarySchema } from "@dodi/games/success";
 
 const UpdatePlaySchema = z.object({
   finalProgress: z.number().min(0).max(1).optional(),

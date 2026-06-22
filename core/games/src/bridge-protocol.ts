@@ -8,7 +8,7 @@ import type {
 import {
   MetricsSummarySchema,
   SuccessCriteriaSchema,
-} from "@/lib/games/success";
+} from "./success";
 
 const BridgeTokenSchema = z
   .string()

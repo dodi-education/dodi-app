@@ -1,5 +1,5 @@
 import type { GameCommand } from "@dodi/types/games";
-import { gameDebug, gameDebugWarn } from "@/lib/games/debug";
+import { gameDebug, gameDebugWarn } from "./debug";
 
 const COMMAND_MARKER_REGEX = /<dodi-command>([\s\S]*?)<\/dodi-command>/g;
 

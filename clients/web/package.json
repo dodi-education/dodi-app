@@ -18,6 +18,7 @@
     "@anthropic-ai/sdk": "^0.80.0",
     "@dodi/ai": "workspace:*",
     "@dodi/crypto": "workspace:*",
+    "@dodi/games": "workspace:*",
     "@dodi/platform": "workspace:*",
     "@dodi/protocol": "workspace:*",
     "@dodi/types": "workspace:*",

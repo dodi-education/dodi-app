@@ -8,7 +8,7 @@ import {
   SuccessCriteriaSchema,
   type ProgressKind,
   type SuccessCriteria,
-} from "@/lib/games/success";
+} from "@dodi/games/success";
 import {
   decryptProviderKey,
   getModelConfig,

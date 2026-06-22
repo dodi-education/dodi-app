@@ -9,7 +9,7 @@
 import { createClientThinkingProvider } from "@dodi/ai/client-thinking";
 import { resolveClientThinking } from "@/lib/ai/resolve-client-thinking";
 import { getActivePersona } from "@/lib/ai/voice-session";
-import { normalizeCommands } from "@/lib/games/normalize-commands";
+import { normalizeCommands } from "@dodi/games/normalize-commands";
 import { buildGameTextContext } from "@dodi/ai/dodi-context";
 import { useProfileStore } from "@/stores/profile-store";
 import type { Game } from "@dodi/types/database";

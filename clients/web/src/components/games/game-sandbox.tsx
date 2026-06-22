@@ -9,13 +9,13 @@ import {
   useRef,
 } from "react";
 
-import { GameToParentMessageSchema } from "@/lib/games/bridge-protocol";
+import { GameToParentMessageSchema } from "@dodi/games/bridge-protocol";
 import {
   createBridgeToken,
   isBridgeTokenValid,
-} from "@/lib/games/bridge-protocol";
-import { gameDebug, gameDebugWarn } from "@/lib/games/debug";
-import type { MetricsSummary } from "@/lib/games/success";
+} from "@dodi/games/bridge-protocol";
+import { gameDebug, gameDebugWarn } from "@dodi/games/debug";
+import type { MetricsSummary } from "@dodi/games/success";
 import type {
   GameCommand,
   GameGoal,

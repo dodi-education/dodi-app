@@ -10,7 +10,7 @@ import {
 import { GameStage } from "@/components/games/game-stage";
 import { GameViewShell } from "@/components/games/game-view-shell";
 import { STAGE } from "@/lib/games/stage";
-import { gameDebug, gameDebugWarn } from "@/lib/games/debug";
+import { gameDebug, gameDebugWarn } from "@dodi/games/debug";
 import {
   evaluateSuccess,
   isEmptyCriteria,
@@ -18,7 +18,7 @@ import {
   type MetricsSummary,
   type ProgressKind,
   type SuccessCriteria,
-} from "@/lib/games/success";
+} from "@dodi/games/success";
 import { useDodiContext } from "@/hooks/use-dodi-context";
 import { useDodiSessionStore } from "@/stores/dodi-session-store";
 import type {

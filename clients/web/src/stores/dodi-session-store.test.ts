@@ -73,11 +73,11 @@ vi.mock("@/lib/ai/client-game-assistant", () => ({
   runGameTextAssistant: async () => ({ reply: "", commands: [] }),
 }));
 
-vi.mock("@/lib/games/command-markers", () => ({
+vi.mock("@dodi/games/command-markers", () => ({
   extractCommandMarkers: () => ({ commands: [] }),
 }));
 
-vi.mock("@/lib/games/debug", () => ({
+vi.mock("@dodi/games/debug", () => ({
   gameDebug: () => {},
   gameDebugWarn: () => {},
 }));

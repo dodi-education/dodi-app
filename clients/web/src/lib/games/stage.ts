@@ -1,34 +1,15 @@
 /**
- * Canonical game canvas — the single source of truth for how AI-generated games
- * are framed on screen AND what dimensions the generation agents design against.
- *
- * Every game is rendered in ONE fixed portrait stage, scaled uniformly to fit the
- * player's device, so a game looks identical in the parent studio preview and the
- * kid play view across phone / tablet / desktop. The same numbers are fed to the
- * generation agents via {@link GAME_CANVAS_TEMPLATE} so the spec they design to
- * always matches the real render.
+ * Browser stage sizing. The canonical dimensions + layout contract are shared in
+ * @dodi/games/stage (pure); this module adds the React/CSS sizing helper and
+ * re-exports the shared bits so existing `@/lib/games/stage` importers are
+ * unaffected.
  */
 
 import type { CSSProperties } from "react";
 
-export const STAGE = {
-  /** Portrait aspect ratio (width : height). */
-  aspectW: 4,
-  aspectH: 5,
-  /** Design-reference canvas the agent treats as its coordinate system (NOT a hard pixel canvas). */
-  logicalWidth: 576,
-  logicalHeight: 720,
-  /** Height cap on roomy (desktop/tablet) screens; width follows the ratio (~720px wide). */
-  maxHeightDesktop: 900,
-  /** Playable height floor on very short viewports. */
-  minHeight: 360,
-  /** Vertical chrome to reserve so the stage fits without scrolling, per surface. */
-  reservedKid: 200,
-  reservedStudio: 120,
-} as const;
+import { STAGE, STAGE_ASPECT_CSS } from "@dodi/games/stage";
 
-/** `aspect-ratio` CSS value, e.g. "4 / 5". */
-export const STAGE_ASPECT_CSS = `${STAGE.aspectW} / ${STAGE.aspectH}`;
+export { STAGE, STAGE_ASPECT_CSS, GAME_CANVAS_TEMPLATE } from "@dodi/games/stage";
 
 /**
  * Inline style that sizes a box to the canonical stage: a fixed 4:5 portrait that
@@ -46,23 +27,3 @@ export function stageSizeStyle(reserved: number = STAGE.reservedKid): CSSPropert
     width: `min(100%, calc(var(--stage-h) * ${STAGE.aspectW} / ${STAGE.aspectH}))`,
   } as CSSProperties;
 }
-
-/** Layout contract injected into every game-generation prompt (see agent-system-prompt + game-generation). */
-export const GAME_CANVAS_TEMPLATE = `
-## Game Canvas (REQUIRED LAYOUT CONTRACT)
-
-Design the game for ONE fixed canvas — it is the only layout target.
-
-- Shape: portrait, aspect ratio ${STAGE.aspectW}:${STAGE.aspectH}.
-- Design reference size: ${STAGE.logicalWidth} x ${STAGE.logicalHeight} (width x height). Treat this
-  as your coordinate system; the canvas is scaled uniformly to fit the player's screen
-  (phone, tablet, desktop), so proportions are always preserved.
-- The game MUST fill its container exactly and own NO viewport:
-    html, body { margin: 0; height: 100%; width: 100%; overflow: hidden; }
-    <your game root> { width: 100%; height: 100%; }
-  NEVER use 100vh / 100vw / calc(100vh - X). The game fills 100% of a ${STAGE.aspectW}:${STAGE.aspectH} box —
-  assuming a taller screen than you are given is exactly what causes controls to be clipped.
-- Lay out with %, flex, and grid relative to the root so everything fits the ${STAGE.aspectW}:${STAGE.aspectH}
-  box with no scrolling and no clipping at any scale.
-- Keep touch targets >= 44x44 px. Avoid fixed pixel heights that assume extra vertical space.
-`.trim();

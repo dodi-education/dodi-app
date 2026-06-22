@@ -13,7 +13,7 @@ import {
   coerceProgressKind,
   coerceSuccessCriteria,
 } from "@/lib/services/game-generation";
-import { SUCCESS_SYSTEM_TEMPLATE, type ProgressKind, type SuccessCriteria } from "@/lib/games/success";
+import { SUCCESS_SYSTEM_TEMPLATE, type ProgressKind, type SuccessCriteria } from "@dodi/games/success";
 import { createLogger } from "@dodi/platform/logger";
 
 const log = createLogger("agent-tools");

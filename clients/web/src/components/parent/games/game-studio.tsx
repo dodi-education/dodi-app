@@ -12,7 +12,7 @@ import { Icon, type IconName } from "@/components/shared/icon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { STAGE } from "@/lib/games/stage";
-import { GAME_TAGS } from "@/lib/games/tags";
+import { GAME_TAGS } from "@dodi/games/tags";
 import { cn } from "@/lib/utils";
 import { useProfiles } from "@/hooks/use-profiles";
 import { resolveClientThinking } from "@/lib/ai/resolve-client-thinking";
@@ -21,7 +21,7 @@ import { buildLearningContext } from "@dodi/ai/learning-context";
 import type { AgentProgressEvent, AgentStep } from "@dodi/types/agent-progress";
 import type { AgentCodeResult } from "@dodi/types/tasks";
 import type { AgentSessionResult } from "@dodi/types/database";
-import type { ProgressKind } from "@/lib/games/success";
+import type { ProgressKind } from "@dodi/games/success";
 
 interface KidOption {
   id: string;
