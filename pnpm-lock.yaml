@@ -31,7 +31,7 @@ importers:
         version: link:../../core/crypto
       '@dodi/platform':
         specifier: workspace:*
-        version: link:../../core/platform
+        version: link:../../platform
       '@dodi/protocol':
         specifier: workspace:*
         version: link:../../core/protocol
@@ -171,31 +171,6 @@ importers:
         specifier: ^4.1.8
         version: 4.1.9(@types/node@20.19.43)(msw@2.14.6(@types/node@20.19.43)(typescript@5.9.3))(vite@8.0.16(@types/node@20.19.43)(jiti@2.7.0))
 
-  core/platform:
-    dependencies:
-      '@dodi/ai':
-        specifier: workspace:*
-        version: link:../ai
-      '@dodi/types':
-        specifier: workspace:*
-        version: link:../types
-      '@dodi/vault':
-        specifier: workspace:*
-        version: link:../vault
-      '@supabase/supabase-js':
-        specifier: 2.98.0
-        version: 2.98.0
-    devDependencies:
-      '@types/node':
-        specifier: ^20
-        version: 20.19.43
-      typescript:
-        specifier: ^5
-        version: 5.9.3
-      vitest:
-        specifier: ^4.1.8
-        version: 4.1.9(@types/node@20.19.43)(msw@2.14.6(@types/node@20.19.43)(typescript@5.9.3))(vite@8.0.16(@types/node@20.19.43)(jiti@2.7.0))
-
   core/protocol:
     dependencies:
       '@dodi/crypto':
@@ -230,6 +205,31 @@ importers:
         specifier: workspace:*
         version: link:../types
     devDependencies:
+      typescript:
+        specifier: ^5
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.8
+        version: 4.1.9(@types/node@20.19.43)(msw@2.14.6(@types/node@20.19.43)(typescript@5.9.3))(vite@8.0.16(@types/node@20.19.43)(jiti@2.7.0))
+
+  platform:
+    dependencies:
+      '@dodi/ai':
+        specifier: workspace:*
+        version: link:../core/ai
+      '@dodi/types':
+        specifier: workspace:*
+        version: link:../core/types
+      '@dodi/vault':
+        specifier: workspace:*
+        version: link:../core/vault
+      '@supabase/supabase-js':
+        specifier: 2.98.0
+        version: 2.98.0
+    devDependencies:
+      '@types/node':
+        specifier: ^20
+        version: 20.19.43
       typescript:
         specifier: ^5
         version: 5.9.3
