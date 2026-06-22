@@ -6,7 +6,8 @@
  * it never inspects or decrypts the key material.
  */
 import { NextResponse } from "next/server";
-import { z } from "zod/v4";
+
+import { StoredVaultKeysSchema } from "@dodi/protocol/schemas";
 
 import { createClient } from "@/lib/supabase/server";
 import { createLogger } from "@dodi/platform/logger";
@@ -17,42 +18,6 @@ import {
 import type { StoredVaultKeys } from "@dodi/vault";
 
 const log = createLogger("vault-keys");
-
-const KemWrapSchema = z.object({
-  v: z.literal(1),
-  scheme: z.literal("kem"),
-  alg: z.literal("ml-kem-768"),
-  kemCiphertext: z.string().min(1),
-  nonce: z.string().min(1),
-  ciphertext: z.string().min(1),
-});
-
-const PasswordWrapSchema = z.object({
-  v: z.literal(1),
-  scheme: z.literal("password"),
-  kdf: z.literal("argon2id"),
-  salt: z.string().min(1),
-  params: z.object({
-    t: z.number().int().positive(),
-    m: z.number().int().positive(),
-    p: z.number().int().positive(),
-    dkLen: z.number().int().positive(),
-  }),
-  nonce: z.string().min(1),
-  ciphertext: z.string().min(1),
-});
-
-const StoredVaultKeysSchema = z.object({
-  deviceWraps: z.array(
-    z.object({
-      deviceId: z.string().min(1),
-      deviceKemPublicKey: z.string().min(1),
-      wrapped: KemWrapSchema,
-    }),
-  ),
-  passwordWrap: PasswordWrapSchema.nullable(),
-  vmkCheck: z.string().min(1),
-});
 
 export async function GET(): Promise<NextResponse> {
   const supabase = await createClient();

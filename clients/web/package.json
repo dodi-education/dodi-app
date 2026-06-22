@@ -19,6 +19,7 @@
     "@dodi/ai": "workspace:*",
     "@dodi/crypto": "workspace:*",
     "@dodi/platform": "workspace:*",
+    "@dodi/protocol": "workspace:*",
     "@dodi/types": "workspace:*",
     "@dodi/vault": "workspace:*",
     "@google/generative-ai": "^0.24.1",

@@ -9,6 +9,7 @@ const nextConfig: NextConfig = {
     "@dodi/ai",
     "@dodi/crypto",
     "@dodi/platform",
+    "@dodi/protocol",
     "@dodi/types",
     "@dodi/vault",
   ],
