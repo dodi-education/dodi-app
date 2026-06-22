@@ -12,20 +12,10 @@
 import fs from "fs";
 import path from "path";
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+import type { Logger, LogLevel } from "@dodi/types/logger";
 
-type LogLevel = "debug" | "info" | "warn" | "error";
-
-interface Logger {
-  debug(event: string, data?: Record<string, unknown>): void;
-  info(event: string, data?: Record<string, unknown>): void;
-  warn(event: string, data?: Record<string, unknown>): void;
-  error(event: string, data?: Record<string, unknown>): void;
-  /** Returns a function that, when called, emits an info log with `durationMs`. */
-  time(event: string): (data?: Record<string, unknown>) => void;
-}
+// This fs-backed logger is the platform's concrete implementation of the
+// shared @dodi/types Logger interface (the agent supplies its own).
 
 // ---------------------------------------------------------------------------
 // Level ordering

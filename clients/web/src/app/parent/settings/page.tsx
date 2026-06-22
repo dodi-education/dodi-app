@@ -7,7 +7,7 @@ import { FieldRow } from "@/components/parent/rows";
 import { PageHead, Section } from "@/components/parent/section";
 import { LanguageSwitcher } from "@/components/shared/language-switcher";
 import { Badge } from "@/components/ui/badge";
-import { getAccount } from "@/lib/services/accounts";
+import { getAccount } from "@dodi/platform/services/accounts";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function SettingsPage() {

@@ -9,8 +9,8 @@ import type {
   Json,
 } from "@dodi/types/database";
 import type { GameMetadata, GameSharingState } from "@dodi/types/games";
-import type { ProgressKind, SuccessCriteria } from "@/lib/games/success";
-import { sanitizeGameBundle } from "@/lib/game-sanitizer";
+import type { ProgressKind, SuccessCriteria } from "@dodi/types/success";
+import { sanitizeGameBundle } from "../game-sanitizer";
 
 type Client = SupabaseClient<Database>;
 

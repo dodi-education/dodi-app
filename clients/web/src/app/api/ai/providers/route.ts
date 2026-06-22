@@ -13,7 +13,7 @@ import { createClient } from "@/lib/supabase/server";
 import {
   getEncryptedProviders,
   setEncryptedProviders,
-} from "@/lib/services/ai-providers";
+} from "@dodi/platform/services/ai-providers";
 
 const PutSchema = z.object({
   encryptedProviders: z.string().min(1),

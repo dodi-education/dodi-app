@@ -2,20 +2,20 @@ import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 
 import { createClient } from "@/lib/supabase/server";
-import { createLogger } from "@/lib/logger";
-import { getProfile } from "@/lib/services/profiles";
+import { createLogger } from "@dodi/platform/logger";
+import { getProfile } from "@dodi/platform/services/profiles";
 
 const log = createLogger("game-create");
 import {
   createCustomGame,
   listGames,
   replaceGameSharings,
-} from "@/lib/services/games";
+} from "@dodi/platform/services/games";
 import { UNBUILT_GAME_PLACEHOLDER } from "@/lib/games/placeholder";
 import {
   getTranslationsForGames,
   applyTranslation,
-} from "@/lib/services/game-translations";
+} from "@dodi/platform/services/game-translations";
 
 /** Extract a useful message from an Error or a Supabase PostgrestError-like object. */
 function describeError(e: unknown): string {

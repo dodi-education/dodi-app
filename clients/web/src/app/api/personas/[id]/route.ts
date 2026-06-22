@@ -6,7 +6,7 @@ import {
   deletePersona,
   getPersona,
   updatePersona,
-} from "@/lib/services/personas";
+} from "@dodi/platform/services/personas";
 
 const UpdatePersonaSchema = z.object({
   name: z.string().min(1).max(100).optional(),

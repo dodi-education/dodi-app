@@ -2,9 +2,9 @@ import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 
 import { createClient } from "@/lib/supabase/server";
-import { getGame, isGameVisibleToProfile } from "@/lib/services/games";
-import { getProfile } from "@/lib/services/profiles";
-import { startPlay } from "@/lib/services/game-plays";
+import { getGame, isGameVisibleToProfile } from "@dodi/platform/services/games";
+import { getProfile } from "@dodi/platform/services/profiles";
+import { startPlay } from "@dodi/platform/services/game-plays";
 import type { ProgressKind } from "@/lib/games/success";
 
 const StartPlaySchema = z.object({

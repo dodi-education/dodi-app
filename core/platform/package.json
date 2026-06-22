@@ -1,0 +1,31 @@
+{
+  "name": "@dodi/platform",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./logger": "./src/logger.ts",
+    "./encryption": "./src/encryption.ts",
+    "./game-sanitizer": "./src/game-sanitizer.ts",
+    "./services/*": "./src/services/*.ts"
+  },
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@dodi/ai": "workspace:*",
+    "@dodi/types": "workspace:*",
+    "@dodi/vault": "workspace:*",
+    "@supabase/supabase-js": "2.98.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "typescript": "^5",
+    "vitest": "^4.1.8"
+  }
+}

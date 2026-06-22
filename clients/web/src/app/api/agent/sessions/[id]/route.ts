@@ -2,11 +2,11 @@ import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 
 import { createClient } from "@/lib/supabase/server";
-import { createLogger } from "@/lib/logger";
+import { createLogger } from "@dodi/platform/logger";
 import {
   getAgentSession,
   deactivateAgentSession,
-} from "@/lib/services/agent-sessions";
+} from "@dodi/platform/services/agent-sessions";
 import { abortSession } from "@/lib/ai/agent-session";
 
 const log = createLogger("agent-session");

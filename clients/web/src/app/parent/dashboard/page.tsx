@@ -16,9 +16,9 @@ import { StatCell, StatStrip } from "@/components/parent/stat-strip";
 import { Icon } from "@/components/shared/icon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { listAgentSessions } from "@/lib/services/agent-sessions";
-import { getDashboardStats } from "@/lib/services/dashboard";
-import { listProfiles } from "@/lib/services/profiles";
+import { listAgentSessions } from "@dodi/platform/services/agent-sessions";
+import { getDashboardStats } from "@dodi/platform/services/dashboard";
+import { listProfiles } from "@dodi/platform/services/profiles";
 import { createClient } from "@/lib/supabase/server";
 
 const STATUS_BADGE_VARIANT: Record<

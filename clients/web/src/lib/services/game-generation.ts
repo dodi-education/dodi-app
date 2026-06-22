@@ -13,7 +13,7 @@ import {
   decryptProviderKey,
   getModelConfig,
   normalizeModelConfig,
-} from "@/lib/services/ai-providers";
+} from "@dodi/platform/services/ai-providers";
 import { THINKING_MODEL_REQUIRED_MESSAGE } from "@dodi/ai/thinking-config";
 
 type Client = SupabaseClient<Database>;

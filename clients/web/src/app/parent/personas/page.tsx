@@ -7,7 +7,7 @@ import { Row, RowMain, RowMeta, RowTitle } from "@/components/parent/rows";
 import { PageHead, Section } from "@/components/parent/section";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { listPersonas } from "@/lib/services/personas";
+import { listPersonas } from "@dodi/platform/services/personas";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function PersonasPage() {

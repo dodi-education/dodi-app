@@ -2,10 +2,10 @@ import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 
 import { createClient } from "@/lib/supabase/server";
-import { getGame } from "@/lib/services/games";
-import { getProfile } from "@/lib/services/profiles";
-import { logMemoryEvent } from "@/lib/services/system-logs";
-import { getTranslation, applyTranslation } from "@/lib/services/game-translations";
+import { getGame } from "@dodi/platform/services/games";
+import { getProfile } from "@dodi/platform/services/profiles";
+import { logMemoryEvent } from "@dodi/platform/services/system-logs";
+import { getTranslation, applyTranslation } from "@dodi/platform/services/game-translations";
 
 const LogGameEventSchema = z.object({
   profileId: z.string().uuid(),

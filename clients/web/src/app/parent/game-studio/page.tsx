@@ -11,9 +11,9 @@ import {
   type GameListItem,
 } from "@/components/parent/games/game-studio-list";
 import { createClient } from "@/lib/supabase/server";
-import { listAccountGames } from "@/lib/services/games";
-import { listProfiles } from "@/lib/services/profiles";
-import { listAgentSessions } from "@/lib/services/agent-sessions";
+import { listAccountGames } from "@dodi/platform/services/games";
+import { listProfiles } from "@dodi/platform/services/profiles";
+import { listAgentSessions } from "@dodi/platform/services/agent-sessions";
 
 export default async function GameStudioPage() {
   const t = await getTranslations("gameStudio");

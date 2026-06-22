@@ -2,12 +2,12 @@ import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 
 import { createClient } from "@/lib/supabase/server";
-import { getProfile } from "@/lib/services/profiles";
+import { getProfile } from "@dodi/platform/services/profiles";
 import {
   decryptProviderKey,
   getModelConfig,
   normalizeModelConfig,
-} from "@/lib/services/ai-providers";
+} from "@dodi/platform/services/ai-providers";
 import {
   getOrCreateSession,
   submitTask,
@@ -22,14 +22,14 @@ import {
   failAgentSession,
   listAgentSessions,
   getActiveAgentSession,
-} from "@/lib/services/agent-sessions";
+} from "@dodi/platform/services/agent-sessions";
 import {
   createCustomGame,
   replaceGameSharings,
   updateCustomGame,
-} from "@/lib/services/games";
-import { sanitizeGameBundle } from "@/lib/game-sanitizer";
-import { createLogger } from "@/lib/logger";
+} from "@dodi/platform/services/games";
+import { sanitizeGameBundle } from "@dodi/platform/game-sanitizer";
+import { createLogger } from "@dodi/platform/logger";
 import type { AgentTaskRequest, AgentCodeResult } from "@dodi/types/tasks";
 import type { AgentProgressEvent } from "@dodi/types/agent-progress";
 import type { SupabaseClient } from "@supabase/supabase-js";

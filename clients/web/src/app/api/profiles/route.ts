@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 
 import { createClient } from "@/lib/supabase/server";
-import { createProfile, listProfiles } from "@/lib/services/profiles";
+import { createProfile, listProfiles } from "@dodi/platform/services/profiles";
 import { generateSocialId } from "@/lib/social-id";
 
 const CreateProfileSchema = z.object({

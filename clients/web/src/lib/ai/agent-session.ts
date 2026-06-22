@@ -13,7 +13,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { createLogger } from "@/lib/logger";
+import { createLogger } from "@dodi/platform/logger";
 import { buildAgentSystemPrompt } from "@/lib/ai/agent-system-prompt";
 import {
   AGENT_TOOLS,
@@ -26,7 +26,7 @@ import {
   updateAgentSessionProgress,
   completeAgentSession,
   failAgentSession,
-} from "@/lib/services/agent-sessions";
+} from "@dodi/platform/services/agent-sessions";
 import type { Database, AgentSessionResult } from "@dodi/types/database";
 import type {
   AgentTaskRequest,

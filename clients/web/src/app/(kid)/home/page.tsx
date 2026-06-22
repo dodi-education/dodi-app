@@ -1,8 +1,8 @@
 import { cookies } from "next/headers";
 
 import { createClient } from "@/lib/supabase/server";
-import { getProfile } from "@/lib/services/profiles";
-import { hasAnyProvider } from "@/lib/services/ai-providers";
+import { getProfile } from "@dodi/platform/services/profiles";
+import { hasAnyProvider } from "@dodi/platform/services/ai-providers";
 import { DodiFullHome } from "@/components/dodi/dodi-full-home";
 
 export default async function KidHomePage() {

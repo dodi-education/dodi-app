@@ -4,10 +4,10 @@ import { getTranslations } from "next-intl/server";
 
 import { GamePlayView } from "@/components/games/game-play-view";
 import { createClient } from "@/lib/supabase/server";
-import { getGame, isGameVisibleToProfile } from "@/lib/services/games";
-import { getProfile } from "@/lib/services/profiles";
-import { logMemoryEvent } from "@/lib/services/system-logs";
-import { getTranslation, applyTranslation } from "@/lib/services/game-translations";
+import { getGame, isGameVisibleToProfile } from "@dodi/platform/services/games";
+import { getProfile } from "@dodi/platform/services/profiles";
+import { logMemoryEvent } from "@dodi/platform/services/system-logs";
+import { getTranslation, applyTranslation } from "@dodi/platform/services/game-translations";
 import { coerceProgressKind, coerceSuccessCriteria } from "@/lib/services/game-generation";
 
 interface RouteContext {

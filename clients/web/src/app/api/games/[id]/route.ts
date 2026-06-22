@@ -2,17 +2,17 @@ import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 
 import { createClient } from "@/lib/supabase/server";
-import { sanitizeGameBundle } from "@/lib/game-sanitizer";
+import { sanitizeGameBundle } from "@dodi/platform/game-sanitizer";
 import type { GameUpdate, Json } from "@dodi/types/database";
 import {
   deleteCustomGame,
   getGame,
   replaceGameSharings,
   updateCustomGame,
-} from "@/lib/services/games";
+} from "@dodi/platform/services/games";
 import { mapSuccessDefinition } from "@/lib/services/game-generation";
-import { getTranslation, applyTranslation } from "@/lib/services/game-translations";
-import { createLogger } from "@/lib/logger";
+import { getTranslation, applyTranslation } from "@dodi/platform/services/game-translations";
+import { createLogger } from "@dodi/platform/logger";
 
 const log = createLogger("game-update");
 

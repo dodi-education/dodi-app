@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { createLogger } from "@/lib/logger";
+import { createLogger } from "../logger";
 import type {
   Database,
   AgentSessionRow,

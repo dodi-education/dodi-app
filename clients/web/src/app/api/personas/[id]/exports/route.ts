@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { createClient } from "@/lib/supabase/server";
-import { getPersona } from "@/lib/services/personas";
+import { getPersona } from "@dodi/platform/services/personas";
 
 interface RouteContext {
   params: Promise<{ id: string }>;

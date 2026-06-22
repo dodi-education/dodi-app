@@ -7,7 +7,7 @@ import { KidViewButton } from "@/components/parent/kid-view-button";
 import { SignOutButton } from "@/components/parent/sign-out-button";
 import { BottomNav, SidebarNav } from "@/components/shared/sidebar-nav";
 import { VaultGate } from "@/components/vault/vault-gate";
-import { getAccount } from "@/lib/services/accounts";
+import { getAccount } from "@dodi/platform/services/accounts";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function ParentLayout({

@@ -5,7 +5,7 @@ import {
   type StudioGame,
 } from "@/components/parent/games/game-studio";
 import { createClient } from "@/lib/supabase/server";
-import { getGame, getGameSharing } from "@/lib/services/games";
+import { getGame, getGameSharing } from "@dodi/platform/services/games";
 import { coerceProgressKind } from "@/lib/services/game-generation";
 import { isUnbuiltBundle } from "@/lib/games/placeholder";
 

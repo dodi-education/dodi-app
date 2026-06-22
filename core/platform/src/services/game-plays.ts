@@ -10,7 +10,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database, GamePlay, GamePlayInsert, Json } from "@dodi/types/database";
-import type { MetricsSummary, ProgressKind } from "@/lib/games/success";
+import type { MetricsSummary, ProgressKind } from "@dodi/types/success";
 
 type Client = SupabaseClient<Database>;
 

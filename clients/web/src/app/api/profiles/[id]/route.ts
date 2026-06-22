@@ -6,7 +6,7 @@ import {
   deleteProfile,
   getProfile,
   updateProfile,
-} from "@/lib/services/profiles";
+} from "@dodi/platform/services/profiles";
 
 const UpdateProfileSchema = z.object({
   // Personal fields (display_name, birthdate, parent_notes) arrive as opaque

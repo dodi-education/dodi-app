@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 
 import { createClient } from "@/lib/supabase/server";
-import { createPersona, listPersonas } from "@/lib/services/personas";
+import { createPersona, listPersonas } from "@dodi/platform/services/personas";
 
 const CreatePersonaSchema = z.object({
   name: z.string().min(1).max(100),

@@ -9,11 +9,11 @@ import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 
 import { createClient } from "@/lib/supabase/server";
-import { createLogger } from "@/lib/logger";
+import { createLogger } from "@dodi/platform/logger";
 import {
   getStoredVaultKeys,
   setStoredVaultKeys,
-} from "@/lib/services/vault-keys";
+} from "@dodi/platform/services/vault-keys";
 import type { StoredVaultKeys } from "@dodi/vault";
 
 const log = createLogger("vault-keys");

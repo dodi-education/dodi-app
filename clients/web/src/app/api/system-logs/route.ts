@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { createClient } from "@/lib/supabase/server";
-import { listSystemLogs } from "@/lib/services/system-logs";
+import { listSystemLogs } from "@dodi/platform/services/system-logs";
 
 export async function GET(request: Request): Promise<NextResponse> {
   const supabase = await createClient();
