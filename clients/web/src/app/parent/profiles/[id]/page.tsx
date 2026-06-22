@@ -20,7 +20,7 @@ import { Input } from "@/components/ui/input";
 import { PersonaSelector } from "@/components/parent/persona-selector";
 import { locales, type Locale } from "@/i18n/config";
 import { generateSocialId } from "@/lib/social-id";
-import { encryptProfileFields } from "@/lib/vault";
+import { encryptProfileFields } from "@dodi/vault";
 import { useProfileStore } from "@/stores/profile-store";
 import { useVaultStore } from "@/stores/vault-store";
 

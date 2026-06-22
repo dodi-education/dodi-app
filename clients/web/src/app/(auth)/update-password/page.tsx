@@ -18,7 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { isValidBackupPhrase } from "@dodi/crypto";
 import { createClient } from "@/lib/supabase/client";
-import { fetchVaultKeys } from "@/lib/vault/client-api";
+import { fetchVaultKeys } from "@/lib/vault-client";
 import { useVaultStore } from "@/stores/vault-store";
 
 /**

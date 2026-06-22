@@ -39,7 +39,7 @@ vi.mock("@/stores/vault-store", () => ({
   useVaultStore: { getState: () => ({ session: {} }) },
 }));
 
-vi.mock("@/lib/vault", () => ({
+vi.mock("@dodi/vault", () => ({
   decryptPersona: (_session: unknown, p: Record<string, unknown>) => ({
     ...p,
     soul: "SOUL",

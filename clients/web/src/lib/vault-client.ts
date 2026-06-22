@@ -2,7 +2,7 @@
  * Browser-side calls to the vault-keys endpoint. The blobs are opaque; only the
  * client ever derives the VMK from them.
  */
-import type { StoredVaultKeys } from "./types";
+import type { StoredVaultKeys } from "@dodi/vault";
 
 /** Pull the server's `{ error }` message out of a failed response, if any. */
 async function errorDetail(res: Response): Promise<string> {

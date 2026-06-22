@@ -33,7 +33,7 @@ vi.mock("@/lib/ai/voice-session", () => ({
   getActivePersona: async () => ({ soul: "SOUL" }),
 }));
 
-vi.mock("@/lib/vault", () => ({
+vi.mock("@dodi/vault", () => ({
   encryptProfileFields: (_s: unknown, fields: { memory?: string | null }) => ({
     memory: `enc:${fields.memory}`,
   }),

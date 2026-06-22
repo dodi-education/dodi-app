@@ -16,7 +16,7 @@ import {
 } from "@/lib/ai/memory-prompt";
 import { AI_PROVIDERS } from "@/lib/ai/providers";
 import { getActivePersona } from "@/lib/ai/voice-session";
-import { encryptProfileFields } from "@/lib/vault";
+import { encryptProfileFields } from "@dodi/vault";
 import { useProfileStore } from "@/stores/profile-store";
 import { useProvidersStore } from "@/stores/providers-store";
 import { useVaultStore } from "@/stores/vault-store";

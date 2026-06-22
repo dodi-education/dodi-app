@@ -13,7 +13,7 @@ import {
   buildHomeVoiceContext,
   isTodayBirthday,
 } from "@/lib/services/dodi-context";
-import { decryptPersona } from "@/lib/vault";
+import { decryptPersona } from "@dodi/vault";
 import { useProfileStore } from "@/stores/profile-store";
 import { useProvidersStore } from "@/stores/providers-store";
 import { useVaultStore } from "@/stores/vault-store";

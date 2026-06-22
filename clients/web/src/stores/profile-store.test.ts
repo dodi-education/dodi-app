@@ -50,7 +50,7 @@ const { vaultMock } = vi.hoisted(() => {
 vi.mock("@/stores/vault-store", () => ({ useVaultStore: vaultMock }));
 
 // Passthrough crypto — we only care about list population, not field decryption.
-vi.mock("@/lib/vault/profile-crypto", () => ({
+vi.mock("@dodi/vault/profile-crypto", () => ({
   decryptProfile: (_session: unknown, row: Record<string, unknown>) => ({
     ...row,
     display_name: row.display_name ?? "Kid",

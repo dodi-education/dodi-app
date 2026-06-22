@@ -11,7 +11,7 @@ import { PageHead, Section } from "@/components/parent/section";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { locales, type Locale } from "@/i18n/config";
-import { encryptProfileFields } from "@/lib/vault";
+import { encryptProfileFields } from "@dodi/vault";
 import { useProfileStore } from "@/stores/profile-store";
 import { useVaultStore } from "@/stores/vault-store";
 

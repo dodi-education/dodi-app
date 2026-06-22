@@ -23,8 +23,8 @@ import {
   unlockVaultWithDevice,
   unlockVaultWithPassword,
   unlockVaultWithPhrase,
-} from "@/lib/vault";
-import { fetchVaultKeys, saveVaultKeys } from "@/lib/vault/client-api";
+} from "@dodi/vault";
+import { fetchVaultKeys, saveVaultKeys } from "@/lib/vault-client";
 
 export type VaultStatus =
   | "idle"

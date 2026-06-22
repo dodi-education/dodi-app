@@ -14,7 +14,7 @@ import {
   getStoredVaultKeys,
   setStoredVaultKeys,
 } from "@/lib/services/vault-keys";
-import type { StoredVaultKeys } from "@/lib/vault";
+import type { StoredVaultKeys } from "@dodi/vault";
 
 const log = createLogger("vault-keys");
 
