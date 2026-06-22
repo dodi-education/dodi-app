@@ -2,7 +2,6 @@
   "name": "@dodi/platform",
   "version": "0.0.0",
   "private": true,
-  "type": "module",
   "exports": {
     ".": "./src/index.ts",
     "./logger": "./src/logger.ts",
@@ -13,18 +12,32 @@
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "scripts": {
+    "dev": "next dev --port 3001",
+    "build": "next build",
+    "start": "next start --port 3001",
+    "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
     "@dodi/ai": "workspace:*",
+    "@dodi/crypto": "workspace:*",
+    "@dodi/protocol": "workspace:*",
     "@dodi/types": "workspace:*",
     "@dodi/vault": "workspace:*",
-    "@supabase/supabase-js": "2.98.0"
+    "@supabase/supabase-js": "2.98.0",
+    "next": "16.1.6",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.1.6",
     "typescript": "^5",
     "vitest": "^4.1.8"
   }
