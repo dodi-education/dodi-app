@@ -6,39 +6,55 @@ import { createLogger } from "@/lib/logger";
 import { getProfile } from "@/lib/services/profiles";
 
 const log = createLogger("game-create");
-import { getGame } from "@/lib/services/games";
 import {
   createCustomGame,
   listGames,
+  replaceGameSharings,
 } from "@/lib/services/games";
-import { generateCustomGame } from "@/lib/services/game-generation";
-import { logMemoryEvent } from "@/lib/services/system-logs";
+import { UNBUILT_GAME_PLACEHOLDER } from "@/lib/games/placeholder";
 import {
-  getTranslation,
   getTranslationsForGames,
   applyTranslation,
 } from "@/lib/services/game-translations";
 
+/** Extract a useful message from an Error or a Supabase PostgrestError-like object. */
+function describeError(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  if (e && typeof e === "object") {
+    const o = e as Record<string, unknown>;
+    const parts = [o.message, o.details, o.hint].filter(
+      (x): x is string => typeof x === "string" && x.length > 0,
+    );
+    if (parts.length) return parts.join(" — ");
+    if (typeof o.code === "string") return `Database error ${o.code}`;
+  }
+  return "Failed to save game";
+}
+
+/**
+ * POST body — create a game. The code comes from one of:
+ *  - `codeBundle` → an already-built bundle is persisted as-is.
+ *  - neither   → a "not built yet" placeholder (built later via the parent studio).
+ * Publication is just `isActive`; lifecycle ("built yet?") is read from the
+ * bundle's marker, not a status field. Updating a game is `PATCH /api/games/:id`.
+ */
 const CreateGameSchema = z.object({
   profileId: z.string().uuid(),
-  prompt: z.string().min(2).max(5000),
-  baseGameId: z.string().uuid().optional(),
+  codeBundle: z.string().optional(),
+  title: z.string().trim().min(1).max(200).optional(),
+  description: z.string().max(5000).optional(),
+  tags: z.array(z.string().max(50)).max(20).optional(),
+  markdown: z.string().max(100000).optional(),
+  learningGoal: z.string().max(2000).optional(),
+  successDefinition: z.string().max(2000).optional(),
+  isActive: z.boolean().optional(),
+  audience: z
+    .object({
+      isFamily: z.boolean(),
+      audienceIds: z.array(z.string().uuid()),
+    })
+    .optional(),
 });
-
-function getAgeFromBirthdate(birthdate: string | null): number | undefined {
-  if (!birthdate) return undefined;
-  const birth = new Date(birthdate);
-  if (Number.isNaN(birth.getTime())) return undefined;
-
-  const now = new Date();
-  let age = now.getFullYear() - birth.getFullYear();
-  const monthDiff = now.getMonth() - birth.getMonth();
-  if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < birth.getDate())) {
-    age -= 1;
-  }
-
-  return age > 0 ? age : undefined;
-}
 
 export async function GET(request: Request): Promise<NextResponse> {
   const supabase = await createClient();
@@ -53,7 +69,6 @@ export async function GET(request: Request): Promise<NextResponse> {
   const { searchParams } = new URL(request.url);
   const profileId = searchParams.get("profileId") ?? undefined;
   const search = searchParams.get("search") ?? undefined;
-  const subject = searchParams.get("subject") ?? undefined;
   const includeSystem = searchParams.get("includeSystem") !== "false";
   const tags = searchParams.getAll("tag").filter(Boolean);
 
@@ -71,7 +86,6 @@ export async function GET(request: Request): Promise<NextResponse> {
       profileId,
       includeSystem,
       search,
-      subject,
       tags,
     });
 
@@ -112,9 +126,8 @@ export async function POST(request: Request): Promise<NextResponse> {
     );
   }
 
-  const { profileId, prompt, baseGameId } = parsed.data;
-  log.info("creation_requested", { profileId, promptLength: prompt.length, baseGameId });
-  log.debug("creation_prompt", { profileId, prompt });
+  const data = parsed.data;
+  const { profileId } = data;
 
   try {
     const profile = await getProfile(supabase, profileId);
@@ -122,72 +135,41 @@ export async function POST(request: Request): Promise<NextResponse> {
       return NextResponse.json({ error: "Profile not found" }, { status: 404 });
     }
 
-    let generationPrompt = prompt;
-    if (baseGameId) {
-      const baseGame = await getGame(supabase, baseGameId);
-      if (!baseGame) {
-        return NextResponse.json({ error: "Base game not found" }, { status: 404 });
-      }
-      const baseTranslation = await getTranslation(supabase, baseGame.id, profile.language);
-      const translatedBase = applyTranslation(baseGame, baseTranslation);
-      generationPrompt = [
-        `Create a remix inspired by the base game \"${translatedBase.title}\".`,
-        `Base game description: ${translatedBase.description}`,
-        "",
-        `Kid request: ${prompt}`,
-      ].join("\n");
+    // Persist a provided bundle, or a "not built yet" placeholder when none.
+    // `createCustomGame` sanitizes the bundle; the placeholder's marker lets
+    // the UI tell an unbuilt game from a real one (see lib/games/placeholder).
+    if (!data.title) {
+      return NextResponse.json({ error: "title is required" }, { status: 400 });
     }
-
-    const generated = await generateCustomGame(
-      supabase,
-      user.id,
-      generationPrompt,
-      {
-        profileName: profile.display_name,
-        age: getAgeFromBirthdate(profile.birthdate),
-        language: profile.language,
-      },
-    );
-
-    log.info("game_generated", {
-      profileId,
-      title: generated.title,
-      codeSizeChars: generated.codeBundle.length,
-    });
-
+    const hasCode = !!data.codeBundle;
     const created = await createCustomGame(supabase, {
       accountId: user.id,
       profileId,
-      sourceGameId: baseGameId ?? null,
-      title: generated.title,
-      description: generated.description,
-      subject: generated.subject,
-      difficulty: generated.difficulty,
-      targetAgeMin: generated.targetAgeMin,
-      targetAgeMax: generated.targetAgeMax,
-      estimatedDurationMinutes: generated.estimatedDurationMinutes,
-      tags: generated.tags,
-      codeBundle: generated.codeBundle,
-      markdown: generated.markdown,
-      metadata: generated.metadata,
-      createdBy: "ai",
+      title: data.title,
+      description: data.description,
+      tags: data.tags,
+      markdown: data.markdown,
+      codeBundle: hasCode ? data.codeBundle! : UNBUILT_GAME_PLACEHOLDER,
+      learningGoal: data.learningGoal ?? "",
+      successDefinition: data.successDefinition ?? "",
+      progressKind: data.successDefinition?.trim() ? "goal" : "open",
+      createdBy: "parent",
+      // Real code is playable; an unbuilt placeholder is not (caller may override).
+      isActive: data.isActive ?? hasCode,
     });
+
+    if (data.audience) {
+      await replaceGameSharings(supabase, created.id, user.id, {
+        family: data.audience.isFamily,
+        profileIds: data.audience.audienceIds,
+      });
+    }
+    log.info("game_saved", { profileId, gameId: created.id, built: hasCode });
 
     log.info("game_created", { profileId, gameId: created.id, title: created.title });
-
-    logMemoryEvent(supabase, {
-      profile_id: profile.id,
-      account_id: user.id,
-      persona_id: profile.active_persona_id,
-      event: "game_created",
-      message: `Created game: ${created.title}`,
-    }).catch(() => {
-      // non-blocking
-    });
-
     return NextResponse.json(created, { status: 201 });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to create game";
+    const message = describeError(error);
     log.error("creation_failed", { profileId, error: message });
     return NextResponse.json({ error: message }, { status: 500 });
   }

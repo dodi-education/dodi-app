@@ -4,6 +4,8 @@
  * Defines the request/response shapes for the coding agent API.
  */
 
+import type { ProgressKind, SuccessCriteria } from "@/lib/games/success";
+
 export type AgentTaskType = "generate_game" | "update_game" | "read_game_state";
 
 // ---------------------------------------------------------------------------
@@ -13,9 +15,11 @@ export type AgentTaskType = "generate_game" | "update_game" | "read_game_state";
 export interface GenerateGamePayload {
   prompt: string;
   title?: string;
-  subject?: string;
-  difficulty?: string;
   tags?: string[];
+  /** Parent's plain-language learning goal (what the game should help with). */
+  learningGoal?: string;
+  /** Parent's plain-language success definition (how Dodi knows the child succeeded). */
+  successDefinition?: string;
 }
 
 export interface UpdateGamePayload {
@@ -23,6 +27,8 @@ export interface UpdateGamePayload {
   existingCode: string;
   existingMarkdown?: string;
   title?: string;
+  learningGoal?: string;
+  successDefinition?: string;
 }
 
 export interface ReadGameStatePayload {
@@ -41,6 +47,11 @@ export interface AgentTaskRequest {
     name: string;
     age?: number;
     language: string;
+    /**
+     * Scrubbing-free learning context (memory + parent notes) for the audience
+     * kid(s), used to shape game design. Never echoed verbatim into game content.
+     */
+    learningContext?: string;
   };
   payload: GenerateGamePayload | UpdateGamePayload | ReadGameStatePayload;
 }
@@ -53,16 +64,22 @@ export interface AgentCodeResult {
   taskType: "generate_game" | "update_game";
   title: string;
   description: string;
-  subject: string;
-  difficulty: string;
   tags: string[];
   codeBundle: string;
   markdown: string;
   metadata: Record<string, unknown>;
+  learningGoal: string;
+  successDefinition: string;
+  successCriteria: SuccessCriteria;
+  progressKind: ProgressKind;
+  /** Short, friendly recap of what the agent built or changed (bullet lines). */
+  changeSummary: string;
   validationPassed: boolean;
   iterationCount: number;
   /** Game ID after server-side persistence (create or update). */
   savedGameId?: string;
+  /** Set when the game was generated but could not be saved (surfaced to the user). */
+  saveError?: string;
 }
 
 export interface AgentAnalysisResult {

@@ -3,25 +3,39 @@ import { z } from "zod/v4";
 
 import { createClient } from "@/lib/supabase/server";
 import { sanitizeGameBundle } from "@/lib/game-sanitizer";
-import type { GameUpdate } from "@/types/database";
+import type { GameUpdate, Json } from "@/types/database";
 import {
   deleteCustomGame,
   getGame,
+  replaceGameSharings,
   updateCustomGame,
 } from "@/lib/services/games";
+import { mapSuccessDefinition } from "@/lib/services/game-generation";
 import { getTranslation, applyTranslation } from "@/lib/services/game-translations";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("game-update");
 
 const UpdateGameSchema = z.object({
   title: z.string().min(1).max(120).optional(),
   description: z.string().max(5000).optional(),
-  subject: z.string().min(1).max(60).optional(),
-  difficulty: z.string().min(1).max(40).optional(),
   target_age_min: z.number().int().min(1).max(25).optional(),
   target_age_max: z.number().int().min(1).max(25).optional(),
   estimated_duration_minutes: z.number().int().min(1).max(180).optional(),
   tags: z.array(z.string().min(1).max(40)).max(20).optional(),
   code_bundle: z.string().min(1).optional(),
+  markdown: z.string().max(100000).optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
+  learning_goal: z.string().max(2000).optional(),
+  success_definition: z.string().max(2000).optional(),
+  profile_id: z.string().uuid().nullable().optional(),
+  is_active: z.boolean().optional(),
+  audience: z
+    .object({
+      isFamily: z.boolean(),
+      audienceIds: z.array(z.string().uuid()),
+    })
+    .optional(),
 });
 
 interface RouteContext {
@@ -98,20 +112,56 @@ export async function PATCH(
       );
     }
 
-    const updates: GameUpdate = {
-      ...parsed.data,
-      metadata: parsed.data.metadata as GameUpdate["metadata"],
-    };
+    // `audience` lives in the game_sharings table; `metadata` is a column that
+    // we shallow-merge. `is_active` / `profile_id` flow through as plain columns.
+    const { audience, metadata: rawMetadata, ...columnUpdates } = parsed.data;
+    const updates: GameUpdate = { ...columnUpdates };
 
-    if (parsed.data.metadata === undefined) {
-      delete updates.metadata;
+    if (rawMetadata !== undefined) {
+      const existingMeta =
+        existing.metadata && typeof existing.metadata === "object" && !Array.isArray(existing.metadata)
+          ? (existing.metadata as Record<string, unknown>)
+          : {};
+      updates.metadata = { ...existingMeta, ...rawMetadata } as GameUpdate["metadata"];
     }
 
     if (updates.code_bundle) {
       updates.code_bundle = sanitizeGameBundle(updates.code_bundle).code;
     }
 
-    const game = await updateCustomGame(supabase, id, updates);
+    // When the success definition changes, re-derive the structured criteria so
+    // the host can evaluate it — without regenerating the game code.
+    if (parsed.data.success_definition !== undefined) {
+      try {
+        const mapped = await mapSuccessDefinition(
+          supabase,
+          user.id,
+          parsed.data.success_definition,
+          { learningGoal: parsed.data.learning_goal ?? existing.learning_goal },
+        );
+        updates.success_criteria = mapped.successCriteria as unknown as Json;
+        updates.progress_kind = mapped.progressKind;
+      } catch (mapErr) {
+        // Persist the text even if mapping fails; criteria stay as-is.
+        log.warn("success_mapping_failed", {
+          gameId: id,
+          error: mapErr instanceof Error ? mapErr.message : "unknown",
+        });
+      }
+    }
+
+    const game =
+      Object.keys(updates).length > 0
+        ? await updateCustomGame(supabase, id, updates)
+        : existing;
+
+    if (audience) {
+      await replaceGameSharings(supabase, id, user.id, {
+        family: audience.isFamily,
+        profileIds: audience.audienceIds,
+      });
+    }
+
     return NextResponse.json(game);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to update game";

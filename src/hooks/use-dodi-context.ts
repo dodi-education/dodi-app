@@ -33,16 +33,11 @@ export function useDodiContext({
   // Stable reference for context object to avoid re-triggering on every render
   const contextRef = useRef(context);
   const contextKey =
-    context.type === "game"
-      ? `game:${context.gameId}`
-      : context.type === "creating"
-        ? context.gameId ? `creating:${context.gameId}` : "creating"
-        : context.type;
+    context.type === "game" ? `game:${context.gameId}` : context.type;
 
   // Update ref when context key changes
   if (
     (context.type === "game" && contextRef.current.type === "game" && context.gameId !== contextRef.current.gameId) ||
-    (context.type === "creating" && contextRef.current.type === "creating" && context.gameId !== contextRef.current.gameId) ||
     context.type !== contextRef.current.type
   ) {
     contextRef.current = context;

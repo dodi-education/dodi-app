@@ -10,7 +10,6 @@ import {
   RowMain,
   RowMeta,
   RowTitle,
-  StackField,
 } from "@/components/parent/rows";
 import { SaveRow } from "@/components/parent/save-row";
 import { Section } from "@/components/parent/section";
@@ -40,7 +39,7 @@ import { validateProviderKey } from "@/lib/ai/validate-key";
 import { useProvidersStore } from "@/stores/providers-store";
 import type { AIProviderId, AccountModelConfig } from "@/types/ai";
 
-const THINKING_PROVIDER_FALLBACK = "__fallback__";
+const THINKING_PROVIDER_NONE = "__none__";
 
 export function AIProviderConfig() {
   const t = useTranslations("settings");
@@ -228,10 +227,6 @@ export function AIProviderConfig() {
 
   const activeProviderDef = AI_PROVIDERS.find((p) => p.id === voiceProvider);
   const activeThinkingProviderDef = AI_PROVIDERS.find((p) => p.id === thinkingProvider);
-  const voiceFallbackText =
-    voiceProvider && voiceModel
-      ? `${voiceProvider} / ${voiceModel}`
-      : t("gameModelFallbackMissingVoice");
 
   if (loading) {
     return (
@@ -462,9 +457,9 @@ export function AIProviderConfig() {
           <Section title={t("thinkingModel")}>
             <FieldRow label={t("thinkingProvider")}>
               <Select
-                value={thinkingProvider || THINKING_PROVIDER_FALLBACK}
+                value={thinkingProvider || THINKING_PROVIDER_NONE}
                 onValueChange={(value) => {
-                  if (value === THINKING_PROVIDER_FALLBACK) {
+                  if (value === THINKING_PROVIDER_NONE) {
                     setThinkingProvider("");
                     setThinkingModel("");
                     return;
@@ -482,7 +477,7 @@ export function AIProviderConfig() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={THINKING_PROVIDER_FALLBACK}>
+                  <SelectItem value={THINKING_PROVIDER_NONE}>
                     {t("thinkingProviderFallback")}
                   </SelectItem>
                   {providers
@@ -499,13 +494,7 @@ export function AIProviderConfig() {
               </Select>
             </FieldRow>
 
-            {!thinkingProvider ? (
-              <StackField>
-                <p className="text-[12.5px] text-muted-foreground">
-                  {t("thinkingModelFallbackHint", { voiceModel: voiceFallbackText })}
-                </p>
-              </StackField>
-            ) : activeThinkingProviderDef ? (
+            {thinkingProvider && activeThinkingProviderDef ? (
               <FieldRow label={t("thinkingModel")}>
                 <Select value={thinkingModel} onValueChange={setThinkingModel}>
                   <SelectTrigger className="w-full sm:w-[260px]">

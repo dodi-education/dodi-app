@@ -59,7 +59,7 @@ export function ProfilesGlance() {
           return (
             <Link
               key={profile.id}
-              href={`/profiles/${profile.id}`}
+              href={`/parent/profiles/${profile.id}`}
               className="block"
             >
               <Row clickable>

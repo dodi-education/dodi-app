@@ -4,8 +4,17 @@ import { type NextRequest, NextResponse } from "next/server";
 export async function updateSession(
   request: NextRequest,
 ): Promise<NextResponse> {
+  // Forward the request path so the i18n resolver (src/i18n/request.ts) can tell
+  // parent routes from kid routes — see resolve-locale.ts. Built fresh on each
+  // response so it also carries any cookies Supabase refreshes below.
+  const forwardedHeaders = () => {
+    const headers = new Headers(request.headers);
+    headers.set("x-pathname", request.nextUrl.pathname);
+    return headers;
+  };
+
   let supabaseResponse = NextResponse.next({
-    request,
+    request: { headers: forwardedHeaders() },
   });
 
   const supabase = createServerClient(
@@ -21,7 +30,7 @@ export async function updateSession(
             request.cookies.set(name, value),
           );
           supabaseResponse = NextResponse.next({
-            request,
+            request: { headers: forwardedHeaders() },
           });
           cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options),
@@ -63,7 +72,7 @@ export async function updateSession(
       pathname === "/reset-password")
   ) {
     const url = request.nextUrl.clone();
-    url.pathname = "/dashboard";
+    url.pathname = "/parent/dashboard";
     return NextResponse.redirect(url);
   }
 

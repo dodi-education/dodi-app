@@ -5,6 +5,10 @@ import type {
   GameToParentMessage,
   ParentToGameMessage,
 } from "@/types/games";
+import {
+  MetricsSummarySchema,
+  SuccessCriteriaSchema,
+} from "@/lib/games/success";
 
 const BridgeTokenSchema = z
   .string()
@@ -28,11 +32,28 @@ export const GameCommandSchema = z.object({
   payload: z.record(z.string(), JsonValueSchema).optional(),
 });
 
+const GameGoalSchema = z.object({
+  learningGoal: z.string(),
+  successDefinition: z.string(),
+  successCriteria: SuccessCriteriaSchema,
+  progressKind: z.enum(["goal", "open"]),
+});
+
 const ParentInitMessageSchema = z.object({
   type: z.literal("dodi:init"),
   token: BridgeTokenSchema,
   payload: z.object({
     gameId: z.string().uuid(),
+    goal: GameGoalSchema.optional(),
+  }),
+});
+
+const ParentSuccessMessageSchema = z.object({
+  type: z.literal("dodi:success"),
+  token: BridgeTokenSchema,
+  payload: z.object({
+    summary: z.string().optional(),
+    metrics: MetricsSummarySchema.optional(),
   }),
 });
 
@@ -77,6 +98,16 @@ const GameStateMessageSchema = z.object({
   payload: z.record(z.string(), JsonValueSchema),
 });
 
+const GameProgressMessageSchema = z.object({
+  type: z.literal("game:progress"),
+  token: BridgeTokenSchema,
+  payload: z.object({
+    progress: z.number(),
+    progressLabel: z.string().optional(),
+    metrics: MetricsSummarySchema.optional(),
+  }),
+});
+
 const GameEventMessageSchema = z.object({
   type: z.literal("game:event"),
   token: BridgeTokenSchema,
@@ -99,12 +130,14 @@ export const ParentToGameMessageSchema = z.discriminatedUnion("type", [
   ParentInitMessageSchema,
   ParentCommandMessageSchema,
   ParentGetStateMessageSchema,
+  ParentSuccessMessageSchema,
 ]);
 
 export const GameToParentMessageSchema = z.discriminatedUnion("type", [
   GameReadyMessageSchema,
   GameResultMessageSchema,
   GameStateMessageSchema,
+  GameProgressMessageSchema,
   GameEventMessageSchema,
   GameErrorMessageSchema,
 ]);

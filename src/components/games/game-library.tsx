@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -22,8 +21,7 @@ export function GameLibrary({ profileId }: GameLibraryProps) {
   const [error, setError] = useState<string | null>(null);
   const [games, setGames] = useState<Game[]>([]);
   const [search, setSearch] = useState(searchParams.get("search") ?? "");
-  const [subjectFilter, setSubjectFilter] = useState<string>(searchParams.get("subject") ?? "all");
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [tagFilter, setTagFilter] = useState<string>(searchParams.get("tag") ?? "all");
 
   const fetchGames = useCallback(async () => {
     setLoading(true);
@@ -50,10 +48,10 @@ export function GameLibrary({ profileId }: GameLibraryProps) {
     void fetchGames();
   }, [fetchGames]);
 
-  const subjectOptions = useMemo(() => {
+  const tagOptions = useMemo(() => {
     const values = new Set<string>();
     for (const game of games) {
-      values.add(game.subject);
+      for (const tag of game.tags) values.add(tag);
     }
     return Array.from(values).sort((a, b) => a.localeCompare(b));
   }, [games]);
@@ -62,7 +60,7 @@ export function GameLibrary({ profileId }: GameLibraryProps) {
     const normalizedSearch = search.trim().toLowerCase();
 
     return games.filter((game) => {
-      if (subjectFilter !== "all" && game.subject !== subjectFilter) {
+      if (tagFilter !== "all" && !game.tags.includes(tagFilter)) {
         return false;
       }
 
@@ -73,33 +71,10 @@ export function GameLibrary({ profileId }: GameLibraryProps) {
       const target = `${game.title} ${game.description} ${game.tags.join(" ")}`.toLowerCase();
       return target.includes(normalizedSearch);
     });
-  }, [games, search, subjectFilter]);
+  }, [games, search, tagFilter]);
 
   const systemGames = filteredGames.filter((game) => game.is_system);
   const customGames = filteredGames.filter((game) => !game.is_system);
-
-  async function handleDelete(game: Game) {
-    if (!confirm(t("confirmDelete", { title: game.title }))) return;
-
-    setDeletingId(game.id);
-    try {
-      const response = await fetch(`/api/games/${game.id}`, {
-        method: "DELETE",
-      });
-
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({ error: t("failedDelete") }));
-        throw new Error(data.error || t("failedDelete"));
-      }
-
-      setGames((prev) => prev.filter((entry) => entry.id !== game.id));
-    } catch (deleteError) {
-      const message = deleteError instanceof Error ? deleteError.message : t("failedDelete");
-      alert(message);
-    } finally {
-      setDeletingId(null);
-    }
-  }
 
   return (
     <div className="w-full max-w-5xl">
@@ -112,12 +87,6 @@ export function GameLibrary({ profileId }: GameLibraryProps) {
             {t("subtitle")}
           </p>
         </div>
-        <KidButton asChild>
-          <Link href="/games/new">
-            <Icon name="sparkles" size={17} stroke={2} />
-            {t("newGame")}
-          </Link>
-        </KidButton>
       </div>
 
       <div className="mt-4 mb-6 flex flex-wrap items-center gap-2">
@@ -134,20 +103,20 @@ export function GameLibrary({ profileId }: GameLibraryProps) {
         <KidButton
           variant="chip"
           size="sm"
-          active={subjectFilter === "all"}
-          onClick={() => setSubjectFilter("all")}
+          active={tagFilter === "all"}
+          onClick={() => setTagFilter("all")}
         >
-          {t("allSubjects")}
+          {t("allTags")}
         </KidButton>
-        {subjectOptions.map((subject) => (
+        {tagOptions.map((tag) => (
           <KidButton
-            key={subject}
+            key={tag}
             variant="chip"
             size="sm"
-            active={subjectFilter === subject}
-            onClick={() => setSubjectFilter(subject)}
+            active={tagFilter === tag}
+            onClick={() => setTagFilter(tag)}
           >
-            {subject}
+            {tag}
           </KidButton>
         ))}
       </div>
@@ -177,12 +146,7 @@ export function GameLibrary({ profileId }: GameLibraryProps) {
             ) : (
               <div className="grid gap-3.5 sm:grid-cols-[repeat(auto-fill,minmax(310px,1fr))]">
                 {customGames.map((game) => (
-                  <GameCard
-                    key={game.id}
-                    game={game}
-                    onDelete={handleDelete}
-                    isDeleting={deletingId === game.id}
-                  />
+                  <GameCard key={game.id} game={game} />
                 ))}
               </div>
             )}

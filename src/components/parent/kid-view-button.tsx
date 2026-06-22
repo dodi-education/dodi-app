@@ -9,7 +9,13 @@ export function KidViewButton({ compact = false }: { compact?: boolean }) {
   const t = useTranslations("nav");
   const router = useRouter();
 
-  async function handleSwitchToKid() {
+  async function handleSwitchToKid(e: React.MouseEvent<HTMLAnchorElement>) {
+    // Let the browser handle modified clicks (ctrl/cmd-click, middle-click,
+    // "open in new tab") natively instead of intercepting the navigation.
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) {
+      return;
+    }
+    e.preventDefault();
     // Fetch profiles to resolve active profile's language
     const response = await fetch("/api/profiles");
     if (response.ok) {
@@ -35,23 +41,25 @@ export function KidViewButton({ compact = false }: { compact?: boolean }) {
 
   if (compact) {
     return (
-      <button
+      <a
+        href="/home"
         onClick={handleSwitchToKid}
         className="flex items-center gap-1.5 whitespace-nowrap rounded-md border border-border-strong bg-card px-2 py-1.5 text-xs font-semibold text-foreground transition-colors hover:border-primary hover:text-primary"
       >
         <Icon name="games" size={14} />
         {t("kidView")}
-      </button>
+      </a>
     );
   }
 
   return (
-    <button
+    <a
+      href="/home"
       onClick={handleSwitchToKid}
       className="flex w-full items-center justify-center gap-2 whitespace-nowrap rounded-md border border-border-strong bg-card px-2.5 py-2 text-[13.5px] font-semibold text-foreground transition-colors hover:border-primary hover:text-primary"
     >
       <Icon name="games" size={15} />
       {t("openKidView")}
-    </button>
+    </a>
   );
 }

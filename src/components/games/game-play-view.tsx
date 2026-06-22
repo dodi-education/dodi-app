@@ -1,17 +1,32 @@
 "use client";
 
-import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 
-import { GameSandbox, type GameSandboxHandle } from "@/components/games/game-sandbox";
+import {
+  type GameProgressUpdate,
+  type GameSandboxHandle,
+} from "@/components/games/game-sandbox";
+import { GameStage } from "@/components/games/game-stage";
 import { GameViewShell } from "@/components/games/game-view-shell";
-import { Icon } from "@/components/shared/icon";
-import { KidButton } from "@/components/kid/kid-button";
+import { STAGE } from "@/lib/games/stage";
 import { gameDebug, gameDebugWarn } from "@/lib/games/debug";
+import {
+  evaluateSuccess,
+  isEmptyCriteria,
+  mergeMetrics,
+  type MetricsSummary,
+  type ProgressKind,
+  type SuccessCriteria,
+} from "@/lib/games/success";
 import { useDodiContext } from "@/hooks/use-dodi-context";
 import { useDodiSessionStore } from "@/stores/dodi-session-store";
-import type { GameToParentMessage, GameCommand } from "@/types/games";
+import type {
+  DodiProgressState,
+  GameCommand,
+  GameGoal,
+  GameToParentMessage,
+} from "@/types/games";
 
 interface GamePlayViewProps {
   gameId: string;
@@ -20,6 +35,10 @@ interface GamePlayViewProps {
   description: string;
   codeBundle: string;
   markdown: string;
+  learningGoal: string;
+  successDefinition: string;
+  successCriteria: SuccessCriteria;
+  progressKind: ProgressKind;
 }
 
 export function GamePlayView({
@@ -29,6 +48,10 @@ export function GamePlayView({
   description,
   codeBundle,
   markdown,
+  learningGoal,
+  successDefinition,
+  successCriteria,
+  progressKind,
 }: GamePlayViewProps) {
   const t = useTranslations("games");
 
@@ -46,10 +69,126 @@ export function GamePlayView({
   const updateGameState = useDodiSessionStore((s) => s.updateGameState);
   const setOnRunCommands = useDodiSessionStore((s) => s.setOnRunCommands);
   const setOnRequestSnapshot = useDodiSessionStore((s) => s.setOnRequestSnapshot);
+  const resetGameAssistance = useDodiSessionStore((s) => s.resetGameAssistance);
+
+  // ── Progress & success tracking ────────────────────────────────────────
+  const goal = useMemo<GameGoal | undefined>(() => {
+    if (progressKind !== "goal" || isEmptyCriteria(successCriteria)) return undefined;
+    return { learningGoal, successDefinition, successCriteria, progressKind };
+  }, [progressKind, successCriteria, learningGoal, successDefinition]);
+
+  const playIdRef = useRef<string | null>(null);
+  const succeededRef = useRef(false);
+  const latestMetricsRef = useRef<MetricsSummary>({});
+  const latestProgressRef = useRef(0);
+
+  const patchPlay = useCallback(
+    (body: Record<string, unknown>, keepalive = false): void => {
+      const id = playIdRef.current;
+      if (!id) return;
+      try {
+        void fetch(`/api/games/${gameId}/plays/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+          keepalive,
+        });
+      } catch {
+        // Persistence must never block gameplay.
+      }
+    },
+    [gameId],
+  );
+
+  // Merge in the host-observed "asking Dodi" count, evaluate, and record success.
+  const evaluateAndRecord = useCallback(
+    (metrics: MetricsSummary, progress: number): void => {
+      latestMetricsRef.current = metrics;
+      latestProgressRef.current = progress;
+      if (!goal || succeededRef.current) return;
+
+      const dodiTurns = useDodiSessionStore.getState().gameAssistanceCount;
+      const merged = mergeMetrics(metrics, { dodiTurns });
+      const result = evaluateSuccess(goal.successCriteria, merged);
+      if (result.succeeded) {
+        succeededRef.current = true;
+        gameDebug("playview", "Success criteria met", merged);
+        sandboxRef.current?.notifySuccess({
+          summary: goal.successDefinition,
+          metrics: merged,
+        });
+        patchPlay({ succeeded: true, finalProgress: progress, metrics: merged });
+      }
+    },
+    [goal, patchPlay],
+  );
+
+  const ingestDodiState = useCallback(
+    (state: Record<string, unknown>): void => {
+      const dodi = state.dodi as DodiProgressState | undefined;
+      if (!dodi || typeof dodi !== "object") return;
+      const metrics = { ...latestMetricsRef.current, ...(dodi.metrics ?? {}) };
+      const progress =
+        typeof dodi.progress === "number" ? dodi.progress : latestProgressRef.current;
+      evaluateAndRecord(metrics, progress);
+    },
+    [evaluateAndRecord],
+  );
+
+  const handleProgress = useCallback(
+    (update: GameProgressUpdate): void => {
+      const metrics = { ...latestMetricsRef.current, ...(update.metrics ?? {}) };
+      evaluateAndRecord(metrics, update.progress);
+    },
+    [evaluateAndRecord],
+  );
+
+  const handleStateChange = useCallback(
+    (state: Record<string, unknown>) => {
+      updateGameState(state);
+      ingestDodiState(state);
+    },
+    [updateGameState, ingestDodiState],
+  );
 
   const handleCommandResult = useCallback((state: Record<string, unknown>) => {
     updateGameState(state, true);
-  }, [updateGameState]);
+    ingestDodiState(state);
+  }, [updateGameState, ingestDodiState]);
+
+  // Start a game_plays record on mount; finalize it on unmount.
+  useEffect(() => {
+    resetGameAssistance();
+    succeededRef.current = false;
+    latestMetricsRef.current = {};
+    latestProgressRef.current = 0;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(`/api/games/${gameId}/plays`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ profileId }),
+        });
+        if (!res.ok) return;
+        const data = (await res.json()) as { playId?: string };
+        if (!cancelled && data.playId) playIdRef.current = data.playId;
+      } catch {
+        // Non-critical.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      const dodiTurns = useDodiSessionStore.getState().gameAssistanceCount;
+      const merged = mergeMetrics(latestMetricsRef.current, { dodiTurns });
+      patchPlay(
+        { finalProgress: latestProgressRef.current, metrics: merged, ended: true },
+        true,
+      );
+    };
+  }, [gameId, profileId, resetGameAssistance, patchPlay]);
 
   const logEvent = useCallback(async (event: string, message: string) => {
     try {
@@ -168,14 +307,6 @@ export function GamePlayView({
       backLabel={t("title")}
       title={title}
       description={description}
-      action={
-        <KidButton asChild variant="ghost" size="sm">
-          <Link href={`/games/${gameId}/edit`}>
-            <Icon name="refresh" size={14} />
-            {t("remixAction")}
-          </Link>
-        </KidButton>
-      }
     >
       {gameError && (
         <div className="mb-4 rounded-[14px] bg-danger-soft px-3 py-2 text-xs font-semibold text-danger">
@@ -183,17 +314,17 @@ export function GamePlayView({
         </div>
       )}
 
-      <div className="rounded-[20px] bg-white p-2 shadow-[0_2px_10px_rgba(34,56,78,0.05)]">
-        <GameSandbox
-          ref={sandboxRef}
-          gameId={gameId}
-          codeBundle={codeBundle}
-          className="h-[66vh] min-h-[440px] w-full rounded-xl border bg-white"
-          onStateChange={updateGameState}
-          onCommandResult={handleCommandResult}
-          onMessage={handleSandboxMessage}
-        />
-      </div>
+      <GameStage
+        sandboxRef={sandboxRef}
+        gameId={gameId}
+        codeBundle={codeBundle}
+        goal={goal}
+        reserved={STAGE.reservedKid}
+        onStateChange={handleStateChange}
+        onCommandResult={handleCommandResult}
+        onProgress={handleProgress}
+        onMessage={handleSandboxMessage}
+      />
     </GameViewShell>
   );
 }

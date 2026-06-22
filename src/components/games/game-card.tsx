@@ -3,48 +3,19 @@
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 
-import { Icon, type IconName } from "@/components/shared/icon";
+import { Icon } from "@/components/shared/icon";
 import { KidButton } from "@/components/kid/kid-button";
+import { tagStyle } from "@/components/parent/games/tag-style";
 import type { Game } from "@/types/database";
 
 interface GameCardProps {
   game: Game;
-  isDeleting?: boolean;
-  onDelete?: (game: Game) => void;
 }
 
-interface SubjectStyle {
-  bg: string;
-  fg: string;
-  icon: IconName;
-}
-
-const SUBJECT_STYLES: Record<string, SubjectStyle> = {
-  creativity: { bg: "#FDF1DC", fg: "#B0782A", icon: "feature_personal" },
-  art: { bg: "#FDF1DC", fg: "#B0782A", icon: "feature_personal" },
-  math: { bg: "#E8F0FC", fg: "#2F6BD8", icon: "feature_smart" },
-  counting: { bg: "#EFE9FA", fg: "#7456C4", icon: "feature_smart" },
-  stories: { bg: "#E9F5F0", fg: "#2E8B6A", icon: "feature_games" },
-  reading: { bg: "#E9F5F0", fg: "#2E8B6A", icon: "feature_games" },
-};
-
-const FALLBACK_STYLE: SubjectStyle = {
-  bg: "#EAF1FC",
-  fg: "#2F6BD8",
-  icon: "games",
-};
-
-function subjectStyle(subject: string): SubjectStyle {
-  return SUBJECT_STYLES[subject.toLowerCase()] ?? FALLBACK_STYLE;
-}
-
-export function GameCard({
-  game,
-  isDeleting = false,
-  onDelete,
-}: GameCardProps) {
+export function GameCard({ game }: GameCardProps) {
   const t = useTranslations("games");
-  const style = subjectStyle(game.subject);
+  // Style the tile from the game's primary tag; render up to three tag chips.
+  const style = tagStyle(game.tags[0] ?? "");
 
   return (
     <div className="flex flex-col gap-2.5 rounded-[20px] bg-white p-[18px] pb-4 shadow-[0_2px_10px_rgba(34,56,78,0.05)]">
@@ -70,15 +41,18 @@ export function GameCard({
       </p>
 
       <div className="flex flex-wrap gap-1.5">
-        <span
-          className="rounded-full px-2.5 py-0.5 text-[11.5px] font-extrabold"
-          style={{ background: style.bg, color: style.fg }}
-        >
-          {game.subject}
-        </span>
-        <span className="rounded-full bg-muted px-2.5 py-0.5 text-[11.5px] font-extrabold text-muted-foreground">
-          {game.difficulty}
-        </span>
+        {game.tags.slice(0, 3).map((tag) => {
+          const ts = tagStyle(tag);
+          return (
+            <span
+              key={tag}
+              className="rounded-full px-2.5 py-0.5 text-[11.5px] font-extrabold capitalize"
+              style={{ background: ts.bg, color: ts.fg }}
+            >
+              {tag}
+            </span>
+          );
+        })}
         <span className="rounded-full bg-muted px-2.5 py-0.5 text-[11.5px] font-extrabold text-muted-foreground">
           {game.estimated_duration_minutes} min
         </span>
@@ -91,25 +65,6 @@ export function GameCard({
             {t("playAction")}
           </Link>
         </KidButton>
-        <KidButton asChild variant="ghost" size="sm">
-          <Link href={`/games/${game.id}/edit`}>
-            <Icon name="refresh" size={14} />
-            {t("remixAction")}
-          </Link>
-        </KidButton>
-        {!game.is_system && onDelete && (
-          <KidButton
-            variant="icon"
-            size="none"
-            className="ml-auto"
-            disabled={isDeleting}
-            onClick={() => onDelete(game)}
-            title={t("deleteAction")}
-            aria-label={t("deleteAction")}
-          >
-            <Icon name="delete" size={16} />
-          </KidButton>
-        )}
       </div>
     </div>
   );

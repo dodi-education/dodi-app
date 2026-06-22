@@ -4,10 +4,11 @@ import { getTranslations } from "next-intl/server";
 
 import { GamePlayView } from "@/components/games/game-play-view";
 import { createClient } from "@/lib/supabase/server";
-import { getGame } from "@/lib/services/games";
+import { getGame, isGameVisibleToProfile } from "@/lib/services/games";
 import { getProfile } from "@/lib/services/profiles";
 import { logMemoryEvent } from "@/lib/services/system-logs";
 import { getTranslation, applyTranslation } from "@/lib/services/game-translations";
+import { coerceProgressKind, coerceSuccessCriteria } from "@/lib/services/game-generation";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -52,6 +53,11 @@ export default async function GamePlayPage({ params }: RouteContext) {
     notFound();
   }
 
+  // Inactive or unshared games aren't reachable by kids, even via a direct URL.
+  if (!(await isGameVisibleToProfile(supabase, rawGame, profile.id))) {
+    notFound();
+  }
+
   const translation = await getTranslation(supabase, rawGame.id, profile.language);
   const game = applyTranslation(rawGame, translation);
 
@@ -71,6 +77,10 @@ export default async function GamePlayPage({ params }: RouteContext) {
       description={game.description}
       codeBundle={game.code_bundle}
       markdown={game.markdown}
+      learningGoal={game.learning_goal}
+      successDefinition={game.success_definition}
+      successCriteria={coerceSuccessCriteria(game.success_criteria)}
+      progressKind={coerceProgressKind(game.progress_kind)}
     />
   );
 }

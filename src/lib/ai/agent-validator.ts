@@ -5,11 +5,20 @@
  * correctly implements the bridge protocol.
  */
 
+import type { MetricKey, ProgressKind } from "@/lib/games/success";
+
 const MAX_BUNDLE_BYTES = 200 * 1024;
 
 export interface ValidationResult {
   valid: boolean;
   errors: string[];
+}
+
+export interface ValidateGameOptions {
+  /** When "goal", enforce the progress/success protocol below. */
+  progressKind?: ProgressKind;
+  /** Metric keys the game's success criteria depend on. */
+  requiredMetrics?: MetricKey[];
 }
 
 const BLOCKED_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
@@ -22,7 +31,10 @@ const BLOCKED_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
   { pattern: /\bdocument\.cookie\b/i, reason: "Accessing document.cookie is not allowed" },
 ];
 
-export function validateGameCode(code: string): ValidationResult {
+export function validateGameCode(
+  code: string,
+  options?: ValidateGameOptions,
+): ValidationResult {
   const errors: string[] = [];
 
   // Size check
@@ -59,6 +71,25 @@ export function validateGameCode(code: string): ValidationResult {
   // Basic HTML check
   if (!/<html/i.test(code) && !/<body/i.test(code) && !/<script/i.test(code)) {
     errors.push("Code does not appear to be valid HTML — must contain at least a <script> tag");
+  }
+
+  // Progress & success protocol checks (goal games only)
+  if (options?.progressKind === "goal") {
+    if (!/game:progress/i.test(code)) {
+      errors.push(
+        "Goal game must emit 'game:progress' messages so the host can track progress and success",
+      );
+    }
+    if (!/progressKind/i.test(code)) {
+      errors.push(
+        "Goal game must include the reserved 'dodi' progress state (set progressKind/progress/metrics)",
+      );
+    }
+    for (const metric of options.requiredMetrics ?? []) {
+      if (!new RegExp(`\\b${metric}\\b`).test(code)) {
+        errors.push(`Goal game must report the '${metric}' metric required by its success criteria`);
+      }
+    }
   }
 
   return {

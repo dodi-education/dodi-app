@@ -2,7 +2,11 @@ import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 
 import { createClient } from "@/lib/supabase/server";
-import { getModelConfig, updateModelConfig } from "@/lib/services/ai-providers";
+import {
+  getModelConfig,
+  normalizeModelConfig,
+  updateModelConfig,
+} from "@/lib/services/ai-providers";
 import type { AccountModelConfig } from "@/types/ai";
 
 const providerEnum = z.enum(["gemini", "openai", "anthropic", "xai"]);
@@ -30,7 +34,9 @@ export async function GET(): Promise<NextResponse> {
 
   try {
     const config = await getModelConfig(supabase, user.id);
-    return NextResponse.json(config);
+    // Normalize so clients always see `thinkingProvider`/`thinkingModel`
+    // (migrated from the legacy gameProvider/gameModel shape at read time).
+    return NextResponse.json(config ? normalizeModelConfig(config) : null);
   } catch {
     return NextResponse.json(
       { error: "Failed to fetch config" },

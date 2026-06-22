@@ -49,7 +49,7 @@ export default function LoginPage() {
     // account predates the vault).
     try {
       const { created } = await useVaultStore.getState().unlockOrBootstrap(password);
-      router.push(created ? "/vault-setup" : "/dashboard");
+      router.push(created ? "/vault-setup" : "/parent/dashboard");
       router.refresh();
     } catch {
       setError(

@@ -508,8 +508,48 @@ The MVP focuses on delivering a functional, delightful core experience:
 - **Kid schedule**: Manages a personal weekly schedule/timetable
 - **Daily challenges**: E.g. Complete 2 math games, 1 reading games
 
+## Progress & Success System
+
+Games report a standardized progress/success signal so Dodi can tell when a child meets a
+parent-defined goal — and, in future, generate challenges like "Solve 3 math games".
+
+- **Game kinds** (`games.progress_kind`): `goal` (measurable objective) or `open` (free/creative play).
+- **Parent input**: a plain-language **learning goal** + optional **success definition** (e.g. *"3
+  calculations solved without asking Dodi, under 5 seconds each"*), entered in the parent Game Studio.
+- **AI mapping**: the success definition is mapped onto a structured `success_criteria` object (jsonb)
+  over a fixed **metric vocabulary** (`correct`, `incorrect`, `attempts`, `accuracy`, `streak`,
+  `score`, `hintsUsed`, `itemsCompleted`, `itemsTotal`, `elapsedMs`, `maxTaskMs`, `avgTaskMs`).
+  See `src/lib/games/success.ts`.
+- **Game protocol**: goal games report `state.dodi = { progressKind, progress, metrics }` and emit a
+  `game:progress` bridge message; the goal is delivered at `dodi:init` and the host sends `dodi:success`
+  on completion (`src/lib/games/bridge-protocol.ts`).
+- **Host-side evaluation**: the app merges game-reported metrics with the host-observed "asking Dodi"
+  count (→ `hintsUsed`) and evaluates the stored criteria; "without asking Dodi" is a host signal.
+- **Persistence**: each play is recorded in `game_plays` (subject denormalized, `succeeded`,
+  `final_progress`, `metrics`). This is the substrate for challenges: *"Solve 3 math games today"* =
+  `countSucceededPlays({ profileId, subject: 'math', sinceDays: 1 })` (`src/lib/services/game-plays.ts`).
+
 ## TODO
 
-- Add game creation and editing via text/prompts in parent view with interactive feedback mode (e.g. if agent asks questions
-- Define standardized "progress" interface for games e.g. 0-100% (necessary for progress tracking and challenges)
-- 
+- Verify / fix context building for game creation (check if available contect, memeory, notes, etc.) are passed to agent sessions.
+- Avatar gallary for kids
+  - Let kids draw their own avatar
+- Game state analysis via screenshot (attach screenshots to game-state <> dodi exchange). This would allow fun features like asking dodi to guess what has been drawn in the drawing game.
+- Daily challenges UI: let Dodi generate + track challenges on top of `game_plays` (foundation is in place).
+- Allow games to connect with AI provider for in-game content generation (e.g. for texts, calculations, formulas etc.)
+- New default games:
+  - Reading: Generate short stories, let kid read the text, then ask questions about the text.
+  - Writing / Reading: Divide generated sentences into text blocks which are randomly laid out. Kid must put the blocks into correct order and read the sentence.
+  - Math tower: Dodi must climb a tower, tower is sinking into water, kid must solve calculation to jump to upper floor, before water reaches the current floor. 10 calculations per level, each level creates harder calculations. At the top, dodi reaches a hot air ballon where she can jump in and fly away. E.g.:
+    - Level 1: Addition, 2 numbers, range of numbers <= 10
+    - Level 2: Subtraction, 2 numbers, range of numbers <= 10
+    - Level 3: Addition, 2 numbers, range of numbers <= 20
+    - Level 4: Subtraction, 2 numbers, range of numbers <= 20
+    - Level 5: Addition, 3 numbers, range of numbers <= 20
+    - Level 6: Subtraction, 3 numbers, range of numbers <= 20
+    - Level 7: Mixed, 3 numbers, range of numbers <= 20
+
+
+- Connect dodi-bot for
+  - Enhanced transcript storage & learning capabilities (e.g. full transcript storage + periodic memory analysis / update)
+  - Periodic (e.g. daily) challenge creation

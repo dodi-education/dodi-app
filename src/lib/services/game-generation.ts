@@ -1,48 +1,45 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { Database, Game } from "@/types/database";
+import type { Database } from "@/types/database";
 import type { AIProviderId } from "@/types/ai";
-import type { GameMetadata } from "@/types/games";
-import { sanitizeGameBundle } from "@/lib/game-sanitizer";
+import {
+  SUCCESS_SYSTEM_TEMPLATE,
+  SuccessCriteriaSchema,
+  type ProgressKind,
+  type SuccessCriteria,
+} from "@/lib/games/success";
 import {
   decryptProviderKey,
   getModelConfig,
   normalizeModelConfig,
 } from "@/lib/services/ai-providers";
+import { THINKING_MODEL_REQUIRED_MESSAGE } from "@/lib/ai/thinking-config";
 
 type Client = SupabaseClient<Database>;
 
-export interface GeneratedGameDefinition {
-  title: string;
-  description: string;
-  subject: string;
-  difficulty: string;
-  targetAgeMin: number;
-  targetAgeMax: number;
-  estimatedDurationMinutes: number;
-  tags: string[];
-  codeBundle: string;
-  markdown: string;
-  metadata: GameMetadata;
+export const EMPTY_SUCCESS_CRITERIA: SuccessCriteria = {
+  description: "",
+  match: "all",
+  conditions: [],
+  requiredMetrics: [],
+};
+
+/** Coerce arbitrary model output into a valid SuccessCriteria (empty on failure). */
+export function coerceSuccessCriteria(raw: unknown): SuccessCriteria {
+  const parsed = SuccessCriteriaSchema.safeParse(raw);
+  return parsed.success ? (parsed.data as SuccessCriteria) : EMPTY_SUCCESS_CRITERIA;
+}
+
+/** Coerce arbitrary model output into a valid ProgressKind (defaults to "open"). */
+export function coerceProgressKind(raw: unknown): ProgressKind {
+  return raw === "goal" ? "goal" : "open";
 }
 
 interface ResolvedGameModel {
   providerId: AIProviderId;
   modelId: string;
   apiKey: string;
-}
-
-interface GenerationContext {
-  profileName: string;
-  age?: number;
-  language: string;
-}
-
-interface RemixContext extends GenerationContext {
-  currentGame: Game;
-  instruction: string;
-  currentState?: Record<string, unknown>;
 }
 
 function safeParseJsonObject(text: string): Record<string, unknown> {
@@ -56,61 +53,23 @@ function safeParseJsonObject(text: string): Record<string, unknown> {
   return parsed as Record<string, unknown>;
 }
 
-function toStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter((item): item is string => typeof item === "string");
-}
-
-function toGameDefinition(raw: Record<string, unknown>): GeneratedGameDefinition {
-  const codeBundleRaw = typeof raw.codeBundle === "string" ? raw.codeBundle : "";
-  const sanitized = sanitizeGameBundle(codeBundleRaw);
-
-  const metadata =
-    raw.metadata && typeof raw.metadata === "object" && !Array.isArray(raw.metadata)
-      ? (raw.metadata as GameMetadata)
-      : {};
-
-  return {
-    title: typeof raw.title === "string" ? raw.title : "New Game",
-    description:
-      typeof raw.description === "string" ? raw.description : "Custom game created with Dodi",
-    subject: typeof raw.subject === "string" ? raw.subject : "creativity",
-    difficulty: typeof raw.difficulty === "string" ? raw.difficulty : "easy",
-    targetAgeMin:
-      typeof raw.targetAgeMin === "number"
-        ? Math.max(1, Math.floor(raw.targetAgeMin))
-        : 4,
-    targetAgeMax:
-      typeof raw.targetAgeMax === "number"
-        ? Math.max(1, Math.floor(raw.targetAgeMax))
-        : 12,
-    estimatedDurationMinutes:
-      typeof raw.estimatedDurationMinutes === "number"
-        ? Math.max(1, Math.floor(raw.estimatedDurationMinutes))
-        : 10,
-    tags: toStringArray(raw.tags),
-    codeBundle: sanitized.code,
-    markdown: typeof raw.markdown === "string" ? raw.markdown : "",
-    metadata,
-  };
-}
-
 async function resolveGameModel(
   supabase: Client,
   accountId: string,
 ): Promise<ResolvedGameModel> {
   const rawConfig = await getModelConfig(supabase, accountId);
   if (!rawConfig) {
-    throw new Error("No AI model configuration found");
+    throw new Error(THINKING_MODEL_REQUIRED_MESSAGE);
   }
 
   const modelConfig = normalizeModelConfig(rawConfig);
 
-  const providerId = modelConfig.thinkingProvider ?? modelConfig.voiceProvider;
-  const modelId = modelConfig.thinkingModel ?? modelConfig.voiceModel;
+  // Requires an explicit thinking model — no voice-provider fallback.
+  const providerId = modelConfig.thinkingProvider;
+  const modelId = modelConfig.thinkingModel;
 
   if (!providerId || !modelId) {
-    throw new Error("No game model configured");
+    throw new Error(THINKING_MODEL_REQUIRED_MESSAGE);
   }
 
   if (providerId !== "gemini") {
@@ -153,93 +112,6 @@ The capabilities array in game:ready MUST list ALL command types the game suppor
 The state object MUST include ALL meaningful game state (score, level, positions, selections, etc).
 `.trim();
 
-export const MARKDOWN_GENERATION_INSTRUCTION = `
-Also generate a "markdown" key containing a markdown document for the AI companion. This document should include:
-- Game Overview: what the game is about and how to play
-- Rules: win/lose conditions, scoring, progression
-- Available Commands: each command type with parameter names, types, allowed values, and a JSON example
-- State Fields: what each field in the game state object means
-- Teaching Strategy: how the AI companion should help the child (hints, encouragement, demonstrations)
-Keep it concise but thorough — the AI reads this as a briefing document.
-`.trim();
-
-function buildGenerationPrompt(prompt: string, context: GenerationContext): string {
-  const ageLine = context.age ? `- Child age: ${context.age}` : "- Child age: unknown";
-
-  return [
-    "Create a kid-safe HTML/CSS/JS game that runs entirely in a sandboxed iframe with no network access.",
-    "Return only JSON with keys:",
-    "title, description, subject, difficulty, targetAgeMin, targetAgeMax, estimatedDurationMinutes, tags, codeBundle, markdown, metadata",
-    "",
-    "Requirements:",
-    "- No external scripts, no fetch, no XMLHttpRequest, no WebSocket, no dynamic import",
-    "- Use inline <script> and inline <style> only",
-    "- Keep code concise and under 200KB",
-    "",
-    BRIDGE_INTERFACE_TEMPLATE,
-    "",
-    MARKDOWN_GENERATION_INSTRUCTION,
-    "",
-    "Child context:",
-    `- Child name: ${context.profileName}`,
-    ageLine,
-    `- Language: ${context.language}`,
-    "",
-    "User request:",
-    prompt,
-  ].join("\n");
-}
-
-function buildRemixPrompt(context: RemixContext): string {
-  return [
-    "You are remixing an existing kid-safe HTML/CSS/JS game.",
-    "Return only JSON with keys:",
-    "title, description, subject, difficulty, targetAgeMin, targetAgeMax, estimatedDurationMinutes, tags, codeBundle, markdown, metadata",
-    "",
-    "Hard requirements:",
-    "- Keep it sandbox-safe: no external scripts, no network APIs, no dynamic imports",
-    "- Keep code under 200KB",
-    "",
-    BRIDGE_INTERFACE_TEMPLATE,
-    "",
-    MARKDOWN_GENERATION_INSTRUCTION,
-    "",
-    "Current game metadata:",
-    JSON.stringify(
-      {
-        title: context.currentGame.title,
-        description: context.currentGame.description,
-        subject: context.currentGame.subject,
-        difficulty: context.currentGame.difficulty,
-        targetAgeMin: context.currentGame.target_age_min,
-        targetAgeMax: context.currentGame.target_age_max,
-        estimatedDurationMinutes: context.currentGame.estimated_duration_minutes,
-        tags: context.currentGame.tags,
-        metadata: context.currentGame.metadata,
-      },
-      null,
-      2,
-    ),
-    "",
-    "Current game markdown:",
-    context.currentGame.markdown || "(none)",
-    "",
-    "Current game code:",
-    context.currentGame.code_bundle,
-    "",
-    "Current game state summary:",
-    JSON.stringify(context.currentState ?? {}, null, 2),
-    "",
-    "Remix instruction:",
-    context.instruction,
-    "",
-    "Child context:",
-    `- Child name: ${context.profileName}`,
-    context.age ? `- Child age: ${context.age}` : "- Child age: unknown",
-    `- Language: ${context.language}`,
-  ].join("\n");
-}
-
 async function runGeminiJson(
   apiKey: string,
   modelId: string,
@@ -264,84 +136,48 @@ async function runGeminiJson(
   return safeParseJsonObject(responseText);
 }
 
-export async function generateCustomGame(
-  supabase: Client,
-  accountId: string,
-  prompt: string,
-  context: GenerationContext,
-): Promise<GeneratedGameDefinition> {
-  const model = await resolveGameModel(supabase, accountId);
-  const fullPrompt = buildGenerationPrompt(prompt, context);
-  const raw = await runGeminiJson(model.apiKey, model.modelId, fullPrompt);
-
-  return toGameDefinition(raw);
+export interface MappedSuccess {
+  progressKind: ProgressKind;
+  successCriteria: SuccessCriteria;
 }
 
-export async function remixCustomGame(
+/**
+ * Map a parent's plain-language success definition onto a structured
+ * SuccessCriteria — without regenerating the game. Used when a parent edits the
+ * Success definition field in the Game Studio. An empty/whitespace definition
+ * maps to open play.
+ */
+export async function mapSuccessDefinition(
   supabase: Client,
   accountId: string,
-  context: RemixContext,
-): Promise<GeneratedGameDefinition> {
+  successDefinition: string,
+  context?: { learningGoal?: string },
+): Promise<MappedSuccess> {
+  if (!successDefinition.trim()) {
+    return { progressKind: "open", successCriteria: EMPTY_SUCCESS_CRITERIA };
+  }
+
   const model = await resolveGameModel(supabase, accountId);
-  const prompt = buildRemixPrompt(context);
+  const prompt = [
+    "Map a parent's plain-language game success definition onto a structured criteria object.",
+    'Return ONLY JSON: { "progressKind": "goal" | "open", "successCriteria": { ... } }.',
+    "",
+    SUCCESS_SYSTEM_TEMPLATE,
+    "",
+    "successCriteria shape:",
+    '{ "description": string, "match": "all" | "any", "conditions": [{ "metric": <MetricKey>, "op": ">="|">"|"<="|"<"|"=="|"!=", "value": number }], "requiredMetrics": [<MetricKey>] }',
+    "Use ONLY the standardized metric keys. Map 'without asking Dodi' to hintsUsed == 0,",
+    "'under N seconds each' to maxTaskMs <= N*1000, 'solve/get N' to correct >= N, etc.",
+    "",
+    context?.learningGoal ? `Learning goal: ${context.learningGoal}` : "",
+    `Success definition: ${successDefinition}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
   const raw = await runGeminiJson(model.apiKey, model.modelId, prompt);
-
-  return toGameDefinition(raw);
-}
-
-function buildRegenerationPrompt(
-  instruction: string,
-  existingCode: string,
-  existingMarkdown: string,
-  context: GenerationContext,
-): string {
-  const ageLine = context.age ? `- Child age: ${context.age}` : "- Child age: unknown";
-
-  return [
-    "You are updating an existing kid-safe HTML/CSS/JS game based on a change instruction.",
-    "Return only JSON with keys:",
-    "title, description, subject, difficulty, targetAgeMin, targetAgeMax, estimatedDurationMinutes, tags, codeBundle, markdown, metadata",
-    "",
-    "Hard requirements:",
-    "- Keep it sandbox-safe: no external scripts, no network APIs, no dynamic imports",
-    "- Keep code under 200KB",
-    "",
-    BRIDGE_INTERFACE_TEMPLATE,
-    "",
-    MARKDOWN_GENERATION_INSTRUCTION,
-    "",
-    "Current game markdown:",
-    existingMarkdown || "(none)",
-    "",
-    "Current game code:",
-    existingCode,
-    "",
-    "Change instruction:",
-    instruction,
-    "",
-    "Child context:",
-    `- Child name: ${context.profileName}`,
-    ageLine,
-    `- Language: ${context.language}`,
-  ].join("\n");
-}
-
-export async function regenerateGame(
-  supabase: Client,
-  accountId: string,
-  instruction: string,
-  existingCode: string,
-  existingMarkdown: string,
-  context: GenerationContext,
-): Promise<GeneratedGameDefinition> {
-  const model = await resolveGameModel(supabase, accountId);
-  const fullPrompt = buildRegenerationPrompt(
-    instruction,
-    existingCode,
-    existingMarkdown,
-    context,
-  );
-  const raw = await runGeminiJson(model.apiKey, model.modelId, fullPrompt);
-
-  return toGameDefinition(raw);
+  return {
+    progressKind: coerceProgressKind(raw.progressKind),
+    successCriteria: coerceSuccessCriteria(raw.successCriteria),
+  };
 }

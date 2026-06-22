@@ -1,3 +1,5 @@
+import { stageSizeStyle } from "@/lib/games/stage";
+
 export default function GamePlayLoading() {
   return (
     <div className="w-full max-w-6xl space-y-4">
@@ -9,8 +11,13 @@ export default function GamePlayLoading() {
         <div className="h-9 w-20 animate-pulse rounded-lg bg-dodi-100" />
       </div>
       <div className="grid gap-4 lg:grid-cols-[300px_1fr]">
-        <div className="h-[66vh] min-h-[440px] animate-pulse rounded-2xl border bg-white shadow-sm" />
-        <div className="h-[66vh] min-h-[440px] animate-pulse rounded-2xl border bg-white shadow-sm" />
+        <div className="h-[420px] animate-pulse rounded-[20px] border bg-white shadow-sm" />
+        <div className="w-full">
+          <div
+            style={stageSizeStyle()}
+            className="mx-auto animate-pulse rounded-[18px] border bg-white shadow-sm"
+          />
+        </div>
       </div>
     </div>
   );

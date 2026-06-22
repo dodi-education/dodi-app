@@ -352,6 +352,14 @@ async function runCodeTask(
     toolContext.existingMarkdown = payload.existingMarkdown;
   }
 
+  // The parent's plain-language goal/success carry through to the saved game
+  // unchanged; the agent only produces the structured mapping + code.
+  const goalPayload = task.payload as Partial<
+    GenerateGamePayload & UpdateGamePayload
+  >;
+  const learningGoal = goalPayload.learningGoal ?? "";
+  const successDefinition = goalPayload.successDefinition ?? "";
+
   // Add user message to session history
   session.messages.push({ role: "user", content: userContent });
 
@@ -486,7 +494,11 @@ async function runCodeTask(
 
   // Final validation if we have code
   if (lastWrite) {
-    const validation = validateGameCode(lastWrite.code);
+    const goalOpts = () => ({
+      progressKind: lastWrite!.progressKind,
+      requiredMetrics: lastWrite!.successCriteria.requiredMetrics,
+    });
+    const validation = validateGameCode(lastWrite.code, goalOpts());
     if (!validation.valid && validationRetries < MAX_VALIDATION_RETRIES) {
       log.warn("validation_retry", {
         profileId: session.profileId,
@@ -568,13 +580,13 @@ async function runCodeTask(
 
         // Re-validate
         if (lastWrite) {
-          const recheck = validateGameCode(lastWrite.code);
+          const recheck = validateGameCode(lastWrite.code, goalOpts());
           if (recheck.valid) break;
         }
       }
     }
 
-    const finalValidation = validateGameCode(lastWrite.code);
+    const finalValidation = validateGameCode(lastWrite.code, goalOpts());
 
     log.info("code_produced", {
       profileId: session.profileId,
@@ -588,12 +600,15 @@ async function runCodeTask(
       taskType: task.taskType as "generate_game" | "update_game",
       title: lastWrite.title,
       description: lastWrite.description,
-      subject: lastWrite.subject,
-      difficulty: lastWrite.difficulty,
       tags: lastWrite.tags,
       codeBundle: lastWrite.code,
       markdown: lastWrite.markdown,
       metadata: {},
+      learningGoal,
+      successDefinition,
+      successCriteria: lastWrite.successCriteria,
+      progressKind: lastWrite.progressKind,
+      changeSummary: lastWrite.changeSummary,
       validationPassed: finalValidation.valid,
       iterationCount,
     };
@@ -603,12 +618,15 @@ async function runCodeTask(
       const sessionResult: AgentSessionResult = {
         title: codeResult.title,
         description: codeResult.description,
-        subject: codeResult.subject,
-        difficulty: codeResult.difficulty,
         tags: codeResult.tags,
         codeBundle: codeResult.codeBundle,
         markdown: codeResult.markdown,
         metadata: codeResult.metadata,
+        learningGoal: codeResult.learningGoal,
+        successDefinition: codeResult.successDefinition,
+        successCriteria: codeResult.successCriteria,
+        progressKind: codeResult.progressKind,
+        changeSummary: codeResult.changeSummary,
         validationPassed: codeResult.validationPassed,
         iterationCount: codeResult.iterationCount,
       };
@@ -640,14 +658,15 @@ function buildCodeTaskUserMessage(task: AgentTaskRequest): string {
       payload.prompt,
     ];
     if (payload.title) lines.push("", `Suggested title: ${payload.title}`);
-    if (payload.subject) lines.push(`Subject: ${payload.subject}`);
-    if (payload.difficulty) lines.push(`Difficulty: ${payload.difficulty}`);
     if (payload.tags?.length) lines.push(`Tags: ${payload.tags.join(", ")}`);
+    if (payload.learningGoal) lines.push("", `Learning goal: ${payload.learningGoal}`);
+    if (payload.successDefinition)
+      lines.push(`Success definition: ${payload.successDefinition}`);
     lines.push(
       "",
       "Steps:",
       "1. Read the bridge docs with read_bridge_docs",
-      "2. Write the game code with write_game_code",
+      "2. Write the game code with write_game_code (set progressKind + successCriteria from the goal/success above)",
       "3. Validate with validate_game",
       "4. Fix any issues and re-validate if needed",
     );
@@ -662,12 +681,15 @@ function buildCodeTaskUserMessage(task: AgentTaskRequest): string {
       payload.instruction,
     ];
     if (payload.title) lines.push("", `Updated title: ${payload.title}`);
+    if (payload.learningGoal) lines.push("", `Learning goal: ${payload.learningGoal}`);
+    if (payload.successDefinition)
+      lines.push(`Success definition: ${payload.successDefinition}`);
     lines.push(
       "",
       "Steps:",
       "1. Read the existing game with read_existing_game",
       "2. Make the requested changes",
-      "3. Write the updated code with write_game_code",
+      "3. Write the updated code with write_game_code (keep progressKind + successCriteria in sync with the goal/success above)",
       "4. Validate with validate_game",
       "5. Fix any issues and re-validate if needed",
     );

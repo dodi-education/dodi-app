@@ -15,25 +15,39 @@ import {
   isBridgeTokenValid,
 } from "@/lib/games/bridge-protocol";
 import { gameDebug, gameDebugWarn } from "@/lib/games/debug";
+import type { MetricsSummary } from "@/lib/games/success";
 import type {
   GameCommand,
+  GameGoal,
   GameToParentMessage,
   ParentToGameMessage,
 } from "@/types/games";
 
+export interface GameProgressUpdate {
+  progress: number;
+  progressLabel?: string;
+  metrics?: MetricsSummary;
+}
+
 export interface GameSandboxHandle {
   sendCommand: (command: GameCommand) => void;
   requestState: () => void;
+  /** Tell the game the success goal was met so it can celebrate. */
+  notifySuccess: (payload?: { summary?: string; metrics?: MetricsSummary }) => void;
 }
 
 interface GameSandboxProps {
   gameId: string;
   codeBundle: string;
   className?: string;
+  /** Learning goal + success criteria delivered to the game on init. */
+  goal?: GameGoal;
   onMessage?: (message: GameToParentMessage) => void;
   onStateChange?: (state: Record<string, unknown>) => void;
   /** Called with state from command results (game:result). Use for immediate (non-debounced) state delivery. */
   onCommandResult?: (state: Record<string, unknown>) => void;
+  /** Called on immediate game:progress updates (progress + standardized metrics). */
+  onProgress?: (update: GameProgressUpdate) => void;
 }
 
 const SANDBOX_CSP =
@@ -99,7 +113,7 @@ function buildSandboxSrcDoc(codeBundle: string): string {
 
 export const GameSandbox = forwardRef<GameSandboxHandle, GameSandboxProps>(
   function GameSandbox(
-    { gameId, codeBundle, className, onMessage, onStateChange, onCommandResult }: GameSandboxProps,
+    { gameId, codeBundle, className, goal, onMessage, onStateChange, onCommandResult, onProgress }: GameSandboxProps,
     ref,
   ) {
     const iframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -108,6 +122,9 @@ export const GameSandbox = forwardRef<GameSandboxHandle, GameSandboxProps>(
     const gameReadyRef = useRef(false);
     const initRetryRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const pendingCommandsRef = useRef<GameCommand[]>([]);
+    // Read goal from a ref inside init so changing goal identity never re-inits the game.
+    const goalRef = useRef<GameGoal | undefined>(goal);
+    goalRef.current = goal;
 
     const postEnvelope = useCallback(
       (message: ParentToGameMessage) => {
@@ -137,7 +154,7 @@ export const GameSandbox = forwardRef<GameSandboxHandle, GameSandboxProps>(
       const initPayload: ParentToGameMessage = {
         type: "dodi:init",
         token: bridgeToken,
-        payload: { gameId },
+        payload: { gameId, goal: goalRef.current },
       };
 
       gameDebug("sandbox", `Sending dodi:init to game ${gameId} (with retry)`);
@@ -179,6 +196,14 @@ export const GameSandbox = forwardRef<GameSandboxHandle, GameSandboxProps>(
           postEnvelope({
             type: "dodi:get_state",
             token: bridgeToken,
+          });
+        },
+        notifySuccess(payload) {
+          gameDebug("sandbox", "notifySuccess called", payload);
+          postEnvelope({
+            type: "dodi:success",
+            token: bridgeToken,
+            payload: payload ?? {},
           });
         },
       }),
@@ -237,6 +262,14 @@ export const GameSandbox = forwardRef<GameSandboxHandle, GameSandboxProps>(
           onStateChange?.(message.payload as Record<string, unknown>);
         }
 
+        if (message.type === "game:progress") {
+          onProgress?.({
+            progress: message.payload.progress,
+            progressLabel: message.payload.progressLabel,
+            metrics: message.payload.metrics,
+          });
+        }
+
         if (message.type === "game:result" && message.payload.state) {
           gameDebug("sandbox", `Command result (ok=${message.payload.result.ok}):`, message.payload);
           const resultState = message.payload.state as Record<string, unknown>;
@@ -264,7 +297,7 @@ export const GameSandbox = forwardRef<GameSandboxHandle, GameSandboxProps>(
         window.removeEventListener("message", handleMessage);
         clearInitRetry();
       };
-    }, [bridgeToken, onMessage, onStateChange, onCommandResult, clearInitRetry, sendInitMessage]);
+    }, [bridgeToken, onMessage, onStateChange, onCommandResult, onProgress, clearInitRetry, sendInitMessage]);
 
     return (
       <iframe

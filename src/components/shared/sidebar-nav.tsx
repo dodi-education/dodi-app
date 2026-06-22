@@ -25,25 +25,36 @@ function useNavGroups(): NavGroup[] {
     {
       label: t("navGroupFamily"),
       items: [
-        { href: "/dashboard", label: t("dashboard"), icon: "dashboard" },
-        { href: "/profiles", label: t("profiles"), icon: "profiles" },
-        { href: "/personas", label: t("personas"), icon: "personas" },
+        { href: "/parent/dashboard", label: t("dashboard"), icon: "dashboard" },
+        { href: "/parent/profiles", label: t("profiles"), icon: "profiles" },
+        { href: "/parent/personas", label: t("personas"), icon: "personas" },
+        {
+          href: "/parent/game-studio",
+          label: t("gameStudio"),
+          icon: "games",
+        },
       ],
     },
     {
       label: t("navGroupActivity"),
       items: [
         {
-          href: "/agent-sessions",
+          href: "/parent/agent-sessions",
           label: t("agentSessions"),
           icon: "agent_sessions",
         },
-        { href: "/system-logs", label: t("systemLogs"), icon: "system_logs" },
+        {
+          href: "/parent/system-logs",
+          label: t("systemLogs"),
+          icon: "system_logs",
+        },
       ],
     },
     {
       label: t("navGroupAccount"),
-      items: [{ href: "/settings", label: t("settings"), icon: "settings" }],
+      items: [
+        { href: "/parent/settings", label: t("settings"), icon: "settings" },
+      ],
     },
   ];
 }

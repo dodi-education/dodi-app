@@ -72,6 +72,20 @@ export function DodiFullHome({
     }
   }, [hasProvider, connect, profileId]);
 
+  // Manual override: `?process-memory=1` force-processes the day's accumulated
+  // transcript into memory now, without waiting for a day change. Read once
+  // imperatively (no useSearchParams → no Suspense boundary needed) and strip
+  // the param so a refresh won't re-trigger. The store's in-flight guard makes
+  // this safe alongside the auto-connect drain above.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("process-memory") === "1") {
+      useDodiSessionStore.getState().processMemoryNow(profileId);
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+  }, [profileId]);
+
   const mascotButtonClass =
     "relative z-[1] size-[76%] cursor-pointer transition-transform duration-200 ease-[cubic-bezier(0.34,1.56,0.64,1)] active:scale-[0.94]";
   const mascotImageClass = "relative z-[1]";

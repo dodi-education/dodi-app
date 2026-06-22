@@ -64,7 +64,6 @@ const GAME = {
   id: "560b130f-80a6-4353-a750-deac44224c53",
   title: "Counting Quest",
   description: "Count the stars",
-  subject: "math",
   markdown: "# game",
   code_bundle: "<html></html>",
   tags: [],

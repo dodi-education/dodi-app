@@ -85,7 +85,7 @@ export default function UpdatePasswordPage() {
         await updateAuthPassword();
       }
 
-      router.push("/dashboard");
+      router.push("/parent/dashboard");
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : t("updatePasswordFailed"));

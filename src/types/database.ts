@@ -1,6 +1,8 @@
 // Manual database types — will be replaced with auto-generated types
 // once a Supabase project is created and `npx supabase gen types typescript` is run.
 
+import type { ProgressKind, SuccessCriteria } from "@/lib/games/success";
+
 export type Json =
   | string
   | number
@@ -136,16 +138,19 @@ export interface Database {
           is_system: boolean;
           title: string;
           description: string;
-          subject: string;
-          difficulty: string;
           target_age_min: number;
           target_age_max: number;
           estimated_duration_minutes: number;
           tags: string[];
           code_bundle: string;
           markdown: string;
+          learning_goal: string;
+          success_definition: string;
+          success_criteria: Json;
+          progress_kind: "goal" | "open";
           metadata: Json;
-          created_by: "system" | "ai" | "kid";
+          is_active: boolean;
+          created_by: "system" | "parent" | "kid";
           created_at: string;
           updated_at: string;
         };
@@ -158,16 +163,19 @@ export interface Database {
           is_system?: boolean;
           title: string;
           description?: string;
-          subject?: string;
-          difficulty?: string;
           target_age_min?: number;
           target_age_max?: number;
           estimated_duration_minutes?: number;
           tags?: string[];
           code_bundle: string;
           markdown?: string;
+          learning_goal?: string;
+          success_definition?: string;
+          success_criteria?: Json;
+          progress_kind?: "goal" | "open";
           metadata?: Json;
-          created_by?: "system" | "ai" | "kid";
+          is_active?: boolean;
+          created_by?: "system" | "parent" | "kid";
           created_at?: string;
           updated_at?: string;
         };
@@ -180,18 +188,93 @@ export interface Database {
           is_system?: boolean;
           title?: string;
           description?: string;
-          subject?: string;
-          difficulty?: string;
           target_age_min?: number;
           target_age_max?: number;
           estimated_duration_minutes?: number;
           tags?: string[];
           code_bundle?: string;
           markdown?: string;
+          learning_goal?: string;
+          success_definition?: string;
+          success_criteria?: Json;
+          progress_kind?: "goal" | "open";
           metadata?: Json;
-          created_by?: "system" | "ai" | "kid";
+          is_active?: boolean;
+          created_by?: "system" | "parent" | "kid";
           created_at?: string;
           updated_at?: string;
+        };
+        Relationships: [];
+      };
+      game_plays: {
+        Row: {
+          id: string;
+          account_id: string;
+          profile_id: string;
+          game_id: string;
+          progress_kind: "goal" | "open";
+          started_at: string;
+          ended_at: string | null;
+          succeeded: boolean;
+          succeeded_at: string | null;
+          final_progress: number;
+          metrics: Json;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          account_id: string;
+          profile_id: string;
+          game_id: string;
+          progress_kind?: "goal" | "open";
+          started_at?: string;
+          ended_at?: string | null;
+          succeeded?: boolean;
+          succeeded_at?: string | null;
+          final_progress?: number;
+          metrics?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          account_id?: string;
+          profile_id?: string;
+          game_id?: string;
+          progress_kind?: "goal" | "open";
+          started_at?: string;
+          ended_at?: string | null;
+          succeeded?: boolean;
+          succeeded_at?: string | null;
+          final_progress?: number;
+          metrics?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      game_sharings: {
+        Row: {
+          id: string;
+          game_id: string;
+          account_id: string;
+          profile_id: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          game_id: string;
+          account_id: string;
+          profile_id?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          game_id?: string;
+          account_id?: string;
+          profile_id?: string | null;
+          created_at?: string;
         };
         Relationships: [];
       };
@@ -324,6 +407,11 @@ export type Account = Database["public"]["Tables"]["accounts"]["Row"];
 export type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 export type Persona = Database["public"]["Tables"]["personas"]["Row"];
 export type Game = Database["public"]["Tables"]["games"]["Row"];
+export type GamePlay = Database["public"]["Tables"]["game_plays"]["Row"];
+export type GamePlayInsert =
+  Database["public"]["Tables"]["game_plays"]["Insert"];
+export type GamePlayUpdate =
+  Database["public"]["Tables"]["game_plays"]["Update"];
 export type SystemLog = Database["public"]["Tables"]["system_logs"]["Row"];
 export type SystemLogInsert =
   Database["public"]["Tables"]["system_logs"]["Insert"];
@@ -334,6 +422,12 @@ export type PersonaInsert = Database["public"]["Tables"]["personas"]["Insert"];
 export type PersonaUpdate = Database["public"]["Tables"]["personas"]["Update"];
 export type GameInsert = Database["public"]["Tables"]["games"]["Insert"];
 export type GameUpdate = Database["public"]["Tables"]["games"]["Update"];
+export type GameSharing =
+  Database["public"]["Tables"]["game_sharings"]["Row"];
+export type GameSharingInsert =
+  Database["public"]["Tables"]["game_sharings"]["Insert"];
+export type GameSharingUpdate =
+  Database["public"]["Tables"]["game_sharings"]["Update"];
 export type GameTranslation =
   Database["public"]["Tables"]["game_translations"]["Row"];
 
@@ -348,12 +442,16 @@ export type AgentSessionUpdate =
 export interface AgentSessionResult {
   title: string;
   description: string;
-  subject: string;
-  difficulty: string;
   tags: string[];
   codeBundle: string;
   markdown: string;
   metadata: Record<string, unknown>;
+  learningGoal: string;
+  successDefinition: string;
+  successCriteria: SuccessCriteria;
+  progressKind: ProgressKind;
+  /** Short, friendly recap of what the agent built or changed (bullet lines). */
+  changeSummary: string;
   validationPassed: boolean;
   iterationCount: number;
 }

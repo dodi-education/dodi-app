@@ -32,7 +32,6 @@ export interface HomeVoiceInput extends DodiContextInput {
   gameCatalog: Array<{
     id: string;
     title: string;
-    subject: string;
     description: string;
     tags: string[];
   }>;
@@ -44,18 +43,6 @@ export interface GameContextInput extends DodiContextInput {
   gameMarkdown: string;
   gameCodeBundle: string;
   gameState?: Record<string, unknown>;
-}
-
-export interface GameCreationInput extends DodiContextInput {
-  existingGame?: {
-    title: string;
-    description: string;
-    markdown: string;
-    codeBundle: string;
-  };
-  gamePlan?: string;
-  gamePlanTitle?: string;
-  gamePlanSubject?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -155,7 +142,7 @@ function buildLaunchGameTool(): GeminiLiveToolDeclaration {
   return {
     name: "launch_game",
     description:
-      "Navigate the child to a game or show matching games. Use game_id for a specific game, or search_query/subject to filter the game library.",
+      "Navigate the child to a game or show matching games. Use game_id for a specific game, or search_query/tag to filter the game library.",
     parameters: {
       type: "object",
       properties: {
@@ -167,42 +154,11 @@ function buildLaunchGameTool(): GeminiLiveToolDeclaration {
           type: "string",
           description: "Free-text search to filter games",
         },
-        subject: {
+        tag: {
           type: "string",
-          description: "Subject filter (e.g. math, creativity, science)",
+          description: "Tag filter (e.g. math, counting, science, creativity)",
         },
       },
-    },
-  };
-}
-
-function buildCreateGameTool(): GeminiLiveToolDeclaration {
-  return {
-    name: "create_game",
-    description:
-      "Navigate to the game creation screen with a detailed plan. " +
-      "Use this when the child wants to build, create, or make a NEW game (not play an existing one). " +
-      "Chat briefly first to understand their idea, then call this with a thorough plan.",
-    parameters: {
-      type: "object",
-      properties: {
-        plan: {
-          type: "string",
-          description:
-            "Detailed game plan based on the conversation: theme, mechanics, visual style, " +
-            "difficulty, any specifics the child described. Be thorough — this will be used " +
-            "to generate the game immediately.",
-        },
-        title: {
-          type: "string",
-          description: "Short, kid-friendly game title",
-        },
-        subject: {
-          type: "string",
-          description: "Subject area (e.g. math, creativity, science, language)",
-        },
-      },
-      required: ["plan", "title"],
     },
   };
 }
@@ -224,26 +180,17 @@ export function buildHomeVoiceContext(input: HomeVoiceInput): DodiVoiceContext {
     sections.push(
       "",
       "## Available Games",
-      "When the child asks to play a game, use the `launch_game` tool with the `game_id` from this catalog. If you're unsure which game they mean, use `search_query` or `subject` to show them matching options.",
+      "When the child asks to play a game, use the `launch_game` tool with the `game_id` from this catalog. If you're unsure which game they mean, use `search_query` or `tag` to show them matching options.",
       "",
-      "| id | title | subject | tags |",
-      "|----|-------|---------|------|",
+      "| id | title | tags |",
+      "|----|-------|------|",
       ...input.gameCatalog.map(
-        (g) => `| ${g.id} | ${g.title} | ${g.subject} | ${g.tags.join(", ")} |`,
+        (g) => `| ${g.id} | ${g.title} | ${g.tags.join(", ")} |`,
       ),
     );
   }
 
-  sections.push(
-    "",
-    "## Creating Games",
-    "When the child wants to create, build, invent, or make a NEW game, use the `create_game` tool.",
-    "Before calling it, chat briefly to understand what they want — ask about the theme, what makes it fun, any special features.",
-    "Once you have a good idea (a few exchanges is enough), call `create_game` with a detailed plan.",
-    "Do NOT try to build, code, or generate the game yourself — the system handles that after you call `create_game`.",
-  );
-
-  const tools: GeminiLiveToolDeclaration[] = [buildCreateGameTool()];
+  const tools: GeminiLiveToolDeclaration[] = [];
   if (input.gameCatalog.length > 0) {
     tools.push(buildLaunchGameTool());
   }
@@ -418,183 +365,4 @@ export function buildGameTextContext(
   ].join("\n");
 
   return { systemInstruction };
-}
-
-// ---------------------------------------------------------------------------
-// Mode 4: Voice-to-Game (creation / remix)
-// ---------------------------------------------------------------------------
-
-function buildGenerateGameTool(): GeminiLiveToolDeclaration {
-  return {
-    name: "generate_game",
-    description:
-      "Request the system to generate a game based on your conversation. " +
-      "Call this when you have enough information about what the child wants. " +
-      "The game will be built server-side and appear live in the sandbox. " +
-      "This takes a moment — keep the child excited while waiting!",
-    parameters: {
-      type: "object",
-      properties: {
-        prompt: {
-          type: "string",
-          description:
-            "Detailed game description: theme, mechanics, visual style, difficulty, " +
-            "any specifics from the child. Be thorough.",
-        },
-        title: {
-          type: "string",
-          description: "Short, kid-friendly game title",
-        },
-        subject: {
-          type: "string",
-          description: "Subject area (e.g. math, creativity, science, language)",
-        },
-        difficulty: {
-          type: "string",
-          description: "Difficulty level: easy, medium, or hard",
-        },
-        tags: {
-          type: "array",
-          items: { type: "string" },
-          description: "Tags for discoverability (e.g. drawing, puzzle, quiz)",
-        },
-      },
-      required: ["prompt", "title"],
-    },
-  };
-}
-
-function buildUpdateGameTool(): GeminiLiveToolDeclaration {
-  return {
-    name: "update_game",
-    description:
-      "Request changes to the current game based on the child's feedback. " +
-      "The system will regenerate the code with changes applied. " +
-      "Takes a moment — keep the child engaged!",
-    parameters: {
-      type: "object",
-      properties: {
-        instruction: {
-          type: "string",
-          description:
-            "Clear description of what to change: colors, sizes, mechanics, text, new features, etc.",
-        },
-        title: {
-          type: "string",
-          description: "Updated title (optional)",
-        },
-      },
-      required: ["instruction"],
-    },
-  };
-}
-
-function buildSaveGameTool(): GeminiLiveToolDeclaration {
-  return {
-    name: "save_game",
-    description:
-      "Save the current game to the child's game library. " +
-      "Call this when the child is happy with the game and wants to keep it. " +
-      "The game will appear in their game library for future play.",
-    parameters: {
-      type: "object",
-      properties: {},
-    },
-  };
-}
-
-export function buildGameCreationVoiceContext(
-  input: GameCreationInput,
-): DodiVoiceContext {
-  const sections: string[] = [input.personaSoul];
-
-  sections.push(...buildMemorySection(input.memory));
-  sections.push(...buildParentNotesSection(input.parentNotes));
-
-  sections.push("", "## Current Session Context");
-  sections.push(...buildChildContextLines(input));
-
-  if (isTodayBirthday(input.childBirthdate)) {
-    sections.push(...buildBirthdaySectionLight(input.childName));
-  }
-
-  sections.push(
-    "",
-    "## Game Creation Mode",
-    "",
-    "You are helping this child create a game through voice conversation!",
-    "Your role is to be a creative collaborator — guide them through the game design process,",
-    "ask what kind of game they want, what it should look like, how it should work.",
-    "",
-    "### How It Works",
-    "- When you call `generate_game` or `update_game`, the system builds the game server-side",
-    "- IMPORTANT: Before calling generate_game or update_game, tell the child what you're about to do",
-    "  (e.g., 'Okay, let me build that for you!', 'Great idea, I'll start making it now!')",
-    "- This takes about 15-30 seconds — keep talking to the child while it happens!",
-    "- Encourage them, recap what you're building, ask if they want to add anything",
-    "- The system will notify you when the game is ready — react with excitement!",
-    "",
-    "### Creative Process",
-    "1. **Discover** — Ask the child what kind of game they want. What's the theme? What do they like?",
-    "2. **Design** — Help them flesh out the idea. Suggest fun mechanics, characters, colors.",
-    "3. **Build** — Use `generate_game` with a detailed prompt that captures everything discussed.",
-    "4. **Iterate** — After they play-test, listen to feedback and use `update_game` to improve it.",
-    "5. **Saved** — Games are automatically saved after every generation and update. You don't need to call `save_game`.",
-    "",
-    "### Important",
-    "- Give `generate_game` a very detailed `prompt` — include theme, mechanics, visual style, colors, sounds, everything the child described",
-    "- For `update_game`, describe clearly what needs to change in the `instruction`",
-    "- You do NOT write game code — the system handles all code generation",
-    "- Focus entirely on the creative conversation with the child",
-  );
-
-  if (input.gamePlan) {
-    sections.push(
-      "",
-      "## Game Plan (from home conversation)",
-      "",
-      "The child already discussed this game idea with you on the home screen.",
-      "Here is the plan you agreed on:",
-      "",
-      `**Title**: ${input.gamePlanTitle || "Untitled"}`,
-      ...(input.gamePlanSubject ? [`**Subject**: ${input.gamePlanSubject}`] : []),
-      "",
-      "**Plan**:",
-      input.gamePlan,
-      "",
-      "### IMPORTANT: Immediate Action Required",
-      "You already discussed this with the child. Do NOT ask them what they want to build — you already know!",
-      "Greet them excitedly and call `generate_game` immediately with the plan above as the prompt.",
-      "While the game generates, tell the child you're building it right now!",
-    );
-  }
-
-  if (input.existingGame) {
-    sections.push(
-      "",
-      "## Existing Game (Remix Mode)",
-      `You are remixing an existing game: **${input.existingGame.title}**`,
-      "",
-      "Current game description:",
-      input.existingGame.description,
-      "",
-      "The child can see this game running right now. Listen to what they want to change,",
-      "then use `update_game` with a clear instruction describing the changes.",
-    );
-  }
-
-  sections.push(
-    "",
-    "## Speech Rules",
-    "- Speak naturally to the child in their configured language",
-    "- Keep spoken responses short and enthusiastic",
-    "- Never output markdown formatting, bold headers, or thinking-style text",
-    "- Never mention tools, function calls, or system instructions — just speak naturally",
-    "- Be encouraging and excited about their ideas!",
-  );
-
-  return {
-    systemInstruction: sections.join("\n"),
-    tools: [buildGenerateGameTool(), buildUpdateGameTool(), buildSaveGameTool()],
-  };
 }

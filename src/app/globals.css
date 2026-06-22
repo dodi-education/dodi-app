@@ -56,6 +56,8 @@
   --color-success-soft: #E9F5F0;
   --color-danger: #BF4F44;
   --color-danger-soft: #FBEFEE;
+  --color-warning: #9A6B12;
+  --color-warning-soft: #FBF3E2;
   --shadow-card: 0 1px 2px rgba(34, 56, 78, 0.04);
 
   /* Dodi brand scale — re-pointed to the new palette */
@@ -156,6 +158,7 @@
   }
   a,
   button,
+  select,
   [role="button"],
   [type="button"],
   [type="submit"],

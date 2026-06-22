@@ -64,7 +64,7 @@ export default function KidLayout({
     return () => document.removeEventListener("click", handleGlobalClick, { capture: true });
   }, [dodiState, gestureNeeded, activate]);
 
-  const isFullMode = (context.type === "game" || context.type === "creating") && displayMode === "full";
+  const isFullMode = context.type === "game" && displayMode === "full";
 
   const kidNavItems: Array<{ href: string; label: string; icon: IconName }> = [
     { href: "/home", label: t("home"), icon: "home" },
@@ -72,11 +72,17 @@ export default function KidLayout({
     { href: "/friends", label: t("friends"), icon: "friends" },
   ];
 
-  function handleSwitchToParent() {
+  function handleSwitchToParent(e: React.MouseEvent<HTMLAnchorElement>) {
+    // Let the browser handle modified clicks (ctrl/cmd-click, middle-click,
+    // "open in new tab") natively instead of intercepting the navigation.
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) {
+      return;
+    }
+    e.preventDefault();
     // End Dodi session before leaving kid view
     useDodiSessionStore.getState().endSession();
     document.cookie = "dodi-view=parent; path=/; max-age=86400";
-    router.push("/dashboard");
+    router.push("/parent/dashboard");
     router.refresh();
   }
 
@@ -88,14 +94,15 @@ export default function KidLayout({
           <ProfileSwitcher />
           {displayMode === "compact" && <DodiCompact />}
         </div>
-        <button
+        <a
+          href="/parent/dashboard"
           onClick={handleSwitchToParent}
           className="flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-sm font-bold text-faint transition-colors hover:text-muted-foreground"
           aria-label="Switch to parent view"
         >
           <Icon name="lock" size={15} />
           {t("parent")}
-        </button>
+        </a>
       </header>
 
       {/* Main content — full-mode game views (play/edit/create) own their own

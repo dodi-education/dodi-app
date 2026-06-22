@@ -8,7 +8,12 @@
 import Anthropic from "@anthropic-ai/sdk";
 
 import { validateGameCode, type ValidationResult } from "@/lib/ai/agent-validator";
-import { BRIDGE_INTERFACE_TEMPLATE } from "@/lib/services/game-generation";
+import {
+  BRIDGE_INTERFACE_TEMPLATE,
+  coerceProgressKind,
+  coerceSuccessCriteria,
+} from "@/lib/services/game-generation";
+import { SUCCESS_SYSTEM_TEMPLATE, type ProgressKind, type SuccessCriteria } from "@/lib/games/success";
 import { createLogger } from "@/lib/logger";
 
 const log = createLogger("agent-tools");
@@ -45,18 +50,48 @@ export const AGENT_TOOLS: Anthropic.Tool[] = [
           type: "string",
           description: "Brief game description",
         },
-        subject: {
+        changeSummary: {
           type: "string",
-          description: "Subject area (e.g. math, creativity, science, language)",
-        },
-        difficulty: {
-          type: "string",
-          description: "Difficulty level: easy, medium, or hard",
+          description:
+            "A short, friendly recap of what you just built or changed, written for the parent. " +
+            "2-4 concise bullet lines (each starting with '- '). For a brand-new game, summarize " +
+            "what you made; for an update, summarize only what changed.",
         },
         tags: {
           type: "array",
           items: { type: "string" },
-          description: "Tags for discoverability",
+          description:
+            "Tags for discoverability. Prefer the predefined catalog: counting, math, " +
+            "language, creativity, science, stories. Add extra descriptive tags only if helpful.",
+        },
+        progressKind: {
+          type: "string",
+          enum: ["goal", "open"],
+          description:
+            "'goal' if the game has a measurable success objective; 'open' for free/creative play.",
+        },
+        successCriteria: {
+          type: "object",
+          description:
+            "Structured mapping of the parent's success definition. Use the standardized metric vocabulary only. Empty conditions for open play.",
+          properties: {
+            description: { type: "string" },
+            match: { type: "string", enum: ["all", "any"] },
+            conditions: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  metric: { type: "string" },
+                  op: { type: "string", enum: [">=", ">", "<=", "<", "==", "!="] },
+                  value: { type: "number" },
+                },
+                required: ["metric", "op", "value"],
+              },
+            },
+            requiredMetrics: { type: "array", items: { type: "string" } },
+          },
+          required: ["description", "match", "conditions", "requiredMetrics"],
         },
       },
       required: ["code", "markdown", "title"],
@@ -120,9 +155,10 @@ export interface LastWriteResult {
   markdown: string;
   title: string;
   description: string;
-  subject: string;
-  difficulty: string;
   tags: string[];
+  progressKind: ProgressKind;
+  successCriteria: SuccessCriteria;
+  changeSummary: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -140,11 +176,13 @@ export function executeTool(
       const markdown = typeof toolInput.markdown === "string" ? toolInput.markdown : "";
       const title = typeof toolInput.title === "string" ? toolInput.title : "New Game";
       const description = typeof toolInput.description === "string" ? toolInput.description : "";
-      const subject = typeof toolInput.subject === "string" ? toolInput.subject : "creativity";
-      const difficulty = typeof toolInput.difficulty === "string" ? toolInput.difficulty : "easy";
+      const changeSummary =
+        typeof toolInput.changeSummary === "string" ? toolInput.changeSummary : "";
       const tags = Array.isArray(toolInput.tags)
         ? toolInput.tags.filter((t): t is string => typeof t === "string")
         : [];
+      const progressKind = coerceProgressKind(toolInput.progressKind);
+      const successCriteria = coerceSuccessCriteria(toolInput.successCriteria);
 
       if (!code.trim()) {
         return { result: JSON.stringify({ ok: false, error: "Code cannot be empty" }) };
@@ -155,9 +193,10 @@ export function executeTool(
         markdown,
         title,
         description,
-        subject,
-        difficulty,
         tags,
+        progressKind,
+        successCriteria,
+        changeSummary,
       };
 
       log.info("write_game_code", {
@@ -216,6 +255,8 @@ export function executeTool(
           "- Game must handle 'dodi:get_state' and send 'game:state'",
           "- Game must proactively send 'game:state' after any user interaction, score/level change, or timed event that changes state",
           "- Always send COMPLETE state after the change is applied",
+          "",
+          SUCCESS_SYSTEM_TEMPLATE,
         ].join("\n"),
       };
     }

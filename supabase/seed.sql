@@ -64,7 +64,7 @@ INSERT INTO public.personas (id, account_id, name, soul, created_at, updated_at,
 - When uncertain, err on the side of remembering — parents can always edit the memory', '2026-02-28 19:47:15.941959+00', '2026-03-11 11:31:51.890625+00', 't');
 
 -- System games (is_system = true)
-INSERT INTO public.games (id, account_id, profile_id, source_game_id, system_key, is_system, title, description, subject, difficulty, target_age_min, target_age_max, estimated_duration_minutes, tags, code_bundle, metadata, created_by, created_at, updated_at, markdown) VALUES ('560b130f-80a6-4353-a750-deac44224c53', NULL, NULL, NULL, 'drawing-basic', 't', 'Drawing', 'A simple drawing game with colors, brush sizes, and fun Dodi drawing commands.', 'creativity', 'easy', '3', '12', '15', '{drawing,art,creativity,avatar}', '
+INSERT INTO public.games (id, account_id, profile_id, source_game_id, system_key, is_system, title, description, target_age_min, target_age_max, estimated_duration_minutes, tags, code_bundle, metadata, created_by, created_at, updated_at, markdown) VALUES ('560b130f-80a6-4353-a750-deac44224c53', NULL, NULL, NULL, 'drawing-basic', 't', 'Drawing', 'A simple drawing game with colors, brush sizes, and fun Dodi drawing commands.', '3', '12', '15', '{drawing,art,creativity,avatar}', '
 <!doctype html>
 <html lang="en">
 <head>
@@ -77,13 +77,14 @@ INSERT INTO public.games (id, account_id, profile_id, source_game_id, system_key
       font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
     }
     * { box-sizing: border-box; }
+    html { height: 100%; }
     body {
       margin: 0;
       background: #f2f7ff;
       color: #123;
       display: flex;
       flex-direction: column;
-      min-height: 100vh;
+      height: 100%;
     }
     .toolbar {
       display: flex;
@@ -122,10 +123,10 @@ INSERT INTO public.games (id, account_id, profile_id, source_game_id, system_key
     }
     #board {
       flex: 1;
+      min-height: 0;
       background: #fff;
       touch-action: none;
       width: 100%;
-      height: calc(100vh - 70px);
       display: block;
     }
   </style>
@@ -226,13 +227,13 @@ INSERT INTO public.games (id, account_id, profile_id, source_game_id, system_key
       function resizeCanvas() {
         var existing = ctx.getImageData(0, 0, canvas.width || 1, canvas.height || 1);
         var ratio = window.devicePixelRatio || 1;
-        var nextW = Math.max(300, Math.floor(window.innerWidth));
-        var nextH = Math.max(300, Math.floor(window.innerHeight - 70));
+        // Size the drawing buffer to the canvas'' own (flex-allocated) box so it fills
+        // the fixed game stage exactly — no assumptions about the device viewport.
+        var nextW = Math.max(1, Math.floor(canvas.clientWidth));
+        var nextH = Math.max(1, Math.floor(canvas.clientHeight));
 
         canvas.width = Math.floor(nextW * ratio);
         canvas.height = Math.floor(nextH * ratio);
-        canvas.style.width = nextW + ''px'';
-        canvas.style.height = nextH + ''px'';
 
         ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
         ctx.lineCap = ''round'';

@@ -1,5 +1,7 @@
 import { cn } from "@/lib/utils";
 
+import { RequiredMark } from "./rows";
+
 interface PageHeadProps {
   title: string;
   sub?: string;
@@ -25,6 +27,7 @@ interface SectionProps {
   desc?: string;
   action?: React.ReactNode;
   className?: string;
+  required?: boolean;
   children: React.ReactNode;
 }
 
@@ -34,6 +37,7 @@ export function Section({
   desc,
   action,
   className,
+  required,
   children,
 }: SectionProps) {
   return (
@@ -41,7 +45,10 @@ export function Section({
       {title ? (
         <div className="mb-2.5 flex items-end justify-between gap-4">
           <div>
-            <h2 className="text-base font-semibold tracking-tight">{title}</h2>
+            <h2 className="text-base font-semibold tracking-tight">
+              {title}
+              {required ? <RequiredMark /> : null}
+            </h2>
             {desc ? (
               <p className="mt-0.5 text-[13px] text-muted-foreground">{desc}</p>
             ) : null}

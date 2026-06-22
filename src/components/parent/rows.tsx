@@ -56,11 +56,22 @@ export function DotSep() {
   return <span className="mx-1.5 text-border-strong">·</span>;
 }
 
+/** Subtle red asterisk marking a mandatory field. Decorative — fields carry
+ *  `aria-required` for assistive tech, so this is hidden from screen readers. */
+export function RequiredMark() {
+  return (
+    <span aria-hidden="true" className="ml-0.5 text-destructive/70">
+      *
+    </span>
+  );
+}
+
 interface FieldRowProps {
   label: string;
   hint?: React.ReactNode;
   htmlFor?: string;
   className?: string;
+  required?: boolean;
   children: React.ReactNode;
 }
 
@@ -70,6 +81,7 @@ export function FieldRow({
   hint,
   htmlFor,
   className,
+  required,
   children,
 }: FieldRowProps) {
   return (
@@ -82,6 +94,7 @@ export function FieldRow({
       <div>
         <label htmlFor={htmlFor} className="text-sm font-medium">
           {label}
+          {required ? <RequiredMark /> : null}
         </label>
         {hint ? (
           <div className="mt-0.5 text-[12.5px] text-muted-foreground">

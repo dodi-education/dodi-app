@@ -193,26 +193,65 @@ CREATE TABLE IF NOT EXISTS "public"."games" (
     "is_system" boolean DEFAULT false NOT NULL,
     "title" "text" NOT NULL,
     "description" "text" DEFAULT ''::"text" NOT NULL,
-    "subject" "text" DEFAULT 'creativity'::"text" NOT NULL,
-    "difficulty" "text" DEFAULT 'easy'::"text" NOT NULL,
     "target_age_min" integer DEFAULT 4 NOT NULL,
     "target_age_max" integer DEFAULT 12 NOT NULL,
     "estimated_duration_minutes" integer DEFAULT 10 NOT NULL,
     "tags" "text"[] DEFAULT '{}'::"text"[] NOT NULL,
     "code_bundle" "text" NOT NULL,
     "metadata" "jsonb" DEFAULT '{}'::"jsonb" NOT NULL,
+    "is_active" boolean DEFAULT false NOT NULL,
     "created_by" "text" DEFAULT 'system'::"text" NOT NULL,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "markdown" "text" DEFAULT ''::"text" NOT NULL,
+    "learning_goal" "text" DEFAULT ''::"text" NOT NULL,
+    "success_definition" "text" DEFAULT ''::"text" NOT NULL,
+    "success_criteria" "jsonb" DEFAULT '{}'::"jsonb" NOT NULL,
+    "progress_kind" "text" DEFAULT 'open'::"text" NOT NULL,
     CONSTRAINT "games_age_range_check" CHECK (("target_age_min" <= "target_age_max")),
-    CONSTRAINT "games_created_by_check" CHECK (("created_by" = ANY (ARRAY['system'::"text", 'ai'::"text", 'kid'::"text"]))),
+    CONSTRAINT "games_created_by_check" CHECK (("created_by" = ANY (ARRAY['system'::"text", 'parent'::"text", 'kid'::"text"]))),
     CONSTRAINT "games_duration_check" CHECK ((("estimated_duration_minutes" >= 1) AND ("estimated_duration_minutes" <= 180))),
-    CONSTRAINT "games_system_row_check" CHECK (((("is_system" = true) AND ("account_id" IS NULL) AND ("profile_id" IS NULL) AND ("system_key" IS NOT NULL)) OR (("is_system" = false) AND ("account_id" IS NOT NULL) AND ("profile_id" IS NOT NULL))))
+    CONSTRAINT "games_progress_kind_check" CHECK (("progress_kind" = ANY (ARRAY['goal'::"text", 'open'::"text"]))),
+    CONSTRAINT "games_system_row_check" CHECK (((("is_system" = true) AND ("account_id" IS NULL) AND ("profile_id" IS NULL) AND ("system_key" IS NOT NULL)) OR (("is_system" = false) AND ("account_id" IS NOT NULL) AND ("system_key" IS NULL))))
 );
 
 
 ALTER TABLE "public"."games" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."game_sharings" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "game_id" "uuid" NOT NULL,
+    "account_id" "uuid" NOT NULL,
+    "profile_id" "uuid",
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "game_sharings_pkey" PRIMARY KEY ("id")
+);
+
+
+ALTER TABLE "public"."game_sharings" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."game_plays" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "account_id" "uuid" NOT NULL,
+    "profile_id" "uuid" NOT NULL,
+    "game_id" "uuid" NOT NULL,
+    "progress_kind" "text" DEFAULT 'open'::"text" NOT NULL,
+    "started_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "ended_at" timestamp with time zone,
+    "succeeded" boolean DEFAULT false NOT NULL,
+    "succeeded_at" timestamp with time zone,
+    "final_progress" numeric DEFAULT 0 NOT NULL,
+    "metrics" "jsonb" DEFAULT '{}'::"jsonb" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "game_plays_progress_kind_check" CHECK (("progress_kind" = ANY (ARRAY['goal'::"text", 'open'::"text"]))),
+    CONSTRAINT "game_plays_progress_range_check" CHECK ((("final_progress" >= (0)::numeric) AND ("final_progress" <= (1)::numeric)))
+);
+
+
+ALTER TABLE "public"."game_plays" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."personas" (
@@ -284,6 +323,11 @@ ALTER TABLE ONLY "public"."game_translations"
 
 
 
+ALTER TABLE ONLY "public"."game_plays"
+    ADD CONSTRAINT "game_plays_pkey" PRIMARY KEY ("id");
+
+
+
 ALTER TABLE ONLY "public"."games"
     ADD CONSTRAINT "games_pkey" PRIMARY KEY ("id");
 
@@ -322,6 +366,18 @@ CREATE INDEX "agent_sessions_profile_status_idx" ON "public"."agent_sessions" US
 
 
 
+CREATE INDEX "game_plays_account_created_idx" ON "public"."game_plays" USING "btree" ("account_id", "created_at" DESC);
+
+
+
+CREATE INDEX "game_plays_challenge_idx" ON "public"."game_plays" USING "btree" ("profile_id", "succeeded", "started_at" DESC);
+
+
+
+CREATE INDEX "game_plays_game_idx" ON "public"."game_plays" USING "btree" ("game_id", "created_at" DESC);
+
+
+
 CREATE INDEX "games_account_profile_created_idx" ON "public"."games" USING "btree" ("account_id", "profile_id", "created_at" DESC);
 
 
@@ -331,6 +387,22 @@ CREATE INDEX "games_system_created_idx" ON "public"."games" USING "btree" ("is_s
 
 
 CREATE INDEX "games_tags_gin_idx" ON "public"."games" USING "gin" ("tags");
+
+
+
+CREATE UNIQUE INDEX "game_sharings_game_profile_uniq" ON "public"."game_sharings" USING "btree" ("game_id", "profile_id") WHERE ("profile_id" IS NOT NULL);
+
+
+
+CREATE UNIQUE INDEX "game_sharings_game_family_uniq" ON "public"."game_sharings" USING "btree" ("game_id") WHERE ("profile_id" IS NULL);
+
+
+
+CREATE INDEX "game_sharings_game_idx" ON "public"."game_sharings" USING "btree" ("game_id");
+
+
+
+CREATE INDEX "game_sharings_account_profile_idx" ON "public"."game_sharings" USING "btree" ("account_id", "profile_id");
 
 
 
@@ -370,6 +442,10 @@ CREATE OR REPLACE TRIGGER "agent_sessions_updated_at" BEFORE UPDATE ON "public".
 
 
 
+CREATE OR REPLACE TRIGGER "game_plays_updated_at" BEFORE UPDATE ON "public"."game_plays" FOR EACH ROW EXECUTE FUNCTION "public"."handle_updated_at"();
+
+
+
 CREATE OR REPLACE TRIGGER "games_updated_at" BEFORE UPDATE ON "public"."games" FOR EACH ROW EXECUTE FUNCTION "public"."handle_updated_at"();
 
 
@@ -399,6 +475,36 @@ ALTER TABLE ONLY "public"."agent_sessions"
 
 ALTER TABLE ONLY "public"."agent_sessions"
     ADD CONSTRAINT "agent_sessions_profile_id_fkey" FOREIGN KEY ("profile_id") REFERENCES "public"."profiles"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."game_plays"
+    ADD CONSTRAINT "game_plays_account_id_fkey" FOREIGN KEY ("account_id") REFERENCES "public"."accounts"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."game_plays"
+    ADD CONSTRAINT "game_plays_game_id_fkey" FOREIGN KEY ("game_id") REFERENCES "public"."games"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."game_plays"
+    ADD CONSTRAINT "game_plays_profile_id_fkey" FOREIGN KEY ("profile_id") REFERENCES "public"."profiles"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."game_sharings"
+    ADD CONSTRAINT "game_sharings_game_id_fkey" FOREIGN KEY ("game_id") REFERENCES "public"."games"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."game_sharings"
+    ADD CONSTRAINT "game_sharings_account_id_fkey" FOREIGN KEY ("account_id") REFERENCES "public"."accounts"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."game_sharings"
+    ADD CONSTRAINT "game_sharings_profile_id_fkey" FOREIGN KEY ("profile_id") REFERENCES "public"."profiles"("id") ON DELETE CASCADE;
 
 
 
@@ -453,6 +559,30 @@ ALTER TABLE ONLY "public"."system_logs"
 
 
 CREATE POLICY "Users can create own agent sessions" ON "public"."agent_sessions" FOR INSERT WITH CHECK (("auth"."uid"() = "account_id"));
+
+
+
+CREATE POLICY "Users can create own game plays" ON "public"."game_plays" FOR INSERT WITH CHECK (("auth"."uid"() = "account_id"));
+
+
+
+CREATE POLICY "Users can update own game plays" ON "public"."game_plays" FOR UPDATE USING (("auth"."uid"() = "account_id")) WITH CHECK (("auth"."uid"() = "account_id"));
+
+
+
+CREATE POLICY "Users can view own game plays" ON "public"."game_plays" FOR SELECT USING (("auth"."uid"() = "account_id"));
+
+
+
+CREATE POLICY "Users can create own game sharings" ON "public"."game_sharings" FOR INSERT WITH CHECK (("auth"."uid"() = "account_id"));
+
+
+
+CREATE POLICY "Users can delete own game sharings" ON "public"."game_sharings" FOR DELETE USING (("auth"."uid"() = "account_id"));
+
+
+
+CREATE POLICY "Users can view own game sharings" ON "public"."game_sharings" FOR SELECT USING (("auth"."uid"() = "account_id"));
 
 
 
@@ -532,6 +662,12 @@ ALTER TABLE "public"."accounts" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."agent_sessions" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."game_plays" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."game_sharings" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."game_translations" ENABLE ROW LEVEL SECURITY;
@@ -775,6 +911,18 @@ GRANT ALL ON TABLE "public"."accounts" TO "service_role";
 GRANT ALL ON TABLE "public"."agent_sessions" TO "anon";
 GRANT ALL ON TABLE "public"."agent_sessions" TO "authenticated";
 GRANT ALL ON TABLE "public"."agent_sessions" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."game_plays" TO "anon";
+GRANT ALL ON TABLE "public"."game_plays" TO "authenticated";
+GRANT ALL ON TABLE "public"."game_plays" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."game_sharings" TO "anon";
+GRANT ALL ON TABLE "public"."game_sharings" TO "authenticated";
+GRANT ALL ON TABLE "public"."game_sharings" TO "service_role";
 
 
 

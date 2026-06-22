@@ -28,7 +28,6 @@ export interface VoiceSessionConfig extends GeminiLiveConfig {
 interface CatalogEntry {
   id: string;
   title: string;
-  subject: string;
   description: string;
   tags: string[];
 }
@@ -71,7 +70,6 @@ async function getGameCatalog(): Promise<CatalogEntry[]> {
   return games.map((g) => ({
     id: g.id,
     title: g.title,
-    subject: g.subject,
     description: g.description,
     tags: g.tags,
   }));

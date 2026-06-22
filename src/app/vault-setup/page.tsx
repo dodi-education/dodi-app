@@ -38,14 +38,14 @@ export default function VaultSetupPage() {
 
   // Direct navigation with no phrase to show (e.g. refresh after setup) → leave.
   useEffect(() => {
-    if (!phrase) router.replace("/dashboard");
+    if (!phrase) router.replace("/parent/dashboard");
   }, [phrase, router]);
 
   if (!phrase) return null;
 
   function finish() {
     acknowledge();
-    router.replace("/dashboard");
+    router.replace("/parent/dashboard");
   }
 
   function handleVerify() {

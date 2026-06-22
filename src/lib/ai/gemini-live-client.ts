@@ -22,7 +22,8 @@ export type GeminiLiveEvent =
   | { type: "setupComplete" }
   | { type: "audio"; data: string } // base64 PCM
   | { type: "text"; text: string }
-  | { type: "inputTranscription"; text: string }
+  | { type: "inputTranscription"; text: string } // kid's speech
+  | { type: "outputTranscription"; text: string } // Dodi's spoken words
   | { type: "toolCall"; id: string; name: string; args: Record<string, unknown> }
   | { type: "interrupted" }
   | { type: "turnComplete" }
@@ -153,6 +154,7 @@ export class GeminiLiveClient {
         parts: [{ text: this.config.systemInstruction }],
       },
       inputAudioTranscription: {},
+      outputAudioTranscription: {},
     };
 
     if (this.config.tools && this.config.tools.length > 0) {
@@ -238,6 +240,14 @@ export class GeminiLiveClient {
           this.onEvent({
             type: "inputTranscription",
             text: content.inputTranscription.text,
+          });
+        }
+
+        // Output transcription (Dodi's spoken words transcribed by Gemini)
+        if (content.outputTranscription?.text) {
+          this.onEvent({
+            type: "outputTranscription",
+            text: content.outputTranscription.text,
           });
         }
 
