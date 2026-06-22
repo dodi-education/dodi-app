@@ -1,3 +1,5 @@
+import { NextResponse } from "next/server";
+
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database } from "@dodi/types/database";
@@ -51,9 +53,27 @@ export async function resolveAuth(request: Request): Promise<AuthContext> {
 }
 
 /** Helper: turn an AuthError into a JSON 401, rethrow anything else. */
-export function unauthorizedResponse(error: unknown): Response | null {
+export function unauthorizedResponse(error: unknown): NextResponse | null {
   if (error instanceof AuthError) {
-    return Response.json({ error: error.message }, { status: error.status });
+    return NextResponse.json({ error: error.message }, { status: error.status });
   }
   return null;
+}
+
+/**
+ * Route helper — resolve auth or return a 401 Response. Usage:
+ *   const auth = await requireAuth(request);
+ *   if (auth instanceof Response) return auth;
+ *   const { accountId, supabase } = auth;
+ */
+export async function requireAuth(
+  request: Request,
+): Promise<AuthContext | NextResponse> {
+  try {
+    return await resolveAuth(request);
+  } catch (error) {
+    const res = unauthorizedResponse(error);
+    if (res) return res;
+    throw error;
+  }
 }
