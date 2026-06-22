@@ -5,7 +5,7 @@
  * written by the AI memory-update flow, which moves client-side in P2 — once it
  * does, it encrypts the new dossier here rather than the server writing plaintext.)
  */
-import type { Profile } from "@/types/database";
+import type { Profile } from "@dodi/types/database";
 
 import type { VaultSession } from "./session";
 

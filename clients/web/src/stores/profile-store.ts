@@ -7,7 +7,7 @@ import { create } from "zustand";
 
 import type { VaultSession } from "@/lib/vault";
 import { decryptProfile } from "@/lib/vault/profile-crypto";
-import type { Profile } from "@/types/database";
+import type { Profile } from "@dodi/types/database";
 
 import { useVaultStore } from "./vault-store";
 

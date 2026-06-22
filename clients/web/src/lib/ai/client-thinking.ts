@@ -12,7 +12,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-import type { AIProviderId } from "@/types/ai";
+import type { AIProviderId } from "@dodi/types/ai";
 
 export interface ThinkingProvider {
   generateJson(system: string, prompt: string): Promise<Record<string, unknown>>;

@@ -17,6 +17,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",
     "@dodi/crypto": "workspace:*",
+    "@dodi/types": "workspace:*",
     "@google/generative-ai": "^0.24.1",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "2.98.0",

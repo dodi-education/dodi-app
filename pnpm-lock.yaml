@@ -26,6 +26,9 @@ importers:
       '@dodi/crypto':
         specifier: workspace:*
         version: link:../../core/crypto
+      '@dodi/types':
+        specifier: workspace:*
+        version: link:../../core/types
       '@google/generative-ai':
         specifier: ^0.24.1
         version: 0.24.1
@@ -136,6 +139,12 @@ importers:
       vitest:
         specifier: ^4.1.8
         version: 4.1.9(@types/node@20.19.43)(msw@2.14.6(@types/node@20.19.43)(typescript@5.9.3))(vite@8.0.16(@types/node@20.19.43)(jiti@2.7.0))
+
+  core/types:
+    devDependencies:
+      typescript:
+        specifier: ^5
+        version: 5.9.3
 
 packages:
 

@@ -12,7 +12,7 @@ import { runClientMemoryUpdate } from "@/lib/ai/client-memory-update";
 import { runGameTextAssistant } from "@/lib/ai/client-game-assistant";
 import { extractCommandMarkers } from "@/lib/games/command-markers";
 import { gameDebug, gameDebugWarn } from "@/lib/games/debug";
-import type { GameCommand } from "@/types/games";
+import type { GameCommand } from "@dodi/types/games";
 
 // ---------------------------------------------------------------------------
 // Types

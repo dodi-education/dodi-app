@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { generateVaultMasterKey } from "@dodi/crypto";
-import type { Profile } from "@/types/database";
+import type { Profile } from "@dodi/types/database";
 
 import {
   type ProfilePersonalFields,

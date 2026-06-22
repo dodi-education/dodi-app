@@ -9,7 +9,7 @@ import { useProfiles } from "@/hooks/use-profiles";
 import { cn } from "@/lib/utils";
 import { useDodiSessionStore } from "@/stores/dodi-session-store";
 
-import type { Profile } from "@/types/database";
+import type { Profile } from "@dodi/types/database";
 
 function getAvatarLabel(name: string): string {
   return name.length <= 5 ? name : name.slice(0, 2).toUpperCase();

@@ -1,10 +1,10 @@
-import type { Json } from "@/types/database";
+import type { Json } from "./database";
 import type {
   DodiProgressState,
   MetricsSummary,
   ProgressKind,
   SuccessCriteria,
-} from "@/lib/games/success";
+} from "./success";
 
 export type GameStateSummary = Record<string, Json | undefined>;
 

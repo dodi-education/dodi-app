@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { useProfileStore } from "@/stores/profile-store";
-import type { Profile } from "@/types/database";
+import type { Profile } from "@dodi/types/database";
 
 /**
  * Client hook over the profile cache: loads the decrypted profile list once

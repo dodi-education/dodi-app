@@ -1,0 +1,25 @@
+{
+  "name": "@dodi/types",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./ai": "./src/ai.ts",
+    "./agent-progress": "./src/agent-progress.ts",
+    "./database": "./src/database.ts",
+    "./games": "./src/games.ts",
+    "./tasks": "./src/tasks.ts",
+    "./success": "./src/success.ts",
+    "./gemini-live": "./src/gemini-live.ts",
+    "./logger": "./src/logger.ts"
+  },
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5"
+  }
+}

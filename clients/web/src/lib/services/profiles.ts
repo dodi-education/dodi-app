@@ -5,7 +5,7 @@ import type {
   Profile,
   ProfileInsert,
   ProfileUpdate,
-} from "@/types/database";
+} from "@dodi/types/database";
 
 type Client = SupabaseClient<Database>;
 

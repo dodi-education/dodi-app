@@ -3,8 +3,8 @@
  * typed GameCommand objects. Pure and browser-importable (no server deps) so the
  * client-side in-game assistant can sanitize the model's JSON output directly.
  */
-import type { Json } from "@/types/database";
-import type { GameCommand } from "@/types/games";
+import type { Json } from "@dodi/types/database";
+import type { GameCommand } from "@dodi/types/games";
 
 function toJsonValue(value: unknown): Json | undefined {
   if (value === null) return null;

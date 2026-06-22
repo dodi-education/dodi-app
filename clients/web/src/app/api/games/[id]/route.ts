@@ -3,7 +3,7 @@ import { z } from "zod/v4";
 
 import { createClient } from "@/lib/supabase/server";
 import { sanitizeGameBundle } from "@/lib/game-sanitizer";
-import type { GameUpdate, Json } from "@/types/database";
+import type { GameUpdate, Json } from "@dodi/types/database";
 import {
   deleteCustomGame,
   getGame,

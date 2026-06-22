@@ -24,7 +24,7 @@ import { encryptProfileFields } from "@/lib/vault";
 import { useProfileStore } from "@/stores/profile-store";
 import { useVaultStore } from "@/stores/vault-store";
 
-import type { Profile } from "@/types/database";
+import type { Profile } from "@dodi/types/database";
 
 const localeNames: Record<Locale, string> = {
   en: "English",

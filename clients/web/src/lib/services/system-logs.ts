@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { Database, SystemLog, SystemLogInsert } from "@/types/database";
+import type { Database, SystemLog, SystemLogInsert } from "@dodi/types/database";
 
 type Client = SupabaseClient<Database>;
 

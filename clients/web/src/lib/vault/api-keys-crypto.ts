@@ -7,7 +7,7 @@
  * The `keyPreview` (last 4 chars, for the UI) lives *inside* the encrypted blob,
  * so even that is invisible to the server.
  */
-import type { AIProviderId } from "@/types/ai";
+import type { AIProviderId } from "@dodi/types/ai";
 
 import type { VaultSession } from "./session";
 

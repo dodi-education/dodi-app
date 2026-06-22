@@ -1,8 +1,8 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { Database } from "@/types/database";
-import type { AIProviderId } from "@/types/ai";
+import type { Database } from "@dodi/types/database";
+import type { AIProviderId } from "@dodi/types/ai";
 import {
   SUCCESS_SYSTEM_TEMPLATE,
   SuccessCriteriaSchema,

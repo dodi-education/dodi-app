@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { Database } from "@/types/database";
+import type { Database } from "@dodi/types/database";
 
 type Client = SupabaseClient<Database>;
 type Account = Database["public"]["Tables"]["accounts"]["Row"];

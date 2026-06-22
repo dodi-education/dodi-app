@@ -7,8 +7,8 @@ import type {
   GameSharingInsert,
   GameUpdate,
   Json,
-} from "@/types/database";
-import type { GameMetadata, GameSharingState } from "@/types/games";
+} from "@dodi/types/database";
+import type { GameMetadata, GameSharingState } from "@dodi/types/games";
 import type { ProgressKind, SuccessCriteria } from "@/lib/games/success";
 import { sanitizeGameBundle } from "@/lib/game-sanitizer";
 

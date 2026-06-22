@@ -27,7 +27,7 @@ import {
   completeAgentSession,
   failAgentSession,
 } from "@/lib/services/agent-sessions";
-import type { Database, AgentSessionResult } from "@/types/database";
+import type { Database, AgentSessionResult } from "@dodi/types/database";
 import type {
   AgentTaskRequest,
   AgentTaskResult,
@@ -36,8 +36,8 @@ import type {
   GenerateGamePayload,
   UpdateGamePayload,
   ReadGameStatePayload,
-} from "@/types/tasks";
-import type { AgentProgressEvent, AgentStep } from "@/types/agent-progress";
+} from "@dodi/types/tasks";
+import type { AgentProgressEvent, AgentStep } from "@dodi/types/agent-progress";
 
 // ---------------------------------------------------------------------------
 // Session types

@@ -7,7 +7,7 @@ import { useTranslations } from "next-intl";
 import { Icon } from "@/components/shared/icon";
 import { KidButton } from "@/components/kid/kid-button";
 import { GameCard } from "@/components/games/game-card";
-import type { Game } from "@/types/database";
+import type { Game } from "@dodi/types/database";
 
 interface GameLibraryProps {
   profileId: string;

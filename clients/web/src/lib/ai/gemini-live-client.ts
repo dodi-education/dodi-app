@@ -4,11 +4,9 @@
  * Supports function calling (tools) for structured game command execution.
  */
 
-export interface GeminiLiveToolDeclaration {
-  name: string;
-  description: string;
-  parameters: Record<string, unknown>;
-}
+import type { GeminiLiveToolDeclaration } from "@dodi/types/gemini-live";
+
+export type { GeminiLiveToolDeclaration } from "@dodi/types/gemini-live";
 
 export interface GeminiLiveConfig {
   apiKey: string;

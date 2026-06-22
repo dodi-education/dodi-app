@@ -9,7 +9,7 @@ import {
 } from "@/components/games/game-sandbox";
 import { STAGE, stageSizeStyle } from "@/lib/games/stage";
 import { cn } from "@/lib/utils";
-import type { GameGoal, GameToParentMessage } from "@/types/games";
+import type { GameGoal, GameToParentMessage } from "@dodi/types/games";
 
 interface GameStageProps {
   gameId: string;

@@ -21,7 +21,7 @@ import type {
   GameGoal,
   GameToParentMessage,
   ParentToGameMessage,
-} from "@/types/games";
+} from "@dodi/types/games";
 
 export interface GameProgressUpdate {
   progress: number;

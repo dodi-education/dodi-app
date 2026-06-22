@@ -12,8 +12,8 @@ import { getActivePersona } from "@/lib/ai/voice-session";
 import { normalizeCommands } from "@/lib/games/normalize-commands";
 import { buildGameTextContext } from "@/lib/services/dodi-context";
 import { useProfileStore } from "@/stores/profile-store";
-import type { Game } from "@/types/database";
-import type { GameAssistantResponse } from "@/types/games";
+import type { Game } from "@dodi/types/database";
+import type { GameAssistantResponse } from "@dodi/types/games";
 
 export async function runGameTextAssistant(
   profileId: string,

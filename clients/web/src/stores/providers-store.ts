@@ -11,7 +11,7 @@ import {
   encryptProviders,
   providerKeyPreview,
 } from "@/lib/vault";
-import type { AIProviderId } from "@/types/ai";
+import type { AIProviderId } from "@dodi/types/ai";
 
 import { useVaultStore } from "./vault-store";
 

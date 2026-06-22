@@ -5,7 +5,7 @@ import type {
   Database,
   AgentSessionRow,
   AgentSessionResult,
-} from "@/types/database";
+} from "@dodi/types/database";
 
 const log = createLogger("agent-sessions-db");
 

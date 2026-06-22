@@ -20,7 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-import type { Persona } from "@/types/database";
+import type { Persona } from "@dodi/types/database";
 
 export default function PersonaDetailPage() {
   const t = useTranslations("personas");

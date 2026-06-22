@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { Database, Game, GameTranslation } from "@/types/database";
+import type { Database, Game, GameTranslation } from "@dodi/types/database";
 
 type Client = SupabaseClient<Database>;
 

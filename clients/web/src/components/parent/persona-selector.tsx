@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 
-import type { Persona } from "@/types/database";
+import type { Persona } from "@dodi/types/database";
 
 interface PersonaSelectorProps {
   profileId: string;

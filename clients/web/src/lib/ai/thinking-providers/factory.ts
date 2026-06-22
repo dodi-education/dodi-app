@@ -2,7 +2,7 @@
  * ThinkingProvider factory — creates the right provider based on config.
  */
 
-import type { AIProviderId } from "@/types/ai";
+import type { AIProviderId } from "@dodi/types/ai";
 
 import { AnthropicThinkingProvider } from "./anthropic";
 import { GeminiThinkingProvider } from "./gemini";

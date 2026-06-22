@@ -6,7 +6,7 @@
  * (is_system_default / no account_id) is a shared, built-in document with no
  * per-account key, so it stays plaintext.
  */
-import type { Persona } from "@/types/database";
+import type { Persona } from "@dodi/types/database";
 
 import type { VaultSession } from "./session";
 

@@ -7,7 +7,7 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { Database } from "@/types/database";
+import type { Database } from "@dodi/types/database";
 import type { StoredVaultKeys } from "@/lib/vault";
 
 type Client = SupabaseClient<Database>;

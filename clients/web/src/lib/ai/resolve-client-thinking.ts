@@ -7,7 +7,7 @@
  */
 import { AI_PROVIDERS } from "@/lib/ai/providers";
 import { useProvidersStore } from "@/stores/providers-store";
-import type { AccountModelConfig, AIProviderId } from "@/types/ai";
+import type { AccountModelConfig, AIProviderId } from "@dodi/types/ai";
 
 export interface ResolvedClientThinking {
   provider: AIProviderId;

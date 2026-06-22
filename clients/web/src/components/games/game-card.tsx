@@ -6,7 +6,7 @@ import { useTranslations } from "next-intl";
 import { Icon } from "@/components/shared/icon";
 import { KidButton } from "@/components/kid/kid-button";
 import { tagStyle } from "@/components/parent/games/tag-style";
-import type { Game } from "@/types/database";
+import type { Game } from "@dodi/types/database";
 
 interface GameCardProps {
   game: Game;

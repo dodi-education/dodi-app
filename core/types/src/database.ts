@@ -1,7 +1,7 @@
 // Manual database types — will be replaced with auto-generated types
 // once a Supabase project is created and `npx supabase gen types typescript` is run.
 
-import type { ProgressKind, SuccessCriteria } from "@/lib/games/success";
+import type { ProgressKind, SuccessCriteria } from "./success";
 
 export type Json =
   | string

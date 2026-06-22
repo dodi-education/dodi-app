@@ -15,7 +15,7 @@ import {
 import { PageHead, Section } from "@/components/parent/section";
 import { DotSep, Row, RowMain, RowMeta, RowTitle } from "@/components/parent/rows";
 import { useProfiles } from "@/hooks/use-profiles";
-import type { SystemLog } from "@/types/database";
+import type { SystemLog } from "@dodi/types/database";
 
 interface PersonaOption {
   id: string;

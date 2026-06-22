@@ -20,7 +20,7 @@ import { encryptProfileFields } from "@/lib/vault";
 import { useProfileStore } from "@/stores/profile-store";
 import { useProvidersStore } from "@/stores/providers-store";
 import { useVaultStore } from "@/stores/vault-store";
-import type { AccountModelConfig } from "@/types/ai";
+import type { AccountModelConfig } from "@dodi/types/ai";
 
 /**
  * Returns `true` only when the new dossier was successfully written to the DB

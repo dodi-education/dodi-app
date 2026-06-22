@@ -37,7 +37,7 @@ import {
 import { AI_PROVIDERS } from "@/lib/ai/providers";
 import { validateProviderKey } from "@/lib/ai/validate-key";
 import { useProvidersStore } from "@/stores/providers-store";
-import type { AIProviderId, AccountModelConfig } from "@/types/ai";
+import type { AIProviderId, AccountModelConfig } from "@dodi/types/ai";
 
 const THINKING_PROVIDER_NONE = "__none__";
 

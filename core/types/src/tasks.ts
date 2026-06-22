@@ -4,7 +4,7 @@
  * Defines the request/response shapes for the coding agent API.
  */
 
-import type { ProgressKind, SuccessCriteria } from "@/lib/games/success";
+import type { ProgressKind, SuccessCriteria } from "./success";
 
 export type AgentTaskType = "generate_game" | "update_game" | "read_game_state";
 

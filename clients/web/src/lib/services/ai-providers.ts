@@ -1,12 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { Database } from "@/types/database";
+import type { Database } from "@dodi/types/database";
 import type {
   AIProviderId,
   AccountModelConfig,
   ConfiguredProvider,
   StoredAPIKeys,
-} from "@/types/ai";
+} from "@dodi/types/ai";
 import { encrypt, decrypt } from "@/lib/encryption";
 import { getProviderDefinition } from "@/lib/ai/providers";
 

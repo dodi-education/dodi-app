@@ -14,28 +14,29 @@
 
 import { z } from "zod/v4";
 
-/** Whether a game has a measurable objective (`goal`) or is open-ended (`open`). */
-export type ProgressKind = "goal" | "open";
+import type {
+  Comparator,
+  Condition,
+  ConditionResult,
+  MetricKey,
+  MetricsSummary,
+  SuccessCriteria,
+  SuccessEvaluation,
+} from "@dodi/types/success";
 
-/**
- * The standardized metric vocabulary. A game may report any subset of these via
- * the reserved `dodi.metrics` object in its state and `game:progress` events.
- * Success criteria conditions reference these keys only — game-specific values
- * live under `metrics.custom` and are not used for evaluation.
- */
-export type MetricKey =
-  | "correct"
-  | "incorrect"
-  | "attempts"
-  | "accuracy" // 0..1
-  | "streak"
-  | "score"
-  | "hintsUsed"
-  | "itemsCompleted"
-  | "itemsTotal"
-  | "elapsedMs"
-  | "maxTaskMs"
-  | "avgTaskMs";
+// Re-export the shared type contracts so existing `@/lib/games/success`
+// importers keep working; the single source of truth is @dodi/types/success.
+export type {
+  Comparator,
+  Condition,
+  ConditionResult,
+  DodiProgressState,
+  MetricKey,
+  MetricsSummary,
+  ProgressKind,
+  SuccessCriteria,
+  SuccessEvaluation,
+} from "@dodi/types/success";
 
 export const METRIC_KEYS: readonly MetricKey[] = [
   "correct",
@@ -69,8 +70,6 @@ export const METRIC_VOCABULARY: Record<MetricKey, string> = {
   avgTaskMs: "Average per-task time in milliseconds.",
 };
 
-export type Comparator = ">=" | ">" | "<=" | "<" | "==" | "!=";
-
 export const COMPARATORS: readonly Comparator[] = [
   ">=",
   ">",
@@ -79,40 +78,6 @@ export const COMPARATORS: readonly Comparator[] = [
   "==",
   "!=",
 ] as const;
-
-export interface Condition {
-  metric: MetricKey;
-  op: Comparator;
-  value: number;
-}
-
-export interface SuccessCriteria {
-  /** Echoes the parent's plain-language success definition. */
-  description: string;
-  /** `all` = every condition must hold (AND); `any` = at least one (OR). */
-  match: "all" | "any";
-  conditions: Condition[];
-  /** Metrics the game MUST report for the criteria to be evaluable. */
-  requiredMetrics: MetricKey[];
-}
-
-/**
- * A reported metrics object. Standard keys are partial numbers; `custom` holds
- * game-specific numeric values that are displayed but never evaluated.
- */
-export type MetricsSummary = Partial<Record<MetricKey, number>> & {
-  custom?: Record<string, number>;
-};
-
-/** Reserved namespaced sub-object games place inside their state / progress events. */
-export interface DodiProgressState {
-  progressKind: ProgressKind;
-  /** Completion toward the goal, 0..1. */
-  progress: number;
-  /** Optional human-readable progress label, e.g. "2 of 3 solved". */
-  progressLabel?: string;
-  metrics: MetricsSummary;
-}
 
 // ---------------------------------------------------------------------------
 // Zod schemas (used by the bridge parser and generation validator)
@@ -153,20 +118,6 @@ export const DodiProgressStateSchema = z.object({
 // ---------------------------------------------------------------------------
 // Evaluation
 // ---------------------------------------------------------------------------
-
-export interface ConditionResult {
-  condition: Condition;
-  /** The actual metric value, or undefined if the game has not reported it. */
-  actual: number | undefined;
-  met: boolean;
-}
-
-export interface SuccessEvaluation {
-  succeeded: boolean;
-  conditions: ConditionResult[];
-  /** Required metrics the game has not reported yet. */
-  missingMetrics: MetricKey[];
-}
 
 function compare(actual: number, op: Comparator, value: number): boolean {
   switch (op) {

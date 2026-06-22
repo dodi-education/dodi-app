@@ -17,8 +17,8 @@ import { decryptPersona } from "@/lib/vault";
 import { useProfileStore } from "@/stores/profile-store";
 import { useProvidersStore } from "@/stores/providers-store";
 import { useVaultStore } from "@/stores/vault-store";
-import type { AccountModelConfig } from "@/types/ai";
-import type { Game, Persona } from "@/types/database";
+import type { AccountModelConfig } from "@dodi/types/ai";
+import type { Game, Persona } from "@dodi/types/database";
 
 export interface VoiceSessionConfig extends GeminiLiveConfig {
   isBirthday?: boolean;

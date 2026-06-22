@@ -5,7 +5,7 @@ const nextConfig: NextConfig = {
   devIndicators: {
     position: 'bottom-right',
   },
-  transpilePackages: ["@dodi/crypto"],
+  transpilePackages: ["@dodi/crypto", "@dodi/types"],
 };
 
 const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");

@@ -18,9 +18,9 @@ import { useProfiles } from "@/hooks/use-profiles";
 import { resolveClientThinking } from "@/lib/ai/resolve-client-thinking";
 import { calculateChildAge } from "@/lib/services/dodi-context";
 import { buildLearningContext } from "@/lib/services/learning-context";
-import type { AgentProgressEvent, AgentStep } from "@/types/agent-progress";
-import type { AgentCodeResult } from "@/types/tasks";
-import type { AgentSessionResult } from "@/types/database";
+import type { AgentProgressEvent, AgentStep } from "@dodi/types/agent-progress";
+import type { AgentCodeResult } from "@dodi/types/tasks";
+import type { AgentSessionResult } from "@dodi/types/database";
 import type { ProgressKind } from "@/lib/games/success";
 
 interface KidOption {

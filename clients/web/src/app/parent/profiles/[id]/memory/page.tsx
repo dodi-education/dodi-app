@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { useProfileStore } from "@/stores/profile-store";
 import { useVaultStore } from "@/stores/vault-store";
 
-import type { Profile } from "@/types/database";
+import type { Profile } from "@dodi/types/database";
 
 const textareaClassName =
   "block w-full resize-y rounded-md border border-input bg-card px-3 py-2 font-mono text-[12.5px] leading-relaxed outline-none transition-[color,box-shadow,border-color] placeholder:text-faint hover:border-faint focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary-soft-2";

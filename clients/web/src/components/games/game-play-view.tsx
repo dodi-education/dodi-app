@@ -26,7 +26,7 @@ import type {
   GameCommand,
   GameGoal,
   GameToParentMessage,
-} from "@/types/games";
+} from "@dodi/types/games";
 
 interface GamePlayViewProps {
   gameId: string;

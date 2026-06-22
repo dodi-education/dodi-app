@@ -7,7 +7,7 @@ import {
   normalizeModelConfig,
   updateModelConfig,
 } from "@/lib/services/ai-providers";
-import type { AccountModelConfig } from "@/types/ai";
+import type { AccountModelConfig } from "@dodi/types/ai";
 
 const providerEnum = z.enum(["gemini", "openai", "anthropic", "xai"]);
 

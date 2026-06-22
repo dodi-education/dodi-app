@@ -5,7 +5,7 @@
  * and by the client to update visual indicators + voice narration.
  */
 
-import type { AgentCodeResult } from "@/types/tasks";
+import type { AgentCodeResult } from "./tasks";
 
 export type AgentStep =
   | "reading_docs"

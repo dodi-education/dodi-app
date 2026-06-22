@@ -30,10 +30,10 @@ import {
 } from "@/lib/services/games";
 import { sanitizeGameBundle } from "@/lib/game-sanitizer";
 import { createLogger } from "@/lib/logger";
-import type { AgentTaskRequest, AgentCodeResult } from "@/types/tasks";
-import type { AgentProgressEvent } from "@/types/agent-progress";
+import type { AgentTaskRequest, AgentCodeResult } from "@dodi/types/tasks";
+import type { AgentProgressEvent } from "@dodi/types/agent-progress";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database } from "@/types/database";
+import type { Database } from "@dodi/types/database";
 import { getLanguageDisplayName } from "@/lib/services/dodi-context";
 
 const log = createLogger("agent-sessions");

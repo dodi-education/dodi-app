@@ -1,4 +1,4 @@
-import type { AIProviderId, AIProviderDefinition } from "@/types/ai";
+import type { AIProviderId, AIProviderDefinition } from "@dodi/types/ai";
 
 export const AI_PROVIDERS: AIProviderDefinition[] = [
   {
