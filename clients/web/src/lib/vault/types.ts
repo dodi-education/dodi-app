@@ -11,7 +11,7 @@
  *
  * Personal fields are sealed client-side before they ever reach a VaultStore.
  */
-import type { KemWrappedKey, PasswordWrappedKey } from "@/lib/crypto";
+import type { KemWrappedKey, PasswordWrappedKey } from "@dodi/crypto";
 
 /** Logical record kinds. Maps to a table (Supabase) or a document type (vault). */
 export type VaultCollection =
@@ -27,7 +27,7 @@ export type MetadataValue = string | number | boolean | null;
 
 /**
  * One stored encrypted record. `ciphertext` is a self-describing versioned
- * envelope (see `@/lib/crypto` record format). `metadata` holds ONLY
+ * envelope (see `@dodi/crypto` record format). `metadata` holds ONLY
  * operational fields that the server is allowed to see and query
  * (ids, FKs, enums, timestamps, the public `social_id`) — never personal data.
  */

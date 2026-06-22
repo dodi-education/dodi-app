@@ -5,7 +5,7 @@ import {
   constantTimeEqual,
   generateKemKeyPair,
   toBase64Url,
-} from "@/lib/crypto";
+} from "@dodi/crypto";
 
 import {
   type DeviceRegistration,

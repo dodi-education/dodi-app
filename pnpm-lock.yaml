@@ -23,21 +23,12 @@ importers:
       '@anthropic-ai/sdk':
         specifier: ^0.80.0
         version: 0.80.0(zod@4.4.3)
+      '@dodi/crypto':
+        specifier: workspace:*
+        version: link:../../core/crypto
       '@google/generative-ai':
         specifier: ^0.24.1
         version: 0.24.1
-      '@noble/ciphers':
-        specifier: 1.3.0
-        version: 1.3.0
-      '@noble/hashes':
-        specifier: 1.8.0
-        version: 1.8.0
-      '@noble/post-quantum':
-        specifier: ^0.6.1
-        version: 0.6.1
-      '@scure/bip39':
-        specifier: ^2.2.0
-        version: 2.2.0
       '@supabase/ssr':
         specifier: ^0.8.0
         version: 0.8.0(@supabase/supabase-js@2.98.0)
@@ -114,6 +105,31 @@ importers:
       tw-animate-css:
         specifier: ^1.4.0
         version: 1.4.0
+      typescript:
+        specifier: ^5
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.8
+        version: 4.1.9(@types/node@20.19.43)(msw@2.14.6(@types/node@20.19.43)(typescript@5.9.3))(vite@8.0.16(@types/node@20.19.43)(jiti@2.7.0))
+
+  core/crypto:
+    dependencies:
+      '@noble/ciphers':
+        specifier: 1.3.0
+        version: 1.3.0
+      '@noble/hashes':
+        specifier: 1.8.0
+        version: 1.8.0
+      '@noble/post-quantum':
+        specifier: ^0.6.1
+        version: 0.6.1
+      '@scure/bip39':
+        specifier: ^2.2.0
+        version: 2.2.0
+    devDependencies:
+      '@types/node':
+        specifier: ^20
+        version: 20.19.43
       typescript:
         specifier: ^5
         version: 5.9.3

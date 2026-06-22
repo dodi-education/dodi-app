@@ -17,7 +17,7 @@ import {
   unwrapKeyWithPassword,
   wrapKeyForDevice,
   wrapKeyWithPassword,
-} from "@/lib/crypto";
+} from "@dodi/crypto";
 
 import type { StoredVaultKeys } from "./types";
 

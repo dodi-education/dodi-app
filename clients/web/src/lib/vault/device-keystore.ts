@@ -16,7 +16,7 @@ import {
   generateSignKeyPair,
   randomBytes,
   toBase64Url,
-} from "@/lib/crypto";
+} from "@dodi/crypto";
 
 export interface StoredDevice {
   deviceId: string;

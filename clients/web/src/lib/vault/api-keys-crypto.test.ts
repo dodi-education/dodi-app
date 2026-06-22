@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { generateVaultMasterKey } from "@/lib/crypto";
+import { generateVaultMasterKey } from "@dodi/crypto";
 
 import {
   type VaultProviders,

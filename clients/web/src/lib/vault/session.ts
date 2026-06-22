@@ -11,7 +11,7 @@ import {
   encryptField,
   isEncryptedField,
   wrapKeyWithPassword,
-} from "@/lib/crypto";
+} from "@dodi/crypto";
 
 export class VaultSession {
   #vmk: Uint8Array | null;

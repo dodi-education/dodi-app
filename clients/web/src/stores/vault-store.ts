@@ -10,7 +10,7 @@
  */
 import { create } from "zustand";
 
-import { toBase64Url } from "@/lib/crypto";
+import { toBase64Url } from "@dodi/crypto";
 import {
   type StoredDevice,
   type StoredVaultKeys,

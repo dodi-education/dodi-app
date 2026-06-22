@@ -5,7 +5,7 @@ import {
   constantTimeEqual,
   toBase64Url,
   unwrapKeyWithPassword,
-} from "@/lib/crypto";
+} from "@dodi/crypto";
 
 import {
   type StoredDevice,
