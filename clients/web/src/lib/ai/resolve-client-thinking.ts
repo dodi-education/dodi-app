@@ -5,7 +5,7 @@
  *
  * Mirrors the resolution in client-memory-update.ts.
  */
-import { AI_PROVIDERS } from "@/lib/ai/providers";
+import { AI_PROVIDERS } from "@dodi/ai/providers";
 import { useProvidersStore } from "@/stores/providers-store";
 import type { AccountModelConfig, AIProviderId } from "@dodi/types/ai";
 

@@ -12,7 +12,7 @@ import {
   buildGameVoiceContext,
   buildHomeVoiceContext,
   isTodayBirthday,
-} from "@/lib/services/dodi-context";
+} from "@dodi/ai/dodi-context";
 import { decryptPersona } from "@dodi/vault";
 import { useProfileStore } from "@/stores/profile-store";
 import { useProvidersStore } from "@/stores/providers-store";

@@ -8,7 +8,7 @@ import type {
   StoredAPIKeys,
 } from "@dodi/types/ai";
 import { encrypt, decrypt } from "@/lib/encryption";
-import { getProviderDefinition } from "@/lib/ai/providers";
+import { getProviderDefinition } from "@dodi/ai/providers";
 
 type Client = SupabaseClient<Database>;
 

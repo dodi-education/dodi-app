@@ -34,8 +34,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-import { AI_PROVIDERS } from "@/lib/ai/providers";
-import { validateProviderKey } from "@/lib/ai/validate-key";
+import { AI_PROVIDERS } from "@dodi/ai/providers";
+import { validateProviderKey } from "@dodi/ai/validate-key";
 import { useProvidersStore } from "@/stores/providers-store";
 import type { AIProviderId, AccountModelConfig } from "@dodi/types/ai";
 

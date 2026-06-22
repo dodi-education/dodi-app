@@ -5,7 +5,7 @@
  * and mode-specific instructions into system prompts + tool declarations.
  */
 
-import type { GeminiLiveToolDeclaration } from "@/lib/ai/gemini-live-client";
+import type { GeminiLiveToolDeclaration } from "@dodi/types/gemini-live";
 
 /**
  * Hint injected when memory is empty (first session with this child). Defined

@@ -46,7 +46,7 @@ vi.mock("@dodi/vault", () => ({
   }),
 }));
 
-vi.mock("@/lib/services/dodi-context", () => ({
+vi.mock("@dodi/ai/dodi-context", () => ({
   buildGameVoiceContext: () => ({ systemInstruction: "SYS", tools: [] }),
   buildHomeVoiceContext: () => ({ systemInstruction: "SYS", tools: [] }),
   isTodayBirthday: () => false,

@@ -39,7 +39,7 @@ vi.mock("@dodi/vault", () => ({
   }),
 }));
 
-vi.mock("@/lib/ai/client-thinking", () => ({
+vi.mock("@dodi/ai/client-thinking", () => ({
   createClientThinkingProvider: () => provider,
 }));
 

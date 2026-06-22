@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildMemoryUpdateInstruction,
   parseMemoryUpdateResponse,
-} from "@/lib/ai/memory-prompt";
+} from "./memory-prompt";
 
 describe("buildMemoryUpdateInstruction", () => {
   const instruction = buildMemoryUpdateInstruction("SOUL-DOC");

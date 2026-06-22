@@ -14,7 +14,7 @@ import {
   getModelConfig,
   normalizeModelConfig,
 } from "@/lib/services/ai-providers";
-import { THINKING_MODEL_REQUIRED_MESSAGE } from "@/lib/ai/thinking-config";
+import { THINKING_MODEL_REQUIRED_MESSAGE } from "@dodi/ai/thinking-config";
 
 type Client = SupabaseClient<Database>;
 

@@ -6,11 +6,11 @@
  * thinking provider directly from the browser. The server never sees the child's
  * data, the persona soul, or the provider key.
  */
-import { createClientThinkingProvider } from "@/lib/ai/client-thinking";
+import { createClientThinkingProvider } from "@dodi/ai/client-thinking";
 import { resolveClientThinking } from "@/lib/ai/resolve-client-thinking";
 import { getActivePersona } from "@/lib/ai/voice-session";
 import { normalizeCommands } from "@/lib/games/normalize-commands";
-import { buildGameTextContext } from "@/lib/services/dodi-context";
+import { buildGameTextContext } from "@dodi/ai/dodi-context";
 import { useProfileStore } from "@/stores/profile-store";
 import type { Game } from "@dodi/types/database";
 import type { GameAssistantResponse } from "@dodi/types/games";

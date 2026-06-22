@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",
+    "@dodi/ai": "workspace:*",
     "@dodi/crypto": "workspace:*",
     "@dodi/types": "workspace:*",
     "@dodi/vault": "workspace:*",

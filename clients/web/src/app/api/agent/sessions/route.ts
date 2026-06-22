@@ -15,7 +15,7 @@ import {
   trimHistory,
   AgentAbortedError,
 } from "@/lib/ai/agent-session";
-import { THINKING_MODEL_REQUIRED_MESSAGE } from "@/lib/ai/thinking-config";
+import { THINKING_MODEL_REQUIRED_MESSAGE } from "@dodi/ai/thinking-config";
 import {
   createAgentSession,
   cleanupStaleAgentSessions,
@@ -34,7 +34,7 @@ import type { AgentTaskRequest, AgentCodeResult } from "@dodi/types/tasks";
 import type { AgentProgressEvent } from "@dodi/types/agent-progress";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@dodi/types/database";
-import { getLanguageDisplayName } from "@/lib/services/dodi-context";
+import { getLanguageDisplayName } from "@dodi/ai/dodi-context";
 
 const log = createLogger("agent-sessions");
 

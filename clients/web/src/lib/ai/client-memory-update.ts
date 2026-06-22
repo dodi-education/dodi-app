@@ -9,12 +9,12 @@
  * the manual ?process-memory trigger). Returns whether the encrypted write
  * succeeded so the caller only clears its outbox on success.
  */
-import { createClientThinkingProvider } from "@/lib/ai/client-thinking";
+import { createClientThinkingProvider } from "@dodi/ai/client-thinking";
 import {
   buildMemoryUpdateInstruction,
   parseMemoryUpdateResponse,
-} from "@/lib/ai/memory-prompt";
-import { AI_PROVIDERS } from "@/lib/ai/providers";
+} from "@dodi/ai/memory-prompt";
+import { AI_PROVIDERS } from "@dodi/ai/providers";
 import { getActivePersona } from "@/lib/ai/voice-session";
 import { encryptProfileFields } from "@dodi/vault";
 import { useProfileStore } from "@/stores/profile-store";
