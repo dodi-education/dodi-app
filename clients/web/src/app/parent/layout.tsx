@@ -1,34 +1,19 @@
 import Image from "next/image";
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { getTranslations } from "next-intl/server";
 
+import { AccountBadge } from "@/components/parent/account-badge";
 import { KidViewButton } from "@/components/parent/kid-view-button";
 import { SignOutButton } from "@/components/parent/sign-out-button";
 import { BottomNav, SidebarNav } from "@/components/shared/sidebar-nav";
 import { VaultGate } from "@/components/vault/vault-gate";
-import { getAccount } from "@dodi/platform/services/accounts";
-import { createClient } from "@/lib/supabase/server";
 
-export default async function ParentLayout({
+// Auth gating is handled by middleware (unauth -> /login); data is fetched
+// client-side, so this layout is a pure shell.
+export default function ParentLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/login");
-  }
-
-  const t = await getTranslations("settings");
-  const account = await getAccount(supabase, user.id).catch(() => null);
-  const tier = account?.subscription_tier ?? "free";
-  const initial = (user.email?.[0] ?? "?").toUpperCase();
-
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
       {/* Desktop sidebar */}
@@ -50,22 +35,7 @@ export default async function ParentLayout({
         </div>
         <div className="mt-auto flex flex-col gap-2.5 pt-3">
           <KidViewButton />
-          <div className="flex items-center gap-2 border-t pt-2.5">
-            <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary-soft-2 text-xs font-bold text-primary">
-              {initial}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-[12.5px] font-semibold">
-                {user.email}
-              </div>
-              <div className="text-[11.5px] text-muted-foreground">
-                {t("tierLabel", {
-                  tier: tier.charAt(0).toUpperCase() + tier.slice(1),
-                })}
-              </div>
-            </div>
-            <SignOutButton />
-          </div>
+          <AccountBadge />
         </div>
       </aside>
 
