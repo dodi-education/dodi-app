@@ -1,28 +1,28 @@
-import Link from "next/link";
-import { redirect } from "next/navigation";
-import { getTranslations } from "next-intl/server";
+"use client";
 
-import { Icon } from "@/components/shared/icon";
+import Link from "next/link";
+import { useTranslations } from "next-intl";
+import { useEffect, useState } from "react";
+
 import { Row, RowMain, RowMeta, RowTitle } from "@/components/parent/rows";
 import { PageHead, Section } from "@/components/parent/section";
+import { Icon } from "@/components/shared/icon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { listPersonas } from "@dodi/platform/services/personas";
-import { createClient } from "@/lib/supabase/server";
+import { dodi } from "@/lib/api";
+import type { Persona } from "@dodi/types/database";
 
-export default async function PersonasPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+export default function PersonasPage() {
+  const t = useTranslations("personas");
+  const [personas, setPersonas] = useState<Persona[]>([]);
 
-  if (!user) {
-    redirect("/login");
-  }
-
-  const t = await getTranslations("personas");
-
-  const personas = await listPersonas(supabase, user.id);
+  useEffect(() => {
+    dodi
+      .request("/api/personas")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((d: Persona[]) => setPersonas(d))
+      .catch(() => setPersonas([]));
+  }, []);
 
   return (
     <div>
@@ -65,7 +65,11 @@ export default async function PersonasPage() {
                   )}
                 </RowTitle>
                 <RowMeta className="truncate">
-                  {persona.soul.split("\n").find((l) => l.startsWith("- "))?.replace(/^- /, "").replace(/\*\*/g, "") ?? t("noDescription")}
+                  {persona.soul
+                    .split("\n")
+                    .find((l) => l.startsWith("- "))
+                    ?.replace(/^- /, "")
+                    .replace(/\*\*/g, "") ?? t("noDescription")}
                 </RowMeta>
               </RowMain>
               <Icon name="chevron_right" size={16} className="text-faint" />
