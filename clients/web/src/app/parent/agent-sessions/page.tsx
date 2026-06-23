@@ -1,5 +1,6 @@
 "use client";
 
+import { dodi } from "@/lib/api";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 
@@ -63,7 +64,7 @@ export default function AgentSessionsPage() {
         params.set("limit", String(PAGE_SIZE));
         params.set("offset", String(offset));
 
-        const res = await fetch(`/api/agent/sessions?${params.toString()}`);
+        const res = await dodi.request(`/api/agent/sessions?${params.toString()}`);
         if (!res.ok) throw new Error("Failed to fetch");
 
         const data: AgentSessionRow[] = await res.json();
@@ -99,7 +100,7 @@ export default function AgentSessionsPage() {
 
     setDeactivating(sessionId);
     try {
-      const res = await fetch(`/api/agent/sessions/${sessionId}`, {
+      const res = await dodi.request(`/api/agent/sessions/${sessionId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: "inactive" }),

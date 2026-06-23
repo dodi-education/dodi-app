@@ -1,5 +1,6 @@
 "use client";
 
+import { dodi } from "@/lib/api";
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 
@@ -74,7 +75,7 @@ export function AIProviderConfig() {
     async function load() {
       try {
         await useProvidersStore.getState().load();
-        const res = await fetch("/api/ai/config");
+        const res = await dodi.request("/api/ai/config");
         if (cancelled) return;
         if (res.ok) {
           const cfg: AccountModelConfig | null = await res.json();
@@ -153,7 +154,7 @@ export function AIProviderConfig() {
           def.models.find((m) => m.capabilities.includes("voice")) ?? def.models[0];
         const defaultVoice = def.voices[0];
         if (defaultModel && defaultVoice) {
-          await fetch("/api/ai/config", {
+          await dodi.request("/api/ai/config", {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -197,7 +198,7 @@ export function AIProviderConfig() {
     setConfigSaved(false);
 
     try {
-      const res = await fetch("/api/ai/config", {
+      const res = await dodi.request("/api/ai/config", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

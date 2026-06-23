@@ -3,6 +3,7 @@
  * and reuse the plaintext across navigation. Decrypted data lives in memory only
  * (never persisted). Mutations call `invalidate()` to force a refetch.
  */
+import { dodi } from "@/lib/api";
 import { create } from "zustand";
 
 import type { VaultSession } from "@dodi/vault";
@@ -64,7 +65,7 @@ export const useProfileStore = create<ProfileStoreState>((set, get) => ({
     if (listInFlight && !force) return listInFlight;
 
     listInFlight = (async () => {
-      const res = await fetch("/api/profiles");
+      const res = await dodi.request("/api/profiles");
       if (!res.ok) throw new Error("Failed to load profiles");
       const rows = (await res.json()) as Profile[];
       const session = await awaitSession();
@@ -94,7 +95,7 @@ export const useProfileStore = create<ProfileStoreState>((set, get) => ({
     if (existing && !force) return existing;
 
     const pending = (async () => {
-      const res = await fetch(`/api/profiles/${id}`);
+      const res = await dodi.request(`/api/profiles/${id}`);
       if (!res.ok) return null;
       const row = (await res.json()) as Profile;
       const decrypted = decryptProfile(await awaitSession(), row);

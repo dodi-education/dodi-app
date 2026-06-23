@@ -1,5 +1,6 @@
 "use client";
 
+import { dodi } from "@/lib/api";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -226,7 +227,7 @@ export function GameStudio({ initialGame }: GameStudioProps) {
     let cancelled = false;
     void (async () => {
       try {
-        const res = await fetch("/api/ai/config");
+        const res = await dodi.request("/api/ai/config");
         if (cancelled) return;
         if (!res.ok) {
           setHasThinkingProvider(false);
@@ -350,7 +351,7 @@ export function GameStudio({ initialGame }: GameStudioProps) {
     pollRef.current = setInterval(() => {
       void (async () => {
         try {
-          const res = await fetch(`/api/agent/sessions/${id}`);
+          const res = await dodi.request(`/api/agent/sessions/${id}`);
           if (!res.ok) {
             stopPolling();
             setThinking(false);
@@ -448,7 +449,7 @@ export function GameStudio({ initialGame }: GameStudioProps) {
     stoppingRef.current = true;
     stopPolling();
     try {
-      await fetch(`/api/agent/sessions/${sessionId}`, {
+      await dodi.request(`/api/agent/sessions/${sessionId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: "inactive" }),
@@ -555,7 +556,7 @@ export function GameStudio({ initialGame }: GameStudioProps) {
           kids.find((k) => k.id === primaryProfileId)?.birthdate ?? null,
         ) ?? undefined;
 
-      const res = await fetch("/api/agent/sessions", {
+      const res = await dodi.request("/api/agent/sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
         body: JSON.stringify({
@@ -653,7 +654,7 @@ export function GameStudio({ initialGame }: GameStudioProps) {
     setSaving(true);
     try {
       if (game.id) {
-        const res = await fetch(`/api/games/${game.id}`, {
+        const res = await dodi.request(`/api/games/${game.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -668,7 +669,7 @@ export function GameStudio({ initialGame }: GameStudioProps) {
         if (!res.ok) throw new Error(await readError(res));
       } else {
         // Persist a new game straight from settings (no build required).
-        const res = await fetch("/api/games", {
+        const res = await dodi.request("/api/games", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

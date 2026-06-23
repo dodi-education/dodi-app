@@ -1,5 +1,6 @@
 "use client";
 
+import { dodi } from "@/lib/api";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 
@@ -87,7 +88,7 @@ export function GamePlayView({
       const id = playIdRef.current;
       if (!id) return;
       try {
-        void fetch(`/api/games/${gameId}/plays/${id}`, {
+        void dodi.request(`/api/games/${gameId}/plays/${id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
@@ -166,7 +167,7 @@ export function GamePlayView({
     let cancelled = false;
     void (async () => {
       try {
-        const res = await fetch(`/api/games/${gameId}/plays`, {
+        const res = await dodi.request(`/api/games/${gameId}/plays`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ profileId }),
@@ -192,7 +193,7 @@ export function GamePlayView({
 
   const logEvent = useCallback(async (event: string, message: string) => {
     try {
-      await fetch(`/api/games/${gameId}/events`, {
+      await dodi.request(`/api/games/${gameId}/events`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

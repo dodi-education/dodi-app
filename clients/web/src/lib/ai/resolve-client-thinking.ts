@@ -5,6 +5,7 @@
  *
  * Mirrors the resolution in client-memory-update.ts.
  */
+import { dodi } from "@/lib/api";
 import { AI_PROVIDERS } from "@dodi/ai/providers";
 import { useProvidersStore } from "@/stores/providers-store";
 import type { AccountModelConfig, AIProviderId } from "@dodi/types/ai";
@@ -20,7 +21,7 @@ export interface ResolvedClientThinking {
  * available (caller should prompt the parent to configure a provider key).
  */
 export async function resolveClientThinking(): Promise<ResolvedClientThinking | null> {
-  const cfgRes = await fetch("/api/ai/config");
+  const cfgRes = await dodi.request("/api/ai/config");
   if (!cfgRes.ok) return null;
   const config = (await cfgRes.json()) as AccountModelConfig | null;
   if (!config) return null;

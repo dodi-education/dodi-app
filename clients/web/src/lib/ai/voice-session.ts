@@ -7,6 +7,7 @@
  *
  * model_config (provider/model selection) is plaintext, fetched from /api/ai/config.
  */
+import { dodi } from "@/lib/api";
 import type { GeminiLiveConfig } from "@/lib/ai/gemini-live-client";
 import {
   buildGameVoiceContext,
@@ -33,7 +34,7 @@ interface CatalogEntry {
 }
 
 async function getModelConfig(): Promise<AccountModelConfig> {
-  const res = await fetch("/api/ai/config");
+  const res = await dodi.request("/api/ai/config");
   if (!res.ok) throw new Error("No AI provider configured");
   const cfg = (await res.json()) as AccountModelConfig | null;
   if (!cfg) throw new Error("No AI provider configured");
@@ -50,7 +51,7 @@ async function getVoiceKey(config: AccountModelConfig): Promise<string> {
 
 /** Active persona (or the global default), with its soul decrypted. */
 export async function getActivePersona(activePersonaId: string | null): Promise<Persona> {
-  const res = await fetch("/api/personas");
+  const res = await dodi.request("/api/personas");
   if (!res.ok) throw new Error("Failed to load persona");
   const personas = (await res.json()) as Persona[];
   const persona =
@@ -64,7 +65,7 @@ export async function getActivePersona(activePersonaId: string | null): Promise<
 }
 
 async function getGameCatalog(): Promise<CatalogEntry[]> {
-  const res = await fetch("/api/games");
+  const res = await dodi.request("/api/games");
   if (!res.ok) return [];
   const games = (await res.json()) as Game[];
   return games.map((g) => ({
@@ -119,7 +120,7 @@ export async function buildGameVoiceConfig(
   const apiKey = await getVoiceKey(config);
   const persona = await getActivePersona(profile.active_persona_id);
 
-  const gameRes = await fetch(`/api/games/${gameId}`);
+  const gameRes = await dodi.request(`/api/games/${gameId}`);
   if (!gameRes.ok) throw new Error("Game not found");
   const game = (await gameRes.json()) as Game;
 

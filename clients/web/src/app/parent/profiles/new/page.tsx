@@ -1,5 +1,6 @@
 "use client";
 
+import { dodi } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
@@ -57,7 +58,7 @@ export default function NewProfilePage() {
       ...(birthdate ? { birthdate } : {}),
     });
 
-    const response = await fetch("/api/profiles", {
+    const response = await dodi.request("/api/profiles", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

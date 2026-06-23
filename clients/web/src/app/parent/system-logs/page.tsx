@@ -1,5 +1,6 @@
 "use client";
 
+import { dodi } from "@/lib/api";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 
@@ -65,7 +66,7 @@ export default function SystemLogsPage() {
 
   // Fetch filter options on mount
   useEffect(() => {
-    fetch("/api/personas")
+    dodi.request("/api/personas")
       .then((r) => r.json())
       .then((data: PersonaOption[]) => {
         if (Array.isArray(data)) setPersonas(data);
@@ -84,7 +85,7 @@ export default function SystemLogsPage() {
         params.set("limit", String(PAGE_SIZE));
         params.set("offset", String(offset));
 
-        const res = await fetch(`/api/system-logs?${params.toString()}`);
+        const res = await dodi.request(`/api/system-logs?${params.toString()}`);
         if (!res.ok) throw new Error("Failed to fetch");
 
         const data: SystemLog[] = await res.json();

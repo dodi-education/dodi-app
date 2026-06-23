@@ -1,5 +1,6 @@
 "use client";
 
+import { dodi } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 
@@ -17,7 +18,7 @@ export function KidViewButton({ compact = false }: { compact?: boolean }) {
     }
     e.preventDefault();
     // Fetch profiles to resolve active profile's language
-    const response = await fetch("/api/profiles");
+    const response = await dodi.request("/api/profiles");
     if (response.ok) {
       const profiles = await response.json();
       if (profiles.length > 0) {

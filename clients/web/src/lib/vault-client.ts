@@ -1,16 +1,15 @@
 /**
- * Browser-side vault-keys calls. Thin wrapper over a same-origin, cookie-authed
- * DodiClient (the transport + logic now live in @dodi/protocol).
+ * Browser-side vault-keys calls, routed through the platform API (api.dodi.app)
+ * with the user's bearer token, via the shared DodiClient.
  */
-import { DodiClient } from "@dodi/protocol";
 import type { StoredVaultKeys } from "@dodi/vault";
 
-const client = new DodiClient();
+import { dodi } from "@/lib/api";
 
 export function fetchVaultKeys(): Promise<StoredVaultKeys | null> {
-  return client.getVaultKeys();
+  return dodi.getVaultKeys();
 }
 
 export function saveVaultKeys(keys: StoredVaultKeys): Promise<void> {
-  return client.putVaultKeys(keys);
+  return dodi.putVaultKeys(keys);
 }

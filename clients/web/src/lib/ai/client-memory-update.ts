@@ -9,6 +9,7 @@
  * the manual ?process-memory trigger). Returns whether the encrypted write
  * succeeded so the caller only clears its outbox on success.
  */
+import { dodi } from "@/lib/api";
 import { createClientThinkingProvider } from "@dodi/ai/client-thinking";
 import {
   buildMemoryUpdateInstruction,
@@ -45,7 +46,7 @@ export async function runClientMemoryUpdate(
     const session = useVaultStore.getState().session;
     if (!session) return false;
 
-    const cfgRes = await fetch("/api/ai/config");
+    const cfgRes = await dodi.request("/api/ai/config");
     if (!cfgRes.ok) return false;
     const config = (await cfgRes.json()) as AccountModelConfig | null;
     if (!config) return false;
@@ -87,7 +88,7 @@ export async function runClientMemoryUpdate(
     const result = parseMemoryUpdateResponse(responseText);
     const enc = encryptProfileFields(session, { memory: result.memory });
 
-    const res = await fetch(`/api/profiles/${profileId}`, {
+    const res = await dodi.request(`/api/profiles/${profileId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ memory: enc.memory }),

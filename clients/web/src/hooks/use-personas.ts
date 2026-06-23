@@ -1,3 +1,4 @@
+import { dodi } from "@/lib/api";
 import { useEffect, useState } from "react";
 
 interface PersonaSummary {
@@ -14,7 +15,7 @@ export function usePersonas(): { nameById: Map<string, string>; loading: boolean
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/personas")
+    dodi.request("/api/personas")
       .then((r) => (r.ok ? r.json() : []))
       .then((data) => {
         if (!cancelled) setPersonas(data as PersonaSummary[]);

@@ -1,5 +1,6 @@
 "use client";
 
+import { dodi } from "@/lib/api";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
@@ -108,7 +109,7 @@ export default function EditProfilePage() {
       birthdate: birthdate || null,
     });
 
-    const response = await fetch(`/api/profiles/${params.id}`, {
+    const response = await dodi.request(`/api/profiles/${params.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -136,7 +137,7 @@ export default function EditProfilePage() {
       return;
     }
 
-    const response = await fetch(`/api/profiles/${params.id}`, {
+    const response = await dodi.request(`/api/profiles/${params.id}`, {
       method: "DELETE",
     });
 

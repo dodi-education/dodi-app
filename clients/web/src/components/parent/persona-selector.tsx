@@ -1,5 +1,6 @@
 "use client";
 
+import { dodi } from "@/lib/api";
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 
@@ -18,7 +19,7 @@ export function PersonaSelector({ profileId, value, onChange }: PersonaSelectorP
 
   useEffect(() => {
     async function load() {
-      const response = await fetch("/api/personas");
+      const response = await dodi.request("/api/personas");
       if (response.ok) {
         const data: Persona[] = await response.json();
         setPersonas(data);
@@ -32,7 +33,7 @@ export function PersonaSelector({ profileId, value, onChange }: PersonaSelectorP
     const newValue = personaId || null;
     onChange(newValue);
 
-    await fetch(`/api/profiles/${profileId}`, {
+    await dodi.request(`/api/profiles/${profileId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ active_persona_id: newValue }),

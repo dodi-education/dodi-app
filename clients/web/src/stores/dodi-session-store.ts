@@ -1,3 +1,4 @@
+import { dodi } from "@/lib/api";
 import { create } from "zustand";
 
 import {
@@ -1260,7 +1261,7 @@ function createEventHandler(
               if (snapshot) {
                 gameDebug("voice", `read_game_state: got snapshot (${snapshot.length} chars)`);
               }
-              return fetch("/api/agent/sessions", {
+              return dodi.request("/api/agent/sessions", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({

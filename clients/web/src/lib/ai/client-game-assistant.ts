@@ -6,6 +6,7 @@
  * thinking provider directly from the browser. The server never sees the child's
  * data, the persona soul, or the provider key.
  */
+import { dodi } from "@/lib/api";
 import { createClientThinkingProvider } from "@dodi/ai/client-thinking";
 import { resolveClientThinking } from "@/lib/ai/resolve-client-thinking";
 import { getActivePersona } from "@/lib/ai/voice-session";
@@ -31,7 +32,7 @@ export async function runGameTextAssistant(
   const persona = await getActivePersona(profile.active_persona_id);
 
   // Locale-translated game (title/description) — matches the old server route.
-  const gameRes = await fetch(`/api/games/${gameId}?locale=${profile.language}`);
+  const gameRes = await dodi.request(`/api/games/${gameId}?locale=${profile.language}`);
   if (!gameRes.ok) throw new Error("Game not found");
   const game = (await gameRes.json()) as Game;
 

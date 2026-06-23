@@ -1,5 +1,6 @@
 "use client";
 
+import { dodi } from "@/lib/api";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
@@ -65,12 +66,12 @@ export default function NewPersonaPage() {
         const formData = new FormData();
         formData.append("file", fileInputRef.current.files[0]);
         formData.append("name", name);
-        response = await fetch("/api/personas/imports", {
+        response = await dodi.request("/api/personas/imports", {
           method: "POST",
           body: formData,
         });
       } else {
-        response = await fetch("/api/personas", {
+        response = await dodi.request("/api/personas", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name, soul }),

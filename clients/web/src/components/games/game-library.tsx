@@ -1,5 +1,6 @@
 "use client";
 
+import { dodi } from "@/lib/api";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -28,7 +29,7 @@ export function GameLibrary({ profileId }: GameLibraryProps) {
     setError(null);
 
     try {
-      const response = await fetch(`/api/games?profileId=${profileId}`);
+      const response = await dodi.request(`/api/games?profileId=${profileId}`);
       if (!response.ok) {
         const data = await response.json().catch(() => ({ error: "Failed to fetch games" }));
         throw new Error(data.error || "Failed to fetch games");

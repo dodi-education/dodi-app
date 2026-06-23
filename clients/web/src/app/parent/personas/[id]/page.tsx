@@ -1,5 +1,6 @@
 "use client";
 
+import { dodi } from "@/lib/api";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
@@ -42,7 +43,7 @@ export default function PersonaDetailPage() {
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      const response = await fetch(`/api/personas/${params.id}`);
+      const response = await dodi.request(`/api/personas/${params.id}`);
       if (cancelled) return;
       if (!response.ok) {
         setError(t("notFound"));
@@ -72,7 +73,7 @@ export default function PersonaDetailPage() {
     }
     setLoading(true);
 
-    const response = await fetch(`/api/personas/${params.id}`, {
+    const response = await dodi.request(`/api/personas/${params.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, soul }),
@@ -99,7 +100,7 @@ export default function PersonaDetailPage() {
     }
     setLoading(true);
 
-    const response = await fetch(`/api/personas/${params.id}/clones`, {
+    const response = await dodi.request(`/api/personas/${params.id}/clones`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: cloneName }),
@@ -119,7 +120,7 @@ export default function PersonaDetailPage() {
   async function handleDelete() {
     if (!confirm(t("confirmDelete"))) return;
 
-    const response = await fetch(`/api/personas/${params.id}`, {
+    const response = await dodi.request(`/api/personas/${params.id}`, {
       method: "DELETE",
     });
 

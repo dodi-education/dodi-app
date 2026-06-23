@@ -1,5 +1,6 @@
 "use client";
 
+import { dodi } from "@/lib/api";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -59,7 +60,7 @@ export function GameStudioList({
     const timer = setInterval(() => {
       void (async () => {
         try {
-          const res = await fetch("/api/agent/sessions?status=active&limit=100");
+          const res = await dodi.request("/api/agent/sessions?status=active&limit=100");
           if (!res.ok) return;
           const sessions = (await res.json()) as Array<{ game_id: string | null }>;
           if (cancelled) return;

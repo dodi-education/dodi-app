@@ -3,6 +3,7 @@
  * `/api/ai/providers`, decrypts it with the VaultSession, caches the plaintext
  * keys in memory, and re-encrypts on every change. The server never sees a key.
  */
+import { dodi } from "@/lib/api";
 import { create } from "zustand";
 
 import {
@@ -22,14 +23,14 @@ function requireSession() {
 }
 
 async function fetchBlob(): Promise<string | null> {
-  const res = await fetch("/api/ai/providers");
+  const res = await dodi.request("/api/ai/providers");
   if (!res.ok) throw new Error("Failed to load providers");
   const data = (await res.json()) as { encryptedProviders: string | null };
   return data.encryptedProviders ?? null;
 }
 
 async function saveBlob(blob: string): Promise<void> {
-  const res = await fetch("/api/ai/providers", {
+  const res = await dodi.request("/api/ai/providers", {
     method: "PUT",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ encryptedProviders: blob }),
