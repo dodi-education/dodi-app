@@ -4,7 +4,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database } from "@dodi/types/database";
 
-import { anonClient, userClient } from "./supabase";
+import { verifyDeviceBearer } from "./device-token";
+import { anonClient, serviceClient, userClient } from "./supabase";
 
 export type AuthVia = "user" | "device";
 
@@ -40,8 +41,19 @@ export async function resolveAuth(request: Request): Promise<AuthContext> {
   const token = readBearer(request);
   if (!token) throw new AuthError("Missing bearer token");
 
-  // P7.5 will detect + verify platform-signed device tokens here first.
+  // Device bearer (platform-signed, stateless): the agent and other headless
+  // clients. Queries run via the service-role client and MUST be scoped to
+  // accountId in app code (RLS is bypassed for this path).
+  const device = verifyDeviceBearer(token);
+  if (device) {
+    return {
+      accountId: device.accountId,
+      supabase: serviceClient(),
+      via: "device",
+    };
+  }
 
+  // User JWT (web/native): validated statelessly; queries run as the user (RLS).
   const { data, error } = await anonClient().auth.getUser(token);
   if (error || !data.user) throw new AuthError("Invalid or expired token");
 

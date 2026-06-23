@@ -392,6 +392,51 @@ export interface Database {
         };
         Relationships: [];
       };
+      devices: {
+        Row: {
+          id: string;
+          account_id: string | null;
+          device_id: string;
+          name: string | null;
+          kem_public_key: string;
+          sign_public_key: string;
+          status: string;
+          pairing_code: string | null;
+          enrolled_at: string | null;
+          last_seen_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          account_id?: string | null;
+          device_id: string;
+          name?: string | null;
+          kem_public_key: string;
+          sign_public_key: string;
+          status?: string;
+          pairing_code?: string | null;
+          enrolled_at?: string | null;
+          last_seen_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          account_id?: string | null;
+          device_id?: string;
+          name?: string | null;
+          kem_public_key?: string;
+          sign_public_key?: string;
+          status?: string;
+          pairing_code?: string | null;
+          enrolled_at?: string | null;
+          last_seen_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
@@ -415,6 +460,10 @@ export type GamePlayUpdate =
 export type SystemLog = Database["public"]["Tables"]["system_logs"]["Row"];
 export type SystemLogInsert =
   Database["public"]["Tables"]["system_logs"]["Insert"];
+export type Device = Database["public"]["Tables"]["devices"]["Row"];
+export type DeviceInsert = Database["public"]["Tables"]["devices"]["Insert"];
+export type DeviceUpdate = Database["public"]["Tables"]["devices"]["Update"];
+export type DeviceStatus = "pending" | "active" | "revoked";
 export type ProfileInsert = Database["public"]["Tables"]["profiles"]["Insert"];
 export type ProfileUpdate = Database["public"]["Tables"]["profiles"]["Update"];
 

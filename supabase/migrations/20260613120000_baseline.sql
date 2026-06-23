@@ -1021,3 +1021,43 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TAB
 
 
 
+
+-- ---------------------------------------------------------------------------
+-- devices: paired always-on companion devices (dodi-bot / agent).
+-- Public keys only; the VMK wrap lives in accounts.vault_keys.deviceWraps.
+-- Enroll/claim run via the service role (account_id is null until claimed).
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS "public"."devices" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "account_id" "uuid",
+    "device_id" "text" NOT NULL,
+    "name" "text",
+    "kem_public_key" "text" NOT NULL,
+    "sign_public_key" "text" NOT NULL,
+    "status" "text" DEFAULT 'pending'::"text" NOT NULL,
+    "pairing_code" "text",
+    "enrolled_at" timestamp with time zone,
+    "last_seen_at" timestamp with time zone,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+ALTER TABLE ONLY "public"."devices"
+    ADD CONSTRAINT "devices_pkey" PRIMARY KEY ("id");
+
+ALTER TABLE ONLY "public"."devices"
+    ADD CONSTRAINT "devices_account_device_uniq" UNIQUE ("account_id", "device_id");
+
+ALTER TABLE ONLY "public"."devices"
+    ADD CONSTRAINT "devices_account_id_fkey" FOREIGN KEY ("account_id") REFERENCES "public"."accounts"("id") ON DELETE CASCADE;
+
+CREATE INDEX "devices_account_idx" ON "public"."devices" USING "btree" ("account_id");
+CREATE INDEX "devices_pairing_code_idx" ON "public"."devices" USING "btree" ("pairing_code");
+
+CREATE OR REPLACE TRIGGER "devices_updated_at" BEFORE UPDATE ON "public"."devices" FOR EACH ROW EXECUTE FUNCTION "public"."handle_updated_at"();
+
+CREATE POLICY "Users manage own devices" ON "public"."devices" USING (("auth"."uid"() = "account_id")) WITH CHECK (("auth"."uid"() = "account_id"));
+
+GRANT ALL ON TABLE "public"."devices" TO "anon";
+GRANT ALL ON TABLE "public"."devices" TO "authenticated";
+GRANT ALL ON TABLE "public"."devices" TO "service_role";
