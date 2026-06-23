@@ -1,6 +1,8 @@
+"use client";
+
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { getLocale, getTranslations } from "next-intl/server";
+import { useLocale, useTranslations } from "next-intl";
+import { useEffect, useState } from "react";
 
 import { ProfileAvatar, ProfileName } from "@/components/parent/profile-bits";
 import { ProfilesGlance } from "@/components/parent/profiles-glance";
@@ -16,10 +18,15 @@ import { StatCell, StatStrip } from "@/components/parent/stat-strip";
 import { Icon } from "@/components/shared/icon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { listAgentSessions } from "@dodi/platform/services/agent-sessions";
-import { getDashboardStats } from "@dodi/platform/services/dashboard";
-import { listProfiles } from "@dodi/platform/services/profiles";
-import { createClient } from "@/lib/supabase/server";
+import { useProfiles } from "@/hooks/use-profiles";
+import { dodi } from "@/lib/api";
+import type { AgentSessionRow } from "@dodi/types/database";
+
+interface DashboardStats {
+  sessionsToday: number;
+  sessionsThisWeek: number;
+  gamesCreated: number;
+}
 
 const STATUS_BADGE_VARIANT: Record<
   string,
@@ -40,33 +47,41 @@ function formatElapsed(createdAt: string, finishedAt: string | null): string {
   return `${minutes}m ${seconds % 60}s`;
 }
 
-export default async function DashboardPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/login");
-  }
-
-  const [t, ts, locale] = await Promise.all([
-    getTranslations("dashboard"),
-    getTranslations("agentSessions"),
-    getLocale(),
-  ]);
+export default function DashboardPage() {
+  const t = useTranslations("dashboard");
+  const ts = useTranslations("agentSessions");
+  const locale = useLocale();
 
   // profiles fetched only for the count (empty state) + IDs; names/ages are
   // decrypted client-side in the ProfileAvatar/ProfileName/ProfilesGlance islands.
-  const [profiles, stats, sessions] = await Promise.all([
-    listProfiles(supabase, user.id),
-    getDashboardStats(supabase, user.id).catch(() => ({
-      sessionsToday: 0,
-      sessionsThisWeek: 0,
-      gamesCreated: 0,
-    })),
-    listAgentSessions(supabase, user.id, { limit: 5 }).catch(() => []),
-  ]);
+  const { profiles } = useProfiles();
+  const [stats, setStats] = useState<DashboardStats>({
+    sessionsToday: 0,
+    sessionsThisWeek: 0,
+    gamesCreated: 0,
+  });
+  const [sessions, setSessions] = useState<AgentSessionRow[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    dodi
+      .request("/api/dashboard")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: DashboardStats | null) => {
+        if (!cancelled && d) setStats(d);
+      })
+      .catch(() => {});
+    dodi
+      .request("/api/agent/sessions?limit=5")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: AgentSessionRow[] | null) => {
+        if (!cancelled && Array.isArray(d)) setSessions(d);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const statusLabels: Record<string, string> = {
     active: ts("statusActive"),
@@ -78,6 +93,11 @@ export default async function DashboardPage() {
     generate_game: ts("taskGenerate"),
     update_game: ts("taskUpdate"),
   };
+
+  // Still loading the (decrypted) profile list — hold the page chrome.
+  if (profiles === null) {
+    return <PageHead title={t("title")} sub={t("subtitle")} />;
+  }
 
   if (profiles.length === 0) {
     return (

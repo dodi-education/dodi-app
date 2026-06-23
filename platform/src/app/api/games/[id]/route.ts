@@ -7,9 +7,11 @@ import type { GameUpdate, Json } from "@dodi/types/database";
 import {
   deleteCustomGame,
   getGame,
+  isGameVisibleToProfile,
   replaceGameSharings,
   updateCustomGame,
 } from "@/services/games";
+import { getProfile } from "@/services/profiles";
 import { mapSuccessDefinition } from "@/lib/game-generation";
 import { getTranslation, applyTranslation } from "@/services/game-translations";
 import { createLogger } from "@/logger";
@@ -53,12 +55,26 @@ export async function GET(
   const { accountId, supabase } = auth;
 
   const { searchParams } = new URL(request.url);
-  const locale = searchParams.get("locale") ?? "en";
+  const profileId = searchParams.get("profileId") ?? undefined;
+  let locale = searchParams.get("locale") ?? "en";
 
   try {
     const game = await getGame(supabase, id);
     if (!game) {
       return NextResponse.json({ error: "Game not found" }, { status: 404 });
+    }
+
+    // Kid deep-link: scope the read to a profile — derive its locale and gate on
+    // visibility so inactive/unshared games 404 even via a direct URL.
+    if (profileId) {
+      const profile = await getProfile(supabase, profileId);
+      if (!profile || profile.account_id !== accountId) {
+        return NextResponse.json({ error: "Game not found" }, { status: 404 });
+      }
+      locale = profile.language;
+      if (!(await isGameVisibleToProfile(supabase, game, profileId))) {
+        return NextResponse.json({ error: "Game not found" }, { status: 404 });
+      }
     }
 
     const translation = await getTranslation(supabase, game.id, locale);

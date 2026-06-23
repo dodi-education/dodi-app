@@ -1,7 +1,9 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { getTranslations } from "next-intl/server";
+import { useTranslations } from "next-intl";
+import { useEffect, useMemo, useState } from "react";
 
 import { PageHead, Section } from "@/components/parent/section";
 import { Button } from "@/components/ui/button";
@@ -10,69 +12,71 @@ import {
   GameStudioList,
   type GameListItem,
 } from "@/components/parent/games/game-studio-list";
-import { createClient } from "@/lib/supabase/server";
-import { listAccountGames } from "@dodi/platform/services/games";
-import { listProfiles } from "@dodi/platform/services/profiles";
-import { listAgentSessions } from "@dodi/platform/services/agent-sessions";
+import { useProfiles } from "@/hooks/use-profiles";
+import { dodi } from "@/lib/api";
+import type { AgentSessionRow, Game } from "@dodi/types/database";
 
-export default async function GameStudioPage() {
-  const t = await getTranslations("gameStudio");
+type AccountGame = Game & {
+  sharing: { family: boolean; profileIds: string[] };
+};
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+export default function GameStudioPage() {
+  const t = useTranslations("gameStudio");
 
-  if (!user) {
-    notFound();
-  }
+  const { profiles } = useProfiles();
+  const [games, setGames] = useState<AccountGame[] | null>(null);
+  const [activeGameIds, setActiveGameIds] = useState<string[]>([]);
 
-  const [games, profiles, activeSessions] = await Promise.all([
-    listAccountGames(supabase, user.id),
-    listProfiles(supabase, user.id),
-    listAgentSessions(supabase, user.id, { status: "active" }),
-  ]);
-
-  const nameById = new Map(profiles.map((p) => [p.id, p.display_name]));
-  const activeGameIds = activeSessions
-    .map((s) => s.game_id)
-    .filter((id): id is string => Boolean(id));
-
-  // "Who can play" lives in game_sharings — load it once for the whole account
-  // (RLS scopes to this account) and index by game.
-  const { data: sharingRows } = await supabase
-    .from("game_sharings")
-    .select("game_id, profile_id");
-  const sharingByGame = new Map<string, { family: boolean; profileIds: string[] }>();
-  for (const row of sharingRows ?? []) {
-    let entry = sharingByGame.get(row.game_id);
-    if (!entry) {
-      entry = { family: false, profileIds: [] };
-      sharingByGame.set(row.game_id, entry);
-    }
-    if (row.profile_id === null) entry.family = true;
-    else entry.profileIds.push(row.profile_id);
-  }
-
-  const items: GameListItem[] = games.map((g) => {
-    const share = sharingByGame.get(g.id) ?? { family: false, profileIds: [] };
-    // The owning kid (for kid-created games) always counts as audience.
-    const audienceIds = new Set(share.profileIds);
-    if (g.profile_id) audienceIds.add(g.profile_id);
-    const kidNames = Array.from(audienceIds)
-      .map((id) => nameById.get(id))
-      .filter((name): name is string => Boolean(name));
-
-    return {
-      id: g.id,
-      title: g.title,
-      tags: g.tags,
-      updatedAt: g.updated_at,
-      isActive: g.is_active,
-      isFamily: share.family,
-      kidNames,
+  useEffect(() => {
+    let cancelled = false;
+    dodi
+      .request("/api/games?scope=account")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((d: AccountGame[]) => {
+        if (!cancelled) setGames(Array.isArray(d) ? d : []);
+      })
+      .catch(() => {
+        if (!cancelled) setGames([]);
+      });
+    dodi
+      .request("/api/agent/sessions?status=active")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((d: AgentSessionRow[]) => {
+        if (cancelled || !Array.isArray(d)) return;
+        setActiveGameIds(
+          d.map((s) => s.game_id).filter((id): id is string => Boolean(id)),
+        );
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
     };
-  });
+  }, []);
+
+  const items: GameListItem[] = useMemo(() => {
+    if (!games) return [];
+    // Decrypted names come from the profile cache (E2EE display_name).
+    const nameById = new Map((profiles ?? []).map((p) => [p.id, p.display_name]));
+    return games.map((g) => {
+      const share = g.sharing ?? { family: false, profileIds: [] };
+      // The owning kid (for kid-created games) always counts as audience.
+      const audienceIds = new Set(share.profileIds);
+      if (g.profile_id) audienceIds.add(g.profile_id);
+      const kidNames = Array.from(audienceIds)
+        .map((id) => nameById.get(id))
+        .filter((name): name is string => Boolean(name));
+
+      return {
+        id: g.id,
+        title: g.title,
+        tags: g.tags,
+        updatedAt: g.updated_at,
+        isActive: g.is_active,
+        isFamily: share.family,
+        kidNames,
+      };
+    });
+  }, [games, profiles]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -116,7 +120,11 @@ export default async function GameStudioPage() {
       </Link>
 
       <Section title={t("yourGames")} desc={t("yourGamesDesc")}>
-        {items.length === 0 ? (
+        {games === null ? (
+          <p className="px-1 py-6 text-center text-sm text-muted-foreground">
+            …
+          </p>
+        ) : items.length === 0 ? (
           <p className="px-1 py-6 text-center text-sm text-muted-foreground">
             {t("noGames")}
           </p>

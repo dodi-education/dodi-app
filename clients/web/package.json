@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --experimental-https -H 0.0.0.0 --port 3000",
-    "dev:https": "next dev --experimental-https -H 0.0.0.0 --port 3000",
+    "dev": "next dev --experimental-https --experimental-https-key ../../certs/dev-key.pem --experimental-https-cert ../../certs/dev.pem -H 0.0.0.0 --port 3000",
+    "dev:https": "next dev --experimental-https --experimental-https-key ../../certs/dev-key.pem --experimental-https-cert ../../certs/dev.pem -H 0.0.0.0 --port 3000",
     "dev:redirect": "node scripts/http-redirect.mjs",
     "dev:full": "node scripts/http-redirect.mjs & next dev --experimental-https --port 3001",
     "build": "next build",
@@ -19,7 +19,6 @@
     "@dodi/ai": "workspace:*",
     "@dodi/crypto": "workspace:*",
     "@dodi/games": "workspace:*",
-    "@dodi/platform": "workspace:*",
     "@dodi/protocol": "workspace:*",
     "@dodi/types": "workspace:*",
     "@dodi/vault": "workspace:*",

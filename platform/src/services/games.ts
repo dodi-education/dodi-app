@@ -345,6 +345,34 @@ export async function replaceGameSharings(
   if (insertError) throw insertError;
 }
 
+/**
+ * Read the normalized sharing state for every game in an account, keyed by game
+ * id (for the parent studio list). Games with no sharing rows are absent from
+ * the map — the caller defaults them to "shared with nobody".
+ */
+export async function getAccountSharingByGame(
+  supabase: Client,
+  accountId: string,
+): Promise<Record<string, GameSharingState>> {
+  const { data, error } = await supabase
+    .from("game_sharings")
+    .select("game_id, profile_id")
+    .eq("account_id", accountId);
+  if (error) throw error;
+
+  const map: Record<string, GameSharingState> = {};
+  for (const row of data ?? []) {
+    let entry = map[row.game_id];
+    if (!entry) {
+      entry = { family: false, profileIds: [] };
+      map[row.game_id] = entry;
+    }
+    if (row.profile_id === null) entry.family = true;
+    else entry.profileIds.push(row.profile_id);
+  }
+  return map;
+}
+
 /** Read the normalized sharing state for a single game (for the studio UI). */
 export async function getGameSharing(
   supabase: Client,

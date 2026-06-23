@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { AIProviderConfig } from "@/components/parent/ai-provider-config";
 import { ChangePassword } from "@/components/parent/change-password";
+import { DevicesSection } from "@/components/parent/devices-section";
 import { FieldRow } from "@/components/parent/rows";
 import { PageHead, Section } from "@/components/parent/section";
 import { LanguageSwitcher } from "@/components/shared/language-switcher";
@@ -55,6 +56,8 @@ export default function SettingsPage() {
       </Section>
 
       <ChangePassword />
+
+      <DevicesSection />
 
       <AIProviderConfig />
     </div>

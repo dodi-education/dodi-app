@@ -9,7 +9,6 @@ const nextConfig: NextConfig = {
     "@dodi/ai",
     "@dodi/crypto",
     "@dodi/games",
-    "@dodi/platform",
     "@dodi/protocol",
     "@dodi/types",
     "@dodi/vault",

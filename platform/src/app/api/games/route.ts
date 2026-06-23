@@ -8,6 +8,8 @@ import { getProfile } from "@/services/profiles";
 const log = createLogger("game-create");
 import {
   createCustomGame,
+  getAccountSharingByGame,
+  listAccountGames,
   listGames,
   replaceGameSharings,
 } from "@/services/games";
@@ -62,10 +64,31 @@ export async function GET(request: Request): Promise<NextResponse> {
   const { accountId, supabase } = auth;
 
   const { searchParams } = new URL(request.url);
+  const scope = searchParams.get("scope");
   const profileId = searchParams.get("profileId") ?? undefined;
   const search = searchParams.get("search") ?? undefined;
   const includeSystem = searchParams.get("includeSystem") !== "false";
   const tags = searchParams.getAll("tag").filter(Boolean);
+
+  // Parent studio view: all custom games for the account, each annotated with
+  // its sharing state. Canonical titles (no per-kid translation).
+  if (scope === "account") {
+    try {
+      const [games, sharingByGame] = await Promise.all([
+        listAccountGames(supabase, accountId),
+        getAccountSharingByGame(supabase, accountId),
+      ]);
+      const withSharing = games.map((game) => ({
+        ...game,
+        sharing: sharingByGame[game.id] ?? { family: false, profileIds: [] },
+      }));
+      return NextResponse.json(withSharing);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to fetch games";
+      return NextResponse.json({ error: message }, { status: 500 });
+    }
+  }
 
   let locale = "en";
   if (profileId) {

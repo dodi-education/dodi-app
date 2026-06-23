@@ -1056,6 +1056,8 @@ CREATE INDEX "devices_pairing_code_idx" ON "public"."devices" USING "btree" ("pa
 
 CREATE OR REPLACE TRIGGER "devices_updated_at" BEFORE UPDATE ON "public"."devices" FOR EACH ROW EXECUTE FUNCTION "public"."handle_updated_at"();
 
+ALTER TABLE "public"."devices" ENABLE ROW LEVEL SECURITY;
+
 CREATE POLICY "Users manage own devices" ON "public"."devices" USING (("auth"."uid"() = "account_id")) WITH CHECK (("auth"."uid"() = "account_id"));
 
 GRANT ALL ON TABLE "public"."devices" TO "anon";

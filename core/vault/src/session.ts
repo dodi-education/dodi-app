@@ -13,6 +13,9 @@ import {
   wrapKeyWithPassword,
 } from "@dodi/crypto";
 
+import { addDeviceToVault, type DeviceRegistration } from "./account-keys";
+import type { StoredVaultKeys } from "./types";
+
 export class VaultSession {
   #vmk: Uint8Array | null;
 
@@ -62,6 +65,19 @@ export class VaultSession {
   rewrapPassword(newPassword: string, params?: Argon2Params): PasswordWrappedKey {
     if (!this.#vmk) throw new Error("Vault is locked");
     return wrapKeyWithPassword(newPassword, this.#vmk, params);
+  }
+
+  /**
+   * Authorize another device against the vault using the in-memory VMK: wrap the
+   * VMK to the new device's KEM public key and return the updated keys to
+   * persist. Mirrors `rewrapPassword` — the raw VMK never leaves the session.
+   */
+  addDevice(
+    storedKeys: StoredVaultKeys,
+    device: DeviceRegistration,
+  ): StoredVaultKeys {
+    if (!this.#vmk) throw new Error("Vault is locked");
+    return addDeviceToVault(storedKeys, this.#vmk, device);
   }
 
   /** Zero and drop the key from memory. */

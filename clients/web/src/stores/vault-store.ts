@@ -12,6 +12,7 @@ import { create } from "zustand";
 
 import { toBase64Url } from "@dodi/crypto";
 import {
+  type DeviceRegistration,
   type StoredDevice,
   type StoredVaultKeys,
   VaultSession,
@@ -19,6 +20,7 @@ import {
   createAccountVault,
   createIndexedDbDeviceKeystore,
   getOrCreateDevice,
+  removeDeviceFromVault,
   setVaultPassword,
   unlockVaultWithDevice,
   unlockVaultWithPassword,
@@ -62,6 +64,14 @@ interface VaultStoreState {
    * password wrap using the in-memory VMK — no old password or phrase needed.
    */
   changePassword: (newPassword: string) => Promise<void>;
+  /**
+   * Pair another device: wrap the in-memory VMK to its KEM public key and
+   * persist the updated keys. Requires an unlocked vault. Call after the device
+   * is claimed (so we have its deviceId + KEM key) and before activating it.
+   */
+  addDevice: (device: DeviceRegistration) => Promise<void>;
+  /** Revoke a device's vault access: drop its wrap and persist (no VMK needed). */
+  removeDevice: (deviceId: string) => Promise<void>;
   acknowledgeBackupPhrase: () => void;
   lock: () => void;
 }
@@ -222,6 +232,20 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
       ...keys,
       passwordWrap: session.rewrapPassword(newPassword),
     });
+  },
+
+  addDevice: async (device) => {
+    const session = get().session;
+    if (!session) throw new Error("Vault is locked");
+    const keys = await fetchVaultKeys();
+    if (!keys) throw new Error("No vault to update");
+    await saveVaultKeys(session.addDevice(keys, device));
+  },
+
+  removeDevice: async (deviceId) => {
+    const keys = await fetchVaultKeys();
+    if (!keys) throw new Error("No vault to update");
+    await saveVaultKeys(removeDeviceFromVault(keys, deviceId));
   },
 
   acknowledgeBackupPhrase: () => set({ pendingBackupPhrase: null }),

@@ -32,9 +32,6 @@ importers:
       '@dodi/games':
         specifier: workspace:*
         version: link:../../core/games
-      '@dodi/platform':
-        specifier: workspace:*
-        version: link:../../platform
       '@dodi/protocol':
         specifier: workspace:*
         version: link:../../core/protocol

@@ -18,7 +18,7 @@ function corsHeaders(origin: string | null): Headers {
   if (origin && ALLOWED_ORIGINS.includes(origin)) {
     headers.set("access-control-allow-origin", origin);
   }
-  headers.set("access-control-allow-methods", "GET,POST,PATCH,DELETE,OPTIONS");
+  headers.set("access-control-allow-methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
   headers.set("access-control-allow-headers", "authorization,content-type");
   headers.set("access-control-max-age", "86400");
   headers.set("vary", "Origin");
