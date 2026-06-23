@@ -65,15 +65,9 @@ window.addEventListener('message',function(e){
     console.log('[iframe-shim] IN: '+d.type,d);
   }
 });
-(function(){
-  var origPost=parent.postMessage.bind(parent);
-  parent.postMessage=function(msg,origin){
-    if(msg&&typeof msg==='object'&&typeof msg.type==='string'){
-      console.log('[iframe-shim] OUT: '+msg.type,msg);
-    }
-    return origPost(msg,origin);
-  };
-})();
+// Outgoing messages can't be logged from inside the sandbox: it's origin "null",
+// so reassigning the cross-origin parent.postMessage throws a SecurityError. The
+// host logs the messages it receives instead (see GameSandbox onMessage).
 console.log('[iframe-shim] shim active');
 </script>`;
   // Insert before the first <script> in the body so it runs first

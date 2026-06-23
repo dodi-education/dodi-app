@@ -41,7 +41,10 @@ export class DodiClient {
     this.auth = options.auth ?? { kind: "cookie" };
     const f = options.fetch ?? globalThis.fetch;
     if (!f) throw new Error("DodiClient: no fetch implementation available");
-    this.fetchImpl = f;
+    // Bind to the global object: browser `fetch` brand-checks its receiver and
+    // throws "Illegal invocation" if called as a method on anything else (here,
+    // `this.fetchImpl(...)` would otherwise pass the client instance as `this`).
+    this.fetchImpl = f.bind(globalThis);
   }
 
   /** Low-level request with auth applied. Exposed for endpoints not yet wrapped. */

@@ -803,7 +803,9 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
       if (err instanceof DOMException && err.name === "AbortError") return;
       if (gen !== contextGeneration) return;
       const message = err instanceof Error ? err.message : "Failed to switch context";
-      set({ state: "disconnected", error: message });
+      // Same as connect(): a failed config build won't recover on auto-retry, so
+      // mark it fatal to stop the disconnected→reconnect hot-loop.
+      set({ state: "disconnected", error: message, fatalError: true });
     }
   },
 
@@ -902,6 +904,10 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
         dodiSpeaking: false,
         gestureNeeded: false,
         error: message,
+        // Building the voice config failed (e.g. no voice model/provider/key
+        // configured, vault locked). Blind auto-reconnect would re-throw and
+        // hot-loop, so mark it fatal — the kid taps to retry once it's fixed.
+        fatalError: true,
       });
     }
   },

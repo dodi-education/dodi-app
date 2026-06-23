@@ -396,7 +396,7 @@ export function GameStudio({ initialGame }: GameStudioProps) {
   /** Show the most recent completed task's change summary (recap on reopen). */
   const showLastSummary = async (gameId: string, profileId: string): Promise<void> => {
     try {
-      const res = await fetch(
+      const res = await dodi.request(
         `/api/agent/sessions?profileId=${profileId}&status=completed&limit=10`,
       );
       if (!res.ok) return;
@@ -416,7 +416,7 @@ export function GameStudio({ initialGame }: GameStudioProps) {
 
   const recoverSession = async (gameId: string, profileId: string): Promise<void> => {
     try {
-      const res = await fetch(
+      const res = await dodi.request(
         `/api/agent/sessions?profileId=${profileId}&gameId=${gameId}&context=game_creation&limit=1`,
       );
       if (!res.ok) return;
