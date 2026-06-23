@@ -1,20 +1,20 @@
 import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 
-import { createClient } from "@/lib/supabase/server";
-import { getProfile } from "@dodi/platform/services/profiles";
+import { requireAuth } from "@/lib/resolve-auth";
+import { getProfile } from "@/services/profiles";
 import {
   decryptProviderKey,
   getModelConfig,
   normalizeModelConfig,
-} from "@dodi/platform/services/ai-providers";
+} from "@/services/ai-providers";
 import {
   getOrCreateSession,
   submitTask,
   resetGameContext,
   trimHistory,
   AgentAbortedError,
-} from "@/lib/ai/agent-session";
+} from "@/lib/agent/agent-session";
 import { THINKING_MODEL_REQUIRED_MESSAGE } from "@dodi/ai/thinking-config";
 import {
   createAgentSession,
@@ -22,14 +22,14 @@ import {
   failAgentSession,
   listAgentSessions,
   getActiveAgentSession,
-} from "@dodi/platform/services/agent-sessions";
+} from "@/services/agent-sessions";
 import {
   createCustomGame,
   replaceGameSharings,
   updateCustomGame,
-} from "@dodi/platform/services/games";
-import { sanitizeGameBundle } from "@dodi/platform/game-sanitizer";
-import { createLogger } from "@dodi/platform/logger";
+} from "@/services/games";
+import { sanitizeGameBundle } from "@/game-sanitizer";
+import { createLogger } from "@/logger";
 import type { AgentTaskRequest, AgentCodeResult } from "@dodi/types/tasks";
 import type { AgentProgressEvent } from "@dodi/types/agent-progress";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -46,14 +46,9 @@ const log = createLogger("agent-sessions");
  * filters (an object or `null`) instead of an array.
  */
 export async function GET(request: Request): Promise<NextResponse> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAuth(request);
+  if (auth instanceof Response) return auth;
+  const { accountId, supabase } = auth;
 
   const { searchParams } = new URL(request.url);
   const profileId = searchParams.get("profileId") ?? undefined;
@@ -77,13 +72,13 @@ export async function GET(request: Request): Promise<NextResponse> {
       }
       const session = await getActiveAgentSession(supabase, profileId, context, gameId);
       // RLS should enforce ownership, but be explicit.
-      if (session && session.account_id !== user.id) {
+      if (session && session.account_id !== accountId) {
         return NextResponse.json(null);
       }
       return NextResponse.json(session);
     }
 
-    const sessions = await listAgentSessions(supabase, user.id, {
+    const sessions = await listAgentSessions(supabase, accountId, {
       profileId,
       status,
       limit,
@@ -222,14 +217,9 @@ async function persistGameResult(
 }
 
 export async function POST(request: Request): Promise<NextResponse | Response> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAuth(request);
+  if (auth instanceof Response) return auth;
+  const { accountId, supabase } = auth;
 
   const body: unknown = await request.json();
   const parsed = TaskSchema.safeParse(body);
@@ -251,11 +241,11 @@ export async function POST(request: Request): Promise<NextResponse | Response> {
 
   try {
     const profile = await getProfile(supabase, profileId);
-    if (!profile || profile.account_id !== user.id) {
+    if (!profile || profile.account_id !== accountId) {
       return NextResponse.json({ error: "Profile not found" }, { status: 404 });
     }
 
-    const rawConfig = await getModelConfig(supabase, user.id);
+    const rawConfig = await getModelConfig(supabase, accountId);
     if (!rawConfig) {
       return NextResponse.json(
         { error: THINKING_MODEL_REQUIRED_MESSAGE },
@@ -289,7 +279,7 @@ export async function POST(request: Request): Promise<NextResponse | Response> {
       apiKey = parsed.data.apiKey;
     } else {
       try {
-        apiKey = await decryptProviderKey(supabase, user.id, thinkingProviderId);
+        apiKey = await decryptProviderKey(supabase, accountId, thinkingProviderId);
       } catch {
         return NextResponse.json(
           { error: "Missing AI provider key. Configure a provider key in Settings." },
@@ -339,10 +329,10 @@ export async function POST(request: Request): Promise<NextResponse | Response> {
 
     if (isCodeTask) {
       // Clean up stale sessions before starting a new one
-      await cleanupStaleAgentSessions(supabase, user.id);
+      await cleanupStaleAgentSessions(supabase, accountId);
 
       const dbSession = await createAgentSession(supabase, {
-        accountId: user.id,
+        accountId: accountId,
         profileId,
         taskType,
         taskPrompt: extractTaskPrompt(taskType, payload as Record<string, unknown>),
@@ -388,7 +378,7 @@ export async function POST(request: Request): Promise<NextResponse | Response> {
             if (isCodeTask && "codeBundle" in result && result.codeBundle) {
               try {
                 const savedId = await persistGameResult(
-                  supabase, user.id, profileId, gameId, result as AgentCodeResult, parsed.data.audience,
+                  supabase, accountId, profileId, gameId, result as AgentCodeResult, parsed.data.audience,
                 );
                 (result as AgentCodeResult).savedGameId = savedId;
               } catch (saveErr) {
@@ -438,7 +428,7 @@ export async function POST(request: Request): Promise<NextResponse | Response> {
     if (isCodeTask && "codeBundle" in result && result.codeBundle) {
       try {
         const savedId = await persistGameResult(
-          supabase, user.id, profileId, gameId, result as AgentCodeResult, parsed.data.audience,
+          supabase, accountId, profileId, gameId, result as AgentCodeResult, parsed.data.audience,
         );
         (result as AgentCodeResult).savedGameId = savedId;
       } catch (saveErr) {

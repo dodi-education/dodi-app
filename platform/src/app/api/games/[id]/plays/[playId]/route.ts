@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 
-import { createClient } from "@/lib/supabase/server";
-import { getPlay, updatePlay } from "@dodi/platform/services/game-plays";
+import { requireAuth } from "@/lib/resolve-auth";
+import { getPlay, updatePlay } from "@/services/game-plays";
 import { MetricsSummarySchema } from "@dodi/games/success";
 
 const UpdatePlaySchema = z.object({
@@ -22,14 +22,9 @@ export async function PATCH(
 ): Promise<NextResponse> {
   const { playId } = await context.params;
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAuth(request);
+  if (auth instanceof Response) return auth;
+  const { accountId, supabase } = auth;
 
   const body: unknown = await request.json();
   const parsed = UpdatePlaySchema.safeParse(body);
@@ -42,7 +37,7 @@ export async function PATCH(
 
   try {
     const play = await getPlay(supabase, playId);
-    if (!play || play.account_id !== user.id) {
+    if (!play || play.account_id !== accountId) {
       return NextResponse.json({ error: "Play not found" }, { status: 404 });
     }
 

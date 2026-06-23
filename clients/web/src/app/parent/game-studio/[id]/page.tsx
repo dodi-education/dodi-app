@@ -6,7 +6,7 @@ import {
 } from "@/components/parent/games/game-studio";
 import { createClient } from "@/lib/supabase/server";
 import { getGame, getGameSharing } from "@dodi/platform/services/games";
-import { coerceProgressKind } from "@/lib/services/game-generation";
+import { coerceProgressKind } from "@dodi/games/game-spec";
 import { isUnbuiltBundle } from "@dodi/games/placeholder";
 
 interface RouteContext {

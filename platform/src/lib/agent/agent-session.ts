@@ -13,20 +13,20 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { createLogger } from "@dodi/platform/logger";
-import { buildAgentSystemPrompt } from "@/lib/ai/agent-system-prompt";
+import { createLogger } from "@/logger";
+import { buildAgentSystemPrompt } from "./agent-system-prompt";
 import {
   AGENT_TOOLS,
   executeTool,
   type ToolContext,
   type LastWriteResult,
-} from "@/lib/ai/agent-tools";
-import { validateGameCode } from "@/lib/ai/agent-validator";
+} from "./agent-tools";
+import { validateGameCode } from "./agent-validator";
 import {
   updateAgentSessionProgress,
   completeAgentSession,
   failAgentSession,
-} from "@dodi/platform/services/agent-sessions";
+} from "@/services/agent-sessions";
 import type { Database, AgentSessionResult } from "@dodi/types/database";
 import type {
   AgentTaskRequest,

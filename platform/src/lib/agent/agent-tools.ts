@@ -7,14 +7,14 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 
-import { validateGameCode, type ValidationResult } from "@/lib/ai/agent-validator";
+import { validateGameCode, type ValidationResult } from "./agent-validator";
 import {
   BRIDGE_INTERFACE_TEMPLATE,
   coerceProgressKind,
   coerceSuccessCriteria,
-} from "@/lib/services/game-generation";
+} from "@dodi/games/game-spec";
 import { SUCCESS_SYSTEM_TEMPLATE, type ProgressKind, type SuccessCriteria } from "@dodi/games/success";
-import { createLogger } from "@dodi/platform/logger";
+import { createLogger } from "@/logger";
 
 const log = createLogger("agent-tools");
 

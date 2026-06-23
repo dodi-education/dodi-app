@@ -4,6 +4,7 @@
  * protocol, command parsing, the stage/canvas layout contract, tags, placeholder.
  */
 export * from "./success";
+export * from "./game-spec";
 export * from "./stage";
 export * from "./bridge-protocol";
 export * from "./command-markers";

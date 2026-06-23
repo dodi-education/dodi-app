@@ -8,7 +8,7 @@ import { getGame, isGameVisibleToProfile } from "@dodi/platform/services/games";
 import { getProfile } from "@dodi/platform/services/profiles";
 import { logMemoryEvent } from "@dodi/platform/services/system-logs";
 import { getTranslation, applyTranslation } from "@dodi/platform/services/game-translations";
-import { coerceProgressKind, coerceSuccessCriteria } from "@/lib/services/game-generation";
+import { coerceProgressKind, coerceSuccessCriteria } from "@dodi/games/game-spec";
 
 interface RouteContext {
   params: Promise<{ id: string }>;

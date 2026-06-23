@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 
-import { createClient } from "@/lib/supabase/server";
-import { createProfile, listProfiles } from "@dodi/platform/services/profiles";
-import { generateSocialId } from "@/lib/social-id";
+import { requireAuth } from "@/lib/resolve-auth";
+import { createProfile, listProfiles } from "@/services/profiles";
+import { generateSocialId } from "@dodi/crypto/social-id";
 
 const CreateProfileSchema = z.object({
   // display_name + birthdate arrive as client-encrypted ciphertext (opaque strings).
@@ -12,18 +12,13 @@ const CreateProfileSchema = z.object({
   language: z.string().min(2).max(5).optional(),
 });
 
-export async function GET(): Promise<NextResponse> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+export async function GET(request: Request): Promise<NextResponse> {
+  const auth = await requireAuth(request);
+  if (auth instanceof Response) return auth;
+  const { accountId, supabase } = auth;
 
   try {
-    const profiles = await listProfiles(supabase, user.id);
+    const profiles = await listProfiles(supabase, accountId);
     return NextResponse.json(profiles);
   } catch {
     return NextResponse.json(
@@ -34,14 +29,9 @@ export async function GET(): Promise<NextResponse> {
 }
 
 export async function POST(request: Request): Promise<NextResponse> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAuth(request);
+  if (auth instanceof Response) return auth;
+  const { accountId, supabase } = auth;
 
   const body: unknown = await request.json();
   const result = CreateProfileSchema.safeParse(body);
@@ -58,7 +48,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
       const profile = await createProfile(supabase, {
-        account_id: user.id,
+        account_id: accountId,
         display_name: result.data.display_name,
         social_id: generateSocialId(),
         birthdate: result.data.birthdate ?? null,

@@ -233,12 +233,18 @@ importers:
 
   platform:
     dependencies:
+      '@anthropic-ai/sdk':
+        specifier: ^0.80.0
+        version: 0.80.0(zod@4.4.3)
       '@dodi/ai':
         specifier: workspace:*
         version: link:../core/ai
       '@dodi/crypto':
         specifier: workspace:*
         version: link:../core/crypto
+      '@dodi/games':
+        specifier: workspace:*
+        version: link:../core/games
       '@dodi/protocol':
         specifier: workspace:*
         version: link:../core/protocol
@@ -248,6 +254,9 @@ importers:
       '@dodi/vault':
         specifier: workspace:*
         version: link:../core/vault
+      '@google/generative-ai':
+        specifier: ^0.24.1
+        version: 0.24.1
       '@supabase/supabase-js':
         specifier: 2.98.0
         version: 2.98.0

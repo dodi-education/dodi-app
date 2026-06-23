@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./success": "./src/success.ts",
+    "./game-spec": "./src/game-spec.ts",
     "./stage": "./src/stage.ts",
     "./bridge-protocol": "./src/bridge-protocol.ts",
     "./command-markers": "./src/command-markers.ts",

@@ -1,18 +1,18 @@
 import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 
-import { createClient } from "@/lib/supabase/server";
-import { sanitizeGameBundle } from "@dodi/platform/game-sanitizer";
+import { requireAuth } from "@/lib/resolve-auth";
+import { sanitizeGameBundle } from "@/game-sanitizer";
 import type { GameUpdate, Json } from "@dodi/types/database";
 import {
   deleteCustomGame,
   getGame,
   replaceGameSharings,
   updateCustomGame,
-} from "@dodi/platform/services/games";
-import { mapSuccessDefinition } from "@/lib/services/game-generation";
-import { getTranslation, applyTranslation } from "@dodi/platform/services/game-translations";
-import { createLogger } from "@dodi/platform/logger";
+} from "@/services/games";
+import { mapSuccessDefinition } from "@/lib/game-generation";
+import { getTranslation, applyTranslation } from "@/services/game-translations";
+import { createLogger } from "@/logger";
 
 const log = createLogger("game-update");
 
@@ -48,14 +48,9 @@ export async function GET(
 ): Promise<NextResponse> {
   const { id } = await context.params;
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAuth(request);
+  if (auth instanceof Response) return auth;
+  const { accountId, supabase } = auth;
 
   const { searchParams } = new URL(request.url);
   const locale = searchParams.get("locale") ?? "en";
@@ -80,14 +75,9 @@ export async function PATCH(
 ): Promise<NextResponse> {
   const { id } = await context.params;
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAuth(request);
+  if (auth instanceof Response) return auth;
+  const { accountId, supabase } = auth;
 
   const body: unknown = await request.json();
   const parsed = UpdateGameSchema.safeParse(body);
@@ -135,7 +125,7 @@ export async function PATCH(
       try {
         const mapped = await mapSuccessDefinition(
           supabase,
-          user.id,
+          accountId,
           parsed.data.success_definition,
           { learningGoal: parsed.data.learning_goal ?? existing.learning_goal },
         );
@@ -156,7 +146,7 @@ export async function PATCH(
         : existing;
 
     if (audience) {
-      await replaceGameSharings(supabase, id, user.id, {
+      await replaceGameSharings(supabase, id, accountId, {
         family: audience.isFamily,
         profileIds: audience.audienceIds,
       });
@@ -170,19 +160,14 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   context: RouteContext,
 ): Promise<NextResponse> {
   const { id } = await context.params;
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAuth(request);
+  if (auth instanceof Response) return auth;
+  const { accountId, supabase } = auth;
 
   try {
     const existing = await getGame(supabase, id);

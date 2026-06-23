@@ -9,3 +9,4 @@ export * from "./primitives";
 export * from "./record";
 export * from "./keys";
 export * from "./mnemonic";
+export * from "./social-id";

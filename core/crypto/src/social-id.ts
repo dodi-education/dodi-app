@@ -1,4 +1,4 @@
-import { randomBytes } from "@dodi/crypto";
+import { randomBytes } from "./primitives";
 
 const ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
 

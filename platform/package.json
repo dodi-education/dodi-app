@@ -21,11 +21,14 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.80.0",
     "@dodi/ai": "workspace:*",
     "@dodi/crypto": "workspace:*",
+    "@dodi/games": "workspace:*",
     "@dodi/protocol": "workspace:*",
     "@dodi/types": "workspace:*",
     "@dodi/vault": "workspace:*",
+    "@google/generative-ai": "^0.24.1",
     "@supabase/supabase-js": "2.98.0",
     "next": "16.1.6",
     "react": "19.2.3",

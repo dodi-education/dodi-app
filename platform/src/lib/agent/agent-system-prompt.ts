@@ -5,7 +5,7 @@
  * and game structure requirements.
  */
 
-import { BRIDGE_INTERFACE_TEMPLATE } from "@/lib/services/game-generation";
+import { BRIDGE_INTERFACE_TEMPLATE } from "@dodi/games/game-spec";
 import { GAME_CANVAS_TEMPLATE } from "@dodi/games/stage";
 import { SUCCESS_SYSTEM_TEMPLATE } from "@dodi/games/success";
 

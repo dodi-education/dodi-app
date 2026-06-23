@@ -4,6 +4,7 @@ const nextConfig: NextConfig = {
   transpilePackages: [
     "@dodi/ai",
     "@dodi/crypto",
+    "@dodi/games",
     "@dodi/protocol",
     "@dodi/types",
     "@dodi/vault",

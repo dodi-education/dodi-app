@@ -1,29 +1,24 @@
 import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 
-import { createClient } from "@/lib/supabase/server";
-import { createLogger } from "@dodi/platform/logger";
+import { requireAuth } from "@/lib/resolve-auth";
+import { createLogger } from "@/logger";
 import {
   getAgentSession,
   deactivateAgentSession,
-} from "@dodi/platform/services/agent-sessions";
-import { abortSession } from "@/lib/ai/agent-session";
+} from "@/services/agent-sessions";
+import { abortSession } from "@/lib/agent/agent-session";
 
 const log = createLogger("agent-session");
 
 /** GET /api/agent/sessions/:id — get a single session by ID (for polling). */
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAuth(request);
+  if (auth instanceof Response) return auth;
+  const { accountId, supabase } = auth;
 
   const { id } = await params;
 
@@ -35,7 +30,7 @@ export async function GET(
     }
 
     // Verify ownership
-    if (session.account_id !== user.id) {
+    if (session.account_id !== accountId) {
       return NextResponse.json({ error: "Session not found" }, { status: 404 });
     }
 
@@ -58,14 +53,9 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAuth(request);
+  if (auth instanceof Response) return auth;
+  const { accountId, supabase } = auth;
 
   const { id } = await params;
 
@@ -85,7 +75,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Session not found" }, { status: 404 });
     }
 
-    if (session.account_id !== user.id) {
+    if (session.account_id !== accountId) {
       return NextResponse.json({ error: "Session not found" }, { status: 404 });
     }
 
@@ -97,7 +87,7 @@ export async function PATCH(
       );
     }
 
-    log.info("deactivation_requested", { sessionId: id, profileId: session.profile_id });
+    log.info("deactivationrequested", { sessionId: id, profileId: session.profile_id });
 
     // Abort the in-memory agent task (if still running on this server)
     abortSession(session.profile_id);

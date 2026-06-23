@@ -1,21 +1,21 @@
 import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 
-import { createClient } from "@/lib/supabase/server";
-import { createLogger } from "@dodi/platform/logger";
-import { getProfile } from "@dodi/platform/services/profiles";
+import { requireAuth } from "@/lib/resolve-auth";
+import { createLogger } from "@/logger";
+import { getProfile } from "@/services/profiles";
 
 const log = createLogger("game-create");
 import {
   createCustomGame,
   listGames,
   replaceGameSharings,
-} from "@dodi/platform/services/games";
+} from "@/services/games";
 import { UNBUILT_GAME_PLACEHOLDER } from "@dodi/games/placeholder";
 import {
   getTranslationsForGames,
   applyTranslation,
-} from "@dodi/platform/services/game-translations";
+} from "@/services/game-translations";
 
 /** Extract a useful message from an Error or a Supabase PostgrestError-like object. */
 function describeError(e: unknown): string {
@@ -57,14 +57,9 @@ const CreateGameSchema = z.object({
 });
 
 export async function GET(request: Request): Promise<NextResponse> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAuth(request);
+  if (auth instanceof Response) return auth;
+  const { accountId, supabase } = auth;
 
   const { searchParams } = new URL(request.url);
   const profileId = searchParams.get("profileId") ?? undefined;
@@ -75,7 +70,7 @@ export async function GET(request: Request): Promise<NextResponse> {
   let locale = "en";
   if (profileId) {
     const profile = await getProfile(supabase, profileId);
-    if (!profile || profile.account_id !== user.id) {
+    if (!profile || profile.account_id !== accountId) {
       return NextResponse.json({ error: "Profile not found" }, { status: 404 });
     }
     locale = profile.language;
@@ -107,14 +102,9 @@ export async function GET(request: Request): Promise<NextResponse> {
 }
 
 export async function POST(request: Request): Promise<NextResponse> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAuth(request);
+  if (auth instanceof Response) return auth;
+  const { accountId, supabase } = auth;
 
   const body: unknown = await request.json();
   const parsed = CreateGameSchema.safeParse(body);
@@ -131,7 +121,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   try {
     const profile = await getProfile(supabase, profileId);
-    if (!profile || profile.account_id !== user.id) {
+    if (!profile || profile.account_id !== accountId) {
       return NextResponse.json({ error: "Profile not found" }, { status: 404 });
     }
 
@@ -143,7 +133,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     }
     const hasCode = !!data.codeBundle;
     const created = await createCustomGame(supabase, {
-      accountId: user.id,
+      accountId: accountId,
       profileId,
       title: data.title,
       description: data.description,
@@ -159,7 +149,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     });
 
     if (data.audience) {
-      await replaceGameSharings(supabase, created.id, user.id, {
+      await replaceGameSharings(supabase, created.id, accountId, {
         family: data.audience.isFamily,
         profileIds: data.audience.audienceIds,
       });
