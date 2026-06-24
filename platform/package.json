@@ -1,0 +1,38 @@
+{
+  "name": "@dodi/platform",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --experimental-https --experimental-https-key ../certs/dev-key.pem --experimental-https-cert ../certs/dev.pem -H 0.0.0.0 --port 3001",
+    "build": "next build",
+    "start": "next start --port 3001",
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.80.0",
+    "@dodi/ai": "workspace:*",
+    "@dodi/crypto": "workspace:*",
+    "@dodi/games": "workspace:*",
+    "@dodi/protocol": "workspace:*",
+    "@dodi/types": "workspace:*",
+    "@dodi/vault": "workspace:*",
+    "@google/generative-ai": "^0.24.1",
+    "@supabase/supabase-js": "2.98.0",
+    "next": "16.1.6",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.1.6",
+    "typescript": "^5",
+    "vitest": "^4.1.8"
+  }
+}

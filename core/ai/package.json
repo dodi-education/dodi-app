@@ -1,0 +1,35 @@
+{
+  "name": "@dodi/ai",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./providers": "./src/providers.ts",
+    "./thinking-config": "./src/thinking-config.ts",
+    "./client-thinking": "./src/client-thinking.ts",
+    "./validate-key": "./src/validate-key.ts",
+    "./memory-prompt": "./src/memory-prompt.ts",
+    "./dodi-context": "./src/dodi-context.ts",
+    "./learning-context": "./src/learning-context.ts",
+    "./thinking-providers/factory": "./src/thinking-providers/factory.ts",
+    "./thinking-providers/anthropic": "./src/thinking-providers/anthropic.ts",
+    "./thinking-providers/gemini": "./src/thinking-providers/gemini.ts"
+  },
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.80.0",
+    "@dodi/types": "workspace:*",
+    "@google/generative-ai": "^0.24.1"
+  },
+  "devDependencies": {
+    "typescript": "^5",
+    "vitest": "^4.1.8"
+  }
+}

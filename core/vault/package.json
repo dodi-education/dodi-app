@@ -1,0 +1,31 @@
+{
+  "name": "@dodi/vault",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./types": "./src/types.ts",
+    "./account-keys": "./src/account-keys.ts",
+    "./device-keystore": "./src/device-keystore.ts",
+    "./session": "./src/session.ts",
+    "./profile-crypto": "./src/profile-crypto.ts",
+    "./persona-crypto": "./src/persona-crypto.ts",
+    "./api-keys-crypto": "./src/api-keys-crypto.ts"
+  },
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@dodi/crypto": "workspace:*",
+    "@dodi/types": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5",
+    "vitest": "^4.1.8"
+  }
+}
