@@ -18,6 +18,7 @@ import { PageHead, Section } from "@/components/parent/section";
 import { Icon } from "@/components/shared/icon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { PersonaSelector } from "@/components/parent/persona-selector";
 import { locales, type Locale } from "@/i18n/config";
 import { generateSocialId } from "@dodi/crypto/social-id";
@@ -39,6 +40,7 @@ export default function EditProfilePage() {
   const t = useTranslations("profiles");
   const tc = useTranslations("common");
   const tp = useTranslations("personas");
+  const tf = useTranslations("friends");
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -49,6 +51,10 @@ export default function EditProfilePage() {
   const [birthdate, setBirthdate] = useState("");
   const [language, setLanguage] = useState<string>("en");
   const [activePersonaId, setActivePersonaId] = useState<string | null>(null);
+  const [canInitiate, setCanInitiate] = useState(false);
+  const [canBeAdded, setCanBeAdded] = useState(false);
+  const [incomingApproval, setIncomingApproval] = useState(true);
+  const [outgoingApproval, setOutgoingApproval] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
@@ -70,6 +76,14 @@ export default function EditProfilePage() {
         setBirthdate(data.birthdate ?? "");
         setLanguage(data.language ?? "en");
         setActivePersonaId(data.active_persona_id);
+        setCanInitiate(data.can_add_friends ?? false);
+        setCanBeAdded(data.can_be_added_as_friend ?? false);
+        setIncomingApproval(
+          data.incoming_friend_requests_require_parent_approval ?? true,
+        );
+        setOutgoingApproval(
+          data.outgoing_friend_requests_require_parent_approval ?? false,
+        );
         setFetching(false);
       } catch {
         if (!cancelled) {
@@ -117,6 +131,10 @@ export default function EditProfilePage() {
         social_id: socialId,
         birthdate: enc.birthdate,
         language,
+        can_add_friends: canInitiate,
+        can_be_added_as_friend: canBeAdded,
+        incoming_friend_requests_require_parent_approval: incomingApproval,
+        outgoing_friend_requests_require_parent_approval: outgoingApproval,
       }),
     });
 
@@ -258,6 +276,30 @@ export default function EditProfilePage() {
               profileId={params.id}
               value={activePersonaId}
               onChange={setActivePersonaId}
+            />
+          </FieldRow>
+          <FieldRow label={tf("canInitiate")} hint={tf("canInitiateHint")}>
+            <Switch checked={canInitiate} onCheckedChange={setCanInitiate} />
+          </FieldRow>
+          <FieldRow label={tf("canBeAdded")} hint={tf("canBeAddedHint")}>
+            <Switch checked={canBeAdded} onCheckedChange={setCanBeAdded} />
+          </FieldRow>
+          <FieldRow
+            label={tf("incomingApproval")}
+            hint={tf("incomingApprovalHint")}
+          >
+            <Switch
+              checked={incomingApproval}
+              onCheckedChange={setIncomingApproval}
+            />
+          </FieldRow>
+          <FieldRow
+            label={tf("outgoingApproval")}
+            hint={tf("outgoingApprovalHint")}
+          >
+            <Switch
+              checked={outgoingApproval}
+              onCheckedChange={setOutgoingApproval}
             />
           </FieldRow>
           {error && (

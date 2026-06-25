@@ -10,6 +10,7 @@ import {
   RowMeta,
   RowTitle,
 } from "@/components/parent/rows";
+import { FriendApprovals } from "@/components/parent/friend-approvals";
 import { PageHead, Section } from "@/components/parent/section";
 import { Icon } from "@/components/shared/icon";
 import { Badge } from "@/components/ui/badge";
@@ -60,6 +61,8 @@ export default function ProfilesPage() {
         }
       />
 
+      <FriendApprovals />
+
       {loading ? (
         <Section>
           <div className="px-5 py-12 text-center text-sm text-muted-foreground">
@@ -107,7 +110,7 @@ export default function ProfilesPage() {
                       ) : null}
                     </RowTitle>
                     <RowMeta>
-                      @{profile.social_id}
+                      {profile.social_id}
                       <DotSep />
                       {profile.active_persona_id
                         ? (personaNames.get(profile.active_persona_id) ??

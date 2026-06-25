@@ -26,10 +26,19 @@ export function userClient(accessToken: string): SupabaseClient<Database> {
 }
 
 /**
- * Service-role client for device-authenticated requests (P7.5). RLS is bypassed,
- * so every query MUST be scoped to the resolved account_id in app code.
+ * Service-role client for cross-account operations (devices, friends) and
+ * device-authenticated requests. RLS is bypassed, so every query MUST be scoped
+ * to the resolved account_id in app code.
  */
 export function serviceClient(): SupabaseClient<Database> {
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-  return createClient<Database>(SUPABASE_URL, serviceKey, { auth: NO_SESSION });
+  // Supabase "secret" key (sb_secret_…): bypasses RLS, so keep it server-only.
+  const secretKey = process.env.SUPABASE_SECRET_KEY;
+  if (!secretKey) {
+    throw new Error(
+      "SUPABASE_SECRET_KEY is not set on the platform server. It is required for " +
+        "cross-account operations (friend discovery/requests, device pairing). " +
+        "Add it to platform/.env.local and restart the platform server.",
+    );
+  }
+  return createClient<Database>(SUPABASE_URL, secretKey, { auth: NO_SESSION });
 }

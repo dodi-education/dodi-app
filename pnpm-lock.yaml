@@ -59,6 +59,9 @@ importers:
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
+      jsqr:
+        specifier: ^1.4.0
+        version: 1.4.0
       next:
         specifier: 16.1.6
         version: 16.1.6(@babel/core@7.29.7)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
@@ -68,6 +71,9 @@ importers:
       prismjs:
         specifier: ^1.30.0
         version: 1.30.0
+      qrcode-generator:
+        specifier: ^2.0.4
+        version: 2.0.4
       radix-ui:
         specifier: ^1.4.3
         version: 1.6.0(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
@@ -192,6 +198,9 @@ importers:
       '@dodi/crypto':
         specifier: workspace:*
         version: link:../crypto
+      '@dodi/types':
+        specifier: workspace:*
+        version: link:../types
       '@dodi/vault':
         specifier: workspace:*
         version: link:../vault
@@ -3507,6 +3516,9 @@ packages:
   jsonfile@6.2.1:
     resolution: {integrity: sha512-zwOTdL3rFQ/lRdBnntKVOX6k5cKJwEc1HdilT71BWEu7J41gXIB2MRp+vxduPSwZJPWBxEzv4yH1wYLJGUHX4Q==}
 
+  jsqr@1.4.0:
+    resolution: {integrity: sha512-dxLob7q65Xg2DvstYkRpkYtmKm2sPJ9oFhrhmudT1dZvNFFTlroai3AWSpLey/w5vMcLBXRgOJsbXpdN9HzU/A==}
+
   jsx-ast-utils@3.3.5:
     resolution: {integrity: sha512-ZZow9HBI5O6EPgSJLUb8n2NKgmVWTwCvHGwFuJlMjvLFqlGG6pjirPhtdsseaLZjSibD8eegzmYpUZwoIlj2cQ==}
     engines: {node: '>=4.0'}
@@ -3996,6 +4008,9 @@ packages:
   punycode@2.3.1:
     resolution: {integrity: sha512-vYt7UD1U9Wg6138shLtLOvdAu+8DsC/ilFtEVHcH+wydcSpNE20AfSOduf6MkRFahL5FY7X1oU7nKVZFtfq8Fg==}
     engines: {node: '>=6'}
+
+  qrcode-generator@2.0.4:
+    resolution: {integrity: sha512-mZSiP6RnbHl4xL2Ap5HfkjLnmxfKcPWpWe/c+5XxCuetEenqmNFf1FH/ftXPCtFG5/TDobjsjz6sSNL0Sr8Z9g==}
 
   qs@6.15.2:
     resolution: {integrity: sha512-Rzq0KEyX/w/tEybncDgdkZrJgVUsUMk3xjh3t5bv3S1HTAtg+uOYt72+ZfwiQwKdysThkTBdL/rTi6HDmX9Ddw==}
@@ -8085,6 +8100,8 @@ snapshots:
     optionalDependencies:
       graceful-fs: 4.2.11
 
+  jsqr@1.4.0: {}
+
   jsx-ast-utils@3.3.5:
     dependencies:
       array-includes: 3.1.9
@@ -8554,6 +8571,8 @@ snapshots:
       ipaddr.js: 1.9.1
 
   punycode@2.3.1: {}
+
+  qrcode-generator@2.0.4: {}
 
   qs@6.15.2:
     dependencies:

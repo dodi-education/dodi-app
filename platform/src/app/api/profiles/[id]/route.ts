@@ -21,11 +21,16 @@ const UpdateProfileSchema = z.object({
   birthdate: z.string().max(2000).nullable().optional(),
   language: z.string().min(2).max(5).optional(),
   active_persona_id: z.string().uuid().nullable().optional(),
-  first_interaction: z.boolean().optional(),
   memory: z.string().max(100000).nullable().optional(),
   parent_notes: z.string().max(200000).nullable().optional(),
   avatar_config: z.record(z.string(), z.any()).nullable().optional(),
   preferences: z.record(z.string(), z.any()).nullable().optional(),
+  // Parent-controlled friend settings (plaintext, server-enforced). The friend
+  // identity keys are published via POST /api/profiles/[id]/friend-keys, not here.
+  can_add_friends: z.boolean().optional(),
+  can_be_added_as_friend: z.boolean().optional(),
+  incoming_friend_requests_require_parent_approval: z.boolean().optional(),
+  outgoing_friend_requests_require_parent_approval: z.boolean().optional(),
 });
 
 interface RouteContext {

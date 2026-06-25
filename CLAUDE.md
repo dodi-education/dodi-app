@@ -152,6 +152,7 @@ dodi-web/
 - **Stores**: camelCase with `Store` suffix (`profileStore`, `gameStore`)
 - **Constants**: UPPER_SNAKE_CASE (`MAX_GAMES_FREE_TIER`)
 - **Database tables/columns**: snake_case (`kid_profiles`, `created_at`)
+- **Booleans** (columns, fields, props): name so the value reads as a yes/no predicate. **Prefer an `is_`/`has_`/`can_` prefix** (`is_active`, `has_avatar`, `can_add_friends`); Avoid noun-like boolean names (`first_interaction` → `has_met_dodi`) or one word names (`accepted`, `succeeded`).
 - **API routes**: kebab-case paths (`/api/ai/generate-game`)
 
 ### Components
@@ -344,9 +345,9 @@ docs: add API provider configuration guide
 
 ```bash
 # .env.local
-NEXT_PUBLIC_SUPABASE_URL=         # Supabase project URL
-NEXT_PUBLIC_SUPABASE_ANON_KEY=    # Supabase anonymous key (safe for client)
-SUPABASE_SERVICE_ROLE_KEY=        # Supabase service role key (server only)
+NEXT_PUBLIC_SUPABASE_URL=             # Supabase project URL
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY= # Supabase publishable key sb_publishable_… (safe for client)
+SUPABASE_SECRET_KEY=                  # Supabase secret key sb_secret_… (server only, bypasses RLS)
 ENCRYPTION_SECRET=                # AES-256 key for encrypting sensitive data
 NEXT_PUBLIC_APP_URL=              # App URL (for OAuth redirects, QR codes)
 ```
