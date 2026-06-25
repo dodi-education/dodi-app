@@ -22,7 +22,6 @@ function baseProfile(overrides: Partial<Profile>): Profile {
     memory: null,
     parent_notes: null,
     language: "en",
-    first_interaction: false,
     preferences: null,
     created_at: "now",
     updated_at: "now",

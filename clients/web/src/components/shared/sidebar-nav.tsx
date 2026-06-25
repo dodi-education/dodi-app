@@ -18,7 +18,7 @@ interface NavGroup {
   items: NavItem[];
 }
 
-function useNavGroups(): NavGroup[] {
+export function useNavGroups(): NavGroup[] {
   const t = useTranslations("nav");
 
   return [
@@ -59,7 +59,18 @@ function useNavGroups(): NavGroup[] {
   ];
 }
 
-export function SidebarNav() {
+/** Label for the nav destination matching the current path (for the mobile top bar). */
+export function useCurrentNavLabel(): string | null {
+  const pathname = usePathname();
+  const groups = useNavGroups();
+  for (const group of groups) {
+    const match = group.items.find((item) => pathname.startsWith(item.href));
+    if (match) return match.label;
+  }
+  return null;
+}
+
+export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const groups = useNavGroups();
 
@@ -81,6 +92,7 @@ export function SidebarNav() {
               <Link
                 key={item.href}
                 href={item.href}
+                onClick={onNavigate}
                 className={cn(
                   "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors",
                   isActive
@@ -95,35 +107,6 @@ export function SidebarNav() {
           })}
         </div>
       ))}
-    </nav>
-  );
-}
-
-export function BottomNav() {
-  const pathname = usePathname();
-  const groups = useNavGroups();
-  const navItems = groups.flatMap((g) => g.items);
-
-  return (
-    <nav className="flex items-center justify-around border-t bg-sidebar py-2">
-      {navItems.map((item) => {
-        const isActive = pathname.startsWith(item.href);
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={cn(
-              "flex flex-col items-center gap-1 rounded-md px-3 py-1 text-xs transition-colors",
-              isActive
-                ? "font-semibold text-primary"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            <Icon name={item.icon} className="h-5 w-5" />
-            <span>{item.label}</span>
-          </Link>
-        );
-      })}
     </nav>
   );
 }

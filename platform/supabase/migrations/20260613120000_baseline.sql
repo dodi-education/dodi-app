@@ -281,7 +281,6 @@ CREATE TABLE IF NOT EXISTS "public"."profiles" (
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "language" "text" DEFAULT 'en'::"text" NOT NULL,
-    "first_interaction" boolean DEFAULT false NOT NULL,
     "parent_notes" "text"
 );
 
@@ -1063,3 +1062,81 @@ CREATE POLICY "Users manage own devices" ON "public"."devices" USING (("auth"."u
 GRANT ALL ON TABLE "public"."devices" TO "anon";
 GRANT ALL ON TABLE "public"."devices" TO "authenticated";
 GRANT ALL ON TABLE "public"."devices" TO "service_role";
+
+
+-- ---------------------------------------------------------------------------
+-- friends: kid-to-kid (profile-to-profile) social connections.
+-- Per-profile friend identity keys live on profiles: the public halves
+-- (friend_kem_public_key / friend_sign_public_key) are plaintext so other kids
+-- can seal to them; the secret halves are sealed under the account VMK in
+-- friend_secret_keys (enc:v1:, opaque to the server). Friend "cards" (name,
+-- birthdate, avatar) are sealed client-side to the recipient profile's KEM key
+-- and stored on the friendship row as opaque blobs the server can never read —
+-- it only gates *delivery* by status. Parent-controlled per-kid settings gate
+-- who may add / be added and whether a parent's final approval is required.
+-- See @dodi/protocol friend-card helpers.
+-- ---------------------------------------------------------------------------
+ALTER TABLE "public"."profiles" ADD COLUMN IF NOT EXISTS "friend_kem_public_key" "text";
+ALTER TABLE "public"."profiles" ADD COLUMN IF NOT EXISTS "friend_sign_public_key" "text";
+ALTER TABLE "public"."profiles" ADD COLUMN IF NOT EXISTS "friend_secret_keys" "text";
+ALTER TABLE "public"."profiles" ADD COLUMN IF NOT EXISTS "can_add_friends" boolean DEFAULT false NOT NULL;
+ALTER TABLE "public"."profiles" ADD COLUMN IF NOT EXISTS "can_be_added_as_friend" boolean DEFAULT false NOT NULL;
+ALTER TABLE "public"."profiles" ADD COLUMN IF NOT EXISTS "incoming_friend_requests_require_parent_approval" boolean DEFAULT true NOT NULL;
+ALTER TABLE "public"."profiles" ADD COLUMN IF NOT EXISTS "outgoing_friend_requests_require_parent_approval" boolean DEFAULT false NOT NULL;
+
+COMMENT ON COLUMN "public"."profiles"."friend_secret_keys" IS 'Opaque enc:v1: blob — the profile''s ML-KEM/ML-DSA secret keys sealed under the account VMK. Server cannot decrypt.';
+
+CREATE TABLE IF NOT EXISTS "public"."friendships" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "requester_account_id" "uuid" NOT NULL,
+    "requester_profile_id" "uuid" NOT NULL,
+    "addressee_account_id" "uuid" NOT NULL,
+    "addressee_profile_id" "uuid" NOT NULL,
+    "status" "text" DEFAULT 'pending'::"text" NOT NULL,
+    "addressee_accepted" boolean DEFAULT false NOT NULL,
+    "requester_parent_ok" boolean,
+    "addressee_parent_ok" boolean,
+    "blocked_by" "uuid",
+    "requester_preview_card" "text",
+    "requester_card" "text",
+    "addressee_card" "text",
+    "nickname" "text",
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "friendships_status_check" CHECK (("status" = ANY (ARRAY['pending'::"text", 'awaiting_parent'::"text", 'accepted'::"text", 'rejected'::"text", 'blocked'::"text"]))),
+    CONSTRAINT "friendships_distinct_profiles_check" CHECK (("requester_profile_id" <> "addressee_profile_id"))
+);
+
+ALTER TABLE "public"."friendships" OWNER TO "postgres";
+
+ALTER TABLE ONLY "public"."friendships"
+    ADD CONSTRAINT "friendships_pkey" PRIMARY KEY ("id");
+
+ALTER TABLE ONLY "public"."friendships"
+    ADD CONSTRAINT "friendships_requester_account_id_fkey" FOREIGN KEY ("requester_account_id") REFERENCES "public"."accounts"("id") ON DELETE CASCADE;
+ALTER TABLE ONLY "public"."friendships"
+    ADD CONSTRAINT "friendships_requester_profile_id_fkey" FOREIGN KEY ("requester_profile_id") REFERENCES "public"."profiles"("id") ON DELETE CASCADE;
+ALTER TABLE ONLY "public"."friendships"
+    ADD CONSTRAINT "friendships_addressee_account_id_fkey" FOREIGN KEY ("addressee_account_id") REFERENCES "public"."accounts"("id") ON DELETE CASCADE;
+ALTER TABLE ONLY "public"."friendships"
+    ADD CONSTRAINT "friendships_addressee_profile_id_fkey" FOREIGN KEY ("addressee_profile_id") REFERENCES "public"."profiles"("id") ON DELETE CASCADE;
+ALTER TABLE ONLY "public"."friendships"
+    ADD CONSTRAINT "friendships_blocked_by_fkey" FOREIGN KEY ("blocked_by") REFERENCES "public"."profiles"("id") ON DELETE SET NULL;
+
+-- At most one live relationship per kid pair, regardless of direction.
+CREATE UNIQUE INDEX "friendships_pair_uniq" ON "public"."friendships" USING "btree" (LEAST("requester_profile_id", "addressee_profile_id"), GREATEST("requester_profile_id", "addressee_profile_id")) WHERE ("status" = ANY (ARRAY['pending'::"text", 'awaiting_parent'::"text", 'accepted'::"text", 'blocked'::"text"]));
+CREATE INDEX "friendships_addressee_idx" ON "public"."friendships" USING "btree" ("addressee_profile_id", "status");
+CREATE INDEX "friendships_requester_idx" ON "public"."friendships" USING "btree" ("requester_profile_id", "status");
+
+CREATE OR REPLACE TRIGGER "friendships_updated_at" BEFORE UPDATE ON "public"."friendships" FOR EACH ROW EXECUTE FUNCTION "public"."handle_updated_at"();
+
+ALTER TABLE "public"."friendships" ENABLE ROW LEVEL SECURITY;
+
+-- Participants may READ their own friendship rows (defense-in-depth). All writes
+-- go through the service-role (serviceClient) friends service, which enforces
+-- scoping in app code — there is intentionally no INSERT/UPDATE/DELETE policy.
+CREATE POLICY "Participants can view friendships" ON "public"."friendships" FOR SELECT USING ((("auth"."uid"() = "requester_account_id") OR ("auth"."uid"() = "addressee_account_id")));
+
+GRANT ALL ON TABLE "public"."friendships" TO "anon";
+GRANT ALL ON TABLE "public"."friendships" TO "authenticated";
+GRANT ALL ON TABLE "public"."friendships" TO "service_role";

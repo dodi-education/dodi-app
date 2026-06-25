@@ -386,27 +386,8 @@ AI-generated games run in a strictly sandboxed iframe:
 1. **Privacy by default** — all content is private unless explicitly shared
 2. **Parental control** — parents can see, edit, and delete all stored data
 3. **Minimal data collection** — only store what's needed for personalization
-4. **Encryption at rest** — sensitive fields encrypted server-side
+4. **E2EE End-To-End Client-Side Encryption** — sensitive fields quantum secure, end-to-end encrypted (E2EE)
 5. **COPPA/GDPR-K awareness** — designed with children's privacy regulations in mind
-
-### MVP Approach: Server-Side Encryption
-- Sensitive profile data (birthdate, memory, preferences) encrypted at rest in Supabase
-- Supabase Row-Level Security (RLS) ensures accounts can only access their own data
-- API keys encrypted with a per-account key before storage
-- AI memory data is only decrypted and sent to AI providers when needed (game creation, Dodi interaction)
-- All API calls to AI providers go through server-side API routes (never expose keys to client)
-
-### Future Enhancement: Local-First Option
-- Opt-in feature: store kid memory/profile data locally (IndexedDB) with client-side encryption
-- Encrypted blobs can be backed up to server for cross-device sync
-- Parents hold the encryption passphrase
-- Trade-off: data loss risk if browser cleared without backup
-
-### API Key Security
-- API keys are never exposed to the client browser
-- All AI API calls are proxied through Next.js API routes / server actions
-- Keys are encrypted at rest in the database
-- Keys are decrypted in memory only during API calls on the server
 
 ---
 
@@ -474,11 +455,11 @@ The MVP focuses on delivering a functional, delightful core experience:
 - [x] Built-in default game: Drawing
 - [x] Game library (browse, filter, replay)
 
-### Phase 4: Social
+### Phase 4: Socialsharing
 - [ ] Unify date storage (UTC in db) and conversion to local time
 - [ ] Configure date time format
-- [ ] Name tags and QR code generation
-- [ ] Friend system (add, accept, manage)
+- [x] Name tags and QR code generation
+- [x] Friend system (add, accept, manage)
 - [ ] Drawing game: Let the kid save drawings and share them with friends
 - [ ] Game sharing
 - [ ] Activity emoji picker
@@ -531,9 +512,12 @@ parent-defined goal — and, in future, generate challenges like "Solve 3 math g
 
 ## TODO
 
-- Verify / fix context building for game creation (check if available contect, memeory, notes, etc.) are passed to agent sessions.
+- Encrypt account specific personas
+
 - Avatar gallary for kids
   - Let kids draw their own avatar
+- Add parents view pin (can be set in settings and needs to be entered to enter parents view)
+- Profile pin puzzle (set 3 avatars in a specific order, kid has to put the order in place to switch profile)
 - Game state analysis via screenshot (attach screenshots to game-state <> dodi exchange). This would allow fun features like asking dodi to guess what has been drawn in the drawing game.
 - Daily challenges UI: let Dodi generate + track challenges on top of `game_plays` (foundation is in place).
 - Allow games to connect with AI provider for in-game content generation (e.g. for texts, calculations, formulas etc.)

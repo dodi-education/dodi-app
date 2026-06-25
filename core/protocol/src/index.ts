@@ -4,5 +4,6 @@
  * platform (validation), and the agent.
  */
 export * from "./envelope";
+export * from "./friend-card";
 export * from "./schemas";
 export * from "./client";

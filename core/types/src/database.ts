@@ -59,8 +59,17 @@ export interface Database {
           memory: string | null;
           parent_notes: string | null;
           language: string;
-          first_interaction: boolean;
           preferences: Json | null;
+          // Friend identity: public halves plaintext; secret halves sealed
+          // under the account VMK (friend_secret_keys, enc:v1:, server-blind).
+          friend_kem_public_key: string | null;
+          friend_sign_public_key: string | null;
+          friend_secret_keys: string | null;
+          // Parent-controlled per-kid friend settings (plaintext, enforceable).
+          can_add_friends: boolean;
+          can_be_added_as_friend: boolean;
+          incoming_friend_requests_require_parent_approval: boolean;
+          outgoing_friend_requests_require_parent_approval: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -75,8 +84,14 @@ export interface Database {
           memory?: string | null;
           parent_notes?: string | null;
           language?: string;
-          first_interaction?: boolean;
           preferences?: Json | null;
+          friend_kem_public_key?: string | null;
+          friend_sign_public_key?: string | null;
+          friend_secret_keys?: string | null;
+          can_add_friends?: boolean;
+          can_be_added_as_friend?: boolean;
+          incoming_friend_requests_require_parent_approval?: boolean;
+          outgoing_friend_requests_require_parent_approval?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -91,8 +106,75 @@ export interface Database {
           memory?: string | null;
           parent_notes?: string | null;
           language?: string;
-          first_interaction?: boolean;
           preferences?: Json | null;
+          friend_kem_public_key?: string | null;
+          friend_sign_public_key?: string | null;
+          friend_secret_keys?: string | null;
+          can_add_friends?: boolean;
+          can_be_added_as_friend?: boolean;
+          incoming_friend_requests_require_parent_approval?: boolean;
+          outgoing_friend_requests_require_parent_approval?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      friendships: {
+        Row: {
+          id: string;
+          requester_account_id: string;
+          requester_profile_id: string;
+          addressee_account_id: string;
+          addressee_profile_id: string;
+          status: string;
+          addressee_accepted: boolean;
+          // tri-state: null = approval not required, false = required+pending,
+          // true = approved.
+          requester_parent_ok: boolean | null;
+          addressee_parent_ok: boolean | null;
+          blocked_by: string | null;
+          // Sealed SealedEnvelope JSON (opaque to the server).
+          requester_preview_card: string | null;
+          requester_card: string | null;
+          addressee_card: string | null;
+          // Requester's private nickname for this friend (enc:v1: under their VMK).
+          nickname: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          requester_account_id: string;
+          requester_profile_id: string;
+          addressee_account_id: string;
+          addressee_profile_id: string;
+          status?: string;
+          addressee_accepted?: boolean;
+          requester_parent_ok?: boolean | null;
+          addressee_parent_ok?: boolean | null;
+          blocked_by?: string | null;
+          requester_preview_card?: string | null;
+          requester_card?: string | null;
+          addressee_card?: string | null;
+          nickname?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          requester_account_id?: string;
+          requester_profile_id?: string;
+          addressee_account_id?: string;
+          addressee_profile_id?: string;
+          status?: string;
+          addressee_accepted?: boolean;
+          requester_parent_ok?: boolean | null;
+          addressee_parent_ok?: boolean | null;
+          blocked_by?: string | null;
+          requester_preview_card?: string | null;
+          requester_card?: string | null;
+          addressee_card?: string | null;
+          nickname?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -466,6 +548,37 @@ export type DeviceUpdate = Database["public"]["Tables"]["devices"]["Update"];
 export type DeviceStatus = "pending" | "active" | "revoked";
 export type ProfileInsert = Database["public"]["Tables"]["profiles"]["Insert"];
 export type ProfileUpdate = Database["public"]["Tables"]["profiles"]["Update"];
+
+export type Friendship = Database["public"]["Tables"]["friendships"]["Row"];
+export type FriendshipInsert =
+  Database["public"]["Tables"]["friendships"]["Insert"];
+export type FriendshipUpdate =
+  Database["public"]["Tables"]["friendships"]["Update"];
+
+/** Lifecycle of a friendship. See @dodi/protocol friend-card + friends service. */
+export type FriendshipStatus =
+  | "pending"
+  | "awaiting_parent"
+  | "accepted"
+  | "rejected"
+  | "blocked";
+
+/**
+ * The minimal identity a kid reveals with a friend *request* — shown to the
+ * addressee so they can decide. Sealed to the addressee's profile KEM key.
+ */
+export interface FriendPreviewCard {
+  displayName: string;
+  avatarConfig: Json | null;
+}
+
+/**
+ * The full card exchanged once a friendship is `accepted` — adds birthdate.
+ * Sealed to the recipient profile's KEM key; server gates delivery by status.
+ */
+export interface FriendCard extends FriendPreviewCard {
+  birthdate: string | null;
+}
 
 export type PersonaInsert = Database["public"]["Tables"]["personas"]["Insert"];
 export type PersonaUpdate = Database["public"]["Tables"]["personas"]["Update"];

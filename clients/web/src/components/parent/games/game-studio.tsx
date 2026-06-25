@@ -16,6 +16,7 @@ import { STAGE } from "@/lib/games/stage";
 import { GAME_TAGS } from "@dodi/games/tags";
 import { cn } from "@/lib/utils";
 import { useProfiles } from "@/hooks/use-profiles";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import { resolveClientThinking } from "@/lib/ai/resolve-client-thinking";
 import { calculateChildAge } from "@dodi/ai/dodi-context";
 import { buildLearningContext } from "@dodi/ai/learning-context";
@@ -189,6 +190,15 @@ export function GameStudio({ initialGame }: GameStudioProps) {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sideWidth, setSideWidth] = useState(SIDE_DEFAULT);
   const [composerHeight, setComposerHeight] = useState(COMPOSER_DEFAULT);
+  // Portrait phones + upright tablets get a vertical, tab-switched layout
+  // (matches the `compact` CSS variant). Landscape/desktop keep the resizable
+  // side-by-side panes.
+  const vertical = useMediaQuery("(orientation: portrait), (max-width: 767px)");
+  // New games open on the Game tab (settings must be filled before the chat
+  // unlocks); existing games open on the Dodi chat.
+  const [mtab, setMtab] = useState<"game" | "chat">(
+    initialGame?.id ? "chat" : "game",
+  );
   const threadRef = useRef<HTMLDivElement | null>(null);
   const sideWidthRef = useRef(SIDE_DEFAULT);
   const composerHeightRef = useRef(COMPOSER_DEFAULT);
@@ -711,7 +721,7 @@ export function GameStudio({ initialGame }: GameStudioProps) {
 
   return (
     <div
-      className="fixed inset-x-0 bottom-16 top-14 z-30 flex flex-col bg-background md:bottom-0 md:left-56 md:right-0 md:top-0"
+      className="fixed inset-x-0 top-14 bottom-0 z-30 flex flex-col bg-background wide:top-0 wide:left-56"
       data-screen-label={editing ? "Parent — Edit game" : "Parent — New game"}
     >
       {/* Studio bar */}
@@ -731,10 +741,38 @@ export function GameStudio({ initialGame }: GameStudioProps) {
         </div>
       </div>
 
+      {/* Mobile tab bar (vertical layout only) */}
+      {vertical && (
+        <div className="flex flex-shrink-0 gap-1 border-b border-border bg-card px-3 py-2">
+          <StudioTab
+            active={mtab === "game"}
+            onClick={() => setMtab("game")}
+            icon="show"
+            label={t("tabGame")}
+          />
+          <StudioTab
+            active={mtab === "chat"}
+            onClick={() => setMtab("chat")}
+            icon="sparkles"
+            label={t("tabDodi")}
+          />
+        </div>
+      )}
+
       {/* Two-pane: main stage + chat sidebar */}
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
+      <div
+        className={cn(
+          "flex min-h-0 flex-1 overflow-hidden",
+          vertical ? "flex-col" : "flex-row",
+        )}
+      >
         {/* Main stage */}
-        <div className="flex min-h-0 flex-1 flex-col bg-background max-md:min-h-[46vh]">
+        <div
+          className={cn(
+            "flex min-h-0 flex-1 flex-col bg-background",
+            vertical && mtab !== "game" && "hidden",
+          )}
+        >
           <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border bg-card px-4 py-2.5 md:px-5">
             <div className="inline-flex gap-0.5 rounded-[10px] border border-border bg-background p-[3px]">
               <SegTab active={view === "preview"} onClick={() => setView("preview")} icon="show" label={t("preview")} />
@@ -854,17 +892,24 @@ export function GameStudio({ initialGame }: GameStudioProps) {
 
         {/* Chat sidebar */}
         <div
-          style={{ width: sideWidth }}
-          className="relative flex min-h-0 flex-1 flex-col border-border bg-card max-md:!w-full max-md:border-t md:flex-none md:border-l"
+          style={vertical ? undefined : { width: sideWidth }}
+          className={cn(
+            "relative flex min-h-0 flex-col border-border bg-card",
+            vertical
+              ? cn("w-full flex-1", mtab !== "chat" && "hidden")
+              : "flex-none border-l",
+          )}
         >
-          {/* Resize handle (desktop) */}
-          <div
-            onMouseDown={startSideResize}
-            className="group absolute -left-1 bottom-0 top-0 z-10 hidden w-2.5 cursor-col-resize items-center justify-center md:flex"
-            title="Drag to resize"
-          >
-            <span className="h-7 w-0.5 rounded bg-border-strong transition-all group-hover:h-11 group-hover:bg-primary" />
-          </div>
+          {/* Resize handle (horizontal layout only) */}
+          {!vertical && (
+            <div
+              onMouseDown={startSideResize}
+              className="group absolute -left-1 bottom-0 top-0 z-10 flex w-2.5 cursor-col-resize items-center justify-center"
+              title="Drag to resize"
+            >
+              <span className="h-7 w-0.5 rounded bg-border-strong transition-all group-hover:h-11 group-hover:bg-primary" />
+            </div>
+          )}
 
           {/* Header */}
           <div className="flex flex-shrink-0 items-center gap-3 border-b border-border px-4 py-3">
@@ -990,14 +1035,16 @@ export function GameStudio({ initialGame }: GameStudioProps) {
               </div>
             )}
             <div className="relative rounded-2xl border border-border-strong bg-card px-4 pb-2.5 pt-3 shadow-[0_4px_18px_rgba(34,56,78,0.07)] transition-colors focus-within:border-primary">
-              {/* Composer top resize handle (desktop) */}
-              <div
-                onMouseDown={startComposerResize}
-                className="group absolute -top-1.5 left-0 right-0 z-10 hidden h-3 cursor-ns-resize items-center justify-center md:flex"
-                title="Drag to resize"
-              >
-                <span className="h-[3px] w-8 rounded bg-border-strong transition-all group-hover:w-12 group-hover:bg-primary" />
-              </div>
+              {/* Composer top resize handle (horizontal layout only) */}
+              {!vertical && (
+                <div
+                  onMouseDown={startComposerResize}
+                  className="group absolute -top-1.5 left-0 right-0 z-10 flex h-3 cursor-ns-resize items-center justify-center"
+                  title="Drag to resize"
+                >
+                  <span className="h-[3px] w-8 rounded bg-border-strong transition-all group-hover:w-12 group-hover:bg-primary" />
+                </div>
+              )}
               <textarea
                 style={{ height: composerHeight }}
                 disabled={composerLocked}
@@ -1065,6 +1112,35 @@ function SegTab({
         active
           ? "bg-card text-ink shadow-[0_1px_2px_rgba(34,56,78,0.06)]"
           : "text-muted-foreground hover:text-ink-2",
+      )}
+    >
+      <Icon name={icon} size={15} />
+      {label}
+    </button>
+  );
+}
+
+/** Full-width Game/Dodi switch shown above the panes in the vertical layout. */
+function StudioTab({
+  active,
+  onClick,
+  icon,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: IconName;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "inline-flex flex-1 items-center justify-center gap-1.5 rounded-[9px] border px-2.5 py-2 text-[13.5px] font-semibold transition-colors",
+        active
+          ? "border-primary-soft-2 bg-primary-soft text-primary"
+          : "border-border bg-background text-muted-foreground",
       )}
     >
       <Icon name={icon} size={15} />
