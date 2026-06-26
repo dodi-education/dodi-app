@@ -69,7 +69,7 @@ export function FriendRow({
         onClick={onOpen}
         className={`${ROW_BASE} transition-all duration-150 ease-[cubic-bezier(0.34,1.56,0.64,1)] hover:-translate-y-0.5 hover:shadow-[0_8px_20px_rgba(34,56,78,0.1)] active:scale-[0.985]`}
       >
-        <FriendAvatar label={primary} />
+        <FriendAvatar label={primary} avatarConfig={friend.avatarConfig} />
         <div className="min-w-0 flex-1">
           <NameLabel primary={primary} suffix={suffix} />
         </div>
@@ -81,7 +81,7 @@ export function FriendRow({
   if (friend.status === "pending" && friend.role === "addressee") {
     return (
       <div className={`${ROW_BASE} outline outline-[1.5px] outline-primary-soft-2`}>
-        <FriendAvatar label={primary} />
+        <FriendAvatar label={primary} avatarConfig={friend.avatarConfig} />
         <div className="min-w-0 flex-1">
           <NameLabel primary={primary} suffix={suffix} />
           <div className="truncate text-[13px] font-bold text-primary">
@@ -116,7 +116,7 @@ export function FriendRow({
     // This kid already accepted; the friendship is waiting on a parent.
     return (
       <div className={ROW_BASE}>
-        <FriendAvatar label={primary} />
+        <FriendAvatar label={primary} avatarConfig={friend.avatarConfig} />
         <div className="min-w-0 flex-1">
           <NameLabel primary={primary} suffix={suffix} />
           <div className="truncate text-[13px] font-bold text-faint">
@@ -148,7 +148,7 @@ export function FriendRow({
       friend.status === "awaiting_parent" ? awaitingLabel : t("pending");
     return (
       <div className={ROW_BASE}>
-        <FriendAvatar label={primary} />
+        <FriendAvatar label={primary} avatarConfig={friend.avatarConfig} />
         <div className="min-w-0 flex-1">
           <NameLabel primary={primary} suffix={suffix} />
           <div className="truncate text-[13px] font-bold text-faint">
@@ -177,7 +177,7 @@ export function FriendRow({
   // blocked
   return (
     <div className={`${ROW_BASE} opacity-90`}>
-      <FriendAvatar label={primary} grayscale />
+      <FriendAvatar label={primary} avatarConfig={friend.avatarConfig} grayscale />
       <div className="min-w-0 flex-1">
         <NameLabel primary={primary} suffix={suffix} />
         <div className="truncate text-[13px] font-bold text-faint">

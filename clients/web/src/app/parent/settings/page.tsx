@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { AIProviderConfig } from "@/components/parent/ai-provider-config";
 import { ChangePassword } from "@/components/parent/change-password";
+import { DateTimeSettings } from "@/components/parent/date-time-settings";
 import { DevicesSection } from "@/components/parent/devices-section";
 import { FieldRow } from "@/components/parent/rows";
 import { PageHead, Section } from "@/components/parent/section";
@@ -54,6 +55,8 @@ export default function SettingsPage() {
           </span>
         </FieldRow>
       </Section>
+
+      <DateTimeSettings />
 
       <ChangePassword />
 

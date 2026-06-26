@@ -1,0 +1,24 @@
+{
+  "name": "@dodi/intl",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./prefs": "./src/prefs.ts",
+    "./format": "./src/format.ts",
+    "./age": "./src/age.ts"
+  },
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "typescript": "^5",
+    "vitest": "^4.1.8"
+  }
+}

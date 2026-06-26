@@ -38,6 +38,12 @@ const UpdateGameSchema = z.object({
       audienceIds: z.array(z.string().uuid()),
     })
     .optional(),
+  // Vault-decrypted thinking key + provider/model, supplied by the client only
+  // when a `success_definition` change needs re-mapping to structured criteria.
+  // The server cannot decrypt the key itself (E2EE), so it relies on these.
+  apiKey: z.string().min(1).optional(),
+  provider: z.enum(["gemini", "openai", "anthropic", "xai"]).optional(),
+  model: z.string().min(1).optional(),
 });
 
 interface RouteContext {
@@ -136,12 +142,21 @@ export async function PATCH(
     }
 
     // When the success definition changes, re-derive the structured criteria so
-    // the host can evaluate it — without regenerating the game code.
+    // the host can evaluate it — without regenerating the game code. Mapping a
+    // non-empty definition needs the vault-decrypted thinking key the client
+    // supplies; absent it, persist the text and leave the criteria unchanged.
     if (parsed.data.success_definition !== undefined) {
+      const model =
+        parsed.data.apiKey && parsed.data.provider && parsed.data.model
+          ? {
+              providerId: parsed.data.provider,
+              modelId: parsed.data.model,
+              apiKey: parsed.data.apiKey,
+            }
+          : null;
       try {
         const mapped = await mapSuccessDefinition(
-          supabase,
-          accountId,
+          model,
           parsed.data.success_definition,
           { learningGoal: parsed.data.learning_goal ?? existing.learning_goal },
         );

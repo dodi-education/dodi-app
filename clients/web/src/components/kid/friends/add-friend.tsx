@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 
 import { KidButton } from "@/components/kid/kid-button";
@@ -31,9 +31,9 @@ interface AddFriendProps {
 }
 
 const SEGMENTS: Array<{ key: Seg; labelKey: string; icon: IconName }> = [
-  { key: "code", labelKey: "segCode", icon: "qrcode" },
-  { key: "scan", labelKey: "segScan", icon: "camera" },
   { key: "tag", labelKey: "segTag", icon: "user_plus" },
+  { key: "scan", labelKey: "segScan", icon: "camera" },
+  { key: "code", labelKey: "segCode", icon: "qrcode" },
 ];
 
 const CARD = "flex flex-col items-center rounded-[26px] bg-white px-6 py-[26px] shadow-[0_4px_18px_rgba(34,56,78,0.06)]";
@@ -48,13 +48,21 @@ export function AddFriend({
 }: AddFriendProps) {
   const t = useTranslations("friends");
   const myTag = formatHandle(myHandle);
-  const [seg, setSeg] = useState<Seg>(initialCode ? "tag" : "code");
+  const [seg, setSeg] = useState<Seg>("tag");
   const [copied, setCopied] = useState(false);
   const [tag, setTag] = useState(initialCode ? normalizeHandle(initialCode) : "");
   const [nickname, setNickname] = useState("");
   const [sent, setSent] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const tagInputRef = useRef<HTMLInputElement>(null);
+
+  // Land on the "Add by code" tab with the code field ready to type. Re-runs when
+  // switching back to this tab; the ref is null while another panel is shown, so
+  // the focus call is a safe no-op there.
+  useEffect(() => {
+    if (seg === "tag") tagInputRef.current?.focus();
+  }, [seg]);
 
   // The QR encodes an absolute deep link, so it needs the runtime origin —
   // resolved after mount (empty on the server) to keep hydration stable. The
@@ -234,9 +242,10 @@ export function AddFriend({
             {t("tagLabel")}
           </div>
           <input
+            ref={tagInputRef}
             value={tag}
             onChange={(e) => {
-              setTag(e.target.value.replace(/@/g, ""));
+              setTag(e.target.value.replace(/@/g, "").toUpperCase());
               if (error) setError(null);
             }}
             onKeyDown={(e) => {
@@ -249,7 +258,7 @@ export function AddFriend({
             className="rounded-2xl border-2 border-border-strong bg-muted px-4 py-3.5 text-center font-mono text-[17px] font-bold text-ink outline-none focus:border-primary focus:bg-white"
           />
           <div className="mt-4 self-center max-w-[300px] text-center text-[13.5px] font-semibold leading-relaxed text-muted-foreground">
-            {t("tagHint", { example: "k4f9q2tz" })}
+            {t("tagHint")}
           </div>
           <div className="mb-1 mt-4 text-sm font-extrabold text-ink-2">
             {t("nicknameLabel")}

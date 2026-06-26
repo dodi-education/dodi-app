@@ -15,8 +15,10 @@ import { PageHead, Section } from "@/components/parent/section";
 import { Icon } from "@/components/shared/icon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useDateFormat } from "@/components/providers/date-format-provider";
 import { usePersonas } from "@/hooks/use-personas";
 import { useProfiles } from "@/hooks/use-profiles";
+import { ageFromBirthdate } from "@dodi/intl";
 
 const AVATAR_PALETTE = [
   { bg: "bg-primary-soft-2", fg: "text-primary" },
@@ -29,23 +31,11 @@ function avatarColor(index: number) {
   return AVATAR_PALETTE[index % AVATAR_PALETTE.length];
 }
 
-function ageFromBirthdate(birthdate: string | null): number | null {
-  if (!birthdate) return null;
-  const birth = new Date(birthdate);
-  if (Number.isNaN(birth.getTime())) return null;
-  const now = new Date();
-  let age = now.getFullYear() - birth.getFullYear();
-  const beforeBirthday =
-    now.getMonth() < birth.getMonth() ||
-    (now.getMonth() === birth.getMonth() && now.getDate() < birth.getDate());
-  if (beforeBirthday) age -= 1;
-  return age;
-}
-
 export default function ProfilesPage() {
   const t = useTranslations("profiles");
   const td = useTranslations("dashboard");
   const tc = useTranslations("common");
+  const { formatDateOnly } = useDateFormat();
   const { profiles, loading, error } = useProfiles();
   const { nameById: personaNames } = usePersonas();
 
@@ -118,7 +108,11 @@ export default function ProfilesPage() {
                         : t("default")}
                       <DotSep />
                       {profile.birthdate
-                        ? t("born", { date: profile.birthdate })
+                        ? t("born", {
+                            date:
+                              formatDateOnly(profile.birthdate) ??
+                              profile.birthdate,
+                          })
                         : t("birthdateNotSet")}
                     </RowMeta>
                   </RowMain>

@@ -2,6 +2,7 @@
   "name": "@dodi/web",
   "version": "0.1.0",
   "private": true,
+  "license": "AGPL-3.0-only",
   "scripts": {
     "dev": "next dev --experimental-https --experimental-https-key ../../certs/dev-key.pem --experimental-https-cert ../../certs/dev.pem -H 0.0.0.0 --port 3000",
     "dev:https": "next dev --experimental-https --experimental-https-key ../../certs/dev-key.pem --experimental-https-cert ../../certs/dev.pem -H 0.0.0.0 --port 3000",
@@ -19,6 +20,7 @@
     "@dodi/ai": "workspace:*",
     "@dodi/crypto": "workspace:*",
     "@dodi/games": "workspace:*",
+    "@dodi/intl": "workspace:*",
     "@dodi/protocol": "workspace:*",
     "@dodi/types": "workspace:*",
     "@dodi/vault": "workspace:*",

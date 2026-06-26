@@ -3,6 +3,8 @@ import { Hanken_Grotesk, Nunito } from "next/font/google";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
 
+import { DateFormatProvider } from "@/components/providers/date-format-provider";
+
 import "./globals.css";
 
 const hanken = Hanken_Grotesk({
@@ -37,7 +39,7 @@ export default async function RootLayout({
         className={`${hanken.variable} ${nunito.variable} font-sans antialiased`}
       >
         <NextIntlClientProvider messages={messages}>
-          {children}
+          <DateFormatProvider>{children}</DateFormatProvider>
         </NextIntlClientProvider>
       </body>
     </html>

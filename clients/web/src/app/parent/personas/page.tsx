@@ -10,19 +10,32 @@ import { Icon } from "@/components/shared/icon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { dodi } from "@/lib/api";
+import { decryptPersona } from "@dodi/vault";
+import { useVaultStore } from "@/stores/vault-store";
 import type { Persona } from "@dodi/types/database";
 
 export default function PersonasPage() {
   const t = useTranslations("personas");
   const [personas, setPersonas] = useState<Persona[]>([]);
+  const session = useVaultStore((s) => s.session);
 
   useEffect(() => {
+    if (!session) return;
+    let cancelled = false;
     dodi
       .request("/api/personas")
       .then((r) => (r.ok ? r.json() : []))
-      .then((d: Persona[]) => setPersonas(d))
-      .catch(() => setPersonas([]));
-  }, []);
+      // Account personas arrive as ciphertext; decrypt name + soul for display.
+      .then((d: Persona[]) => {
+        if (!cancelled) setPersonas(d.map((p) => decryptPersona(session, p)));
+      })
+      .catch(() => {
+        if (!cancelled) setPersonas([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [session]);
 
   return (
     <div>

@@ -11,6 +11,11 @@ import { SaveRow } from "@/components/parent/save-row";
 import { PageHead, Section } from "@/components/parent/section";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { encryptPersonaFields } from "@dodi/vault";
+import { useVaultStore } from "@/stores/vault-store";
+
+/** Plaintext soul cap (enforced client-side; the server only sees ciphertext). */
+const MAX_SOUL_LENGTH = 50000;
 
 export default function NewPersonaPage() {
   const t = useTranslations("personas");
@@ -46,10 +51,12 @@ export default function NewPersonaPage() {
     e.preventDefault();
     setError(null);
 
+    // Import reads the file into `soul` (handleFileSelect), so both modes now
+    // submit the same encrypted create — the soul never reaches the server raw.
     const nextInvalid = {
       name: !name.trim(),
       file: isImport && !fileInputRef.current?.files?.[0],
-      soul: !isImport && !soul.trim(),
+      soul: !soul.trim(),
     };
     if (nextInvalid.name || nextInvalid.file || nextInvalid.soul) {
       setInvalidName(nextInvalid.name);
@@ -57,26 +64,25 @@ export default function NewPersonaPage() {
       setInvalidSoul(nextInvalid.soul);
       return;
     }
+    if (soul.length > MAX_SOUL_LENGTH) {
+      setError(t("soulTooLong"));
+      return;
+    }
+
+    const session = useVaultStore.getState().session;
+    if (!session) {
+      setError(t("failedToCreate"));
+      return;
+    }
     setLoading(true);
 
     try {
-      let response: Response;
-
-      if (isImport && fileInputRef.current?.files?.[0]) {
-        const formData = new FormData();
-        formData.append("file", fileInputRef.current.files[0]);
-        formData.append("name", name);
-        response = await dodi.request("/api/personas/imports", {
-          method: "POST",
-          body: formData,
-        });
-      } else {
-        response = await dodi.request("/api/personas", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name, soul }),
-        });
-      }
+      // Seal `name` and `soul` under the account VMK before they leave the browser.
+      const response = await dodi.request("/api/personas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(encryptPersonaFields(session, { name, soul })),
+      });
 
       if (!response.ok) {
         const data = await response.json();

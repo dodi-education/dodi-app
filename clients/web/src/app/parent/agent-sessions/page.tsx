@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select";
 import { PageHead, Section } from "@/components/parent/section";
 import { DotSep, Row, RowMain, RowMeta, RowTitle } from "@/components/parent/rows";
+import { useDateFormat } from "@/components/providers/date-format-provider";
 import { useProfiles } from "@/hooks/use-profiles";
 import type { AgentSessionRow } from "@dodi/types/database";
 
@@ -32,18 +33,9 @@ const STATUS_BADGE_VARIANTS: Record<
 
 const PAGE_SIZE = 50;
 
-function formatElapsed(createdAt: string, finishedAt: string | null): string {
-  const start = new Date(createdAt).getTime();
-  const end = finishedAt ? new Date(finishedAt).getTime() : Date.now();
-  const seconds = Math.round((end - start) / 1000);
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = seconds % 60;
-  return `${minutes}m ${remainingSeconds}s`;
-}
-
 export default function AgentSessionsPage() {
   const t = useTranslations("agentSessions");
+  const { formatDateTime, formatElapsed } = useDateFormat();
 
   const [sessions, setSessions] = useState<AgentSessionRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -213,7 +205,7 @@ export default function AgentSessionsPage() {
                       </>
                     )}
                   <DotSep />
-                  {new Date(session.created_at).toLocaleString()}
+                  {formatDateTime(session.created_at)}
                   <DotSep />
                   {t("elapsed")}: {formatElapsed(session.created_at, session.finished_at)}
                 </RowMeta>

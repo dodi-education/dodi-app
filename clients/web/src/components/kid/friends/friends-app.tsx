@@ -25,6 +25,7 @@ function Centered({ children }: { children: React.ReactNode }) {
 export function FriendsApp({ profileId }: { profileId: string }) {
   const t = useTranslations("friends");
   const f = useFriends(profileId);
+  const { reload } = f;
   const searchParams = useSearchParams();
   const router = useRouter();
 
@@ -41,6 +42,21 @@ export function FriendsApp({ profileId }: { profileId: string }) {
   useEffect(() => {
     if (addParam) router.replace("/friends");
   }, [addParam, router]);
+
+  // Re-tapping the friends tab while already on it returns to the list and
+  // reloads (mirrors how the games tab resets from a game detail). The bottom
+  // nav broadcasts this because a Link to the current URL is otherwise a no-op.
+  useEffect(() => {
+    function onReselect(event: Event) {
+      const href = (event as CustomEvent<{ href: string }>).detail?.href;
+      if (href && href !== "/friends") return;
+      setView({ mode: "list" });
+      setPendingCode(null);
+      reload();
+    }
+    window.addEventListener("kid-tab-reselect", onReselect);
+    return () => window.removeEventListener("kid-tab-reselect", onReselect);
+  }, [reload]);
 
   if (f.error === "locked") {
     return <Centered>{t("errorVaultLocked")}</Centered>;

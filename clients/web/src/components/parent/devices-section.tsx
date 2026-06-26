@@ -1,8 +1,9 @@
 "use client";
 
-import { useLocale, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 
+import { useDateFormat } from "@/components/providers/date-format-provider";
 import { Row, RowMain, RowMeta, RowTitle } from "@/components/parent/rows";
 import { Section } from "@/components/parent/section";
 import { Icon } from "@/components/shared/icon";
@@ -34,7 +35,7 @@ interface ClaimedDevice {
  */
 export function DevicesSection() {
   const t = useTranslations("settings");
-  const locale = useLocale();
+  const { formatDateTime } = useDateFormat();
 
   const [devices, setDevices] = useState<Device[] | null>(null);
   const [code, setCode] = useState("");
@@ -177,10 +178,7 @@ export function DevicesSection() {
               <RowMeta>
                 {device.last_seen_at
                   ? t("lastSeen", {
-                      date: new Date(device.last_seen_at).toLocaleString(
-                        locale,
-                        { dateStyle: "medium", timeStyle: "short" },
-                      ),
+                      date: formatDateTime(device.last_seen_at),
                     })
                   : t("neverSeen")}
               </RowMeta>

@@ -6,6 +6,7 @@ import { useState, useRef, useEffect } from "react";
 
 import { Icon } from "@/components/shared/icon";
 import { locales, type Locale } from "@/i18n/config";
+import { dodi } from "@/lib/api";
 
 const localeLabels: Record<Locale, string> = {
   en: "EN",
@@ -14,6 +15,22 @@ const localeLabels: Record<Locale, string> = {
 
 function setLocaleCookie(locale: Locale) {
   document.cookie = `NEXT_LOCALE=${locale}; path=/; max-age=31536000`;
+}
+
+/**
+ * Best-effort persist of the parent's UI language to their account, so the
+ * choice follows them across devices (the cookie above is only a per-device
+ * cache). On public pages there's no session, so the request 401s — we swallow
+ * that and keep the cookie-only behaviour.
+ */
+function persistLocale(locale: Locale) {
+  void dodi
+    .request("/api/account", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ language: locale }),
+    })
+    .catch(() => {});
 }
 
 export function LanguageSwitcher({ dropUp = false }: { dropUp?: boolean }) {
@@ -34,6 +51,7 @@ export function LanguageSwitcher({ dropUp = false }: { dropUp?: boolean }) {
 
   function handleSelect(newLocale: Locale) {
     setLocaleCookie(newLocale);
+    persistLocale(newLocale);
     setOpen(false);
     router.refresh();
   }

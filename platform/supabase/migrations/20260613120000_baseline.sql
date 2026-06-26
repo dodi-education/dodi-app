@@ -134,7 +134,9 @@ CREATE TABLE IF NOT EXISTS "public"."accounts" (
     "subscription_tier" "public"."subscription_tier" DEFAULT 'free'::"public"."subscription_tier" NOT NULL,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    "vault_keys" "jsonb"
+    "vault_keys" "jsonb",
+    "date_preferences" "jsonb",
+    "language" "text" DEFAULT 'en'::"text" NOT NULL
 );
 
 
@@ -142,6 +144,10 @@ ALTER TABLE "public"."accounts" OWNER TO "postgres";
 
 
 COMMENT ON COLUMN "public"."accounts"."vault_keys" IS 'Opaque wrapped Vault Master Key material (StoredVaultKeys). Server cannot decrypt it. See src/lib/vault.';
+
+COMMENT ON COLUMN "public"."accounts"."date_preferences" IS 'Plaintext account-level date/time display prefs ({ dateStyle, timeStyle, timeZoneEnc }). An explicit timezone is sealed enc:v1: in timeZoneEnc so the server stays blind.';
+
+COMMENT ON COLUMN "public"."accounts"."language" IS 'Parent UI language (BCP-47 short code, e.g. en/de). Durable source of truth; cached client-side in the NEXT_LOCALE cookie and re-seeded at login.';
 
 
 
@@ -274,10 +280,10 @@ CREATE TABLE IF NOT EXISTS "public"."profiles" (
     "display_name" "text" NOT NULL,
     "social_id" "text" NOT NULL,
     "birthdate" "text",
-    "avatar_config" "jsonb",
+    "avatar_config" "text",
     "active_persona_id" "uuid",
     "memory" "text",
-    "preferences" "jsonb",
+    "date_preferences" "jsonb",
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "language" "text" DEFAULT 'en'::"text" NOT NULL,
@@ -286,6 +292,8 @@ CREATE TABLE IF NOT EXISTS "public"."profiles" (
 
 
 ALTER TABLE "public"."profiles" OWNER TO "postgres";
+
+COMMENT ON COLUMN "public"."profiles"."date_preferences" IS 'Plaintext per-kid date/time display override ({ dateStyle?, timeStyle?, timeZoneEnc? }); absent fields inherit the account default. An explicit timezone is sealed enc:v1: in timeZoneEnc.';
 
 
 CREATE TABLE IF NOT EXISTS "public"."system_logs" (
@@ -1085,6 +1093,20 @@ ALTER TABLE "public"."profiles" ADD COLUMN IF NOT EXISTS "incoming_friend_reques
 ALTER TABLE "public"."profiles" ADD COLUMN IF NOT EXISTS "outgoing_friend_requests_require_parent_approval" boolean DEFAULT false NOT NULL;
 
 COMMENT ON COLUMN "public"."profiles"."friend_secret_keys" IS 'Opaque enc:v1: blob — the profile''s ML-KEM/ML-DSA secret keys sealed under the account VMK. Server cannot decrypt.';
+
+-- ---------------------------------------------------------------------------
+-- profiles: avatar appearance + avatar-PIN puzzle.
+-- ---------------------------------------------------------------------------
+-- avatar_config holds the kid's chosen look { color, avatar } but is E2EE: the
+-- client stores it as an enc:v1: JSON string (text, like the other sealed
+-- fields), because the avatar choice can leak sensitive inferences (e.g.
+-- gender). avatar_pin is
+-- the optional secret 3-animal puzzle sequence, also sealed under the account
+-- VMK (enc:v1:); NULL means the puzzle is disabled. Both are opaque to server.
+ALTER TABLE "public"."profiles" ADD COLUMN IF NOT EXISTS "avatar_pin" "text";
+
+COMMENT ON COLUMN "public"."profiles"."avatar_config" IS 'E2EE enc:v1: JSON string { color, avatar } — the kid''s chosen look, sealed under the account VMK. Server cannot decrypt.';
+COMMENT ON COLUMN "public"."profiles"."avatar_pin" IS 'E2EE enc:v1: JSON array of 3 avatar ids — the optional avatar-PIN puzzle. NULL = disabled. Server cannot decrypt.';
 
 CREATE TABLE IF NOT EXISTS "public"."friendships" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,

@@ -664,6 +664,11 @@ export function GameStudio({ initialGame }: GameStudioProps) {
     setSaving(true);
     try {
       if (game.id) {
+        // Re-mapping the success definition to structured criteria needs the
+        // thinking provider key, which lives only in the unlocked vault — resolve
+        // it here and hand it over (the server cannot decrypt it). Absent (no
+        // provider configured), the server just persists the text unchanged.
+        const thinking = await resolveClientThinking();
         const res = await dodi.request(`/api/games/${game.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -674,6 +679,9 @@ export function GameStudio({ initialGame }: GameStudioProps) {
             success_definition: game.successDefinition,
             is_active: game.isActive,
             audience: { isFamily: game.isFamily, audienceIds: game.audienceIds },
+            apiKey: thinking?.apiKey,
+            provider: thinking?.provider,
+            model: thinking?.model,
           }),
         });
         if (!res.ok) throw new Error(await readError(res));

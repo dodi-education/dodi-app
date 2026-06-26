@@ -4,6 +4,8 @@ import { dodi } from "@/lib/api";
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 
+import { decryptPersona } from "@dodi/vault";
+import { useVaultStore } from "@/stores/vault-store";
 import type { Persona } from "@dodi/types/database";
 
 interface PersonaSelectorProps {
@@ -16,18 +18,21 @@ export function PersonaSelector({ profileId, value, onChange }: PersonaSelectorP
   const t = useTranslations("personas");
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [loading, setLoading] = useState(true);
+  const session = useVaultStore((s) => s.session);
 
   useEffect(() => {
+    if (!session) return;
     async function load() {
       const response = await dodi.request("/api/personas");
       if (response.ok) {
         const data: Persona[] = await response.json();
-        setPersonas(data);
+        // Account personas are encrypted; decrypt names for the dropdown labels.
+        setPersonas(data.map((p) => decryptPersona(session!, p)));
       }
       setLoading(false);
     }
     load();
-  }, []);
+  }, [session]);
 
   async function handleChange(personaId: string) {
     const newValue = personaId || null;

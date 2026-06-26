@@ -18,11 +18,19 @@ function baseProfile(overrides: Partial<Profile>): Profile {
     social_id: "k7m2q9x4tp",
     birthdate: "2018-04-05",
     avatar_config: null,
+    avatar_pin: null,
     active_persona_id: null,
     memory: null,
     parent_notes: null,
     language: "en",
-    preferences: null,
+    date_preferences: null,
+    friend_kem_public_key: null,
+    friend_sign_public_key: null,
+    friend_secret_keys: null,
+    can_add_friends: false,
+    can_be_added_as_friend: false,
+    incoming_friend_requests_require_parent_approval: true,
+    outgoing_friend_requests_require_parent_approval: false,
     created_at: "now",
     updated_at: "now",
     ...overrides,
@@ -80,5 +88,31 @@ describe("profile field crypto", () => {
     const enc = encryptProfileFields(session, fields);
     expect(enc.display_name).toBeUndefined();
     expect(enc.parent_notes?.startsWith("enc:v1:")).toBe(true);
+  });
+
+  it("seals avatar_config as an opaque string and round-trips to an object", () => {
+    const look = { color: 3, avatar: "animal_rabbit" };
+    const enc = encryptProfileFields(session, { avatar_config: look });
+    // Ciphertext is an opaque enc:v1: string, never a readable object.
+    expect(typeof enc.avatar_config).toBe("string");
+    expect((enc.avatar_config as unknown as string).startsWith("enc:v1:")).toBe(
+      true,
+    );
+
+    const row = baseProfile({ avatar_config: enc.avatar_config });
+    expect(decryptProfile(session, row).avatar_config).toEqual(look);
+  });
+
+  it("seals avatar_pin and round-trips the sequence; null clears it", () => {
+    const seq = JSON.stringify(["animal_ape", "animal_frog", "animal_ape"]);
+    const enc = encryptProfileFields(session, { avatar_pin: seq });
+    expect(enc.avatar_pin?.startsWith("enc:v1:")).toBe(true);
+
+    const row = baseProfile({ avatar_pin: enc.avatar_pin ?? null });
+    expect(decryptProfile(session, row).avatar_pin).toBe(seq);
+
+    // A disabled puzzle (null) passes through untouched.
+    expect(encryptProfileFields(session, { avatar_pin: null }).avatar_pin).toBeNull();
+    expect(decryptProfile(session, baseProfile({ avatar_pin: null })).avatar_pin).toBeNull();
   });
 });

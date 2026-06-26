@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useLocale, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 
+import { useDateFormat } from "@/components/providers/date-format-provider";
 import { Row, RowMain, RowMeta, RowTitle } from "@/components/parent/rows";
 import { Section } from "@/components/parent/section";
 import { Button } from "@/components/ui/button";
@@ -24,16 +25,6 @@ interface DecodedApproval extends PendingApproval {
   target: string;
 }
 
-function formatDate(value: string, locale: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat(locale, {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  }).format(date);
-}
-
 /**
  * Friendships across the parent's kids awaiting this parent's final approval,
  * split into Incoming (someone wants to add this child) and Outgoing (this child
@@ -45,7 +36,7 @@ function formatDate(value: string, locale: string): string {
  */
 export function FriendApprovals() {
   const t = useTranslations("friends");
-  const locale = useLocale();
+  const { formatDate } = useDateFormat();
   const { profiles } = useProfiles();
   const session = useVaultStore((s) => s.session);
   const [items, setItems] = useState<PendingApproval[] | null>(null);
@@ -108,7 +99,7 @@ export function FriendApprovals() {
         <RowTitle>
           {t("approvalSummary", { requester: a.requester, target: a.target })}
         </RowTitle>
-        <RowMeta>{t("sentOn", { date: formatDate(a.createdAt, locale) })}</RowMeta>
+        <RowMeta>{t("sentOn", { date: formatDate(a.createdAt) })}</RowMeta>
       </RowMain>
       <div className="flex shrink-0 gap-2">
         <Button

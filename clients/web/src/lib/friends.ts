@@ -123,12 +123,13 @@ async function jsonRequest<T>(path: string, init?: RequestInit): Promise<T> {
 // ---------------------------------------------------------------------------
 
 /**
- * Normalize a typed/pasted friend code to a bare social_id. Codes are shown and
- * shared without any prefix, but we still tolerate a stray leading `@` in case
- * someone pastes an older-style code.
+ * Normalize a typed/pasted friend code to a bare social_id. Codes are canonically
+ * UPPERCASE (see `generateSocialId`), so we uppercase here to make lookups
+ * case-insensitive for the kid — they can type lowercase and still match. We also
+ * tolerate a stray leading `@` in case someone pastes an older-style code.
  */
 export function normalizeHandle(raw: string): string {
-  return raw.trim().replace(/^@+/, "").toLowerCase();
+  return raw.trim().replace(/^@+/, "").toUpperCase();
 }
 
 /** Null-safe display of a social_id (the bare friend code, no prefix). */
@@ -280,6 +281,57 @@ export async function sendFriendRequest(
       fullCard,
       nickname: session.encryptField(nickname.trim()),
     }),
+  });
+}
+
+/** A friendship whose card this profile seals, plus the key to re-seal it. */
+export interface CardRefreshTarget {
+  friendshipId: string;
+  side: "requester" | "addressee";
+  counterpartKemPublicKey: string | null;
+}
+
+export function fetchCardRefreshTargets(
+  profileId: string,
+): Promise<CardRefreshTarget[]> {
+  return jsonRequest<CardRefreshTarget[]>(
+    `/api/friends/card-targets?profileId=${encodeURIComponent(profileId)}`,
+  );
+}
+
+/**
+ * Re-seal this profile's shared card (name / avatar / birthdate) to every friend
+ * so their lists always show current data. Call after editing any shared field.
+ * No-op when the profile has no friendships, so it never forces friend-key
+ * creation. Requires a DECRYPTED profile (display_name/avatar_config/birthdate).
+ */
+export async function refreshFriendCards(
+  profile: Profile,
+  session: VaultSession,
+): Promise<void> {
+  const targets = await fetchCardRefreshTargets(profile.id);
+  if (targets.length === 0) return;
+  const keys = await ensureFriendKeys(profile, session);
+  const { preview, full } = buildCards(profile);
+  const cards = targets
+    .filter((t) => t.counterpartKemPublicKey)
+    .map((t) => {
+      const kem = t.counterpartKemPublicKey as string;
+      const card = JSON.stringify(sealFriendCard(kem, full, keys.sign));
+      // The requester's name+avatar also travel in the preview (shown pre-accept);
+      // the addressee only ever has the full card.
+      return t.side === "requester"
+        ? {
+            friendshipId: t.friendshipId,
+            previewCard: JSON.stringify(sealFriendCard(kem, preview, keys.sign)),
+            card,
+          }
+        : { friendshipId: t.friendshipId, card };
+    });
+  if (cards.length === 0) return;
+  await jsonRequest("/api/friends/refresh-cards", {
+    method: "POST",
+    body: JSON.stringify({ profileId: profile.id, cards }),
   });
 }
 

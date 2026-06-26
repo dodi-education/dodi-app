@@ -32,6 +32,9 @@ importers:
       '@dodi/games':
         specifier: workspace:*
         version: link:../../core/games
+      '@dodi/intl':
+        specifier: workspace:*
+        version: link:../../core/intl
       '@dodi/protocol':
         specifier: workspace:*
         version: link:../../core/protocol
@@ -138,6 +141,9 @@ importers:
       '@anthropic-ai/sdk':
         specifier: ^0.80.0
         version: 0.80.0(zod@4.4.3)
+      '@dodi/intl':
+        specifier: workspace:*
+        version: link:../intl
       '@dodi/types':
         specifier: workspace:*
         version: link:../types
@@ -185,6 +191,15 @@ importers:
       zod:
         specifier: ^4.3.6
         version: 4.4.3
+    devDependencies:
+      typescript:
+        specifier: ^5
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.8
+        version: 4.1.9(@types/node@20.19.43)(msw@2.14.6(@types/node@20.19.43)(typescript@5.9.3))(vite@8.0.16(@types/node@20.19.43)(jiti@2.7.0))
+
+  core/intl:
     devDependencies:
       typescript:
         specifier: ^5
@@ -251,6 +266,9 @@ importers:
       '@dodi/games':
         specifier: workspace:*
         version: link:../core/games
+      '@dodi/intl':
+        specifier: workspace:*
+        version: link:../core/intl
       '@dodi/protocol':
         specifier: workspace:*
         version: link:../core/protocol

@@ -21,6 +21,8 @@ export interface Database {
           encrypted_api_keys: Json | null;
           model_config: Json | null;
           vault_keys: Json | null;
+          date_preferences: Json | null;
+          language: string;
           subscription_tier: string;
           created_at: string;
           updated_at: string;
@@ -31,6 +33,8 @@ export interface Database {
           encrypted_api_keys?: Json | null;
           model_config?: Json | null;
           vault_keys?: Json | null;
+          date_preferences?: Json | null;
+          language?: string;
           subscription_tier?: string;
           created_at?: string;
           updated_at?: string;
@@ -41,6 +45,8 @@ export interface Database {
           encrypted_api_keys?: Json | null;
           model_config?: Json | null;
           vault_keys?: Json | null;
+          date_preferences?: Json | null;
+          language?: string;
           subscription_tier?: string;
           created_at?: string;
           updated_at?: string;
@@ -54,12 +60,15 @@ export interface Database {
           display_name: string;
           social_id: string;
           birthdate: string | null;
+          // E2EE: enc:v1: JSON string { color, avatar } in memory after decrypt.
           avatar_config: Json | null;
+          // E2EE: enc:v1: JSON array of 3 avatar ids; null = puzzle disabled.
+          avatar_pin: string | null;
           active_persona_id: string | null;
           memory: string | null;
           parent_notes: string | null;
           language: string;
-          preferences: Json | null;
+          date_preferences: Json | null;
           // Friend identity: public halves plaintext; secret halves sealed
           // under the account VMK (friend_secret_keys, enc:v1:, server-blind).
           friend_kem_public_key: string | null;
@@ -80,11 +89,12 @@ export interface Database {
           social_id: string;
           birthdate?: string | null;
           avatar_config?: Json | null;
+          avatar_pin?: string | null;
           active_persona_id?: string | null;
           memory?: string | null;
           parent_notes?: string | null;
           language?: string;
-          preferences?: Json | null;
+          date_preferences?: Json | null;
           friend_kem_public_key?: string | null;
           friend_sign_public_key?: string | null;
           friend_secret_keys?: string | null;
@@ -102,11 +112,12 @@ export interface Database {
           social_id?: string;
           birthdate?: string | null;
           avatar_config?: Json | null;
+          avatar_pin?: string | null;
           active_persona_id?: string | null;
           memory?: string | null;
           parent_notes?: string | null;
           language?: string;
-          preferences?: Json | null;
+          date_preferences?: Json | null;
           friend_kem_public_key?: string | null;
           friend_sign_public_key?: string | null;
           friend_secret_keys?: string | null;

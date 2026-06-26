@@ -8,10 +8,12 @@ import {
   computeStatus,
   createFriendRequest,
   listBlocked,
+  listCardRefreshTargets,
   listFriends,
   listPendingApprovals,
   listRequests,
   lookupFriendTarget,
+  refreshFriendCards,
   removeFriendship,
   respondToRequest,
   setParentApproval,
@@ -155,11 +157,12 @@ function profile(overrides: Partial<Profile>): Profile {
     social_id: "handle-x",
     birthdate: null,
     avatar_config: null,
+    avatar_pin: null,
     active_persona_id: null,
     memory: null,
     parent_notes: null,
     language: "en",
-    preferences: null,
+    date_preferences: null,
     friend_kem_public_key: "kem-x",
     friend_sign_public_key: "sign-x",
     friend_secret_keys: "enc:v1:secret",
@@ -770,6 +773,146 @@ describe("views and card-delivery gating", () => {
     expect(approvals[0].nickname).toBeNull();
     // The requester's parent has nothing to approve.
     expect(await listPendingApprovals(fakeClient(store), "acc-a")).toHaveLength(0);
+  });
+
+  it("re-seals the requester's card so an accepted friend sees the new data", async () => {
+    // Reproduces the stale-friend-list bug: a friend keeps seeing the snapshot
+    // card until the owner re-seals it. After refresh, the new card is delivered.
+    const store = setup([
+      profile({ id: "p-a", account_id: "acc-a", friend_kem_public_key: "kem-a" }),
+      profile({ id: "p-b", account_id: "acc-b", friend_kem_public_key: "kem-b" }),
+    ]);
+    const created = await createFriendRequest(fakeClient(store), reqInput());
+    await respondToRequest(fakeClient(store), {
+      accountId: "acc-b",
+      profileId: "p-b",
+      friendshipId: created.id,
+      action: "accept",
+      addresseeCard: ADDR_CARD,
+    });
+
+    // p-a (requester) edits its avatar/name → re-seals to every friend.
+    const targets = await listCardRefreshTargets(fakeClient(store), {
+      accountId: "acc-a",
+      profileId: "p-a",
+    });
+    expect(targets).toEqual([
+      { friendshipId: created.id, side: "requester", counterpartKemPublicKey: "kem-b" },
+    ]);
+
+    const NEW_PREVIEW = JSON.stringify({ preview: "v2" });
+    const NEW_FULL = JSON.stringify({ full: "v2" });
+    const n = await refreshFriendCards(fakeClient(store), {
+      accountId: "acc-a",
+      profileId: "p-a",
+      cards: [{ friendshipId: created.id, previewCard: NEW_PREVIEW, card: NEW_FULL }],
+    });
+    expect(n).toBe(1);
+
+    // The addressee's friend list now reads the refreshed card, not the snapshot.
+    const friendsOfB = await listFriends(fakeClient(store), {
+      accountId: "acc-b",
+      profileId: "p-b",
+    });
+    expect(friendsOfB[0].card).toBe(NEW_FULL);
+  });
+
+  it("re-seals the addressee's card so the requester sees the new data", async () => {
+    const store = setup([
+      profile({ id: "p-a", account_id: "acc-a", friend_kem_public_key: "kem-a" }),
+      profile({ id: "p-b", account_id: "acc-b", friend_kem_public_key: "kem-b" }),
+    ]);
+    const created = await createFriendRequest(fakeClient(store), reqInput());
+    await respondToRequest(fakeClient(store), {
+      accountId: "acc-b",
+      profileId: "p-b",
+      friendshipId: created.id,
+      action: "accept",
+      addresseeCard: ADDR_CARD,
+    });
+
+    const targets = await listCardRefreshTargets(fakeClient(store), {
+      accountId: "acc-b",
+      profileId: "p-b",
+    });
+    expect(targets[0]).toMatchObject({ side: "addressee", counterpartKemPublicKey: "kem-a" });
+
+    const NEW_ADDR = JSON.stringify({ addressee: "v2" });
+    await refreshFriendCards(fakeClient(store), {
+      accountId: "acc-b",
+      profileId: "p-b",
+      cards: [{ friendshipId: created.id, card: NEW_ADDR }],
+    });
+    const friendsOfA = await listFriends(fakeClient(store), {
+      accountId: "acc-a",
+      profileId: "p-a",
+    });
+    expect(friendsOfA[0].card).toBe(NEW_ADDR);
+  });
+
+  it("refreshes the preview a pending addressee sees, before acceptance", async () => {
+    const store = setup([
+      profile({ id: "p-a", account_id: "acc-a", social_id: "ann" }),
+      profile({ id: "p-b", account_id: "acc-b", social_id: "ben" }),
+    ]);
+    const created = await createFriendRequest(fakeClient(store), reqInput());
+    const NEW_PREVIEW = JSON.stringify({ preview: "v2" });
+    await refreshFriendCards(fakeClient(store), {
+      accountId: "acc-a",
+      profileId: "p-a",
+      cards: [
+        { friendshipId: created.id, previewCard: NEW_PREVIEW, card: JSON.stringify({ full: "v2" }) },
+      ],
+    });
+    const incoming = await listRequests(fakeClient(store), {
+      accountId: "acc-b",
+      profileId: "p-b",
+      direction: "incoming",
+    });
+    expect(incoming[0].card).toBe(NEW_PREVIEW);
+  });
+
+  it("has no addressee card to refresh before the kid accepts", async () => {
+    const store = setup([
+      profile({ id: "p-a", account_id: "acc-a" }),
+      profile({ id: "p-b", account_id: "acc-b" }),
+    ]);
+    const created = await createFriendRequest(fakeClient(store), reqInput());
+    expect(
+      await listCardRefreshTargets(fakeClient(store), { accountId: "acc-b", profileId: "p-b" }),
+    ).toHaveLength(0);
+    const n = await refreshFriendCards(fakeClient(store), {
+      accountId: "acc-b",
+      profileId: "p-b",
+      cards: [{ friendshipId: created.id, card: "x" }],
+    });
+    expect(n).toBe(0);
+  });
+
+  it("won't let a non-participant overwrite a card", async () => {
+    const store = setup([
+      profile({ id: "p-a", account_id: "acc-a" }),
+      profile({ id: "p-b", account_id: "acc-b" }),
+    ]);
+    const created = await createFriendRequest(fakeClient(store), reqInput());
+    await respondToRequest(fakeClient(store), {
+      accountId: "acc-b",
+      profileId: "p-b",
+      friendshipId: created.id,
+      action: "accept",
+      addresseeCard: ADDR_CARD,
+    });
+    const n = await refreshFriendCards(fakeClient(store), {
+      accountId: "acc-evil",
+      profileId: "p-evil",
+      cards: [{ friendshipId: created.id, previewCard: "x", card: "x" }],
+    });
+    expect(n).toBe(0);
+    const friendsOfB = await listFriends(fakeClient(store), {
+      accountId: "acc-b",
+      profileId: "p-b",
+    });
+    expect(friendsOfB[0].card).toBe(FULL); // untouched
   });
 
   it("gives an outgoing approval the kid's nickname to decrypt", async () => {

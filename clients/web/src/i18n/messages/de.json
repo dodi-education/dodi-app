@@ -6,7 +6,8 @@
     "cancel": "Abbrechen",
     "save": "Speichern",
     "delete": "Löschen",
-    "loading": "Laden..."
+    "loading": "Laden...",
+    "saved": "Änderungen gespeichert"
   },
   "landing": {
     "heroTitle": "Hallo, ich bin Dodi!",
@@ -97,6 +98,7 @@
     "default": "Standard",
     "born": "Geboren: {date}",
     "birthdateNotSet": "Geburtsdatum nicht gesetzt",
+    "dateTimeOverrideHint": "Überschreibe die Datums- & Uhrzeitanzeige des Kontos für dieses Kind. „Übernehmen“ behält die Familienvorgabe.",
     "createTitle": "Kinderprofil erstellen",
     "createDescription": "Füge ein neues Profil hinzu, das dein Kind mit Dodi nutzen kann",
     "displayName": "Anzeigename",
@@ -126,7 +128,13 @@
     "dangerZone": "Gefahrenbereich",
     "dangerZoneDescription": "Dieses Profil und alle zugehörigen Daten unwiderruflich löschen.",
     "deleteProfile": "Profil löschen",
-    "confirmDelete": "Bist du sicher, dass du dieses Profil löschen möchtest? Dies kann nicht rückgängig gemacht werden."
+    "confirmDelete": "Bist du sicher, dass du dieses Profil löschen möchtest? Dies kann nicht rückgängig gemacht werden.",
+    "pinPuzzleTitle": "Bilder-Rätsel",
+    "pinPuzzleDesc": "Ein Avatar-Rätsel, das {name} lösen muss, bevor in der Kinderansicht zu diesem Profil gewechselt werden kann",
+    "pinPuzzleToggle": "Geheimes Rätsel verlangen",
+    "pinPuzzleToggleHint": "{name} tippt 3 geheime Tiere in der richtigen Reihenfolge an, um das Profil zu entsperren",
+    "pinPuzzleSetHint": "Tippe 3 Tiere in der Reihenfolge an, die {name} wiederholen muss",
+    "pinPuzzleIncomplete": "Wähle alle 3 geheimen Tiere"
   },
   "settings": {
     "title": "Einstellungen",
@@ -138,6 +146,22 @@
     "subscription": "Abonnement",
     "tierLabel": "{tier}-Stufe",
     "accountId": "Konto-ID",
+    "dateTimeTitle": "Datum & Uhrzeit",
+    "dateTimeDescription": "Lege fest, wie Datum und Uhrzeit in der App angezeigt werden.",
+    "timezone": "Zeitzone",
+    "timezoneHint": "Zeiten werden in dieser Zone angezeigt. Wird privat gespeichert – der Server sieht sie nie.",
+    "timezoneAuto": "Automatisch (Gerät)",
+    "dateFormat": "Datumsformat",
+    "dateFormatLocale": "Sprachstandard",
+    "dateFormatLong": "Lang",
+    "timeFormat": "Uhrzeitformat",
+    "timeFormat24h": "24-Stunden",
+    "timeFormat12h": "12-Stunden",
+    "timeFormatNone": "Keine Uhrzeit",
+    "dateInherit": "Vom Konto übernehmen",
+    "datePreviewLabel": "Vorschau",
+    "dateVaultLocked": "Dein sicherer Tresor ist gesperrt. Bitte lade die Seite neu und versuche es erneut.",
+    "dateSaveFailed": "Datumseinstellungen konnten nicht gespeichert werden. Bitte versuche es erneut.",
     "aiConfigTitle": "KI-Anbieter Konfiguration",
     "aiConfigDescription": "Konfiguriere KI-Anbieter, um Dodi eine Stimme zu geben und Spiele zu erstellen.",
     "addProvider": "Anbieter hinzufügen",
@@ -228,6 +252,7 @@
     "useDefault": "Standard verwenden (Dodi)",
     "saving": "Speichern...",
     "notFound": "Persona nicht gefunden",
+    "soulTooLong": "Das Soul-Dokument ist zu lang (maximal 50.000 Zeichen)",
     "failedToCreate": "Persona konnte nicht erstellt werden",
     "failedToUpdate": "Persona konnte nicht aktualisiert werden",
     "failedToClone": "Persona konnte nicht geklont werden",
@@ -484,8 +509,8 @@
     "scanUnsupported": "Scannen ist hier nicht verfügbar — gib den Code ein.",
     "typeCodeInstead": "Code stattdessen eingeben",
     "tagLabel": "Gib den Code deines Freundes ein",
-    "tagPlaceholder": "freundescode",
-    "tagHint": "Ein Freundescode sieht aus wie {example} — frag deinen Freund nach seinem.",
+    "tagPlaceholder": "",
+    "tagHint": "Ein Freundescode hat 8 Zeichen. Frag deinen Freund nach seinem.",
     "nicknameLabel": "Name oder Spitzname",
     "nicknamePlaceholder": "z. B. Tom aus der Schule",
     "sendRequest": "Anfrage senden",
@@ -539,5 +564,21 @@
     "openKidView": "Kinderansicht öffnen",
     "openMenu": "Menü öffnen",
     "closeMenu": "Menü schließen"
+  },
+  "kidProfile": {
+    "whosPlaying": "Wer spielt?",
+    "close": "Schließen",
+    "secret": "{name}s Geheimnis",
+    "secretHint": "Tippe die 3 geheimen Figuren der Reihe nach an",
+    "cancel": "Abbrechen",
+    "look": "{name}s Aussehen",
+    "lookHint": "Wähle eine Farbe & eine Figur",
+    "colorLabel": "Farbe {n}",
+    "group": {
+      "animals": "Tiere",
+      "dinos": "Dinos",
+      "entities": "Wesen",
+      "humans": "Figuren"
+    }
   }
 }
