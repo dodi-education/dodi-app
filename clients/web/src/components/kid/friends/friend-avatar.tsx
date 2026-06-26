@@ -1,5 +1,11 @@
-/** Kid-palette avatar: a colored circle with the first initial, color hashed
- *  from the label so a given friend is always the same color. */
+/** Kid-palette avatar for a friend: their chosen animal on their chosen color
+ *  ring when set, otherwise a colored circle with the first initial, color
+ *  hashed from the label so a given friend is always the same color. */
+
+import { KidAvatar } from "@/components/kid/kid-avatar";
+import { readAvatarConfig } from "@/lib/avatars";
+
+import type { Json } from "@dodi/types/database";
 
 const PALETTE = [
   { bg: "#DCE9FA", fg: "#2F6BD8" },
@@ -17,14 +23,37 @@ function colorFor(seed: string) {
 }
 
 interface FriendAvatarProps {
-  /** Name or handle — drives both the initial and the color. */
+  /** Name or handle — drives both the initial and the fallback color. */
   label: string;
+  /** The friend's chosen look from their sealed card (animal + color). */
+  avatarConfig?: Json | null;
   size?: number;
   grayscale?: boolean;
 }
 
-export function FriendAvatar({ label, size = 50, grayscale }: FriendAvatarProps) {
+export function FriendAvatar({
+  label,
+  avatarConfig,
+  size = 50,
+  grayscale,
+}: FriendAvatarProps) {
   const safe = label.trim() || "?";
+
+  // When the friend picked an avatar, show it on their chosen color ring.
+  if (readAvatarConfig(avatarConfig).avatar) {
+    return (
+      <span
+        className="inline-flex shrink-0"
+        style={{ filter: grayscale ? "grayscale(0.7)" : undefined }}
+      >
+        <KidAvatar
+          profile={{ display_name: safe, avatar_config: avatarConfig ?? null }}
+          size={size}
+        />
+      </span>
+    );
+  }
+
   const c = colorFor(safe);
   return (
     <div

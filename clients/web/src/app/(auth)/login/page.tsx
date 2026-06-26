@@ -16,8 +16,31 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { dodi } from "@/lib/api";
 import { createClient } from "@/lib/supabase/client";
 import { useVaultStore } from "@/stores/vault-store";
+
+/**
+ * Adopt the account's stored UI language onto this device by seeding the
+ * `NEXT_LOCALE` cookie from `accounts.language`. The cookie is only a
+ * per-device cache; re-seeding it at login lets the parent's saved preference
+ * follow them to new browsers/devices. Best-effort — on failure we keep
+ * whatever cookie / Accept-Language was already resolving.
+ */
+async function seedLocaleFromAccount(): Promise<void> {
+  try {
+    const res = await dodi.request("/api/account");
+    if (!res.ok) return;
+    const { account } = (await res.json()) as {
+      account: { language?: string } | null;
+    };
+    if (account?.language) {
+      document.cookie = `NEXT_LOCALE=${account.language}; path=/; max-age=31536000`;
+    }
+  } catch {
+    // best-effort; ignore
+  }
+}
 
 export default function LoginPage() {
   const t = useTranslations("auth");
@@ -49,6 +72,9 @@ export default function LoginPage() {
     // account predates the vault).
     try {
       const { created } = await useVaultStore.getState().unlockOrBootstrap(password);
+      // Adopt the account's saved UI language onto this device before we render
+      // the parent app (so a returning parent on a new device sees their language).
+      await seedLocaleFromAccount();
       router.push(created ? "/vault-setup" : "/parent/dashboard");
       router.refresh();
     } catch {

@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 
 import { Icon } from "@/components/shared/icon";
+import { useDateFormat } from "@/components/providers/date-format-provider";
 import {
   FieldRow,
   Row,
@@ -45,6 +46,7 @@ const THINKING_PROVIDER_NONE = "__none__";
 export function AIProviderConfig() {
   const t = useTranslations("settings");
   const tc = useTranslations("common");
+  const { formatDate } = useDateFormat();
 
   // API keys are E2EE: decrypted client-side from the vault (the server never
   // sees them). The providers map lives in the providers store.
@@ -371,7 +373,7 @@ export function AIProviderConfig() {
                 </RowTitle>
                 <RowMeta>
                   {t("added", {
-                    date: new Date(provider.addedAt).toLocaleDateString(),
+                    date: formatDate(provider.addedAt),
                   })}
                 </RowMeta>
               </RowMain>

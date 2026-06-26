@@ -45,6 +45,11 @@ export async function updateSession(
   } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
+  // The marketing landing lives on the apex (dodi.app); the app entrance lives
+  // on app.dodi.app. The two share one deployment, so the root path is routed
+  // by host.
+  const host = request.headers.get("host") ?? "";
+  const isAppSubdomain = host.startsWith("app.");
 
   // Public routes that don't require auth
   const publicRoutes = ["/", "/login", "/register", "/reset-password"];
@@ -58,11 +63,19 @@ export async function updateSession(
     return NextResponse.redirect(url);
   }
 
-  // Redirect authenticated users from landing/auth pages
-  if (user && pathname === "/") {
-    const url = request.nextUrl.clone();
-    url.pathname = "/home";
-    return NextResponse.redirect(url);
+  // Root path is host-aware: marketing landing on the apex, app entrance on app.*
+  if (pathname === "/") {
+    if (user) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/home";
+      return NextResponse.redirect(url);
+    }
+    if (isAppSubdomain) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/login";
+      return NextResponse.redirect(url);
+    }
+    // apex + logged out → fall through and serve the landing page
   }
 
   if (

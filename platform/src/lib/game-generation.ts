@@ -1,7 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { THINKING_MODEL_REQUIRED_MESSAGE } from "@dodi/ai/thinking-config";
 import {
   EMPTY_SUCCESS_CRITERIA,
   type MappedSuccess,
@@ -10,17 +8,13 @@ import {
 } from "@dodi/games/game-spec";
 import { SUCCESS_SYSTEM_TEMPLATE } from "@dodi/games/success";
 import type { AIProviderId } from "@dodi/types/ai";
-import type { Database } from "@dodi/types/database";
 
-import {
-  decryptProviderKey,
-  getModelConfig,
-  normalizeModelConfig,
-} from "@/services/ai-providers";
-
-type Client = SupabaseClient<Database>;
-
-interface ResolvedGameModel {
+/**
+ * The thinking provider/model plus its (vault-decrypted) API key. Under the E2EE
+ * architecture the key lives only in the unlocked browser vault, so the caller
+ * must resolve it client-side and pass it in — the server cannot decrypt it.
+ */
+export interface GameModelKey {
   providerId: AIProviderId;
   modelId: string;
   apiKey: string;
@@ -35,34 +29,6 @@ function safeParseJsonObject(text: string): Record<string, unknown> {
     throw new Error("Expected JSON object response");
   }
   return parsed as Record<string, unknown>;
-}
-
-async function resolveGameModel(
-  supabase: Client,
-  accountId: string,
-): Promise<ResolvedGameModel> {
-  const rawConfig = await getModelConfig(supabase, accountId);
-  if (!rawConfig) {
-    throw new Error(THINKING_MODEL_REQUIRED_MESSAGE);
-  }
-
-  const modelConfig = normalizeModelConfig(rawConfig);
-
-  // Requires an explicit thinking model — no voice-provider fallback.
-  const providerId = modelConfig.thinkingProvider;
-  const modelId = modelConfig.thinkingModel;
-
-  if (!providerId || !modelId) {
-    throw new Error(THINKING_MODEL_REQUIRED_MESSAGE);
-  }
-
-  if (providerId !== "gemini") {
-    throw new Error(`Provider "${providerId}" is not yet supported for single-shot game generation`);
-  }
-
-  const apiKey = await decryptProviderKey(supabase, accountId, providerId);
-
-  return { providerId, modelId, apiKey };
 }
 
 async function runGeminiJson(
@@ -93,11 +59,14 @@ async function runGeminiJson(
  * Map a parent's plain-language success definition onto a structured
  * SuccessCriteria — without regenerating the game. Used when a parent edits the
  * Success definition field in the Game Studio. An empty/whitespace definition
- * maps to open play.
+ * maps to open play (no model key needed).
+ *
+ * A non-empty definition requires the vault-decrypted thinking key, resolved by
+ * the caller (`model`); a `null` model throws, signalling the route to persist
+ * the text and leave the structured criteria unchanged.
  */
 export async function mapSuccessDefinition(
-  supabase: Client,
-  accountId: string,
+  model: GameModelKey | null,
   successDefinition: string,
   context?: { learningGoal?: string },
 ): Promise<MappedSuccess> {
@@ -105,7 +74,16 @@ export async function mapSuccessDefinition(
     return { progressKind: "open", successCriteria: EMPTY_SUCCESS_CRITERIA };
   }
 
-  const model = await resolveGameModel(supabase, accountId);
+  if (!model) {
+    throw new Error("A thinking provider key is required to map a success definition");
+  }
+
+  if (model.providerId !== "gemini") {
+    throw new Error(
+      `Provider "${model.providerId}" is not yet supported for single-shot game generation`,
+    );
+  }
+
   const prompt = [
     "Map a parent's plain-language game success definition onto a structured criteria object.",
     'Return ONLY JSON: { "progressKind": "goal" | "open", "successCriteria": { ... } }.',

@@ -2,6 +2,7 @@
   "name": "@dodi/ai",
   "version": "0.0.0",
   "private": true,
+  "license": "AGPL-3.0-only",
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
@@ -25,6 +26,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",
+    "@dodi/intl": "workspace:*",
     "@dodi/types": "workspace:*",
     "@google/generative-ai": "^0.24.1"
   },

@@ -1,7 +1,8 @@
 "use client";
 
-import { useLocale, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 
+import { useDateFormat } from "@/components/providers/date-format-provider";
 import { KidButton } from "@/components/kid/kid-button";
 import { Icon } from "@/components/shared/icon";
 import type { DecodedFriend } from "@/lib/friends";
@@ -16,17 +17,6 @@ interface FriendProfileProps {
   onRemove: () => void;
 }
 
-function formatDate(value: string | null, locale: string): string | null {
-  if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return new Intl.DateTimeFormat(locale, {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  }).format(date);
-}
-
 export function FriendProfile({
   friend,
   busy,
@@ -35,14 +25,15 @@ export function FriendProfile({
   onRemove,
 }: FriendProfileProps) {
   const t = useTranslations("friends");
-  const locale = useLocale();
+  const { formatDate, formatDateOnly } = useDateFormat();
   const name = friend.name?.trim() || friend.nickname?.trim() || "—";
   const nickname =
     friend.name?.trim() && friend.nickname?.trim()
       ? friend.nickname.trim()
       : null;
-  const birthday = formatDate(friend.birthdate, locale) ?? t("unknownValue");
-  const since = formatDate(friend.updatedAt, locale) ?? t("unknownValue");
+  // Birthdate is a floating calendar date — format day-stable (no tz shift).
+  const birthday = formatDateOnly(friend.birthdate) ?? t("unknownValue");
+  const since = formatDate(friend.updatedAt) || t("unknownValue");
 
   return (
     <div className="mx-auto w-full max-w-[460px] px-5 pb-8">
@@ -52,7 +43,7 @@ export function FriendProfile({
       </KidButton>
 
       <div className="mt-1.5 flex flex-col items-center rounded-[26px] bg-white px-6 pb-7 pt-8 shadow-[0_4px_18px_rgba(34,56,78,0.06)]">
-        <FriendAvatar label={name} size={96} />
+        <FriendAvatar label={name} avatarConfig={friend.avatarConfig} size={96} />
         <div className="mt-4 text-[26px] font-extrabold tracking-tight text-ink">
           {name}
         </div>

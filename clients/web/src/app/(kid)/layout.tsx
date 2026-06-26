@@ -72,6 +72,27 @@ export default function KidLayout({
     { href: "/friends", label: t("friends"), icon: "friends" },
   ];
 
+  function handleNavReselect(
+    e: React.MouseEvent<HTMLAnchorElement>,
+    href: string,
+  ) {
+    // Let modified clicks (open-in-new-tab, etc.) behave natively.
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) {
+      return;
+    }
+    // Re-tapping the tab you're already on (exact root path) resets that
+    // section's in-view state. A Link to the current URL is a no-op, so we
+    // intercept and broadcast a reset the section's view listens for. Sub-routes
+    // like /games/[id] still navigate normally (pathname !== href), which
+    // already resets them by unmounting the detail route.
+    if (pathname === href) {
+      e.preventDefault();
+      window.dispatchEvent(
+        new CustomEvent("kid-tab-reselect", { detail: { href } }),
+      );
+    }
+  }
+
   function handleSwitchToParent(e: React.MouseEvent<HTMLAnchorElement>) {
     // Let the browser handle modified clicks (ctrl/cmd-click, middle-click,
     // "open in new tab") natively instead of intercepting the navigation.
@@ -79,11 +100,15 @@ export default function KidLayout({
       return;
     }
     e.preventDefault();
-    // End Dodi session before leaving kid view
+    // End Dodi session before leaving kid view (synchronous; flushes to
+    // localStorage, no in-flight request to lose on reload).
     useDodiSessionStore.getState().endSession();
     document.cookie = "dodi-view=parent; path=/; max-age=86400";
-    router.push("/parent/dashboard");
-    router.refresh();
+    // Full-document navigation, not router.push + refresh: the UI locale is
+    // resolved in the shared root layout from the cookie above, and an SPA
+    // navigation would keep the kid view's NextIntlClientProvider mounted. A
+    // full load re-resolves the locale to the parent's language.
+    window.location.assign("/parent/dashboard");
   }
 
   return (
@@ -126,6 +151,7 @@ export default function KidLayout({
             <Link
               key={item.href}
               href={item.href}
+              onClick={(e) => handleNavReselect(e, item.href)}
               className={cn(
                 "flex min-w-[88px] flex-col items-center gap-1 rounded-2xl px-5 py-2 text-[13.5px] font-extrabold transition-colors sm:min-w-[110px]",
                 isActive

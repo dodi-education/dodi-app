@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useLocale, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 
+import { useDateFormat } from "@/components/providers/date-format-provider";
 import { ProfileAvatar, ProfileName } from "@/components/parent/profile-bits";
 import { ProfilesGlance } from "@/components/parent/profiles-glance";
 import {
@@ -38,19 +39,10 @@ const STATUS_BADGE_VARIANT: Record<
   deactivated: "gray",
 };
 
-function formatElapsed(createdAt: string, finishedAt: string | null): string {
-  const start = new Date(createdAt).getTime();
-  const end = finishedAt ? new Date(finishedAt).getTime() : Date.now();
-  const seconds = Math.max(0, Math.round((end - start) / 1000));
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  return `${minutes}m ${seconds % 60}s`;
-}
-
 export default function DashboardPage() {
   const t = useTranslations("dashboard");
   const ts = useTranslations("agentSessions");
-  const locale = useLocale();
+  const { formatDateTime, formatElapsed } = useDateFormat();
 
   // profiles fetched only for the count (empty state) + IDs; names/ages are
   // decrypted client-side in the ProfileAvatar/ProfileName/ProfilesGlance islands.
@@ -178,10 +170,7 @@ export default function DashboardPage() {
                   <RowMeta>
                     <ProfileName profileId={session.profile_id} />
                     <DotSep />
-                    {new Date(session.created_at).toLocaleString(locale, {
-                      dateStyle: "medium",
-                      timeStyle: "short",
-                    })}
+                    {formatDateTime(session.created_at)}
                     <DotSep />
                     {formatElapsed(session.created_at, session.finished_at)}
                   </RowMeta>

@@ -5,6 +5,7 @@
  * and mode-specific instructions into system prompts + tool declarations.
  */
 
+import { ageFromBirthdate, isTodayBirthday } from "@dodi/intl";
 import type { GeminiLiveToolDeclaration } from "@dodi/types/gemini-live";
 
 /**
@@ -58,35 +59,21 @@ export interface DodiVoiceContext {
 // Private helpers (deduplicated)
 // ---------------------------------------------------------------------------
 
+/**
+ * Whole-years age. Birthdate math now lives in `@dodi/intl`; this wrapper keeps
+ * the original AI contract (age 0 / invalid / future ⇒ null) and the import path
+ * (`@dodi/ai/dodi-context`) that existing consumers rely on.
+ */
 export function calculateChildAge(birthdate: string | null): number | null {
-  if (!birthdate) return null;
-  const birth = new Date(birthdate);
-  if (Number.isNaN(birth.getTime())) return null;
-
-  const now = new Date();
-  let age = now.getFullYear() - birth.getFullYear();
-  const monthDiff = now.getMonth() - birth.getMonth();
-  if (
-    monthDiff < 0 ||
-    (monthDiff === 0 && now.getDate() < birth.getDate())
-  ) {
-    age -= 1;
-  }
-
-  return age > 0 ? age : null;
+  const age = ageFromBirthdate(birthdate);
+  return age != null && age > 0 ? age : null;
 }
 
 export function getLanguageDisplayName(code: string): string {
   return code === "de" ? "German" : "English";
 }
 
-export function isTodayBirthday(birthdate: string | null): boolean {
-  if (!birthdate) return false;
-  const birth = new Date(birthdate);
-  if (Number.isNaN(birth.getTime())) return false;
-  const now = new Date();
-  return birth.getMonth() === now.getMonth() && birth.getDate() === now.getDate();
-}
+export { isTodayBirthday };
 
 function buildChildContextLines(input: DodiContextInput): string[] {
   const age = calculateChildAge(input.childBirthdate);

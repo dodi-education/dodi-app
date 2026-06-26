@@ -4,7 +4,6 @@ import { z } from "zod/v4";
 import { requireAuth } from "@/lib/resolve-auth";
 import { getProfile } from "@/services/profiles";
 import {
-  decryptProviderKey,
   getModelConfig,
   normalizeModelConfig,
 } from "@/services/ai-providers";
@@ -272,20 +271,14 @@ export async function POST(request: Request): Promise<NextResponse | Response> {
       );
     }
 
-    // Use the client-supplied key when present (the server cannot decrypt the
-    // vault-sealed key); otherwise fall back to a legacy server-encrypted key.
-    let apiKey: string;
-    if (parsed.data.apiKey) {
-      apiKey = parsed.data.apiKey;
-    } else {
-      try {
-        apiKey = await decryptProviderKey(supabase, accountId, thinkingProviderId);
-      } catch {
-        return NextResponse.json(
-          { error: "Missing AI provider key. Configure a provider key in Settings." },
-          { status: 400 },
-        );
-      }
+    // The provider key lives only in the unlocked browser vault — the server
+    // cannot decrypt it, so the client must supply it with the request.
+    const apiKey = parsed.data.apiKey;
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: "Missing AI provider key. Configure a provider key in Settings." },
+        { status: 400 },
+      );
     }
 
     // Age and learning context are derived in the browser from vault-decrypted

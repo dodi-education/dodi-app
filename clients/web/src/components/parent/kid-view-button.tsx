@@ -1,14 +1,12 @@
 "use client";
 
 import { dodi } from "@/lib/api";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 
 import { Icon } from "@/components/shared/icon";
 
 export function KidViewButton({ compact = false }: { compact?: boolean }) {
   const t = useTranslations("nav");
-  const router = useRouter();
 
   async function handleSwitchToKid(e: React.MouseEvent<HTMLAnchorElement>) {
     // Let the browser handle modified clicks (ctrl/cmd-click, middle-click,
@@ -36,8 +34,13 @@ export function KidViewButton({ compact = false }: { compact?: boolean }) {
       }
     }
     document.cookie = "dodi-view=kid; path=/; max-age=86400";
-    router.push("/home");
-    router.refresh();
+    // Full-document navigation, not router.push + refresh. The UI locale is
+    // resolved server-side in the root layout from the cookies set above (see
+    // i18n/resolve-locale.ts). Parent and kid routes share that root layout, so
+    // an SPA navigation keeps the previous view's NextIntlClientProvider mounted
+    // and the UI stays in the parent's language. A full load re-resolves the
+    // locale, so the kid profile's language takes effect.
+    window.location.assign("/home");
   }
 
   if (compact) {

@@ -168,19 +168,3 @@ export async function deletePersona(
 
   if (error) throw error;
 }
-
-export async function clonePersona(
-  supabase: Client,
-  personaId: string,
-  accountId: string,
-  newName: string,
-): Promise<Persona> {
-  const source = await getPersona(supabase, personaId);
-  if (!source) throw new Error("Source persona not found");
-
-  return createPersona(supabase, {
-    account_id: accountId,
-    name: newName,
-    soul: source.soul,
-  });
-}

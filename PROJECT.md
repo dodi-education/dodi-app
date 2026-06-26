@@ -462,7 +462,6 @@ The MVP focuses on delivering a functional, delightful core experience:
 - [x] Friend system (add, accept, manage)
 - [ ] Drawing game: Let the kid save drawings and share them with friends
 - [ ] Game sharing
-- [ ] Activity emoji picker
 
 ### Phase 5: Polish & PWA
 - [ ] PWA manifest + service worker
@@ -512,12 +511,9 @@ parent-defined goal — and, in future, generate challenges like "Solve 3 math g
 
 ## TODO
 
-- Encrypt account specific personas
-
-- Avatar gallary for kids
-  - Let kids draw their own avatar
+- Split landing page into separate project (package + vercel project)
+- Let kids draw their own avatars
 - Add parents view pin (can be set in settings and needs to be entered to enter parents view)
-- Profile pin puzzle (set 3 avatars in a specific order, kid has to put the order in place to switch profile)
 - Game state analysis via screenshot (attach screenshots to game-state <> dodi exchange). This would allow fun features like asking dodi to guess what has been drawn in the drawing game.
 - Daily challenges UI: let Dodi generate + track challenges on top of `game_plays` (foundation is in place).
 - Allow games to connect with AI provider for in-game content generation (e.g. for texts, calculations, formulas etc.)

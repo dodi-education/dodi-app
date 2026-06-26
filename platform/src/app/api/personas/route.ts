@@ -4,9 +4,12 @@ import { z } from "zod/v4";
 import { requireAuth } from "@/lib/resolve-auth";
 import { createPersona, listPersonas } from "@/services/personas";
 
+// Account personas are E2EE: `name` and `soul` arrive as opaque `enc:v1:`
+// ciphertext, so these only bound the ciphertext (the client enforces the
+// plaintext limits before sealing). The server never reads the plaintext.
 const CreatePersonaSchema = z.object({
-  name: z.string().min(1).max(100),
-  soul: z.string().min(1).max(50000),
+  name: z.string().min(1).max(2000),
+  soul: z.string().min(1).max(200000),
 });
 
 export async function GET(request: Request): Promise<NextResponse> {

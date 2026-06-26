@@ -743,3 +743,95 @@ export async function listPendingApprovals(
       counterparts.get(a.counterpartProfileId)?.signPublicKey ?? null,
   }));
 }
+
+// ---------------------------------------------------------------------------
+// Card refresh — keep friends' view of shared data (name/avatar/birthdate) live
+// ---------------------------------------------------------------------------
+
+export interface CardRefreshTarget {
+  friendshipId: string;
+  side: "requester" | "addressee";
+  /** Counterpart's published KEM key — the owner re-seals their card to this. */
+  counterpartKemPublicKey: string | null;
+}
+
+/**
+ * Friendships whose stored card was sealed BY this profile and should be
+ * re-sealed when its shared data changes, so the counterpart's list stays
+ * current. Requester side: name+avatar travel from the start (preview), so every
+ * non-rejected row qualifies. Addressee side: a card only exists once the kid
+ * has accepted. Scoped to the caller's account via `rowsForProfile`.
+ */
+export async function listCardRefreshTargets(
+  supabase: Client,
+  input: ProfileScopeInput,
+): Promise<CardRefreshTarget[]> {
+  const rows = await rowsForProfile(supabase, input.accountId, input.profileId);
+  const relevant = rows.filter((r) => {
+    if (r.status === "rejected") return false;
+    const isRequester = r.requester_profile_id === input.profileId;
+    return isRequester || r.addressee_accepted;
+  });
+  const counterpartIds = relevant.map((r) =>
+    r.requester_profile_id === input.profileId
+      ? r.addressee_profile_id
+      : r.requester_profile_id,
+  );
+  const counterparts = await counterpartInfoMap(supabase, counterpartIds);
+  return relevant.map((r) => {
+    const side: "requester" | "addressee" =
+      r.requester_profile_id === input.profileId ? "requester" : "addressee";
+    const counterpartId =
+      side === "requester" ? r.addressee_profile_id : r.requester_profile_id;
+    return {
+      friendshipId: r.id,
+      side,
+      counterpartKemPublicKey:
+        counterparts.get(counterpartId)?.kemPublicKey ?? null,
+    };
+  });
+}
+
+export interface RefreshCardsInput {
+  accountId: string;
+  profileId: string;
+  cards: Array<{
+    friendshipId: string;
+    /** Re-sealed preview card (name + avatar). Requester side only. */
+    previewCard?: string;
+    /** Re-sealed full card (adds birthdate). */
+    card?: string;
+  }>;
+}
+
+/**
+ * Overwrite this profile's already-sealed cards with freshly-sealed ones. Only
+ * the side the acting (account, profile) owns is writable, and the addressee
+ * card is only updated once the kid has accepted. Rows the caller doesn't
+ * participate in are skipped (defense-in-depth on top of the target lookup).
+ * Returns the number of friendships actually updated.
+ */
+export async function refreshFriendCards(
+  supabase: Client,
+  input: RefreshCardsInput,
+): Promise<number> {
+  let updated = 0;
+  for (const c of input.cards) {
+    const row = await getFriendship(supabase, c.friendshipId);
+    if (!row) continue;
+    const side = participantSide(row, input.accountId, input.profileId);
+    if (!side) continue;
+    const patch: FriendshipUpdate = {};
+    if (side === "requester") {
+      if (c.previewCard) patch.requester_preview_card = c.previewCard;
+      if (c.card) patch.requester_card = c.card;
+    } else if (row.addressee_accepted && c.card) {
+      patch.addressee_card = c.card;
+    }
+    if (Object.keys(patch).length > 0) {
+      await updateFriendship(supabase, row.id, patch);
+      updated++;
+    }
+  }
+  return updated;
+}

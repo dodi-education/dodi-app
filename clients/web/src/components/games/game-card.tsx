@@ -19,7 +19,10 @@ export function GameCard({ game }: GameCardProps) {
 
   return (
     <div className="flex flex-col gap-2.5 rounded-[20px] bg-white p-[18px] pb-4 shadow-[0_2px_10px_rgba(34,56,78,0.05)]">
-      <div className="flex items-center gap-3">
+      <Link
+        href={`/games/${game.id}`}
+        className="group flex items-center gap-3 rounded-[14px] outline-none focus-visible:ring-2 focus-visible:ring-primary-soft-2"
+      >
         <div
           className="flex size-[46px] shrink-0 items-center justify-center rounded-[14px]"
           style={{ background: style.bg, color: style.fg }}
@@ -27,14 +30,14 @@ export function GameCard({ game }: GameCardProps) {
           <Icon name={style.icon} size={24} stroke={1.7} />
         </div>
         <div className="min-w-0">
-          <h3 className="text-[16.5px] font-extrabold leading-tight text-ink">
+          <h3 className="text-[16.5px] font-extrabold leading-tight text-ink group-hover:text-primary">
             {game.title}
           </h3>
           <p className="mt-0.5 text-[12.5px] font-bold text-faint">
             {game.is_system ? t("systemLabel") : t("customLabel")}
           </p>
         </div>
-      </div>
+      </Link>
 
       <p className="line-clamp-2 text-[13.5px] font-semibold leading-snug text-muted-foreground">
         {game.description}
@@ -58,7 +61,7 @@ export function GameCard({ game }: GameCardProps) {
         </span>
       </div>
 
-      <div className="mt-1 flex items-center gap-2">
+      <div className="mt-1 flex items-center justify-end gap-2">
         <KidButton asChild size="sm" className="px-6">
           <Link href={`/games/${game.id}`}>
             <Icon name="play" size={13} />

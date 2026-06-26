@@ -8,9 +8,12 @@ import {
   updatePersona,
 } from "@/services/personas";
 
+// Account personas are E2EE: `name`/`soul` arrive as opaque `enc:v1:`
+// ciphertext, so these only bound the ciphertext (the client enforces the
+// plaintext limits before sealing). The server never reads the plaintext.
 const UpdatePersonaSchema = z.object({
-  name: z.string().min(1).max(100).optional(),
-  soul: z.string().min(1).max(50000).optional(),
+  name: z.string().min(1).max(2000).optional(),
+  soul: z.string().min(1).max(200000).optional(),
 });
 
 interface RouteContext {

@@ -15,8 +15,11 @@ import {
 } from "@/components/ui/select";
 import { PageHead, Section } from "@/components/parent/section";
 import { DotSep, Row, RowMain, RowMeta, RowTitle } from "@/components/parent/rows";
+import { useDateFormat } from "@/components/providers/date-format-provider";
 import { useProfiles } from "@/hooks/use-profiles";
-import type { SystemLog } from "@dodi/types/database";
+import { decryptPersona } from "@dodi/vault";
+import { useVaultStore } from "@/stores/vault-store";
+import type { Persona, SystemLog } from "@dodi/types/database";
 
 interface PersonaOption {
   id: string;
@@ -51,6 +54,7 @@ function getEventLabel(event: string, t: ReturnType<typeof useTranslations>): st
 
 export default function SystemLogsPage() {
   const t = useTranslations("systemLogs");
+  const { formatDateTime } = useDateFormat();
 
   const [logs, setLogs] = useState<SystemLog[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,20 +63,29 @@ export default function SystemLogsPage() {
   const { profiles: profileList } = useProfiles();
   const profiles = profileList ?? [];
   const [personas, setPersonas] = useState<PersonaOption[]>([]);
+  const session = useVaultStore((s) => s.session);
 
   const [filterProfile, setFilterProfile] = useState<string>("all");
   const [filterPersona, setFilterPersona] = useState<string>("all");
   const [filterEvent, setFilterEvent] = useState<string>("all");
 
-  // Fetch filter options on mount
+  // Fetch filter options on mount. Account personas are encrypted, so decrypt
+  // their names for the filter labels (the system default passes through).
   useEffect(() => {
+    if (!session) return;
     dodi.request("/api/personas")
       .then((r) => r.json())
-      .then((data: PersonaOption[]) => {
-        if (Array.isArray(data)) setPersonas(data);
+      .then((data: Persona[]) => {
+        if (!Array.isArray(data)) return;
+        setPersonas(
+          data.map((p) => {
+            const dec = decryptPersona(session, p);
+            return { id: dec.id, name: dec.name };
+          }),
+        );
       })
       .catch(() => {});
-  }, []);
+  }, [session]);
 
   const fetchLogs = useCallback(
     async (offset: number, append: boolean) => {
@@ -178,7 +191,7 @@ export default function SystemLogsPage() {
                       <DotSep />
                     </>
                   )}
-                  {new Date(log.created_at).toLocaleString()}
+                  {formatDateTime(log.created_at)}
                 </RowMeta>
               </RowMain>
               <Badge variant={EVENT_BADGE_VARIANTS[log.event] ?? "gray"}>

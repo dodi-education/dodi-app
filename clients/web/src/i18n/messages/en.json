@@ -6,7 +6,8 @@
     "cancel": "Cancel",
     "save": "Save changes",
     "delete": "Delete",
-    "loading": "Loading..."
+    "loading": "Loading...",
+    "saved": "Changes saved"
   },
   "landing": {
     "heroTitle": "Hi, I'm Dodi!",
@@ -97,6 +98,7 @@
     "default": "Default",
     "born": "Born: {date}",
     "birthdateNotSet": "Birthdate not set",
+    "dateTimeOverrideHint": "Override the account's date & time display for this child. \"Inherit\" keeps the family default.",
     "createTitle": "Create kid profile",
     "createDescription": "Add a new profile for your child to use with Dodi",
     "displayName": "Display name",
@@ -126,7 +128,13 @@
     "dangerZone": "Danger zone",
     "dangerZoneDescription": "Permanently delete this profile and all associated data.",
     "deleteProfile": "Delete profile",
-    "confirmDelete": "Are you sure you want to delete this profile? This cannot be undone."
+    "confirmDelete": "Are you sure you want to delete this profile? This cannot be undone.",
+    "pinPuzzleTitle": "Pin puzzle",
+    "pinPuzzleDesc": "An avatar puzzle {name} must solve before switching into this profile in kid view",
+    "pinPuzzleToggle": "Require a secret puzzle",
+    "pinPuzzleToggleHint": "{name} taps 3 secret animals in the right order to unlock their profile",
+    "pinPuzzleSetHint": "Tap 3 animals in the order {name} must repeat",
+    "pinPuzzleIncomplete": "Pick all 3 secret animals"
   },
   "settings": {
     "title": "Settings",
@@ -138,6 +146,22 @@
     "subscription": "Subscription",
     "tierLabel": "{tier} tier",
     "accountId": "Account ID",
+    "dateTimeTitle": "Date & time",
+    "dateTimeDescription": "Choose how dates and times are displayed across the app.",
+    "timezone": "Timezone",
+    "timezoneHint": "Times are shown in this zone. Stored privately — the server never sees it.",
+    "timezoneAuto": "Automatic (device)",
+    "dateFormat": "Date format",
+    "dateFormatLocale": "Locale default",
+    "dateFormatLong": "Long",
+    "timeFormat": "Time format",
+    "timeFormat24h": "24-hour",
+    "timeFormat12h": "12-hour",
+    "timeFormatNone": "No time",
+    "dateInherit": "Inherit from account",
+    "datePreviewLabel": "Preview",
+    "dateVaultLocked": "Your secure vault is locked. Please reload and try again.",
+    "dateSaveFailed": "Couldn't save date settings. Please try again.",
     "aiConfigTitle": "AI Provider Configuration",
     "aiConfigDescription": "Configure AI providers to give Dodi a voice and enable game creation.",
     "addProvider": "Add provider",
@@ -228,6 +252,7 @@
     "useDefault": "Use default (Dodi)",
     "saving": "Saving...",
     "notFound": "Persona not found",
+    "soulTooLong": "Soul document is too long (max 50,000 characters)",
     "failedToCreate": "Failed to create persona",
     "failedToUpdate": "Failed to update persona",
     "failedToClone": "Failed to clone persona",
@@ -484,8 +509,8 @@
     "scanUnsupported": "Scanning isn't available here — type the code instead.",
     "typeCodeInstead": "Type a code instead",
     "tagLabel": "Type your friend's code",
-    "tagPlaceholder": "friend-code",
-    "tagHint": "A friend code looks like {example} — ask your friend for theirs.",
+    "tagPlaceholder": "",
+    "tagHint": "A friend code has 8 chars. Ask your friend for theirs.",
     "nicknameLabel": "Name or nickname",
     "nicknamePlaceholder": "e.g. Tom from school",
     "sendRequest": "Send request",
@@ -539,5 +564,21 @@
     "openKidView": "Open Kid View",
     "openMenu": "Open menu",
     "closeMenu": "Close menu"
+  },
+  "kidProfile": {
+    "whosPlaying": "Who's playing?",
+    "close": "Close",
+    "secret": "{name}'s secret",
+    "secretHint": "Tap the 3 secret characters in order",
+    "cancel": "Cancel",
+    "look": "{name}'s look",
+    "lookHint": "Pick a color & a character",
+    "colorLabel": "Color {n}",
+    "group": {
+      "animals": "Animals",
+      "dinos": "Dinos",
+      "entities": "Entities",
+      "humans": "Characters"
+    }
   }
 }

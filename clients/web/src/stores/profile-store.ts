@@ -46,6 +46,8 @@ interface ProfileStoreState {
   byId: Record<string, Profile>;
   loadList: (force?: boolean) => Promise<Profile[]>;
   loadOne: (id: string, force?: boolean) => Promise<Profile | null>;
+  /** Optimistically merge a patch into a cached profile (list + byId), no refetch. */
+  patchLocal: (id: string, patch: Partial<Profile>) => void;
   invalidate: () => void;
 }
 
@@ -111,6 +113,18 @@ export const useProfileStore = create<ProfileStoreState>((set, get) => ({
       oneInFlight.delete(id);
     }
   },
+
+  patchLocal: (id, patch) =>
+    set((state) => {
+      const existing = state.byId[id];
+      const merged = existing ? { ...existing, ...patch } : existing;
+      return {
+        byId: merged ? { ...state.byId, [id]: merged } : state.byId,
+        list: state.list
+          ? state.list.map((p) => (p.id === id ? { ...p, ...patch } : p))
+          : state.list,
+      };
+    }),
 
   invalidate: () => set({ list: null, byId: {} }),
 }));

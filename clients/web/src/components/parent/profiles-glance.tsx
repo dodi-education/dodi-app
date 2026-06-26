@@ -9,6 +9,7 @@ import { Icon } from "@/components/shared/icon";
 import { Badge } from "@/components/ui/badge";
 import { usePersonas } from "@/hooks/use-personas";
 import { useProfiles } from "@/hooks/use-profiles";
+import { ageFromBirthdate } from "@dodi/intl";
 
 const AVATAR_PALETTE = [
   { bg: "bg-primary-soft-2", fg: "text-primary" },
@@ -19,19 +20,6 @@ const AVATAR_PALETTE = [
 
 function avatarColor(index: number) {
   return AVATAR_PALETTE[index % AVATAR_PALETTE.length];
-}
-
-function ageFromBirthdate(birthdate: string | null): number | null {
-  if (!birthdate) return null;
-  const birth = new Date(birthdate);
-  if (Number.isNaN(birth.getTime())) return null;
-  const now = new Date();
-  let age = now.getFullYear() - birth.getFullYear();
-  const beforeBirthday =
-    now.getMonth() < birth.getMonth() ||
-    (now.getMonth() === birth.getMonth() && now.getDate() < birth.getDate());
-  if (beforeBirthday) age -= 1;
-  return age;
 }
 
 /** Client island: the dashboard "profiles at a glance" list (decrypted). */

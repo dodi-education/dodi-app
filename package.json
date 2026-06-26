@@ -2,6 +2,7 @@
   "name": "dodi",
   "version": "0.0.0",
   "private": true,
+  "license": "AGPL-3.0-only",
   "packageManager": "pnpm@9.15.9",
   "engines": {
     "node": ">=20"

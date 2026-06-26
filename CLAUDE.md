@@ -238,9 +238,8 @@ interface AIProvider {
 ## Security Guidelines
 
 ### API Keys
-- Store encrypted in Supabase using AES-256-GCM
-- Encryption key stored in environment variables (never in code or DB)
-- Decrypt only in server-side API routes, only when needed
+- End-to-end encrypted: keys are sealed **client-side** under the account vault key and stored in Supabase as a single opaque blob (`accounts.encrypted_api_keys`). The server stores/returns it verbatim and can never decrypt it.
+- The provider key is decrypted only in the unlocked browser vault. Server flows that need it (agent tasks, success-criteria mapping) receive it from the client per-request — there is no server-side decryption path or shared encryption secret.
 - Never include in client bundles, logs, or error messages
 
 ### Game Sandboxing
@@ -348,8 +347,7 @@ docs: add API provider configuration guide
 NEXT_PUBLIC_SUPABASE_URL=             # Supabase project URL
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY= # Supabase publishable key sb_publishable_… (safe for client)
 SUPABASE_SECRET_KEY=                  # Supabase secret key sb_secret_… (server only, bypasses RLS)
-ENCRYPTION_SECRET=                # AES-256 key for encrypting sensitive data
-NEXT_PUBLIC_APP_URL=              # App URL (for OAuth redirects, QR codes)
+NEXT_PUBLIC_APP_URL=                  # App URL (for OAuth redirects, QR codes)
 ```
 
 - `NEXT_PUBLIC_` prefix = exposed to client (only non-sensitive values)

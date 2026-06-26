@@ -20,8 +20,13 @@ import { PageHead, Section } from "@/components/parent/section";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { decryptPersona, encryptPersonaFields } from "@dodi/vault";
+import { useVaultStore } from "@/stores/vault-store";
 
 import type { Persona } from "@dodi/types/database";
+
+/** Plaintext soul cap (enforced client-side; the server only sees ciphertext). */
+const MAX_SOUL_LENGTH = 50000;
 
 export default function PersonaDetailPage() {
   const t = useTranslations("personas");
@@ -52,9 +57,13 @@ export default function PersonaDetailPage() {
       }
       const data: Persona = await response.json();
       if (cancelled) return;
-      setPersona(data);
-      setName(data.name);
-      setSoul(data.soul);
+      // Account personas store `name`/`soul` as ciphertext; decrypt for editing.
+      // The system default is plaintext and passes through unchanged.
+      const session = useVaultStore.getState().session;
+      const persona = session ? decryptPersona(session, data) : data;
+      setPersona(persona);
+      setName(persona.name);
+      setSoul(persona.soul);
       setFetching(false);
     }
     load();
@@ -71,12 +80,23 @@ export default function PersonaDetailPage() {
       setInvalidSoul(nextInvalid.soul);
       return;
     }
+    if (soul.length > MAX_SOUL_LENGTH) {
+      setError(t("soulTooLong"));
+      return;
+    }
+
+    const session = useVaultStore.getState().session;
+    if (!session) {
+      setError(t("failedToUpdate"));
+      return;
+    }
     setLoading(true);
 
+    // Seal `name` and `soul` under the account VMK before they leave the browser.
     const response = await dodi.request(`/api/personas/${params.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, soul }),
+      body: JSON.stringify(encryptPersonaFields(session, { name, soul })),
     });
 
     if (!response.ok) {
@@ -98,12 +118,20 @@ export default function PersonaDetailPage() {
       setInvalidCloneName(true);
       return;
     }
+
+    const session = useVaultStore.getState().session;
+    if (!session) {
+      setError(t("failedToClone"));
+      return;
+    }
     setLoading(true);
 
-    const response = await dodi.request(`/api/personas/${params.id}/clones`, {
+    // Cloning seals the source soul (the plaintext default, or a decrypted
+    // custom one) into a new account-owned persona under this account's VMK.
+    const response = await dodi.request("/api/personas", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: cloneName }),
+      body: JSON.stringify(encryptPersonaFields(session, { name: cloneName, soul })),
     });
 
     if (!response.ok) {
@@ -134,7 +162,18 @@ export default function PersonaDetailPage() {
   }
 
   function handleExport() {
-    window.open(`/api/personas/${params.id}/exports`, "_blank");
+    // Export from the already-decrypted soul in the browser — the server only
+    // holds ciphertext for account personas, so it can't produce the .md.
+    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+    const blob = new Blob([soul], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${slug || "persona"}.soul.md`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
   }
 
   if (fetching) {

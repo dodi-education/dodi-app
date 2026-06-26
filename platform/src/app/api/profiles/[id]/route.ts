@@ -16,15 +16,18 @@ const UpdateProfileSchema = z.object({
     .string()
     .min(3)
     .max(30)
-    .regex(/^[a-z0-9-]+$/, "Only lowercase letters, numbers, and hyphens")
+    .regex(/^[A-Z0-9-]+$/, "Only uppercase letters, numbers, and hyphens")
     .optional(),
   birthdate: z.string().max(2000).nullable().optional(),
   language: z.string().min(2).max(5).optional(),
   active_persona_id: z.string().uuid().nullable().optional(),
   memory: z.string().max(100000).nullable().optional(),
   parent_notes: z.string().max(200000).nullable().optional(),
-  avatar_config: z.record(z.string(), z.any()).nullable().optional(),
-  preferences: z.record(z.string(), z.any()).nullable().optional(),
+  // avatar_config + avatar_pin arrive as opaque client-encrypted ciphertext
+  // (avatar_config is an enc:v1: JSON string stored in the jsonb column).
+  avatar_config: z.string().max(8000).nullable().optional(),
+  avatar_pin: z.string().max(4000).nullable().optional(),
+  date_preferences: z.record(z.string(), z.any()).nullable().optional(),
   // Parent-controlled friend settings (plaintext, server-enforced). The friend
   // identity keys are published via POST /api/profiles/[id]/friend-keys, not here.
   can_add_friends: z.boolean().optional(),
