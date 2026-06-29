@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useState } from "react";
 
-import { PIN_LENGTH, PIN_PALETTE, avatarSrc } from "@/lib/avatars";
+import { PIN_LENGTH, PIN_PALETTE, avatarImage } from "@/lib/avatars";
 import { cn } from "@/lib/utils";
 
 type Slots = (string | null)[];
@@ -95,10 +95,11 @@ export function AvatarPinPuzzle(props: AvatarPinPuzzleProps) {
             >
               {s ? (
                 <Image
-                  src={avatarSrc(s)}
+                  src={avatarImage(s)!}
                   alt=""
                   width={62}
                   height={62}
+                  unoptimized
                   className="h-full w-full object-contain p-[5px]"
                 />
               ) : (
@@ -123,10 +124,11 @@ export function AvatarPinPuzzle(props: AvatarPinPuzzleProps) {
             aria-label={id}
           >
             <Image
-              src={avatarSrc(id)}
+              src={avatarImage(id)!}
               alt=""
               width={64}
               height={64}
+              unoptimized
               className="h-full w-full object-contain"
             />
           </button>

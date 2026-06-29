@@ -15,7 +15,7 @@ import {
   AVATAR_GROUPS,
   KID_AVA_COLORS,
   PIN_LENGTH,
-  avatarSrc,
+  avatarImage,
   readAvatarConfig,
   type AvatarConfig,
 } from "@/lib/avatars";
@@ -351,10 +351,11 @@ export function ProfileSwitcher() {
                             }}
                           >
                             <Image
-                              src={avatarSrc(id)}
+                              src={avatarImage(id)!}
                               alt=""
                               width={64}
                               height={64}
+                              unoptimized
                               className="h-full w-full rounded-[11px] object-contain"
                             />
                             {sel && (
