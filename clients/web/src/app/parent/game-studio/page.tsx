@@ -93,32 +93,6 @@ export default function GameStudioPage() {
         }
       />
 
-      {/* Make-a-game CTA */}
-      <Link
-        href="/parent/game-studio/new"
-        className="group flex items-center gap-4 rounded-2xl border border-primary-soft-2 bg-gradient-to-br from-primary-soft to-card px-4 py-4 transition-colors hover:border-primary"
-      >
-        <Image
-          src="/images/dodi-active.png"
-          alt=""
-          width={52}
-          height={52}
-          className="h-[52px] w-[52px] shrink-0 object-contain"
-        />
-        <div className="min-w-0 flex-1">
-          <div className="text-[15px] font-bold tracking-tight text-ink-1">
-            {t("emptyTitle")}
-          </div>
-          <div className="mt-0.5 max-w-xl text-[13px] leading-relaxed text-muted-foreground">
-            {t("emptyDesc")}
-          </div>
-        </div>
-        <Button className="hidden shrink-0 sm:inline-flex">
-          <Icon name="sparkles" size={14} />
-          {t("startBuilding")}
-        </Button>
-      </Link>
-
       <Section title={t("yourGames")} desc={t("yourGamesDesc")}>
         {games === null ? (
           <p className="px-1 py-6 text-center text-sm text-muted-foreground">

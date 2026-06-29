@@ -511,9 +511,14 @@ parent-defined goal — and, in future, generate challenges like "Solve 3 math g
 
 ## TODO
 
-- Split landing page into separate project (package + vercel project)
+- Distinguish between development environment and production:
+ - In production DB/system errors should never be displayed to the users. Only generic errors should be displayed in prodouction.
+ - In Production login should redirect to https://app.dodi.app/login (so app runs always under this domain) 
+
+- Transactional e-mails
+- Onboarding wizard (Password, Seed phrase, PIN (skipable))
+
 - Let kids draw their own avatars
-- Add parents view pin (can be set in settings and needs to be entered to enter parents view)
 - Game state analysis via screenshot (attach screenshots to game-state <> dodi exchange). This would allow fun features like asking dodi to guess what has been drawn in the drawing game.
 - Daily challenges UI: let Dodi generate + track challenges on top of `game_plays` (foundation is in place).
 - Allow games to connect with AI provider for in-game content generation (e.g. for texts, calculations, formulas etc.)
