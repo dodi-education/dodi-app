@@ -293,7 +293,8 @@ export default function EditProfilePage() {
     });
     setDpSaving(false);
     if (!response.ok) {
-      setDpError(t("failedToUpdate"));
+      const data = await response.json().catch(() => null);
+      setDpError(data?.error || t("failedToUpdate"));
       return;
     }
     useProfileStore.getState().invalidate();

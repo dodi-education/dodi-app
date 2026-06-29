@@ -6,6 +6,7 @@ import {
   getAccount,
   updateAccountDatePreferences,
   updateAccountLanguage,
+  updateAccountParentPin,
 } from "@/services/accounts";
 import { DATE_STYLE_IDS } from "@dodi/intl";
 
@@ -22,6 +23,9 @@ const UpdateAccountSchema = z.object({
   datePreferences: DatePreferencesSchema.optional(),
   // Parent UI language (BCP-47 short code, e.g. "en"/"de").
   language: z.string().min(2).max(5).optional(),
+  // `enc:v1:` sealed 4-digit parent PIN; `null` clears it. The server never
+  // sees the plaintext PIN.
+  parentPinEnc: z.string().min(1).nullable().optional(),
 });
 
 /** User-authed: the caller's account (subscription tier, preferences, etc.). */
@@ -47,7 +51,7 @@ export async function PATCH(request: Request): Promise<Response> {
     );
   }
 
-  const { datePreferences, language } = result.data;
+  const { datePreferences, language, parentPinEnc } = result.data;
 
   try {
     const savedDatePreferences = datePreferences
@@ -55,6 +59,9 @@ export async function PATCH(request: Request): Promise<Response> {
       : undefined;
     if (language !== undefined) {
       await updateAccountLanguage(supabase, accountId, language);
+    }
+    if (parentPinEnc !== undefined) {
+      await updateAccountParentPin(supabase, accountId, parentPinEnc);
     }
     return NextResponse.json({
       datePreferences: savedDatePreferences,

@@ -8,6 +8,7 @@ import { useTranslations } from "next-intl";
 import { Icon, type IconName } from "@/components/shared/icon";
 import { DodiCompact } from "@/components/dodi/dodi-compact";
 import { cn } from "@/lib/utils";
+import { clearParentUnlocked } from "@/lib/parent-lock";
 import { ProfileSwitcher } from "@/components/kid/profile-switcher";
 import { useDodiSessionStore } from "@/stores/dodi-session-store";
 import { useVaultStore } from "@/stores/vault-store";
@@ -32,6 +33,9 @@ export default function KidLayout({
   // Ensure the vault is unlocked in kid view (kids enter after the parent has
   // unlocked; silently re-unlocks via the device key on a fresh load).
   useEffect(() => {
+    // Being in kid view always locks the parent area for this device session,
+    // so returning to parent requires the PIN again (when one is set).
+    clearParentUnlocked();
     const { status, unlockSilently } = useVaultStore.getState();
     if (status !== "unlocked") void unlockSilently();
   }, []);

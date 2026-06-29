@@ -86,7 +86,12 @@ export function DateTimeSettings() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ datePreferences }),
       });
-      if (!res.ok) throw new Error(t("dateSaveFailed"));
+      if (!res.ok) {
+        const data = (await res.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        throw new Error(data?.error || t("dateSaveFailed"));
+      }
       useDatePrefStore.getState().setAccountStored(datePreferences);
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);

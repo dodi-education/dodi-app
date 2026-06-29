@@ -1,9 +1,28 @@
 import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
 
+import { canonicalRedirectHost } from "@/lib/canonical-host";
+
 export async function updateSession(
   request: NextRequest,
 ): Promise<NextResponse> {
+  // App-logic routes must run on the canonical app host (app.dodi.app) so the
+  // browser Origin matches the platform API's CORS allowlist. Marketing routes
+  // stay on apex/www; dev (LAN IP/localhost) and preview hosts are left alone.
+  // Done first so redirects skip the session refresh below and don't first bounce
+  // to /login on the wrong host.
+  const redirectHost = canonicalRedirectHost(
+    request.nextUrl.pathname,
+    request.headers.get("host"),
+    process.env.NEXT_PUBLIC_APP_URL,
+  );
+  if (redirectHost) {
+    const url = request.nextUrl.clone();
+    url.hostname = redirectHost;
+    url.port = ""; // default port for the scheme on the canonical host
+    return NextResponse.redirect(url, 308);
+  }
+
   // Forward the request path so the i18n resolver (src/i18n/request.ts) can tell
   // parent routes from kid routes — see resolve-locale.ts. Built fresh on each
   // response so it also carries any cookies Supabase refreshes below.

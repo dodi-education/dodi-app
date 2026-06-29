@@ -1029,7 +1029,7 @@ export function GameStudio({ initialGame }: GameStudioProps) {
                 <span>
                   {t("needThinkingProvider")}{" "}
                   <Link
-                    href="/parent/settings"
+                    href="/parent/settings/ai-providers"
                     className="font-semibold underline underline-offset-2 hover:opacity-80"
                   >
                     {t("openSettings")}

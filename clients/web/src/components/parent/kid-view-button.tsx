@@ -1,6 +1,7 @@
 "use client";
 
 import { dodi } from "@/lib/api";
+import { clearParentUnlocked } from "@/lib/parent-lock";
 import { useTranslations } from "next-intl";
 
 import { Icon } from "@/components/shared/icon";
@@ -34,6 +35,8 @@ export function KidViewButton({ compact = false }: { compact?: boolean }) {
       }
     }
     document.cookie = "dodi-view=kid; path=/; max-age=86400";
+    // Leaving for kid view re-locks the parent area on this device.
+    clearParentUnlocked();
     // Full-document navigation, not router.push + refresh. The UI locale is
     // resolved server-side in the root layout from the cookies set above (see
     // i18n/resolve-locale.ts). Parent and kid routes share that root layout, so

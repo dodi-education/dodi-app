@@ -2,7 +2,7 @@ import Image from "next/image";
 
 import {
   KID_AVA_COLORS,
-  avatarSrc,
+  avatarImage,
   readAvatarConfig,
   type AvatarConfig,
 } from "@/lib/avatars";
@@ -30,8 +30,9 @@ interface KidAvatarProps {
 export function KidAvatar({ profile, size = 34, pad, className }: KidAvatarProps) {
   const cfg: AvatarConfig = readAvatarConfig(profile.avatar_config);
   const color = KID_AVA_COLORS[cfg.color] ?? KID_AVA_COLORS[0];
+  const img = cfg.avatar ? avatarImage(cfg.avatar) : null;
 
-  if (!cfg.avatar) {
+  if (!img) {
     const initial = (profile.display_name?.[0] ?? "?").toUpperCase();
     return (
       <span
@@ -56,10 +57,11 @@ export function KidAvatar({ profile, size = 34, pad, className }: KidAvatarProps
       style={{ width: size, height: size, background: color.ring, padding: ring }}
     >
       <Image
-        src={avatarSrc(cfg.avatar)}
+        src={img}
         alt=""
         width={size}
         height={size}
+        unoptimized
         className="h-full w-full rounded-full bg-white object-cover"
       />
     </span>
