@@ -50,19 +50,15 @@ export function useNavGroups(): NavGroup[] {
         },
       ],
     },
-    {
-      label: t("navGroupAccount"),
-      items: [
-        { href: "/parent/settings", label: t("settings"), icon: "settings" },
-      ],
-    },
   ];
 }
 
 /** Label for the nav destination matching the current path (for the mobile top bar). */
 export function useCurrentNavLabel(): string | null {
+  const t = useTranslations("nav");
   const pathname = usePathname();
   const groups = useNavGroups();
+  if (pathname.startsWith("/parent/settings")) return t("settings");
   for (const group of groups) {
     const match = group.items.find((item) => pathname.startsWith(item.href));
     if (match) return match.label;

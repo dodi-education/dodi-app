@@ -91,7 +91,7 @@ export function ParentShell({ children }: { children: React.ReactNode }) {
           "wide:sticky wide:top-0 wide:z-auto wide:h-screen wide:w-56 wide:translate-x-0 wide:shadow-none",
         )}
       >
-        <div className="relative flex items-center gap-2.5 px-2.5 pb-4">
+        <div className="flex items-center gap-2.5 px-2.5 pb-4">
           <Image
             src="/images/dodi-head-active.png"
             alt="Dodi"
@@ -99,14 +99,24 @@ export function ParentShell({ children }: { children: React.ReactNode }) {
             height={30}
           />
           <span className="text-[17px] font-bold tracking-tight">Dodi</span>
-          <button
-            type="button"
-            onClick={() => setOpen(false)}
-            aria-label={t("closeMenu")}
-            className="absolute top-0 right-0 hidden size-9 items-center justify-center rounded-md text-muted-foreground active:bg-foreground/5 compact:flex"
-          >
-            <Icon name="close" size={18} stroke={2} />
-          </button>
+          <div className="ml-auto flex items-center gap-1">
+            <Link
+              href="/parent/settings/general"
+              onClick={() => setOpen(false)}
+              aria-label={t("settings")}
+              className="flex size-9 items-center justify-center rounded-md text-muted-foreground hover:bg-foreground/5 hover:text-primary active:bg-foreground/5"
+            >
+              <Icon name="settings" size={18} stroke={2} />
+            </Link>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              aria-label={t("closeMenu")}
+              className="hidden size-9 items-center justify-center rounded-md text-muted-foreground active:bg-foreground/5 compact:flex"
+            >
+              <Icon name="close" size={18} stroke={2} />
+            </button>
+          </div>
         </div>
         <div className="flex-1 overflow-y-auto">
           <SidebarNav onNavigate={() => setOpen(false)} />

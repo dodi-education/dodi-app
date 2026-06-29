@@ -26,6 +26,7 @@ import {
   unlockVaultWithPassword,
   unlockVaultWithPhrase,
 } from "@dodi/vault";
+import { clearParentUnlocked, markParentUnlocked } from "@/lib/parent-lock";
 import { fetchVaultKeys, saveVaultKeys } from "@/lib/vault-client";
 
 export type VaultStatus =
@@ -117,6 +118,7 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
         pendingBackupPhrase: backupPhrase,
         status: "unlocked",
       });
+      markParentUnlocked();
       return backupPhrase;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Vault setup failed";
@@ -146,6 +148,8 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
       const vmk = unlockVaultWithPassword(keys, password);
       await ensureDeviceRegistered(keys, vmk);
       set({ session: new VaultSession(vmk), status: "unlocked" });
+      // Strong-auth (password/phrase) ⇒ open the parent area for this session.
+      markParentUnlocked();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unlock failed";
       set({ status: "locked", error: message });
@@ -164,6 +168,8 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
       const vmk = unlockVaultWithPhrase(keys, phrase);
       await ensureDeviceRegistered(keys, vmk);
       set({ session: new VaultSession(vmk), status: "unlocked" });
+      // Strong-auth (password/phrase) ⇒ open the parent area for this session.
+      markParentUnlocked();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Recovery failed";
       set({ status: "locked", error: message });
@@ -215,6 +221,7 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
       await saveVaultKeys(updated);
       await ensureDeviceRegistered(updated, vmk);
       set({ session: new VaultSession(vmk), status: "unlocked" });
+      markParentUnlocked();
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Password reset failed";
@@ -253,5 +260,6 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
   lock: () => {
     get().session?.lock();
     set({ session: null, status: "locked" });
+    clearParentUnlocked();
   },
 }));

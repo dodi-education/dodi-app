@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 
 import { Icon } from "@/components/shared/icon";
+import { clearParentUnlocked } from "@/lib/parent-lock";
 import { createClient } from "@/lib/supabase/client";
 
 export function SignOutButton() {
@@ -11,6 +12,7 @@ export function SignOutButton() {
   const router = useRouter();
 
   async function handleSignOut() {
+    clearParentUnlocked();
     const supabase = createClient();
     await supabase.auth.signOut();
     router.push("/login");

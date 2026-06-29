@@ -82,3 +82,21 @@ export async function updateAccountDatePreferences(
   if (error) throw error;
   return datePreferences;
 }
+
+/**
+ * Set or clear the account's parent PIN. The value, when present, is already
+ * sealed (`enc:v1:`) by the client; `null` removes the PIN. The server never
+ * sees the plaintext — it only stores/returns the opaque blob.
+ */
+export async function updateAccountParentPin(
+  supabase: Client,
+  accountId: string,
+  parentPinEnc: string | null,
+): Promise<void> {
+  const { error } = await supabase
+    .from("accounts")
+    .update({ parent_pin_enc: parentPinEnc } as AccountUpdate)
+    .eq("id", accountId);
+
+  if (error) throw error;
+}

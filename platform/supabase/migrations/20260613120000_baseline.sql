@@ -136,7 +136,8 @@ CREATE TABLE IF NOT EXISTS "public"."accounts" (
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "vault_keys" "jsonb",
     "date_preferences" "jsonb",
-    "language" "text" DEFAULT 'en'::"text" NOT NULL
+    "language" "text" DEFAULT 'en'::"text" NOT NULL,
+    "parent_pin_enc" "text"
 );
 
 
@@ -148,6 +149,8 @@ COMMENT ON COLUMN "public"."accounts"."vault_keys" IS 'Opaque wrapped Vault Mast
 COMMENT ON COLUMN "public"."accounts"."date_preferences" IS 'Plaintext account-level date/time display prefs ({ dateStyle, timeStyle, timeZoneEnc }). An explicit timezone is sealed enc:v1: in timeZoneEnc so the server stays blind.';
 
 COMMENT ON COLUMN "public"."accounts"."language" IS 'Parent UI language (BCP-47 short code, e.g. en/de). Durable source of truth; cached client-side in the NEXT_LOCALE cookie and re-seeded at login.';
+
+COMMENT ON COLUMN "public"."accounts"."parent_pin_enc" IS 'enc:v1: sealed 4-digit parent PIN gating the parent area; null = no PIN. Client-set/verified; server-blind.';
 
 
 
