@@ -33,7 +33,7 @@ export async function createAgentSession(
   supabase: Client,
   input: {
     accountId: string;
-    profileId: string;
+    kidId: string;
     taskType: string;
     taskPrompt: string;
     dodiContext?: string;
@@ -44,7 +44,7 @@ export async function createAgentSession(
     .from("agent_sessions")
     .insert({
       account_id: input.accountId,
-      profile_id: input.profileId,
+      kid_id: input.kidId,
       task_type: input.taskType,
       task_prompt: input.taskPrompt,
       dodi_context: input.dodiContext ?? "game_creation",
@@ -150,17 +150,17 @@ export async function deactivateAgentSession(
 // Queries
 // ---------------------------------------------------------------------------
 
-/** Get the most recent active session for a profile (recovery entry point). */
+/** Get the most recent active session for a kid (recovery entry point). */
 export async function getActiveAgentSession(
   supabase: Client,
-  profileId: string,
+  kidId: string,
   dodiContext?: string,
   gameId?: string,
 ): Promise<AgentSessionRow | null> {
   let query = supabase
     .from("agent_sessions")
     .select("*")
-    .eq("profile_id", profileId)
+    .eq("kid_id", kidId)
     .eq("status", "active")
     .order("created_at", { ascending: false })
     .limit(1);
@@ -198,7 +198,7 @@ export async function getAgentSession(
 }
 
 interface ListAgentSessionsOptions {
-  profileId?: string;
+  kidId?: string;
   status?: string;
   limit?: number;
   offset?: number;
@@ -210,7 +210,7 @@ export async function listAgentSessions(
   accountId: string,
   options: ListAgentSessionsOptions = {},
 ): Promise<AgentSessionRow[]> {
-  const { profileId, status, limit = 50, offset = 0 } = options;
+  const { kidId, status, limit = 50, offset = 0 } = options;
 
   let query = supabase
     .from("agent_sessions")
@@ -219,8 +219,8 @@ export async function listAgentSessions(
     .order("created_at", { ascending: false })
     .range(offset, offset + limit - 1);
 
-  if (profileId) {
-    query = query.eq("profile_id", profileId);
+  if (kidId) {
+    query = query.eq("kid_id", kidId);
   }
 
   if (status) {

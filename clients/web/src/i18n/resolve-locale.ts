@@ -21,7 +21,7 @@ export interface LocaleSignals {
   pathname: string | null;
   /** `dodi-view` cookie — "kid" while the kid app is active. */
   view: string | undefined;
-  /** `dodi-kid-locale` cookie — the active kid profile's language. */
+  /** `dodi-kid-locale` cookie — the active kid's language. */
   kidLocale: string | undefined;
   /** `NEXT_LOCALE` cookie — the parent's chosen UI language. */
   userLocale: string | undefined;
@@ -32,7 +32,7 @@ export interface LocaleSignals {
 /**
  * Decide the UI locale for a request.
  *
- * Precedence: kid-view profile language → explicit user preference
+ * Precedence: kid-view kid language → explicit user preference
  * (`NEXT_LOCALE`) → `Accept-Language` → default.
  */
 export function resolveLocale(signals: LocaleSignals): Locale {
@@ -42,7 +42,7 @@ export function resolveLocale(signals: LocaleSignals): Locale {
   // leftover "kid" value would otherwise shadow the parent's choice here).
   const inParentView = (signals.pathname ?? "").startsWith("/parent");
 
-  // 1. Kid view: use the active kid profile's language (kid routes only).
+  // 1. Kid view: use the active kid's language (kid routes only).
   if (!inParentView && signals.view === "kid" && isLocale(signals.kidLocale)) {
     return signals.kidLocale;
   }

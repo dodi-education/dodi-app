@@ -11,10 +11,10 @@ import { GameCard } from "@/components/games/game-card";
 import type { Game } from "@dodi/types/database";
 
 interface GameLibraryProps {
-  profileId: string;
+  kidId: string;
 }
 
-export function GameLibrary({ profileId }: GameLibraryProps) {
+export function GameLibrary({ kidId }: GameLibraryProps) {
   const t = useTranslations("games");
   const searchParams = useSearchParams();
 
@@ -29,7 +29,7 @@ export function GameLibrary({ profileId }: GameLibraryProps) {
     setError(null);
 
     try {
-      const response = await dodi.request(`/api/games?profileId=${profileId}`);
+      const response = await dodi.request(`/api/games?kidId=${kidId}`);
       if (!response.ok) {
         const data = await response.json().catch(() => ({ error: "Failed to fetch games" }));
         throw new Error(data.error || "Failed to fetch games");
@@ -43,7 +43,7 @@ export function GameLibrary({ profileId }: GameLibraryProps) {
     } finally {
       setLoading(false);
     }
-  }, [profileId]);
+  }, [kidId]);
 
   useEffect(() => {
     void fetchGames();

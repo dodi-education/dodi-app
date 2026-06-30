@@ -4,16 +4,16 @@ import { requireAuth } from "@/lib/resolve-auth";
 import { serviceClient } from "@/lib/supabase";
 import { listRequests } from "@/services/friends";
 
-/** Pending requests for a kid. ?profileId= required; ?direction=incoming|outgoing. */
+/** Pending requests for a kid. ?kidId= required; ?direction=incoming|outgoing. */
 export async function GET(request: Request): Promise<NextResponse> {
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
 
   const params = new URL(request.url).searchParams;
-  const profileId = params.get("profileId");
+  const kidId = params.get("kidId");
   const direction = params.get("direction") ?? "incoming";
-  if (!profileId) {
-    return NextResponse.json({ error: "profileId is required" }, { status: 400 });
+  if (!kidId) {
+    return NextResponse.json({ error: "kidId is required" }, { status: 400 });
   }
   if (direction !== "incoming" && direction !== "outgoing") {
     return NextResponse.json(
@@ -25,7 +25,7 @@ export async function GET(request: Request): Promise<NextResponse> {
   try {
     const requests = await listRequests(serviceClient(), {
       accountId: auth.accountId,
-      profileId,
+      kidId,
       direction,
     });
     return NextResponse.json(requests);

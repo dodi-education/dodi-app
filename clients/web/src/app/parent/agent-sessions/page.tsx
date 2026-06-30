@@ -16,7 +16,7 @@ import {
 import { PageHead, Section } from "@/components/parent/section";
 import { DotSep, Row, RowMain, RowMeta, RowTitle } from "@/components/parent/rows";
 import { useDateFormat } from "@/components/providers/date-format-provider";
-import { useProfiles } from "@/hooks/use-profiles";
+import { useKids } from "@/hooks/use-kids";
 import type { AgentSessionRow } from "@dodi/types/database";
 
 const STATUS_OPTIONS = ["active", "completed", "failed", "deactivated"] as const;
@@ -40,9 +40,9 @@ export default function AgentSessionsPage() {
   const [sessions, setSessions] = useState<AgentSessionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(false);
-  const { profiles: profileList } = useProfiles();
-  const profiles = profileList ?? [];
-  const [filterProfile, setFilterProfile] = useState<string>("all");
+  const { kids: kidList } = useKids();
+  const kids = kidList ?? [];
+  const [filterKid, setFilterKid] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [deactivating, setDeactivating] = useState<string | null>(null);
 
@@ -51,7 +51,7 @@ export default function AgentSessionsPage() {
       setLoading(true);
       try {
         const params = new URLSearchParams();
-        if (filterProfile !== "all") params.set("profileId", filterProfile);
+        if (filterKid !== "all") params.set("kidId", filterKid);
         if (filterStatus !== "all") params.set("status", filterStatus);
         params.set("limit", String(PAGE_SIZE));
         params.set("offset", String(offset));
@@ -68,7 +68,7 @@ export default function AgentSessionsPage() {
         setLoading(false);
       }
     },
-    [filterProfile, filterStatus],
+    [filterKid, filterStatus],
   );
 
   // Refetch when filters change
@@ -108,7 +108,7 @@ export default function AgentSessionsPage() {
     }
   };
 
-  const profileNameMap = new Map(profiles.map((p) => [p.id, p.display_name]));
+  const kidNameMap = new Map(kids.map((p) => [p.id, p.display_name]));
 
   const getStatusLabel = (status: string): string => {
     const map: Record<string, string> = {
@@ -144,13 +144,13 @@ export default function AgentSessionsPage() {
 
       {/* Filter bar */}
       <div className="mb-6 flex flex-wrap gap-3">
-        <Select value={filterProfile} onValueChange={setFilterProfile}>
+        <Select value={filterKid} onValueChange={setFilterKid}>
           <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder={t("filterProfile")} />
+            <SelectValue placeholder={t("filterKid")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">{t("filterProfile")}</SelectItem>
-            {profiles.map((p) => (
+            <SelectItem value="all">{t("filterKid")}</SelectItem>
+            {kids.map((p) => (
               <SelectItem key={p.id} value={p.id}>
                 {p.display_name}
               </SelectItem>
@@ -176,7 +176,7 @@ export default function AgentSessionsPage() {
       {/* Session list */}
       {sessions.length === 0 && !loading ? (
         <div className="rounded-lg border border-dashed border-border-strong px-5 py-8 text-center text-sm text-muted-foreground">
-          {filterProfile === "all" && filterStatus === "all"
+          {filterKid === "all" && filterStatus === "all"
             ? t("noSessions")
             : t("noResults")}
         </div>
@@ -197,11 +197,11 @@ export default function AgentSessionsPage() {
                 )}
                 <RowMeta>
                   {getTaskLabel(session.task_type)}
-                  {filterProfile === "all" &&
-                    profileNameMap.get(session.profile_id) && (
+                  {filterKid === "all" &&
+                    kidNameMap.get(session.kid_id) && (
                       <>
                         <DotSep />
-                        {profileNameMap.get(session.profile_id)}
+                        {kidNameMap.get(session.kid_id)}
                       </>
                     )}
                   <DotSep />

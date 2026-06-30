@@ -3,7 +3,7 @@ import { z } from "zod/v4";
 
 import { requireAuth } from "@/lib/resolve-auth";
 import { createLogger } from "@/logger";
-import { getProfile } from "@/services/profiles";
+import { getKid } from "@/services/kids";
 
 const log = createLogger("game-create");
 import {
@@ -41,7 +41,7 @@ function describeError(e: unknown): string {
  * bundle's marker, not a status field. Updating a game is `PATCH /api/games/:id`.
  */
 const CreateGameSchema = z.object({
-  profileId: z.string().uuid(),
+  kidId: z.string().uuid(),
   codeBundle: z.string().optional(),
   title: z.string().trim().min(1).max(200).optional(),
   description: z.string().max(5000).optional(),
@@ -65,7 +65,7 @@ export async function GET(request: Request): Promise<NextResponse> {
 
   const { searchParams } = new URL(request.url);
   const scope = searchParams.get("scope");
-  const profileId = searchParams.get("profileId") ?? undefined;
+  const kidId = searchParams.get("kidId") ?? undefined;
   const search = searchParams.get("search") ?? undefined;
   const includeSystem = searchParams.get("includeSystem") !== "false";
   const tags = searchParams.getAll("tag").filter(Boolean);
@@ -80,7 +80,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       ]);
       const withSharing = games.map((game) => ({
         ...game,
-        sharing: sharingByGame[game.id] ?? { family: false, profileIds: [] },
+        sharing: sharingByGame[game.id] ?? { family: false, kidIds: [] },
       }));
       return NextResponse.json(withSharing);
     } catch (error) {
@@ -91,17 +91,17 @@ export async function GET(request: Request): Promise<NextResponse> {
   }
 
   let locale = "en";
-  if (profileId) {
-    const profile = await getProfile(supabase, profileId);
-    if (!profile || profile.account_id !== accountId) {
-      return NextResponse.json({ error: "Profile not found" }, { status: 404 });
+  if (kidId) {
+    const kid = await getKid(supabase, kidId);
+    if (!kid || kid.account_id !== accountId) {
+      return NextResponse.json({ error: "Kid not found" }, { status: 404 });
     }
-    locale = profile.language;
+    locale = kid.language;
   }
 
   try {
     const games = await listGames(supabase, {
-      profileId,
+      kidId,
       includeSystem,
       search,
       tags,
@@ -140,12 +140,12 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
 
   const data = parsed.data;
-  const { profileId } = data;
+  const { kidId } = data;
 
   try {
-    const profile = await getProfile(supabase, profileId);
-    if (!profile || profile.account_id !== accountId) {
-      return NextResponse.json({ error: "Profile not found" }, { status: 404 });
+    const kid = await getKid(supabase, kidId);
+    if (!kid || kid.account_id !== accountId) {
+      return NextResponse.json({ error: "Kid not found" }, { status: 404 });
     }
 
     // Persist a provided bundle, or a "not built yet" placeholder when none.
@@ -157,7 +157,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     const hasCode = !!data.codeBundle;
     const created = await createCustomGame(supabase, {
       accountId: accountId,
-      profileId,
+      kidId,
       title: data.title,
       description: data.description,
       tags: data.tags,
@@ -174,16 +174,16 @@ export async function POST(request: Request): Promise<NextResponse> {
     if (data.audience) {
       await replaceGameSharings(supabase, created.id, accountId, {
         family: data.audience.isFamily,
-        profileIds: data.audience.audienceIds,
+        kidIds: data.audience.audienceIds,
       });
     }
-    log.info("game_saved", { profileId, gameId: created.id, built: hasCode });
+    log.info("game_saved", { kidId, gameId: created.id, built: hasCode });
 
-    log.info("game_created", { profileId, gameId: created.id, title: created.title });
+    log.info("game_created", { kidId, gameId: created.id, title: created.title });
     return NextResponse.json(created, { status: 201 });
   } catch (error) {
     const message = describeError(error);
-    log.error("creation_failed", { profileId, error: message });
+    log.error("creation_failed", { kidId, error: message });
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

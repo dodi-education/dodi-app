@@ -39,7 +39,7 @@ export function FriendProfile({
     <div className="mx-auto w-full max-w-[460px] px-5 pb-8">
       <KidButton variant="back" size="sm" onClick={onBack} className="pl-3">
         <Icon name="arrow_left" stroke={2.2} />
-        {t("profileBack")}
+        {t("kidBack")}
       </KidButton>
 
       <div className="mt-1.5 flex flex-col items-center rounded-[26px] bg-white px-6 pb-7 pt-8 shadow-[0_4px_18px_rgba(34,56,78,0.06)]">

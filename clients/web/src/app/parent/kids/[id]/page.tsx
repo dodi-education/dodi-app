@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 
 import { BackLink } from "@/components/parent/back-link";
+import { DateField } from "@/components/parent/date-field";
 import { DateTimeFields } from "@/components/parent/date-time-fields";
 import {
   FieldRow,
@@ -26,7 +27,7 @@ import { PIN_LENGTH } from "@/lib/avatars";
 import { locales, type Locale } from "@/i18n/config";
 import { readStoredDatePref } from "@/lib/date-prefs";
 import { generateSocialId } from "@dodi/crypto/social-id";
-import { encryptProfileFields } from "@dodi/vault";
+import { encryptKidFields } from "@dodi/vault";
 import {
   resolvePref,
   type DateStyleId,
@@ -35,10 +36,10 @@ import {
 } from "@dodi/intl";
 import { refreshFriendCards } from "@/lib/friends";
 import { useDatePrefStore } from "@/stores/date-pref-store";
-import { useProfileStore } from "@/stores/profile-store";
+import { useKidStore } from "@/stores/kid-store";
 import { useVaultStore } from "@/stores/vault-store";
 
-import type { Profile } from "@dodi/types/database";
+import type { Kid } from "@dodi/types/database";
 
 const localeNames: Record<Locale, string> = {
   en: "English",
@@ -64,8 +65,8 @@ function parseStoredPin(raw: string | null): PinSlots | null {
 const selectClassName =
   "h-9 w-full rounded-md border border-input bg-card px-3 text-sm outline-none transition-[color,box-shadow,border-color] hover:border-faint focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary-soft-2 sm:w-[250px]";
 
-export default function EditProfilePage() {
-  const t = useTranslations("profiles");
+export default function EditKidPage() {
+  const t = useTranslations("kids");
   const tc = useTranslations("common");
   const tp = useTranslations("personas");
   const tf = useTranslations("friends");
@@ -76,7 +77,7 @@ export default function EditProfilePage() {
   const accountStored = useDatePrefStore((s) => s.accountStored);
   const vaultSession = useVaultStore((s) => s.session);
   const loadAccountPref = useDatePrefStore((s) => s.load);
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const [kid, setKid] = useState<Kid | null>(null);
   const [displayName, setDisplayName] = useState("");
   const [invalidName, setInvalidName] = useState(false);
   const [socialId, setSocialId] = useState("");
@@ -93,7 +94,7 @@ export default function EditProfilePage() {
   const [pinSaving, setPinSaving] = useState(false);
   const [pinSaved, setPinSaved] = useState(false);
   const [pinError, setPinError] = useState<string | null>(null);
-  // Per-profile date/time override ("" = inherit the account default).
+  // Per-kid date/time override ("" = inherit the account default).
   const [dpDateStyle, setDpDateStyle] = useState<DateStyleId | "">("");
   const [dpTimeStyle, setDpTimeStyle] = useState<TimeStyleId | "">("");
   const [dpTimeZone, setDpTimeZone] = useState<string>("");
@@ -111,7 +112,7 @@ export default function EditProfilePage() {
   // What a kid sees when inheriting — drives the preview's fallback values.
   const dateBasePref = resolvePref(
     locale,
-    "profile",
+    "kid",
     readStoredDatePref(accountStored, vaultSession),
   );
 
@@ -119,14 +120,14 @@ export default function EditProfilePage() {
     let cancelled = false;
     async function load() {
       try {
-        const data = await useProfileStore.getState().loadOne(params.id);
+        const data = await useKidStore.getState().loadOne(params.id);
         if (cancelled) return;
         if (!data) {
-          setError(t("profileNotFound"));
+          setError(t("kidNotFound"));
           setFetching(false);
           return;
         }
-        setProfile(data);
+        setKid(data);
         setDisplayName(data.display_name);
         setSocialId(data.social_id);
         setBirthdate(data.birthdate ?? "");
@@ -162,7 +163,7 @@ export default function EditProfilePage() {
         setFetching(false);
       } catch {
         if (!cancelled) {
-          setError(t("profileNotFound"));
+          setError(t("kidNotFound"));
           setFetching(false);
         }
       }
@@ -193,12 +194,12 @@ export default function EditProfilePage() {
       return;
     }
 
-    const enc = encryptProfileFields(session, {
+    const enc = encryptKidFields(session, {
       display_name: displayName,
       birthdate: birthdate || null,
     });
 
-    const response = await dodi.request(`/api/profiles/${params.id}`, {
+    const response = await dodi.request(`/api/kids/${params.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -221,11 +222,11 @@ export default function EditProfilePage() {
     }
 
     // Re-seal this kid's friend cards so friends see the new name/birthdate.
-    // Best-effort: the profile already saved; never block navigation on it.
-    if (profile) {
+    // Best-effort: the kid already saved; never block navigation on it.
+    if (kid) {
       try {
         await refreshFriendCards(
-          { ...profile, display_name: displayName, birthdate: birthdate || null },
+          { ...kid, display_name: displayName, birthdate: birthdate || null },
           session,
         );
       } catch {
@@ -233,8 +234,8 @@ export default function EditProfilePage() {
       }
     }
 
-    useProfileStore.getState().invalidate();
-    router.push("/parent/profiles");
+    useKidStore.getState().invalidate();
+    router.push("/parent/kids");
     router.refresh();
   }
 
@@ -250,10 +251,10 @@ export default function EditProfilePage() {
       return;
     }
     setPinSaving(true);
-    const enc = encryptProfileFields(session, {
+    const enc = encryptKidFields(session, {
       avatar_pin: pinEnabled ? JSON.stringify(pinSlots) : null,
     });
-    const response = await dodi.request(`/api/profiles/${params.id}`, {
+    const response = await dodi.request(`/api/kids/${params.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ avatar_pin: enc.avatar_pin }),
@@ -263,7 +264,7 @@ export default function EditProfilePage() {
       setPinError(t("failedToUpdate"));
       return;
     }
-    useProfileStore.getState().invalidate();
+    useKidStore.getState().invalidate();
     setPinSaved(true);
     setTimeout(() => setPinSaved(false), 2500);
   }
@@ -286,7 +287,7 @@ export default function EditProfilePage() {
       datePreferences.timeZoneEnc = session.encryptField(dpTimeZone);
     }
 
-    const response = await dodi.request(`/api/profiles/${params.id}`, {
+    const response = await dodi.request(`/api/kids/${params.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ date_preferences: datePreferences }),
@@ -297,7 +298,7 @@ export default function EditProfilePage() {
       setDpError(data?.error || t("failedToUpdate"));
       return;
     }
-    useProfileStore.getState().invalidate();
+    useKidStore.getState().invalidate();
     setDpSaved(true);
     setTimeout(() => setDpSaved(false), 2500);
   }
@@ -307,7 +308,7 @@ export default function EditProfilePage() {
       return;
     }
 
-    const response = await dodi.request(`/api/profiles/${params.id}`, {
+    const response = await dodi.request(`/api/kids/${params.id}`, {
       method: "DELETE",
     });
 
@@ -316,32 +317,32 @@ export default function EditProfilePage() {
       return;
     }
 
-    router.push("/parent/profiles");
+    router.push("/parent/kids");
     router.refresh();
   }
 
   if (fetching) {
     return (
       <div className="flex items-center justify-center py-12">
-        <p className="text-muted-foreground">{t("loadingProfile")}</p>
+        <p className="text-muted-foreground">{t("loadingKid")}</p>
       </div>
     );
   }
 
-  if (!profile) {
+  if (!kid) {
     return (
       <div className="flex items-center justify-center py-12">
-        <p className="text-muted-foreground">{t("profileNotFound")}</p>
+        <p className="text-muted-foreground">{t("kidNotFound")}</p>
       </div>
     );
   }
 
   return (
     <div>
-      <BackLink href="/parent/profiles">{t("title")}</BackLink>
+      <BackLink href="/parent/kids">{t("title")}</BackLink>
       <PageHead
-        title={profile.display_name}
-        sub={t("editDescription", { name: profile.display_name })}
+        title={kid.display_name}
+        sub={t("editDescription", { name: kid.display_name })}
       />
 
       <form onSubmit={handleUpdate}>
@@ -396,12 +397,11 @@ export default function EditProfilePage() {
             </div>
           </FieldRow>
           <FieldRow label={t("birthdate")} htmlFor="birthdate">
-            <Input
+            <DateField
               id="birthdate"
               className="sm:w-[250px]"
-              type="date"
               value={birthdate}
-              onChange={(e) => setBirthdate(e.target.value)}
+              onChange={setBirthdate}
             />
           </FieldRow>
           <FieldRow
@@ -428,7 +428,7 @@ export default function EditProfilePage() {
             htmlFor="persona"
           >
             <PersonaSelector
-              profileId={params.id}
+              kidId={params.id}
               value={activePersonaId}
               onChange={setActivePersonaId}
             />
@@ -477,18 +477,18 @@ export default function EditProfilePage() {
 
       <Section
         title={t("pinPuzzleTitle")}
-        desc={t("pinPuzzleDesc", { name: profile.display_name })}
+        desc={t("pinPuzzleDesc", { name: kid.display_name })}
       >
         <FieldRow
           label={t("pinPuzzleToggle")}
-          hint={t("pinPuzzleToggleHint", { name: profile.display_name })}
+          hint={t("pinPuzzleToggleHint", { name: kid.display_name })}
         >
           <Switch checked={pinEnabled} onCheckedChange={setPinEnabled} />
         </FieldRow>
         {pinEnabled && (
           <div className="px-5 py-4">
             <div className="mb-3 text-[13px] text-muted-foreground">
-              {t("pinPuzzleSetHint", { name: profile.display_name })}
+              {t("pinPuzzleSetHint", { name: kid.display_name })}
             </div>
             <AvatarPinPuzzle
               mode="set"
@@ -538,7 +538,7 @@ export default function EditProfilePage() {
         <Row
           clickable
           className="cursor-pointer"
-          onClick={() => router.push(`/parent/profiles/${params.id}/memory`)}
+          onClick={() => router.push(`/parent/kids/${params.id}/memory`)}
         >
           <RowMain>
             <RowTitle>{t("viewMemory")}</RowTitle>
@@ -550,12 +550,12 @@ export default function EditProfilePage() {
       <Section title={t("dangerZone")}>
         <Row>
           <RowMain>
-            <RowTitle>{t("deleteProfile")}</RowTitle>
+            <RowTitle>{t("deleteKid")}</RowTitle>
             <RowMeta>{t("dangerZoneDescription")}</RowMeta>
           </RowMain>
           <Button variant="destructive" onClick={handleDelete}>
             <Icon name="delete" size={14} />
-            {t("deleteProfile")}
+            {t("deleteKid")}
           </Button>
         </Row>
       </Section>

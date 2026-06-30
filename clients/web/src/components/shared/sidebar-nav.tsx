@@ -26,7 +26,7 @@ export function useNavGroups(): NavGroup[] {
       label: t("navGroupFamily"),
       items: [
         { href: "/parent/dashboard", label: t("dashboard"), icon: "dashboard" },
-        { href: "/parent/profiles", label: t("profiles"), icon: "profiles" },
+        { href: "/parent/kids", label: t("kids"), icon: "kids" },
         { href: "/parent/personas", label: t("personas"), icon: "personas" },
         {
           href: "/parent/game-studio",

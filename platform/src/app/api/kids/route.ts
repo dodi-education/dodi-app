@@ -2,10 +2,10 @@ import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 
 import { requireAuth } from "@/lib/resolve-auth";
-import { createProfile, listProfiles } from "@/services/profiles";
+import { createKid, listKids } from "@/services/kids";
 import { generateSocialId } from "@dodi/crypto/social-id";
 
-const CreateProfileSchema = z.object({
+const CreateKidSchema = z.object({
   // display_name + birthdate arrive as client-encrypted ciphertext (opaque strings).
   display_name: z.string().min(1).max(2000),
   birthdate: z.string().max(2000).optional(),
@@ -18,11 +18,11 @@ export async function GET(request: Request): Promise<NextResponse> {
   const { accountId, supabase } = auth;
 
   try {
-    const profiles = await listProfiles(supabase, accountId);
-    return NextResponse.json(profiles);
+    const kids = await listKids(supabase, accountId);
+    return NextResponse.json(kids);
   } catch {
     return NextResponse.json(
-      { error: "Failed to fetch profiles" },
+      { error: "Failed to fetch kids" },
       { status: 500 },
     );
   }
@@ -34,7 +34,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   const { accountId, supabase } = auth;
 
   const body: unknown = await request.json();
-  const result = CreateProfileSchema.safeParse(body);
+  const result = CreateKidSchema.safeParse(body);
 
   if (!result.success) {
     return NextResponse.json(
@@ -47,17 +47,17 @@ export async function POST(request: Request): Promise<NextResponse> {
   // astronomically unlikely; retry a few times to be safe.
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
-      const profile = await createProfile(supabase, {
+      const kid = await createKid(supabase, {
         account_id: accountId,
         display_name: result.data.display_name,
         social_id: generateSocialId(),
         birthdate: result.data.birthdate ?? null,
         language: result.data.language,
       });
-      return NextResponse.json(profile, { status: 201 });
+      return NextResponse.json(kid, { status: 201 });
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Failed to create profile";
+        error instanceof Error ? error.message : "Failed to create kid";
       if (message.includes("duplicate")) continue;
       return NextResponse.json({ error: message }, { status: 500 });
     }

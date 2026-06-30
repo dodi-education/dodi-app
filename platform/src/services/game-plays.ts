@@ -20,7 +20,7 @@ function castPlay(row: unknown): GamePlay {
 
 export interface StartPlayInput {
   accountId: string;
-  profileId: string;
+  kidId: string;
   gameId: string;
   progressKind: ProgressKind;
 }
@@ -31,7 +31,7 @@ export async function startPlay(
 ): Promise<GamePlay> {
   const payload: GamePlayInsert = {
     account_id: input.accountId,
-    profile_id: input.profileId,
+    kid_id: input.kidId,
     game_id: input.gameId,
     progress_kind: input.progressKind,
   };
@@ -91,7 +91,7 @@ export async function updatePlay(
 }
 
 export interface CountSucceededPlaysInput {
-  profileId: string;
+  kidId: string;
   /** Restrict to games carrying this tag, e.g. "math" for "Solve 3 math games". */
   tag?: string;
   /** Only count plays started within the last N days. */
@@ -99,7 +99,7 @@ export interface CountSucceededPlaysInput {
 }
 
 /**
- * Count succeeded plays for a profile — the query that powers challenges like
+ * Count succeeded plays for a kid — the query that powers challenges like
  * "Solve 3 math games today". Subject was dropped from game_plays, so a tag
  * filter joins through to the game's `tags` array instead.
  */
@@ -116,7 +116,7 @@ export async function countSucceededPlays(
     let query = supabase
       .from("game_plays")
       .select("id, games!inner(tags)", { count: "exact", head: true })
-      .eq("profile_id", input.profileId)
+      .eq("kid_id", input.kidId)
       .eq("succeeded", true)
       .contains("games.tags", [input.tag]);
     if (cutoff) query = query.gte("started_at", cutoff);
@@ -128,7 +128,7 @@ export async function countSucceededPlays(
   let query = supabase
     .from("game_plays")
     .select("id", { count: "exact", head: true })
-    .eq("profile_id", input.profileId)
+    .eq("kid_id", input.kidId)
     .eq("succeeded", true);
   if (cutoff) query = query.gte("started_at", cutoff);
   const { count, error } = await query;

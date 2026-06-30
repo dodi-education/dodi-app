@@ -1,16 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * Reproduction for the profile-switcher "empty circle" bug.
+ * Reproduction for the kid-switcher "empty circle" bug.
  *
  * On a cold kid-view load the vault unlocks asynchronously (KidLayout fires
- * `unlockSilently()`), while the ProfileSwitcher mounts and immediately calls
- * `loadList()`. If the profiles fetch resolves before the vault session is set,
- * the store throws "Vault is locked" and the profile list is never populated —
- * leaving `profiles.length === 0` and the bare placeholder avatar forever.
+ * `unlockSilently()`), while the KidSwitcher mounts and immediately calls
+ * `loadList()`. If the kids fetch resolves before the vault session is set,
+ * the store throws "Vault is locked" and the kid list is never populated —
+ * leaving `kids.length === 0` and the bare placeholder avatar forever.
  *
  * `loadList()` must be resilient to the session not being ready yet: it should
- * resolve with the profiles once the vault finishes unlocking, not fail
+ * resolve with the kids once the vault finishes unlocking, not fail
  * permanently.
  */
 
@@ -50,24 +50,24 @@ const { vaultMock } = vi.hoisted(() => {
 vi.mock("@/stores/vault-store", () => ({ useVaultStore: vaultMock }));
 
 // Passthrough crypto — we only care about list population, not field decryption.
-vi.mock("@dodi/vault/profile-crypto", () => ({
-  decryptProfile: (_session: unknown, row: Record<string, unknown>) => ({
+vi.mock("@dodi/vault/kid-crypto", () => ({
+  decryptKid: (_session: unknown, row: Record<string, unknown>) => ({
     ...row,
     display_name: row.display_name ?? "Kid",
   }),
 }));
 
-import { useProfileStore } from "@/stores/profile-store";
+import { useKidStore } from "@/stores/kid-store";
 
 const ROWS = [
   { id: "p1", display_name: "Ada", language: "en" },
   { id: "p2", display_name: "Bo", language: "de" },
 ];
 
-describe("useProfileStore.loadList — vault unlock race", () => {
+describe("useKidStore.loadList — vault unlock race", () => {
   beforeEach(() => {
     vaultMock.reset();
-    useProfileStore.setState({ list: null, byId: {} });
+    useKidStore.setState({ list: null, byId: {} });
     global.fetch = vi.fn(async () => ({
       ok: true,
       json: async () => ROWS,
@@ -79,9 +79,9 @@ describe("useProfileStore.loadList — vault unlock race", () => {
   });
 
   it("populates the list even when loadList runs before the vault is unlocked", async () => {
-    // ProfileSwitcher's useProfiles() fires while unlockSilently() is still in
+    // KidSwitcher's useKids() fires while unlockSilently() is still in
     // flight: the session is null at this point.
-    const pending = useProfileStore.getState().loadList();
+    const pending = useKidStore.getState().loadList();
 
     // Attach the assertion now so the promise has a handler before the vault
     // unlocks (avoids unhandled-rejection noise on the buggy code path).
@@ -95,7 +95,7 @@ describe("useProfileStore.loadList — vault unlock race", () => {
     vaultMock.setState({ session: {}, status: "unlocked" });
 
     await assertion;
-    expect(useProfileStore.getState().list).toHaveLength(2);
+    expect(useKidStore.getState().list).toHaveLength(2);
   });
 
   it("rejects (does not hang) when the vault is already terminally locked", async () => {
@@ -103,7 +103,7 @@ describe("useProfileStore.loadList — vault unlock race", () => {
     // status has already settled — no future state change will arrive.
     vaultMock.setState({ session: null, status: "locked" });
 
-    await expect(useProfileStore.getState().loadList()).rejects.toThrow(
+    await expect(useKidStore.getState().loadList()).rejects.toThrow(
       "Vault is locked",
     );
   });

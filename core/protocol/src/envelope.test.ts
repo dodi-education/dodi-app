@@ -30,7 +30,7 @@ describe("SealedEnvelope", () => {
 
   it("round-trips a JSON value", () => {
     const { recipient, senderId } = makeParties();
-    const msg = { kind: "command", action: "run-nightly-memory", profileIds: ["a", "b"] };
+    const msg = { kind: "command", action: "run-nightly-memory", kidIds: ["a", "b"] };
     const envelope = sealEnvelopeJson(recipient.kem.publicKey, msg, senderId);
     expect(openEnvelopeJson(recipient.kem.secretKey, envelope)).toEqual(msg);
   });

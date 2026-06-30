@@ -5,6 +5,7 @@ import {
   IconBan,
   IconBrain,
   IconCake,
+  IconCalendar,
   IconCamera,
   IconChartBar,
   IconCheck,
@@ -57,6 +58,7 @@ export type IconName =
   | "arrow_left"
   | "ban"
   | "cake"
+  | "calendar"
   | "camera"
   | "check"
   | "chevron_down"
@@ -85,7 +87,7 @@ export type IconName =
   | "mic_on"
   | "personas"
   | "play"
-  | "profiles"
+  | "kids"
   | "qrcode"
   | "refresh"
   | "search"
@@ -107,6 +109,7 @@ const ICONS: Record<IconName, ComponentType<TablerIconProps>> = {
   arrow_left: IconArrowLeft,
   ban: IconBan,
   cake: IconCake,
+  calendar: IconCalendar,
   camera: IconCamera,
   check: IconCheck,
   chevron_down: IconChevronDown,
@@ -135,7 +138,7 @@ const ICONS: Record<IconName, ComponentType<TablerIconProps>> = {
   mic_on: IconMicrophone,
   personas: IconMasksTheater,
   play: IconPlayerPlayFilled,
-  profiles: IconUser,
+  kids: IconUser,
   qrcode: IconQrcode,
   refresh: IconRefresh,
   search: IconSearch,

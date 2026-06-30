@@ -6,7 +6,7 @@ import { serviceClient } from "@/lib/supabase";
 import { refreshFriendCards } from "@/services/friends";
 
 const RefreshSchema = z.object({
-  profileId: z.string().uuid(),
+  kidId: z.string().uuid(),
   // Re-sealed SealedEnvelope JSON strings (opaque to the server).
   cards: z
     .array(
@@ -40,7 +40,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   try {
     const updated = await refreshFriendCards(serviceClient(), {
       accountId: auth.accountId,
-      profileId: result.data.profileId,
+      kidId: result.data.kidId,
       cards: result.data.cards,
     });
     return NextResponse.json({ updated });

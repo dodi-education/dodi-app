@@ -18,29 +18,29 @@ export default function GamePlayPage() {
   const id = params.id;
   const t = useTranslations("games");
 
-  const [profileId, setProfileId] = useState<string | null>(null);
+  const [kidId, setKidId] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [game, setGame] = useState<Game | null>(null);
   const [missing, setMissing] = useState(false);
   const loggedRef = useRef(false);
 
   useEffect(() => {
-    const pid = getCookie("dodi-active-profile");
+    const pid = getCookie("dodi-active-kid");
     let cancelled = false;
 
     // Init from the cookie after mount, deferred off the synchronous effect tick
     // (avoids the cascading-render lint and SSR/hydration skew from `document`).
     void Promise.resolve().then(() => {
       if (cancelled) return;
-      setProfileId(pid);
+      setKidId(pid);
       setReady(true);
     });
 
     if (pid) {
-      // `profileId` makes the platform derive the locale and enforce visibility
+      // `kidId` makes the platform derive the locale and enforce visibility
       // (inactive/unshared games 404 even via a direct URL).
       dodi
-        .request(`/api/games/${id}?profileId=${pid}`)
+        .request(`/api/games/${id}?kidId=${pid}`)
         .then((r) => {
           if (!r.ok) {
             if (!cancelled) setMissing(true);
@@ -59,7 +59,7 @@ export default function GamePlayPage() {
                 method: "POST",
                 headers: { "content-type": "application/json" },
                 body: JSON.stringify({
-                  profileId: pid,
+                  kidId: pid,
                   event: "game_played",
                   message: "Started game",
                 }),
@@ -78,23 +78,23 @@ export default function GamePlayPage() {
 
   if (missing) notFound();
 
-  if (ready && !profileId) {
+  if (ready && !kidId) {
     return (
       <div className="w-full max-w-xl rounded-2xl border bg-white p-6 text-center shadow-sm">
         <h1 className="text-xl font-bold text-dodi-800">{t("title")}</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          {t("profileRequired")}
+          {t("kidRequired")}
         </p>
       </div>
     );
   }
 
-  if (!game || !profileId) return null;
+  if (!game || !kidId) return null;
 
   return (
     <GamePlayView
       gameId={game.id}
-      profileId={profileId}
+      kidId={kidId}
       title={game.title}
       description={game.description}
       codeBundle={game.code_bundle}

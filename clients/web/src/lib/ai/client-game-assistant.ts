@@ -1,6 +1,6 @@
 /**
  * Client-side in-game text assistant (E2EE). Mirrors the in-game voice companion
- * (`buildGameVoiceConfig`): loads the vault-decrypted profile + persona, fetches
+ * (`buildGameVoiceConfig`): loads the vault-decrypted kid + persona, fetches
  * the language-translated game, resolves the vault-held thinking key, builds the
  * system instruction with the browser-safe `buildGameTextContext`, and calls the
  * thinking provider directly from the browser. The server never sees the child's
@@ -12,37 +12,37 @@ import { resolveClientThinking } from "@/lib/ai/resolve-client-thinking";
 import { getActivePersona } from "@/lib/ai/voice-session";
 import { normalizeCommands } from "@dodi/games/normalize-commands";
 import { buildGameTextContext } from "@dodi/ai/dodi-context";
-import { useProfileStore } from "@/stores/profile-store";
+import { useKidStore } from "@/stores/kid-store";
 import type { Game } from "@dodi/types/database";
 import type { GameAssistantResponse } from "@dodi/types/games";
 
 export async function runGameTextAssistant(
-  profileId: string,
+  kidId: string,
   gameId: string,
   message: string,
   gameState: Record<string, unknown>,
 ): Promise<GameAssistantResponse> {
-  const profile = await useProfileStore.getState().loadOne(profileId);
-  if (!profile) throw new Error("Profile not found");
+  const kid = await useKidStore.getState().loadOne(kidId);
+  if (!kid) throw new Error("Kid not found");
 
   // Thinking provider/model + vault-decrypted key (never the voice model).
   const thinking = await resolveClientThinking();
   if (!thinking) throw new Error("No AI provider key configured");
 
-  const persona = await getActivePersona(profile.active_persona_id);
+  const persona = await getActivePersona(kid.active_persona_id);
 
   // Locale-translated game (title/description) — matches the old server route.
-  const gameRes = await dodi.request(`/api/games/${gameId}?locale=${profile.language}`);
+  const gameRes = await dodi.request(`/api/games/${gameId}?locale=${kid.language}`);
   if (!gameRes.ok) throw new Error("Game not found");
   const game = (await gameRes.json()) as Game;
 
   const { systemInstruction } = buildGameTextContext({
     personaSoul: persona.soul,
-    childName: profile.display_name,
-    childBirthdate: profile.birthdate,
-    childLanguage: profile.language,
-    memory: profile.memory,
-    parentNotes: profile.parent_notes,
+    childName: kid.display_name,
+    childBirthdate: kid.birthdate,
+    childLanguage: kid.language,
+    memory: kid.memory,
+    parentNotes: kid.parent_notes,
     gameTitle: game.title,
     gameDescription: game.description,
     gameMarkdown: game.markdown,

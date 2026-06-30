@@ -6,6 +6,6 @@ export * from "./types";
 export * from "./account-keys";
 export * from "./device-keystore";
 export * from "./session";
-export * from "./profile-crypto";
+export * from "./kid-crypto";
 export * from "./persona-crypto";
 export * from "./api-keys-crypto";

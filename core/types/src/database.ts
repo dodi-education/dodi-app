@@ -57,7 +57,7 @@ export interface Database {
         };
         Relationships: [];
       };
-      profiles: {
+      kids: {
         Row: {
           id: string;
           account_id: string;
@@ -138,9 +138,9 @@ export interface Database {
         Row: {
           id: string;
           requester_account_id: string;
-          requester_profile_id: string;
+          requester_kid_id: string;
           addressee_account_id: string;
-          addressee_profile_id: string;
+          addressee_kid_id: string;
           status: string;
           addressee_accepted: boolean;
           // tri-state: null = approval not required, false = required+pending,
@@ -160,9 +160,9 @@ export interface Database {
         Insert: {
           id?: string;
           requester_account_id: string;
-          requester_profile_id: string;
+          requester_kid_id: string;
           addressee_account_id: string;
-          addressee_profile_id: string;
+          addressee_kid_id: string;
           status?: string;
           addressee_accepted?: boolean;
           requester_parent_ok?: boolean | null;
@@ -178,9 +178,9 @@ export interface Database {
         Update: {
           id?: string;
           requester_account_id?: string;
-          requester_profile_id?: string;
+          requester_kid_id?: string;
           addressee_account_id?: string;
-          addressee_profile_id?: string;
+          addressee_kid_id?: string;
           status?: string;
           addressee_accepted?: boolean;
           requester_parent_ok?: boolean | null;
@@ -229,7 +229,7 @@ export interface Database {
         Row: {
           id: string;
           account_id: string | null;
-          profile_id: string | null;
+          kid_id: string | null;
           source_game_id: string | null;
           system_key: string | null;
           is_system: boolean;
@@ -254,7 +254,7 @@ export interface Database {
         Insert: {
           id?: string;
           account_id?: string | null;
-          profile_id?: string | null;
+          kid_id?: string | null;
           source_game_id?: string | null;
           system_key?: string | null;
           is_system?: boolean;
@@ -279,7 +279,7 @@ export interface Database {
         Update: {
           id?: string;
           account_id?: string | null;
-          profile_id?: string | null;
+          kid_id?: string | null;
           source_game_id?: string | null;
           system_key?: string | null;
           is_system?: boolean;
@@ -307,7 +307,7 @@ export interface Database {
         Row: {
           id: string;
           account_id: string;
-          profile_id: string;
+          kid_id: string;
           game_id: string;
           progress_kind: "goal" | "open";
           started_at: string;
@@ -322,7 +322,7 @@ export interface Database {
         Insert: {
           id?: string;
           account_id: string;
-          profile_id: string;
+          kid_id: string;
           game_id: string;
           progress_kind?: "goal" | "open";
           started_at?: string;
@@ -337,7 +337,7 @@ export interface Database {
         Update: {
           id?: string;
           account_id?: string;
-          profile_id?: string;
+          kid_id?: string;
           game_id?: string;
           progress_kind?: "goal" | "open";
           started_at?: string;
@@ -356,21 +356,21 @@ export interface Database {
           id: string;
           game_id: string;
           account_id: string;
-          profile_id: string | null;
+          kid_id: string | null;
           created_at: string;
         };
         Insert: {
           id?: string;
           game_id: string;
           account_id: string;
-          profile_id?: string | null;
+          kid_id?: string | null;
           created_at?: string;
         };
         Update: {
           id?: string;
           game_id?: string;
           account_id?: string;
-          profile_id?: string | null;
+          kid_id?: string | null;
           created_at?: string;
         };
         Relationships: [];
@@ -409,7 +409,7 @@ export interface Database {
         Row: {
           id: string;
           account_id: string;
-          profile_id: string;
+          kid_id: string;
           task_type: string;
           task_prompt: string;
           dodi_context: string;
@@ -426,7 +426,7 @@ export interface Database {
         Insert: {
           id?: string;
           account_id: string;
-          profile_id: string;
+          kid_id: string;
           task_type: string;
           task_prompt?: string;
           dodi_context?: string;
@@ -443,7 +443,7 @@ export interface Database {
         Update: {
           id?: string;
           account_id?: string;
-          profile_id?: string;
+          kid_id?: string;
           task_type?: string;
           task_prompt?: string;
           dodi_context?: string;
@@ -462,7 +462,7 @@ export interface Database {
       system_logs: {
         Row: {
           id: string;
-          profile_id: string;
+          kid_id: string;
           account_id: string;
           persona_id: string | null;
           event: string;
@@ -471,7 +471,7 @@ export interface Database {
         };
         Insert: {
           id?: string;
-          profile_id: string;
+          kid_id: string;
           account_id: string;
           persona_id?: string | null;
           event: string;
@@ -480,7 +480,7 @@ export interface Database {
         };
         Update: {
           id?: string;
-          profile_id?: string;
+          kid_id?: string;
           account_id?: string;
           persona_id?: string | null;
           event?: string;
@@ -546,7 +546,7 @@ export interface Database {
 
 // Convenience type aliases
 export type Account = Database["public"]["Tables"]["accounts"]["Row"];
-export type Profile = Database["public"]["Tables"]["profiles"]["Row"];
+export type Kid = Database["public"]["Tables"]["kids"]["Row"];
 export type Persona = Database["public"]["Tables"]["personas"]["Row"];
 export type Game = Database["public"]["Tables"]["games"]["Row"];
 export type GamePlay = Database["public"]["Tables"]["game_plays"]["Row"];
@@ -561,8 +561,8 @@ export type Device = Database["public"]["Tables"]["devices"]["Row"];
 export type DeviceInsert = Database["public"]["Tables"]["devices"]["Insert"];
 export type DeviceUpdate = Database["public"]["Tables"]["devices"]["Update"];
 export type DeviceStatus = "pending" | "active" | "revoked";
-export type ProfileInsert = Database["public"]["Tables"]["profiles"]["Insert"];
-export type ProfileUpdate = Database["public"]["Tables"]["profiles"]["Update"];
+export type KidInsert = Database["public"]["Tables"]["kids"]["Insert"];
+export type KidUpdate = Database["public"]["Tables"]["kids"]["Update"];
 
 export type Friendship = Database["public"]["Tables"]["friendships"]["Row"];
 export type FriendshipInsert =
@@ -580,7 +580,7 @@ export type FriendshipStatus =
 
 /**
  * The minimal identity a kid reveals with a friend *request* — shown to the
- * addressee so they can decide. Sealed to the addressee's profile KEM key.
+ * addressee so they can decide. Sealed to the addressee's kid KEM key.
  */
 export interface FriendPreviewCard {
   displayName: string;
@@ -589,7 +589,7 @@ export interface FriendPreviewCard {
 
 /**
  * The full card exchanged once a friendship is `accepted` — adds birthdate.
- * Sealed to the recipient profile's KEM key; server gates delivery by status.
+ * Sealed to the recipient kid's KEM key; server gates delivery by status.
  */
 export interface FriendCard extends FriendPreviewCard {
   birthdate: string | null;

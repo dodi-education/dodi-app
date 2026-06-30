@@ -12,7 +12,7 @@ import { AddFriend } from "./add-friend";
 import { FriendProfile } from "./friend-profile";
 import { FriendsList } from "./friends-list";
 
-type View = { mode: "list" } | { mode: "add" } | { mode: "profile"; id: string };
+type View = { mode: "list" } | { mode: "add" } | { mode: "kid"; id: string };
 
 function Centered({ children }: { children: React.ReactNode }) {
   return (
@@ -22,9 +22,9 @@ function Centered({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function FriendsApp({ profileId }: { profileId: string }) {
+export function FriendsApp({ kidId }: { kidId: string }) {
   const t = useTranslations("friends");
-  const f = useFriends(profileId);
+  const f = useFriends(kidId);
   const { reload } = f;
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -61,7 +61,7 @@ export function FriendsApp({ profileId }: { profileId: string }) {
   if (f.error === "locked") {
     return <Centered>{t("errorVaultLocked")}</Centered>;
   }
-  if (f.loading || !f.profile) {
+  if (f.loading || !f.kid) {
     return (
       <Centered>
         <Icon name="loading" size={28} className="animate-spin text-primary" />
@@ -99,7 +99,7 @@ export function FriendsApp({ profileId }: { profileId: string }) {
     );
   }
 
-  if (view.mode === "profile") {
+  if (view.mode === "kid") {
     const friend = f.friends.find((x) => x.id === view.id);
     if (friend) {
       const name = friend.name?.trim() || friend.nickname?.trim() || "—";
@@ -132,7 +132,7 @@ export function FriendsApp({ profileId }: { profileId: string }) {
         setView({ mode: "add" });
       }}
       onOpen={(friend: DecodedFriend) =>
-        setView({ mode: "profile", id: friend.id })
+        setView({ mode: "kid", id: friend.id })
       }
       onAccept={(friend) => void f.accept(friend)}
       onDecline={(friend) => void f.reject(friend)}

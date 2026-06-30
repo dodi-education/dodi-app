@@ -16,21 +16,21 @@ export function KidViewButton({ compact = false }: { compact?: boolean }) {
       return;
     }
     e.preventDefault();
-    // Fetch profiles to resolve active profile's language
-    const response = await dodi.request("/api/profiles");
+    // Fetch kids to resolve active kid's language
+    const response = await dodi.request("/api/kids");
     if (response.ok) {
-      const profiles = await response.json();
-      if (profiles.length > 0) {
-        // Keep the last-used profile if it still exists, otherwise default to first
+      const kids = await response.json();
+      if (kids.length > 0) {
+        // Keep the last-used kid if it still exists, otherwise default to first
         const existing = document.cookie.match(
-          /(?:^|; )dodi-active-profile=([^;]*)/,
+          /(?:^|; )dodi-active-kid=([^;]*)/,
         );
         const lastUsedId = existing ? decodeURIComponent(existing[1]) : null;
-        const profile =
-          profiles.find((p: { id: string }) => p.id === lastUsedId) ??
-          profiles[0];
-        document.cookie = `dodi-active-profile=${profile.id}; path=/; max-age=86400`;
-        const kidLocale = profile.language ?? "en";
+        const kid =
+          kids.find((p: { id: string }) => p.id === lastUsedId) ??
+          kids[0];
+        document.cookie = `dodi-active-kid=${kid.id}; path=/; max-age=86400`;
+        const kidLocale = kid.language ?? "en";
         document.cookie = `dodi-kid-locale=${kidLocale}; path=/; max-age=86400`;
       }
     }
@@ -42,7 +42,7 @@ export function KidViewButton({ compact = false }: { compact?: boolean }) {
     // i18n/resolve-locale.ts). Parent and kid routes share that root layout, so
     // an SPA navigation keeps the previous view's NextIntlClientProvider mounted
     // and the UI stays in the parent's language. A full load re-resolves the
-    // locale, so the kid profile's language takes effect.
+    // locale, so the kid's language takes effect.
     window.location.assign("/home");
   }
 

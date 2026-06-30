@@ -11,7 +11,7 @@ import {
 interface DodiContextConfig {
   context: DodiContext;
   displayMode: DodiDisplayMode;
-  profileId: string;
+  kidId: string;
 }
 
 /**
@@ -22,7 +22,7 @@ interface DodiContextConfig {
 export function useDodiContext({
   context,
   displayMode,
-  profileId,
+  kidId,
 }: DodiContextConfig): void {
   const setDisplayMode = useDodiSessionStore((s) => s.setDisplayMode);
   const setContext = useDodiSessionStore((s) => s.setContext);
@@ -48,18 +48,18 @@ export function useDodiContext({
   }, [displayMode, setDisplayMode]);
 
   useEffect(() => {
-    if (profileId) {
-      void setContext(contextRef.current, profileId);
+    if (kidId) {
+      void setContext(contextRef.current, kidId);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contextKey, profileId, setContext]);
+  }, [contextKey, kidId, setContext]);
 
   // Auto-connect if session is disconnected (e.g. direct navigation to /games).
   // Skip when the last close was fatal (quota/auth) — retrying won't help and
   // would hot-loop. The kid must explicitly tap to reconnect.
   useEffect(() => {
-    if (profileId && dodiState === "disconnected" && !fatalError) {
-      void connect(profileId);
+    if (kidId && dodiState === "disconnected" && !fatalError) {
+      void connect(kidId);
     }
-  }, [profileId, dodiState, fatalError, connect]);
+  }, [kidId, dodiState, fatalError, connect]);
 }

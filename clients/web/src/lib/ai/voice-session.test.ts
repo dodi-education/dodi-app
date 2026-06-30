@@ -14,7 +14,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const GEMINI_KEY = "AIza-test-key";
 
-const PROFILE = {
+const KID = {
   id: "11111111-1111-1111-1111-111111111111",
   display_name: "Ada",
   birthdate: null,
@@ -24,8 +24,8 @@ const PROFILE = {
   active_persona_id: null,
 };
 
-vi.mock("@/stores/profile-store", () => ({
-  useProfileStore: { getState: () => ({ loadOne: async () => PROFILE }) },
+vi.mock("@/stores/kid-store", () => ({
+  useKidStore: { getState: () => ({ loadOne: async () => KID }) },
 }));
 
 const getKey = vi.fn((id: string) => (id === "gemini" ? GEMINI_KEY : null));
@@ -98,7 +98,7 @@ describe("buildGameVoiceConfig — E2EE key sourcing", () => {
   });
 
   it("sources the provider key from the vault, not a server session route", async () => {
-    const config = await buildGameVoiceConfig(PROFILE.id, GAME.id, {});
+    const config = await buildGameVoiceConfig(KID.id, GAME.id, {});
 
     expect(config.apiKey).toBe(GEMINI_KEY);
     expect(config.model).toBe(MODEL_CONFIG.voiceModel);
@@ -112,7 +112,7 @@ describe("buildGameVoiceConfig — E2EE key sourcing", () => {
   it("throws a clear client error (not a server 500) when the vault has no key", async () => {
     getKey.mockReturnValueOnce(null);
 
-    await expect(buildGameVoiceConfig(PROFILE.id, GAME.id, {})).rejects.toThrow(
+    await expect(buildGameVoiceConfig(KID.id, GAME.id, {})).rejects.toThrow(
       "No API key configured for gemini",
     );
   });

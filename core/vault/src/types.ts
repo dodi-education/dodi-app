@@ -15,7 +15,7 @@ import type { KemWrappedKey, PasswordWrappedKey } from "@dodi/crypto";
 
 /** Logical record kinds. Maps to a table (Supabase) or a document type (vault). */
 export type VaultCollection =
-  | "profile"
+  | "kid"
   | "persona"
   | "game"
   | "game_translation"

@@ -43,17 +43,17 @@ export default function EditGameStudioPage() {
         return;
       }
 
-      const sharing: { family: boolean; profileIds: string[] } = sharingRes.ok
+      const sharing: { family: boolean; kidIds: string[] } = sharingRes.ok
         ? await sharingRes.json()
-        : { family: false, profileIds: [] };
+        : { family: false, kidIds: [] };
       if (cancelled) return;
 
       const audienceIds = sharing.family
         ? []
-        : sharing.profileIds.length > 0
-          ? sharing.profileIds
-          : game.profile_id
-            ? [game.profile_id]
+        : sharing.kidIds.length > 0
+          ? sharing.kidIds
+          : game.kid_id
+            ? [game.kid_id]
             : [];
 
       setInitialGame({

@@ -4,8 +4,8 @@
  * The 32 avatar images live in `src/assets/avatars/<id>.webp` and are imported as
  * ES modules (see `AVATAR_IMAGES`) so Next serves them as content-hashed, immutably
  * cached static files — not via `/_next/image`. Regenerate them from source art with
- * `scripts/optimize-avatars.mjs`. A profile's chosen look is `{ color, avatar }`,
- * stored E2EE-encrypted in `profiles.avatar_config` (decrypted to an object before it
+ * `scripts/optimize-avatars.mjs`. A kid's chosen look is `{ color, avatar }`,
+ * stored E2EE-encrypted in `kids.avatar_config` (decrypted to an object before it
  * reaches this module). The avatar-PIN puzzle uses a curated subset (`PIN_PALETTE`).
  */
 import type { StaticImageData } from "next/image";
@@ -56,7 +56,7 @@ export interface AvatarColor {
   ring: string;
 }
 
-/** The 6 profile colors: soft background, strong foreground, avatar-ring. */
+/** The 6 kid colors: soft background, strong foreground, avatar-ring. */
 export const KID_AVA_COLORS: AvatarColor[] = [
   { bg: "#DCE9FA", fg: "#2F6BD8", ring: "#6E97E2" },
   { bg: "#E9F5F0", fg: "#2E8B6A", ring: "#6BAE94" },
@@ -188,7 +188,7 @@ export function avatarImage(id: string): StaticImageData | null {
 }
 
 /**
- * Normalize a profile's (decrypted) `avatar_config` into `{ color, avatar }`,
+ * Normalize a kid's (decrypted) `avatar_config` into `{ color, avatar }`,
  * with safe defaults. Accepts the decrypted object, a JSON string (defensive),
  * or null.
  */

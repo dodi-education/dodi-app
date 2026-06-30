@@ -17,7 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useDateFormat } from "@/components/providers/date-format-provider";
 import { usePersonas } from "@/hooks/use-personas";
-import { useProfiles } from "@/hooks/use-profiles";
+import { useKids } from "@/hooks/use-kids";
 import { ageFromBirthdate } from "@dodi/intl";
 
 const AVATAR_PALETTE = [
@@ -31,12 +31,12 @@ function avatarColor(index: number) {
   return AVATAR_PALETTE[index % AVATAR_PALETTE.length];
 }
 
-export default function ProfilesPage() {
-  const t = useTranslations("profiles");
+export default function KidsPage() {
+  const t = useTranslations("kids");
   const td = useTranslations("dashboard");
   const tc = useTranslations("common");
   const { formatDateOnly } = useDateFormat();
-  const { profiles, loading, error } = useProfiles();
+  const { kids, loading, error } = useKids();
   const { nameById: personaNames } = usePersonas();
 
   return (
@@ -46,7 +46,7 @@ export default function ProfilesPage() {
         sub={t("subtitle")}
         action={
           <Button asChild>
-            <Link href="/parent/profiles/new">{t("addProfile")}</Link>
+            <Link href="/parent/kids/new">{t("addKid")}</Link>
           </Button>
         }
       />
@@ -65,53 +65,53 @@ export default function ProfilesPage() {
             {error}
           </div>
         </Section>
-      ) : !profiles || profiles.length === 0 ? (
+      ) : !kids || kids.length === 0 ? (
         <Section>
           <div className="flex flex-col items-center gap-4 px-5 py-12">
-            <Icon name="profiles" className="h-10 w-10 text-primary" />
-            <p className="text-sm text-muted-foreground">{t("noProfiles")}</p>
+            <Icon name="kids" className="h-10 w-10 text-primary" />
+            <p className="text-sm text-muted-foreground">{t("noKids")}</p>
             <Button asChild>
-              <Link href="/parent/profiles/new">{t("createFirstProfile")}</Link>
+              <Link href="/parent/kids/new">{t("addKid")}</Link>
             </Button>
           </div>
         </Section>
       ) : (
         <Section>
-          {profiles.map((profile, i) => {
+          {kids.map((kid, i) => {
             const color = avatarColor(i);
-            const age = ageFromBirthdate(profile.birthdate);
+            const age = ageFromBirthdate(kid.birthdate);
             return (
               <Link
-                key={profile.id}
-                href={`/parent/profiles/${profile.id}`}
+                key={kid.id}
+                href={`/parent/kids/${kid.id}`}
                 className="block"
               >
                 <Row clickable>
                   <div
                     className={`flex size-[34px] shrink-0 items-center justify-center rounded-full text-[13px] font-bold ${color.bg} ${color.fg}`}
                   >
-                    {profile.display_name[0]?.toUpperCase()}
+                    {kid.display_name[0]?.toUpperCase()}
                   </div>
                   <RowMain>
                     <RowTitle>
-                      {profile.display_name}
+                      {kid.display_name}
                       {age !== null ? (
                         <Badge variant="gray">{td("ageYears", { age })}</Badge>
                       ) : null}
                     </RowTitle>
                     <RowMeta>
-                      {profile.social_id}
+                      {kid.social_id}
                       <DotSep />
-                      {profile.active_persona_id
-                        ? (personaNames.get(profile.active_persona_id) ??
+                      {kid.active_persona_id
+                        ? (personaNames.get(kid.active_persona_id) ??
                           t("default"))
                         : t("default")}
                       <DotSep />
-                      {profile.birthdate
+                      {kid.birthdate
                         ? t("born", {
                             date:
-                              formatDateOnly(profile.birthdate) ??
-                              profile.birthdate,
+                              formatDateOnly(kid.birthdate) ??
+                              kid.birthdate,
                           })
                         : t("birthdateNotSet")}
                     </RowMeta>

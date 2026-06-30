@@ -3,12 +3,12 @@ import { z } from "zod/v4";
 
 import { requireAuth } from "@/lib/resolve-auth";
 import {
-  deleteProfile,
-  getProfile,
-  updateProfile,
-} from "@/services/profiles";
+  deleteKid,
+  getKid,
+  updateKid,
+} from "@/services/kids";
 
-const UpdateProfileSchema = z.object({
+const UpdateKidSchema = z.object({
   // Personal fields (display_name, birthdate, parent_notes) arrive as opaque
   // client-encrypted ciphertext. social_id stays plaintext (public handle).
   display_name: z.string().min(1).max(2000).optional(),
@@ -29,7 +29,7 @@ const UpdateProfileSchema = z.object({
   avatar_pin: z.string().max(4000).nullable().optional(),
   date_preferences: z.record(z.string(), z.any()).nullable().optional(),
   // Parent-controlled friend settings (plaintext, server-enforced). The friend
-  // identity keys are published via POST /api/profiles/[id]/friend-keys, not here.
+  // identity keys are published via POST /api/kids/[id]/friend-keys, not here.
   can_add_friends: z.boolean().optional(),
   can_be_added_as_friend: z.boolean().optional(),
   incoming_friend_requests_require_parent_approval: z.boolean().optional(),
@@ -50,14 +50,14 @@ export async function GET(
   const { accountId, supabase } = auth;
 
   try {
-    const profile = await getProfile(supabase, id);
-    if (!profile || profile.account_id !== accountId) {
+    const kid = await getKid(supabase, id);
+    if (!kid || kid.account_id !== accountId) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
-    return NextResponse.json(profile);
+    return NextResponse.json(kid);
   } catch {
     return NextResponse.json(
-      { error: "Failed to fetch profile" },
+      { error: "Failed to fetch kid" },
       { status: 500 },
     );
   }
@@ -73,13 +73,13 @@ export async function PATCH(
   const { accountId, supabase } = auth;
 
   // Verify ownership
-  const existing = await getProfile(supabase, id);
+  const existing = await getKid(supabase, id);
   if (!existing || existing.account_id !== accountId) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
   const body: unknown = await request.json();
-  const result = UpdateProfileSchema.safeParse(body);
+  const result = UpdateKidSchema.safeParse(body);
 
   if (!result.success) {
     return NextResponse.json(
@@ -89,11 +89,11 @@ export async function PATCH(
   }
 
   try {
-    const profile = await updateProfile(supabase, id, result.data);
-    return NextResponse.json(profile);
+    const kid = await updateKid(supabase, id, result.data);
+    return NextResponse.json(kid);
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : "Failed to update profile";
+      error instanceof Error ? error.message : "Failed to update kid";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
@@ -108,17 +108,17 @@ export async function DELETE(
   const { accountId, supabase } = auth;
 
   // Verify ownership
-  const existing = await getProfile(supabase, id);
+  const existing = await getKid(supabase, id);
   if (!existing || existing.account_id !== accountId) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
   try {
-    await deleteProfile(supabase, id);
+    await deleteKid(supabase, id);
     return NextResponse.json({ success: true });
   } catch {
     return NextResponse.json(
-      { error: "Failed to delete profile" },
+      { error: "Failed to delete kid" },
       { status: 500 },
     );
   }

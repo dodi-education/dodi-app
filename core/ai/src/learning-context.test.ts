@@ -24,7 +24,7 @@ describe("buildLearningContext", () => {
     expect(out).toContain("Learning memory:\nAlice loves dinosaurs.");
     expect(out).toContain("Parent notes:\nBedtime at 8pm.");
     expect(out).not.toContain("### Child");
-    // Default scope (no audience) selects only the primary profile.
+    // Default scope (no audience) selects only the primary kid.
     expect(out).not.toContain("space");
   });
 

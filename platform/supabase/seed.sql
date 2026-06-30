@@ -64,7 +64,7 @@ INSERT INTO public.personas (id, account_id, name, soul, created_at, updated_at,
 - When uncertain, err on the side of remembering — parents can always edit the memory', '2026-02-28 19:47:15.941959+00', '2026-03-11 11:31:51.890625+00', 't');
 
 -- System games (is_system = true)
-INSERT INTO public.games (id, account_id, profile_id, source_game_id, system_key, is_system, title, description, target_age_min, target_age_max, estimated_duration_minutes, tags, code_bundle, metadata, created_by, created_at, updated_at, markdown) VALUES ('560b130f-80a6-4353-a750-deac44224c53', NULL, NULL, NULL, 'drawing-basic', 't', 'Drawing', 'A simple drawing game with colors, brush sizes, and fun Dodi drawing commands.', '3', '12', '15', '{drawing,art,creativity,avatar}', '
+INSERT INTO public.games (id, account_id, kid_id, source_game_id, system_key, is_system, title, description, target_age_min, target_age_max, estimated_duration_minutes, tags, code_bundle, metadata, created_by, created_at, updated_at, markdown) VALUES ('560b130f-80a6-4353-a750-deac44224c53', NULL, NULL, NULL, 'drawing-basic', 't', 'Drawing', 'A simple drawing game with colors, brush sizes, and fun Dodi drawing commands.', '3', '12', '15', '{drawing,art,creativity,avatar}', '
 <!doctype html>
 <html lang="en">
 <head>

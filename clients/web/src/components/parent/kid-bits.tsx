@@ -1,6 +1,6 @@
 "use client";
 
-import { useProfiles } from "@/hooks/use-profiles";
+import { useKids } from "@/hooks/use-kids";
 
 const AVATAR_PALETTE = [
   { bg: "bg-primary-soft-2", fg: "text-primary" },
@@ -13,19 +13,19 @@ function avatarColor(index: number) {
   return AVATAR_PALETTE[((index % AVATAR_PALETTE.length) + AVATAR_PALETTE.length) % AVATAR_PALETTE.length];
 }
 
-/** Client island: a profile's avatar circle with its decrypted initial. */
-export function ProfileAvatar({
-  profileId,
+/** Client island: a kid's avatar circle with its decrypted initial. */
+export function KidInitialAvatar({
+  kidId,
   fallbackIndex = 0,
 }: {
-  profileId: string;
+  kidId: string;
   fallbackIndex?: number;
 }) {
-  const { profiles } = useProfiles();
-  const index = profiles?.findIndex((p) => p.id === profileId) ?? -1;
-  const profile = index >= 0 ? profiles?.[index] : null;
+  const { kids } = useKids();
+  const index = kids?.findIndex((p) => p.id === kidId) ?? -1;
+  const kid = index >= 0 ? kids?.[index] : null;
   const color = avatarColor(index >= 0 ? index : fallbackIndex);
-  const initial = (profile?.display_name?.[0] ?? "?").toUpperCase();
+  const initial = (kid?.display_name?.[0] ?? "?").toUpperCase();
   return (
     <div
       className={`flex size-[34px] shrink-0 items-center justify-center rounded-full text-[13px] font-bold ${color.bg} ${color.fg}`}
@@ -35,15 +35,15 @@ export function ProfileAvatar({
   );
 }
 
-/** Client island: a profile's decrypted display name (or a fallback). */
-export function ProfileName({
-  profileId,
+/** Client island: a kid's decrypted display name (or a fallback). */
+export function KidNameLabel({
+  kidId,
   fallback = "—",
 }: {
-  profileId: string;
+  kidId: string;
   fallback?: string;
 }) {
-  const { profiles } = useProfiles();
-  const name = profiles?.find((p) => p.id === profileId)?.display_name;
+  const { kids } = useKids();
+  const name = kids?.find((p) => p.id === kidId)?.display_name;
   return <>{name ?? fallback}</>;
 }

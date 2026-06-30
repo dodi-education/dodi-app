@@ -54,11 +54,11 @@ interface SessionTranscript {
   entries: TranscriptEntry[];
 }
 
-// Today's accumulating transcript for one profile, stamped with the local day it
+// Today's accumulating transcript for one kid, stamped with the local day it
 // belongs to. Grows across every session within the day; promoted to the pending
 // outbox once a new day's first connect sees a stale `date`.
 interface CurrentBatch {
-  profileId: string;
+  kidId: string;
   date: string; // local YYYY-MM-DD
   sessions: SessionTranscript[];
 }
@@ -67,7 +67,7 @@ interface CurrentBatch {
 // only after `runClientMemoryUpdate` confirms the PATCH, so a failed or vault-
 // locked attempt is retried on the next connect rather than lost.
 interface PendingBatch {
-  profileId: string;
+  kidId: string;
   sessions: SessionTranscript[];
 }
 
@@ -86,7 +86,7 @@ export interface DodiSessionState {
   context: DodiContext;
 
   // Core state
-  profileId: string | null;
+  kidId: string | null;
   state: DodiState;
   dodiSpeaking: boolean;
   gestureNeeded: boolean;
@@ -113,16 +113,16 @@ export interface DodiSessionState {
   clearPendingNavigation: () => void;
 
   // Actions
-  setContext: (context: DodiContext, profileId: string) => Promise<void>;
+  setContext: (context: DodiContext, kidId: string) => Promise<void>;
   setDisplayMode: (mode: DodiDisplayMode) => void;
-  connect: (profileId: string) => Promise<void>;
+  connect: (kidId: string) => Promise<void>;
   activate: () => Promise<void>;
   deactivate: () => void;
   toggleActive: () => void;
   endSession: () => void;
   // Force-process everything accumulated so far into memory, now (manual
   // ?process-memory trigger), without waiting for a day change.
-  processMemoryNow: (profileId: string) => void;
+  processMemoryNow: (kidId: string) => void;
   sendTextMessage: (message: string, gameId?: string) => Promise<void>;
   updateGameState: (state: Record<string, unknown>, immediate?: boolean) => void;
   setOnRunCommands: (handler: ((commands: GameCommand[]) => void) | null) => void;
@@ -138,7 +138,7 @@ let streamer: AudioStreamer | null = null;
 let recorder: AudioRecorder | null = null;
 let abortController: AbortController | null = null;
 
-let currentProfileId: string | null = null;
+let currentKidId: string | null = null;
 // Today's sessions, loaded from the stored CurrentBatch at connect and mirrored
 // to localStorage at the end of each round.
 let daySessions: SessionTranscript[] = [];
@@ -234,7 +234,7 @@ function sleepFromInactivity(): void {
   window.removeEventListener("pagehide", handlePageHide);
   stopInteractionListeners();
 
-  currentProfileId = null;
+  currentKidId = null;
   daySessions = [];
   currentSession = null;
   sessionStartedAt = null;
@@ -266,12 +266,12 @@ function localDay(): string {
   return new Date().toLocaleDateString("en-CA");
 }
 
-function currentKey(profileId: string): string {
-  return `dodi-transcript-${profileId}`;
+function currentKey(kidId: string): string {
+  return `dodi-transcript-${kidId}`;
 }
 
-function pendingKey(profileId: string): string {
-  return `dodi-memory-pending-${profileId}`;
+function pendingKey(kidId: string): string {
+  return `dodi-memory-pending-${kidId}`;
 }
 
 function totalEntries(sessions: SessionTranscript[]): number {
@@ -292,9 +292,9 @@ function formatTranscript(sessions: SessionTranscript[]): string {
     .join("\n\n");
 }
 
-function readCurrent(profileId: string): CurrentBatch | null {
+function readCurrent(kidId: string): CurrentBatch | null {
   try {
-    const raw = localStorage.getItem(currentKey(profileId));
+    const raw = localStorage.getItem(currentKey(kidId));
     if (!raw) return null;
     return JSON.parse(raw) as CurrentBatch;
   } catch {
@@ -302,25 +302,25 @@ function readCurrent(profileId: string): CurrentBatch | null {
   }
 }
 
-function writeCurrent(profileId: string, batch: CurrentBatch): void {
+function writeCurrent(kidId: string, batch: CurrentBatch): void {
   try {
-    localStorage.setItem(currentKey(profileId), JSON.stringify(batch));
+    localStorage.setItem(currentKey(kidId), JSON.stringify(batch));
   } catch {
     // ignore (quota / unavailable)
   }
 }
 
-function clearCurrent(profileId: string): void {
+function clearCurrent(kidId: string): void {
   try {
-    localStorage.removeItem(currentKey(profileId));
+    localStorage.removeItem(currentKey(kidId));
   } catch {
     // ignore
   }
 }
 
-function readPending(profileId: string): PendingBatch | null {
+function readPending(kidId: string): PendingBatch | null {
   try {
-    const raw = localStorage.getItem(pendingKey(profileId));
+    const raw = localStorage.getItem(pendingKey(kidId));
     if (!raw) return null;
     return JSON.parse(raw) as PendingBatch;
   } catch {
@@ -341,37 +341,37 @@ function capPendingSessions(sessions: SessionTranscript[]): SessionTranscript[] 
   return out;
 }
 
-function writePending(profileId: string, sessions: SessionTranscript[]): void {
+function writePending(kidId: string, sessions: SessionTranscript[]): void {
   try {
     const data: PendingBatch = {
-      profileId,
+      kidId,
       sessions: capPendingSessions(sessions),
     };
-    localStorage.setItem(pendingKey(profileId), JSON.stringify(data));
+    localStorage.setItem(pendingKey(kidId), JSON.stringify(data));
   } catch {
     // ignore
   }
 }
 
-function clearPending(profileId: string): void {
+function clearPending(kidId: string): void {
   try {
-    localStorage.removeItem(pendingKey(profileId));
+    localStorage.removeItem(pendingKey(kidId));
   } catch {
     // ignore
   }
 }
 
 /** Append sessions to the outbox (oldest dropped past MAX_PENDING_ENTRIES). */
-function appendToPending(profileId: string, sessions: SessionTranscript[]): void {
-  const existing = readPending(profileId)?.sessions ?? [];
-  writePending(profileId, [...existing, ...sessions]);
+function appendToPending(kidId: string, sessions: SessionTranscript[]): void {
+  const existing = readPending(kidId)?.sessions ?? [];
+  writePending(kidId, [...existing, ...sessions]);
 }
 
 /** Mirror today's sessions to the dated current-day key. */
 function persistToLocalStorage(): void {
-  if (!currentProfileId) return;
-  writeCurrent(currentProfileId, {
-    profileId: currentProfileId,
+  if (!currentKidId) return;
+  writeCurrent(currentKidId, {
+    kidId: currentKidId,
     date: localDay(),
     sessions: daySessions,
   });
@@ -421,13 +421,13 @@ function appendRoundFragment(role: "kid" | "dodi", fragment: string): void {
  * between the two can never lose the day's transcript (worst case it lingers in
  * both keys and is re-promoted, which the thinking model reconciles).
  */
-function promoteStaleDay(profileId: string): void {
-  const current = readCurrent(profileId);
+function promoteStaleDay(kidId: string): void {
+  const current = readCurrent(kidId);
   if (!current || totalEntries(current.sessions) === 0) return;
   // A missing date (written by older code) is treated as stale.
   if (current.date === localDay()) return;
-  appendToPending(profileId, current.sessions);
-  clearCurrent(profileId);
+  appendToPending(kidId, current.sessions);
+  clearCurrent(kidId);
 }
 
 /**
@@ -435,17 +435,17 @@ function promoteStaleDay(profileId: string): void {
  * confirmed write. Guarded against concurrent drains; skips below the minimum
  * unless `force` (manual trigger).
  */
-function drainPending(profileId: string, force: boolean): void {
+function drainPending(kidId: string, force: boolean): void {
   if (memoryDrainInFlight) return;
-  const pending = readPending(profileId);
+  const pending = readPending(kidId);
   const count = pending ? totalEntries(pending.sessions) : 0;
   if (count === 0) return;
   if (!force && count < MIN_MEMORY_BATCH_ENTRIES) return;
 
   memoryDrainInFlight = true;
-  void runClientMemoryUpdate(profileId, formatTranscript(pending!.sessions))
+  void runClientMemoryUpdate(kidId, formatTranscript(pending!.sessions))
     .then((ok) => {
-      if (ok) clearPending(profileId);
+      if (ok) clearPending(kidId);
     })
     .catch(() => {
       // keep the outbox for retry
@@ -529,9 +529,9 @@ function resetFlowFlags(): void {
   tapStartedAtMs = null;
 }
 
-function getGreetingMode(profileId: string, isBirthday: boolean): "long" | "short" | "birthday" {
+function getGreetingMode(kidId: string, isBirthday: boolean): "long" | "short" | "birthday" {
   if (isBirthday) {
-    const birthdayKey = `dodi-birthday-greeting-${profileId}`;
+    const birthdayKey = `dodi-birthday-greeting-${kidId}`;
     const today = new Date().toISOString().slice(0, 10);
     try {
       if (localStorage.getItem(birthdayKey) !== today) {
@@ -541,7 +541,7 @@ function getGreetingMode(profileId: string, isBirthday: boolean): "long" | "shor
     } catch { /* fall through */ }
   }
 
-  const key = `dodi-last-long-greeting-${profileId}`;
+  const key = `dodi-last-long-greeting-${kidId}`;
   const today = new Date().toISOString().slice(0, 10);
   try {
     if (localStorage.getItem(key) === today) return "short";
@@ -564,7 +564,7 @@ function transitionToActive(
   set: (partial: Partial<DodiSessionState>) => void,
   get: () => DodiSessionState,
 ): void {
-  if (!client || !currentProfileId) return;
+  if (!client || !currentKidId) return;
 
   set({ state: "active", gestureNeeded: false, error: null });
 
@@ -578,7 +578,7 @@ function transitionToActive(
 
     if (!hasGreetedThisPageLoad) {
       hasGreetedThisPageLoad = true;
-      const mode = getGreetingMode(currentProfileId!, sessionIsBirthday);
+      const mode = getGreetingMode(currentKidId!, sessionIsBirthday);
       client.sendGreeting(mode);
     }
   }
@@ -614,7 +614,7 @@ async function startMic(
 ): Promise<void> {
   if (get().state !== "active") return;
   if (micRequestInFlight) return;
-  if (!currentProfileId) return;
+  if (!currentKidId) return;
 
   if (!navigator.mediaDevices?.getUserMedia) {
     set({ error: "secureContextRequired" });
@@ -688,7 +688,7 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
   displayMode: "full",
   context: { type: "home" },
 
-  profileId: null,
+  kidId: null,
   state: "disconnected",
   dodiSpeaking: false,
   gestureNeeded: false,
@@ -724,11 +724,11 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
     set({ onRequestSnapshot: handler });
   },
 
-  setContext: async (newContext: DodiContext, profileId: string) => {
+  setContext: async (newContext: DodiContext, kidId: string) => {
     const state = get();
     const oldContext = state.context;
 
-    // If same context and same profile, just update gameState if needed
+    // If same context and same kid, just update gameState if needed
     if (!contextRequiresReconnect(oldContext, newContext)) {
       set({ context: newContext });
       return;
@@ -776,14 +776,14 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
         // Build the voice session client-side from the vault (E2EE): the server
         // can no longer decrypt the provider key. Mirrors connect().
         config = await buildGameVoiceConfig(
-          profileId,
+          kidId,
           newContext.gameId,
           newContext.gameState,
         );
         if (gen !== contextGeneration || controller.signal.aborted) return;
       } else {
         // Home/browse context — build client-side from the vault (E2EE).
-        config = await buildHomeVoiceConfig(profileId);
+        config = await buildHomeVoiceConfig(kidId);
         if (gen !== contextGeneration || controller.signal.aborted) return;
       }
 
@@ -796,7 +796,7 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
       }
 
       const isGameContext = newContext.type === "game";
-      const handleEvent = createEventHandler(set, get, profileId, gen, isGameContext);
+      const handleEvent = createEventHandler(set, get, kidId, gen, isGameContext);
       client = new GeminiLiveClient(config, handleEvent);
       client.connect();
     } catch (err) {
@@ -809,14 +809,14 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
     }
   },
 
-  connect: async (profileId: string) => {
-    if (!profileId) return;
+  connect: async (kidId: string) => {
+    if (!kidId) return;
 
     const currentState = get();
 
-    // Already connecting or connected for this profile
+    // Already connecting or connected for this kid
     if (
-      currentProfileId === profileId &&
+      currentKidId === kidId &&
       (currentState.state === "connecting" ||
         currentState.state === "active" ||
         currentState.state === "deaf")
@@ -824,8 +824,8 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
       return;
     }
 
-    if (currentProfileId && currentProfileId !== profileId) {
-      // Different profile — teardown
+    if (currentKidId && currentKidId !== kidId) {
+      // Different kid — teardown
       window.removeEventListener("beforeunload", handleBeforeUnload);
       window.removeEventListener("pagehide", handlePageHide);
       cleanup();
@@ -840,9 +840,9 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
     // the outbox (one chunk to the thinking model), then load today's sessions so
     // this connect appends a fresh session to them. Nothing is cleared except on
     // a confirmed encrypted write (inside drainPending).
-    promoteStaleDay(profileId);
-    drainPending(profileId, false);
-    const todayBatch = readCurrent(profileId);
+    promoteStaleDay(kidId);
+    drainPending(kidId, false);
+    const todayBatch = readCurrent(kidId);
     daySessions =
       todayBatch && todayBatch.date === localDay() ? todayBatch.sessions : [];
     currentSession = null;
@@ -850,7 +850,7 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
     roundText = "";
     roundStartedAt = null;
 
-    currentProfileId = profileId;
+    currentKidId = kidId;
     sessionStartedAt = null;
     greetingSent = false;
     micRequestInFlight = false;
@@ -860,7 +860,7 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
     abortController = controller;
 
     set({
-      profileId,
+      kidId,
       state: "connecting",
       dodiSpeaking: false,
       gestureNeeded: false,
@@ -874,13 +874,13 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
 
       if (currentContext.type === "game") {
         config = await buildGameVoiceConfig(
-          profileId,
+          kidId,
           currentContext.gameId,
           currentContext.gameState,
         );
         if (gen !== contextGeneration || controller.signal.aborted) return;
       } else {
-        config = await buildHomeVoiceConfig(profileId);
+        config = await buildHomeVoiceConfig(kidId);
         if (gen !== contextGeneration || controller.signal.aborted) return;
       }
 
@@ -891,7 +891,7 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
       streamer = new AudioStreamer();
 
       const isGameContext = currentContext.type === "game";
-      const handleEvent = createEventHandler(set, get, profileId, gen, isGameContext);
+      const handleEvent = createEventHandler(set, get, kidId, gen, isGameContext);
       client = new GeminiLiveClient(config, handleEvent);
       client.connect();
     } catch (err) {
@@ -915,7 +915,7 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
   activate: async () => {
     const current = get();
     if (current.state !== "deaf") return;
-    if (!client || !currentProfileId) return;
+    if (!client || !currentKidId) return;
 
     // Prime AudioContext from user gesture
     if (!streamer) {
@@ -940,8 +940,8 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
       get().deactivate();
     } else if (current.state === "deaf") {
       void get().activate();
-    } else if ((current.state === "disconnected" || current.state === "sleep") && current.profileId) {
-      void get().connect(current.profileId);
+    } else if ((current.state === "disconnected" || current.state === "sleep") && current.kidId) {
+      void get().connect(current.kidId);
     }
     // connecting: no-op
   },
@@ -956,7 +956,7 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
     flushRound();
     persistToLocalStorage();
 
-    currentProfileId = null;
+    currentKidId = null;
     daySessions = [];
     currentSession = null;
     sessionStartedAt = null;
@@ -966,7 +966,7 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
     resetFlowFlags();
 
     set({
-      profileId: null,
+      kidId: null,
       state: "disconnected",
       dodiSpeaking: false,
       gestureNeeded: false,
@@ -977,33 +977,33 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
     });
   },
 
-  processMemoryNow: (profileId: string) => {
-    if (!profileId) return;
+  processMemoryNow: (kidId: string) => {
+    if (!kidId) return;
 
     // Flush the in-progress round, then move EVERYTHING accumulated (today
     // included) into the outbox and reset the live sessions synchronously.
     // Rounds that arrive after this start a fresh current-day batch — so nothing
     // is double-processed and nothing is lost.
-    if (currentProfileId === profileId) {
+    if (currentKidId === kidId) {
       flushRound();
       persistToLocalStorage();
     }
-    const current = readCurrent(profileId);
+    const current = readCurrent(kidId);
     if (current && totalEntries(current.sessions) > 0) {
-      appendToPending(profileId, current.sessions);
+      appendToPending(kidId, current.sessions);
     }
-    clearCurrent(profileId);
-    if (currentProfileId === profileId) {
+    clearCurrent(kidId);
+    if (currentKidId === kidId) {
       daySessions = [];
       currentSession = null;
     }
 
-    drainPending(profileId, true);
+    drainPending(kidId, true);
   },
 
   sendTextMessage: async (message: string, gameId?: string) => {
     const trimmed = message.trim();
-    if (!trimmed || !currentProfileId) return;
+    if (!trimmed || !currentKidId) return;
 
     const state = get();
     if (state.chatSubmitting) return;
@@ -1032,7 +1032,7 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
       // the thinking key lives only in the unlocked vault, so the server can
       // neither assemble the prompt nor run this. Mirrors the voice companion.
       const data = await runGameTextAssistant(
-        currentProfileId,
+        currentKidId,
         resolvedGameId,
         trimmed,
         state.context.type === "game" ? state.context.gameState : {},
@@ -1109,13 +1109,13 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
 function createEventHandler(
   set: (partial: Partial<DodiSessionState>) => void,
   get: () => DodiSessionState,
-  profileId: string,
+  kidId: string,
   generation: number,
   isGameContext: boolean,
 ): (event: GeminiLiveEvent) => void {
   return (event: GeminiLiveEvent): void => {
     if (generation !== contextGeneration) return;
-    if (currentProfileId !== profileId) return;
+    if (currentKidId !== kidId) return;
 
     switch (event.type) {
       case "setupComplete": {
@@ -1124,7 +1124,7 @@ function createEventHandler(
           void streamer.tryResume().then((audioOk) => {
             // Guard against stale callback
             if (generation !== contextGeneration) return;
-            if (currentProfileId !== profileId) return;
+            if (currentKidId !== kidId) return;
 
             if (audioOk) {
               transitionToActive(set, get);
@@ -1271,7 +1271,7 @@ function createEventHandler(
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                  profileId,
+                  kidId,
                   taskType: "read_game_state",
                   gameId: ctx.gameId,
                   payload: {

@@ -3,7 +3,7 @@
 import { useDodiContext } from "@/hooks/use-dodi-context";
 
 interface BrowseContextProps {
-  profileId: string;
+  kidId: string;
   children: React.ReactNode;
 }
 
@@ -11,11 +11,11 @@ interface BrowseContextProps {
  * Wrapper that declares Dodi browse context (compact mode)
  * for pages where Dodi is not the primary interaction.
  */
-export function BrowseContext({ profileId, children }: BrowseContextProps) {
+export function BrowseContext({ kidId, children }: BrowseContextProps) {
   useDodiContext({
     context: { type: "browse" },
     displayMode: "compact",
-    profileId,
+    kidId,
   });
 
   return <>{children}</>;

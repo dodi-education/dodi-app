@@ -1,6 +1,6 @@
 /**
  * Tiny client-side cookie helpers. Used for non-sensitive UI state that the
- * browser needs to read synchronously (e.g. the active kid profile). Server
+ * browser needs to read synchronously (e.g. the active kid). Server
  * auth still lives in the Supabase session cookie, not here.
  */
 
@@ -13,7 +13,7 @@ export function getCookie(name: string): string | null {
   return match ? decodeURIComponent(match[1]) : null;
 }
 
-/** Write a cookie (path `/`, 24h max-age) — matches the existing profile cookies. */
+/** Write a cookie (path `/`, 24h max-age) — matches the existing kid cookies. */
 export function setCookie(name: string, value: string): void {
   if (typeof document === "undefined") return;
   document.cookie = `${name}=${value}; path=/; max-age=86400`;

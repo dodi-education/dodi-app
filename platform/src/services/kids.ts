@@ -2,82 +2,82 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type {
   Database,
-  Profile,
-  ProfileInsert,
-  ProfileUpdate,
+  Kid,
+  KidInsert,
+  KidUpdate,
 } from "@dodi/types/database";
 
 type Client = SupabaseClient<Database>;
 
-export async function listProfiles(
+export async function listKids(
   supabase: Client,
   accountId: string,
-): Promise<Profile[]> {
+): Promise<Kid[]> {
   const { data, error } = await supabase
-    .from("profiles")
+    .from("kids")
     .select("*")
     .eq("account_id", accountId)
     .order("created_at", { ascending: true });
 
   if (error) throw error;
-  return (data ?? []) as unknown as Profile[];
+  return (data ?? []) as unknown as Kid[];
 }
 
-export async function getProfile(
+export async function getKid(
   supabase: Client,
-  profileId: string,
-): Promise<Profile | null> {
+  kidId: string,
+): Promise<Kid | null> {
   const { data, error } = await supabase
-    .from("profiles")
+    .from("kids")
     .select("*")
-    .eq("id", profileId)
+    .eq("id", kidId)
     .single();
 
   if (error) {
     if (error.code === "PGRST116") return null;
     throw error;
   }
-  return data as unknown as Profile;
+  return data as unknown as Kid;
 }
 
-export async function createProfile(
+export async function createKid(
   supabase: Client,
-  profile: ProfileInsert,
-): Promise<Profile> {
+  kid: KidInsert,
+): Promise<Kid> {
   const { data, error } = await supabase
-    .from("profiles")
-    .insert(profile)
+    .from("kids")
+    .insert(kid)
     .select()
     .single();
 
   if (error) throw error;
-  return data as unknown as Profile;
+  return data as unknown as Kid;
 }
 
-export async function updateProfile(
+export async function updateKid(
   supabase: Client,
-  profileId: string,
-  updates: ProfileUpdate,
-): Promise<Profile> {
+  kidId: string,
+  updates: KidUpdate,
+): Promise<Kid> {
   const { data, error } = await supabase
-    .from("profiles")
+    .from("kids")
     .update(updates)
-    .eq("id", profileId)
+    .eq("id", kidId)
     .select()
     .single();
 
   if (error) throw error;
-  return data as unknown as Profile;
+  return data as unknown as Kid;
 }
 
-export async function deleteProfile(
+export async function deleteKid(
   supabase: Client,
-  profileId: string,
+  kidId: string,
 ): Promise<void> {
   const { error } = await supabase
-    .from("profiles")
+    .from("kids")
     .delete()
-    .eq("id", profileId);
+    .eq("id", kidId);
 
   if (error) throw error;
 }

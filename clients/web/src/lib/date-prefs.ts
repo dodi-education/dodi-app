@@ -1,5 +1,5 @@
 /**
- * Map a stored `date_preferences` blob (the account/profile jsonb column) into
+ * Map a stored `date_preferences` blob (the account/kid jsonb column) into
  * an in-memory partial preference. The date/time styles are plaintext; the
  * timezone, when set, is sealed (`enc:v1:`) and decrypted with the VaultSession
  * so the server never sees the plaintext zone.

@@ -1,16 +1,16 @@
 import { describe, expect, it } from "vitest";
 
 import { generateVaultMasterKey } from "@dodi/crypto";
-import type { Profile } from "@dodi/types/database";
+import type { Kid } from "@dodi/types/database";
 
 import {
-  type ProfilePersonalFields,
-  decryptProfile,
-  encryptProfileFields,
-} from "./profile-crypto";
+  type KidPersonalFields,
+  decryptKid,
+  encryptKidFields,
+} from "./kid-crypto";
 import { VaultSession } from "./session";
 
-function baseProfile(overrides: Partial<Profile>): Profile {
+function baseKid(overrides: Partial<Kid>): Kid {
   return {
     id: "p1",
     account_id: "a1",
@@ -37,11 +37,11 @@ function baseProfile(overrides: Partial<Profile>): Profile {
   };
 }
 
-describe("profile field crypto", () => {
+describe("kid field crypto", () => {
   const session = new VaultSession(generateVaultMasterKey());
 
   it("encrypts only the personal fields, leaving metadata plaintext", () => {
-    const enc = encryptProfileFields(session, {
+    const enc = encryptKidFields(session, {
       display_name: "Emma",
       birthdate: "2018-04-05",
       parent_notes: "Shy about reading.",
@@ -52,17 +52,17 @@ describe("profile field crypto", () => {
   });
 
   it("round-trips through a stored row", () => {
-    const enc = encryptProfileFields(session, {
+    const enc = encryptKidFields(session, {
       display_name: "Emma",
       birthdate: "2018-04-05",
       parent_notes: "Loves dinosaurs 🦕",
     });
-    const row = baseProfile({
+    const row = baseKid({
       display_name: enc.display_name!,
       birthdate: enc.birthdate ?? null,
       parent_notes: enc.parent_notes ?? null,
     });
-    const decrypted = decryptProfile(session, row);
+    const decrypted = decryptKid(session, row);
     expect(decrypted.display_name).toBe("Emma");
     expect(decrypted.birthdate).toBe("2018-04-05");
     expect(decrypted.parent_notes).toBe("Loves dinosaurs 🦕");
@@ -72,47 +72,47 @@ describe("profile field crypto", () => {
   });
 
   it("leaves null fields null and passes through legacy plaintext", () => {
-    const row = baseProfile({
+    const row = baseKid({
       display_name: "PlaintextName", // legacy / not yet encrypted
       birthdate: null,
       parent_notes: null,
     });
-    const decrypted = decryptProfile(session, row);
+    const decrypted = decryptKid(session, row);
     expect(decrypted.display_name).toBe("PlaintextName");
     expect(decrypted.birthdate).toBeNull();
     expect(decrypted.parent_notes).toBeNull();
   });
 
   it("skips absent fields on partial updates", () => {
-    const fields: ProfilePersonalFields = { parent_notes: "just notes" };
-    const enc = encryptProfileFields(session, fields);
+    const fields: KidPersonalFields = { parent_notes: "just notes" };
+    const enc = encryptKidFields(session, fields);
     expect(enc.display_name).toBeUndefined();
     expect(enc.parent_notes?.startsWith("enc:v1:")).toBe(true);
   });
 
   it("seals avatar_config as an opaque string and round-trips to an object", () => {
     const look = { color: 3, avatar: "animal_rabbit" };
-    const enc = encryptProfileFields(session, { avatar_config: look });
+    const enc = encryptKidFields(session, { avatar_config: look });
     // Ciphertext is an opaque enc:v1: string, never a readable object.
     expect(typeof enc.avatar_config).toBe("string");
     expect((enc.avatar_config as unknown as string).startsWith("enc:v1:")).toBe(
       true,
     );
 
-    const row = baseProfile({ avatar_config: enc.avatar_config });
-    expect(decryptProfile(session, row).avatar_config).toEqual(look);
+    const row = baseKid({ avatar_config: enc.avatar_config });
+    expect(decryptKid(session, row).avatar_config).toEqual(look);
   });
 
   it("seals avatar_pin and round-trips the sequence; null clears it", () => {
     const seq = JSON.stringify(["animal_ape", "animal_frog", "animal_ape"]);
-    const enc = encryptProfileFields(session, { avatar_pin: seq });
+    const enc = encryptKidFields(session, { avatar_pin: seq });
     expect(enc.avatar_pin?.startsWith("enc:v1:")).toBe(true);
 
-    const row = baseProfile({ avatar_pin: enc.avatar_pin ?? null });
-    expect(decryptProfile(session, row).avatar_pin).toBe(seq);
+    const row = baseKid({ avatar_pin: enc.avatar_pin ?? null });
+    expect(decryptKid(session, row).avatar_pin).toBe(seq);
 
     // A disabled puzzle (null) passes through untouched.
-    expect(encryptProfileFields(session, { avatar_pin: null }).avatar_pin).toBeNull();
-    expect(decryptProfile(session, baseProfile({ avatar_pin: null })).avatar_pin).toBeNull();
+    expect(encryptKidFields(session, { avatar_pin: null }).avatar_pin).toBeNull();
+    expect(decryptKid(session, baseKid({ avatar_pin: null })).avatar_pin).toBeNull();
   });
 });

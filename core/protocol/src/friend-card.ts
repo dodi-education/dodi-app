@@ -2,13 +2,13 @@
  * Friend cards — the E2EE mechanism that lets one kid reveal their name (and,
  * once accepted, birthdate) to another kid without the server ever reading it.
  *
- * Each profile has its own ML-KEM-768 + ML-DSA-65 identity (separate from device
+ * Each kid has its own ML-KEM-768 + ML-DSA-65 identity (separate from device
  * keys, so any device the kid signs into can use it). The public halves are
- * published plaintext on the profile row; the secret halves are sealed under the
+ * published plaintext on the kid row; the secret halves are sealed under the
  * account Vault Master Key (`friend_secret_keys`). A card is sealed to the
- * recipient profile's KEM public key and signed with the sender profile's
+ * recipient kid's KEM public key and signed with the sender kid's
  * signing key — this is exactly the message envelope (`./envelope`), reused with
- * profile keys instead of device keys. The server stores the opaque blob and
+ * kid keys instead of device keys. The server stores the opaque blob and
  * only gates *delivery* by friendship status; it can never decrypt it.
  */
 import {
@@ -28,13 +28,13 @@ import {
   sealEnvelopeJson,
 } from "./envelope";
 
-/** A profile's friend identity: KEM keypair (receive) + signing keypair (send). */
-export interface ProfileFriendKeys {
+/** A kid's friend identity: KEM keypair (receive) + signing keypair (send). */
+export interface KidFriendKeys {
   kem: KemKeyPair;
   sign: SignKeyPair;
 }
 
-/** The plaintext public halves, base64url, as published on the profile row. */
+/** The plaintext public halves, base64url, as published on the kid row. */
 export interface PublishedFriendKeys {
   kemPublicKey: string;
   signPublicKey: string;
@@ -46,13 +46,13 @@ interface SecretKeyBundle {
   sign: { publicKey: string; secretKey: string };
 }
 
-/** Generate a fresh per-profile friend identity. */
-export function generateProfileFriendKeys(): ProfileFriendKeys {
+/** Generate a fresh per-kid friend identity. */
+export function generateKidFriendKeys(): KidFriendKeys {
   return { kem: generateKemKeyPair(), sign: generateSignKeyPair() };
 }
 
-/** The public halves to publish plaintext on the profile (for others to seal to). */
-export function publishedFriendKeys(keys: ProfileFriendKeys): PublishedFriendKeys {
+/** The public halves to publish plaintext on the kid (for others to seal to). */
+export function publishedFriendKeys(keys: KidFriendKeys): PublishedFriendKeys {
   return {
     kemPublicKey: toBase64Url(keys.kem.publicKey),
     signPublicKey: toBase64Url(keys.sign.publicKey),
@@ -60,9 +60,9 @@ export function publishedFriendKeys(keys: ProfileFriendKeys): PublishedFriendKey
 }
 
 /** Seal the full keypair under the account VMK for storage in `friend_secret_keys`. */
-export function wrapProfileSecretKeys(
+export function wrapKidSecretKeys(
   session: VaultSession,
-  keys: ProfileFriendKeys,
+  keys: KidFriendKeys,
 ): string {
   const bundle: SecretKeyBundle = {
     kem: {
@@ -78,10 +78,10 @@ export function wrapProfileSecretKeys(
 }
 
 /** Recover the keypair from a sealed `friend_secret_keys` blob. */
-export function unwrapProfileSecretKeys(
+export function unwrapKidSecretKeys(
   session: VaultSession,
   blob: string,
-): ProfileFriendKeys {
+): KidFriendKeys {
   const bundle = session.decryptJson<SecretKeyBundle>(blob);
   if (!bundle) throw new Error("friend secret keys are missing or empty");
   return {
@@ -97,8 +97,8 @@ export function unwrapProfileSecretKeys(
 }
 
 /**
- * Seal a friend card (preview or full) to a recipient profile's KEM public key,
- * signed by the sender profile. `recipientKemPublicKey` is the base64url value
+ * Seal a friend card (preview or full) to a recipient kid's KEM public key,
+ * signed by the sender kid. `recipientKemPublicKey` is the base64url value
  * from a friend lookup.
  */
 export function sealFriendCard(
@@ -113,9 +113,9 @@ export function sealFriendCard(
 }
 
 /**
- * Open a friend card with the recipient profile's KEM secret key. Pass the
+ * Open a friend card with the recipient kid's KEM secret key. Pass the
  * expected sender signing public key (base64url, from the friendship row's known
- * counterpart) to bind the card to that profile and reject a swapped sender.
+ * counterpart) to bind the card to that kid and reject a swapped sender.
  */
 export function openFriendCard<T extends FriendPreviewCard = FriendCard>(
   recipientKemSecretKey: Uint8Array,

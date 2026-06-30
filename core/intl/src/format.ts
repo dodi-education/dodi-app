@@ -157,6 +157,93 @@ export function formatDateOnly(
   return datePortion(date, ctx.locale, "UTC", ctx.dateStyle);
 }
 
+/** A typeable date input's field order + separator (numeric form). */
+export type DateFieldPart = "day" | "month" | "year";
+export interface DateFieldMask {
+  order: DateFieldPart[];
+  separator: string;
+}
+
+// Distinct day/month so the locale-derived field order is unambiguous.
+const MASK_SAMPLE = new Date(Date.UTC(2026, 5, 24)); // 24 Jun 2026
+
+const EXPLICIT_MASKS: Partial<Record<DateStyleId, DateFieldMask>> = {
+  dmy_slash: { order: ["day", "month", "year"], separator: "/" },
+  mdy_slash: { order: ["month", "day", "year"], separator: "/" },
+  dmy_dot: { order: ["day", "month", "year"], separator: "." },
+  ymd_dash: { order: ["year", "month", "day"], separator: "-" },
+};
+
+/**
+ * The numeric field order + separator to use for a *typeable* date input.
+ * Explicit styles are fixed; `numeric`/`long` derive both from the locale's own
+ * short numeric format (`de` → DD.MM.YYYY, `en` → MM/DD/YYYY). `long` isn't
+ * typeable, so it falls back to the locale's numeric ordering.
+ */
+export function dateFieldMask(locale: string, dateStyle: DateStyleId): DateFieldMask {
+  const explicit = EXPLICIT_MASKS[dateStyle];
+  if (explicit) return explicit;
+  const parts = new Intl.DateTimeFormat(locale, {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).formatToParts(MASK_SAMPLE);
+  const order: DateFieldPart[] = [];
+  let separator = "";
+  for (const p of parts) {
+    if (p.type === "day" || p.type === "month" || p.type === "year") {
+      order.push(p.type);
+    } else if (p.type === "literal" && !separator) {
+      const ch = p.value.trim();
+      if (ch) separator = ch[0];
+    }
+  }
+  if (order.length !== 3) return { order: ["year", "month", "day"], separator: "-" };
+  return { order, separator: separator || "/" };
+}
+
+/** The format hint for a date input (e.g. `DD.MM.YYYY`). */
+export function dateFieldPlaceholder(mask: DateFieldMask): string {
+  const label: Record<DateFieldPart, string> = { day: "DD", month: "MM", year: "YYYY" };
+  return mask.order.map((f) => label[f]).join(mask.separator);
+}
+
+/** Format a canonical `YYYY-MM-DD` into the masked numeric string; `""` if empty/invalid. */
+export function formatDateField(iso: string | null | undefined, mask: DateFieldMask): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec((iso ?? "").trim());
+  if (!m) return "";
+  const vals: Record<DateFieldPart, string> = { year: m[1], month: m[2], day: m[3] };
+  return mask.order.map((f) => vals[f]).join(mask.separator);
+}
+
+/**
+ * Parse a typed date into a canonical `YYYY-MM-DD` using `mask`'s field order.
+ * Separator-agnostic (any non-digit runs delimit the three groups). Returns
+ * `null` unless the input is a complete, real calendar date with a 4-digit year.
+ */
+export function parseDateField(text: string, mask: DateFieldMask): string | null {
+  const groups = text.match(/\d+/g);
+  if (!groups || groups.length !== 3) return null;
+  const vals = {} as Record<DateFieldPart, string>;
+  mask.order.forEach((f, i) => (vals[f] = groups[i]));
+  if (vals.year.length !== 4) return null; // require an explicit 4-digit year
+  const year = Number(vals.year);
+  const month = Number(vals.month);
+  const day = Number(vals.day);
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  const date = new Date(Date.UTC(year, month - 1, day));
+  // Reject overflow (e.g. 31 Feb silently rolling into March).
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  const pad = (n: number): string => String(n).padStart(2, "0");
+  return `${vals.year}-${pad(month)}-${pad(day)}`;
+}
+
 /**
  * Short elapsed duration between two instants ("45s", "3m 12s"). `endIso` of
  * `null` means "now" (for in-progress durations). Replaces the duplicated

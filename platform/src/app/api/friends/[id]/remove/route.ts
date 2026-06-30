@@ -18,16 +18,16 @@ export async function POST(
   if (auth instanceof Response) return auth;
 
   const body = (await request.json().catch(() => null)) as {
-    profileId?: string;
+    kidId?: string;
   } | null;
-  if (!body?.profileId) {
-    return NextResponse.json({ error: "profileId is required" }, { status: 400 });
+  if (!body?.kidId) {
+    return NextResponse.json({ error: "kidId is required" }, { status: 400 });
   }
 
   try {
     await removeFriendship(serviceClient(), {
       accountId: auth.accountId,
-      profileId: body.profileId,
+      kidId: body.kidId,
       friendshipId: id,
     });
     return NextResponse.json({ success: true });

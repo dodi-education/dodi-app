@@ -15,7 +15,7 @@ import { sanitizeGameBundle } from "../game-sanitizer";
 type Client = SupabaseClient<Database>;
 
 export interface ListGamesOptions {
-  profileId?: string;
+  kidId?: string;
   includeSystem?: boolean;
   search?: string;
   tags?: string[];
@@ -23,8 +23,8 @@ export interface ListGamesOptions {
 
 export interface CreateCustomGameInput {
   accountId: string;
-  /** Owning kid profile — set ONLY when a kid created the game; null otherwise. */
-  profileId?: string | null;
+  /** Owning kid — set ONLY when a kid created the game; null otherwise. */
+  kidId?: string | null;
   sourceGameId?: string | null;
   title: string;
   description?: string;
@@ -57,44 +57,44 @@ export function getGameMetadata(game: Pick<Game, "metadata">): GameMetadata {
 }
 
 /** Per-game sharing state keyed by game id, used to resolve kid visibility. */
-export type SharingMap = Map<string, { family: boolean; profileIds: Set<string> }>;
+export type SharingMap = Map<string, { family: boolean; kidIds: Set<string> }>;
 
 /**
- * Whether a game is visible to a given kid profile. System games are always
- * visible; custom games must be active AND either owned by the profile or
+ * Whether a game is visible to a given kid. System games are always
+ * visible; custom games must be active AND either owned by the kid or
  * shared with it (family-wide or specifically). Inactive custom games are
  * hidden from kids regardless of sharing — they live only in the parent studio.
  */
-export function isVisibleToProfile(
-  game: Pick<Game, "id" | "is_system" | "is_active" | "profile_id">,
-  profileId: string,
+export function isVisibleToKid(
+  game: Pick<Game, "id" | "is_system" | "is_active" | "kid_id">,
+  kidId: string,
   sharings: SharingMap,
 ): boolean {
   if (game.is_system) return true;
   if (!game.is_active) return false;
-  if (game.profile_id === profileId) return true;
+  if (game.kid_id === kidId) return true;
   const share = sharings.get(game.id);
-  return !!share && (share.family || share.profileIds.has(profileId));
+  return !!share && (share.family || share.kidIds.has(kidId));
 }
 
 /** Fetch all sharing rows for the current account and index them by game id. */
 async function loadSharingMap(supabase: Client): Promise<SharingMap> {
   const { data, error } = await supabase
     .from("game_sharings")
-    .select("game_id, profile_id");
+    .select("game_id, kid_id");
   if (error) throw error;
 
   const map: SharingMap = new Map();
   for (const row of data ?? []) {
     let entry = map.get(row.game_id);
     if (!entry) {
-      entry = { family: false, profileIds: new Set<string>() };
+      entry = { family: false, kidIds: new Set<string>() };
       map.set(row.game_id, entry);
     }
-    if (row.profile_id === null) {
+    if (row.kid_id === null) {
       entry.family = true;
     } else {
-      entry.profileIds.add(row.profile_id);
+      entry.kidIds.add(row.kid_id);
     }
   }
   return map;
@@ -109,18 +109,18 @@ export interface GameCatalogEntry {
 
 export async function listGameCatalog(
   supabase: Client,
-  profileId?: string,
+  kidId?: string,
 ): Promise<GameCatalogEntry[]> {
   let query = supabase
     .from("games")
     .select("id, title, description, tags")
     .order("title", { ascending: true });
 
-  if (profileId) {
-    // System games, or active games owned by this profile. Inactive owned
+  if (kidId) {
+    // System games, or active games owned by this kid. Inactive owned
     // games stay out of the kid-facing catalog.
     query = query.or(
-      `is_system.eq.true,and(profile_id.eq.${profileId},is_active.eq.true)`,
+      `is_system.eq.true,and(kid_id.eq.${kidId},is_active.eq.true)`,
     );
   } else {
     query = query.eq("is_system", true);
@@ -137,7 +137,7 @@ export async function listGames(
   options: ListGamesOptions,
 ): Promise<Game[]> {
   const {
-    profileId,
+    kidId,
     includeSystem = true,
     search,
     tags,
@@ -149,10 +149,10 @@ export async function listGames(
     .order("is_system", { ascending: false })
     .order("created_at", { ascending: false });
 
-  if (profileId) {
+  if (kidId) {
     // RLS already limits custom rows to this account; fetch account + system
     // games and apply audience visibility (owner / shared / family) in JS so
-    // games shared with this kid by another profile are included.
+    // games shared with this kid by another kid are included.
     if (!includeSystem) {
       query = query.eq("is_system", false);
     }
@@ -165,13 +165,13 @@ export async function listGames(
 
   const base = (data ?? []).map(castGame);
 
-  // Sharing rows are only needed when filtering for a specific kid profile.
-  const sharings: SharingMap = profileId
+  // Sharing rows are only needed when filtering for a specific kid.
+  const sharings: SharingMap = kidId
     ? await loadSharingMap(supabase)
     : new Map();
 
   return base.filter((game) => {
-    if (profileId && !isVisibleToProfile(game, profileId, sharings))
+    if (kidId && !isVisibleToKid(game, kidId, sharings))
       return false;
 
     if (tags && tags.length > 0) {
@@ -231,7 +231,7 @@ export async function createCustomGame(
 
   const payload: GameInsert = {
     account_id: input.accountId,
-    profile_id: input.profileId ?? null,
+    kid_id: input.kidId ?? null,
     source_game_id: input.sourceGameId ?? null,
     is_system: false,
     is_active: input.isActive ?? false,
@@ -314,8 +314,8 @@ export async function deleteCustomGame(
 
 /**
  * Replace all sharing rows for a game with the given target. `family: true`
- * writes a single account-wide row (profile_id NULL); otherwise one row per
- * profile id. An empty, non-family target leaves the game shared with nobody.
+ * writes a single account-wide row (kid_id NULL); otherwise one row per
+ * kid id. An empty, non-family target leaves the game shared with nobody.
  */
 export async function replaceGameSharings(
   supabase: Client,
@@ -330,11 +330,11 @@ export async function replaceGameSharings(
   if (deleteError) throw deleteError;
 
   const rows: GameSharingInsert[] = sharing.family
-    ? [{ game_id: gameId, account_id: accountId, profile_id: null }]
-    : sharing.profileIds.map((profileId) => ({
+    ? [{ game_id: gameId, account_id: accountId, kid_id: null }]
+    : sharing.kidIds.map((kidId) => ({
         game_id: gameId,
         account_id: accountId,
-        profile_id: profileId,
+        kid_id: kidId,
       }));
 
   if (rows.length === 0) return;
@@ -356,7 +356,7 @@ export async function getAccountSharingByGame(
 ): Promise<Record<string, GameSharingState>> {
   const { data, error } = await supabase
     .from("game_sharings")
-    .select("game_id, profile_id")
+    .select("game_id, kid_id")
     .eq("account_id", accountId);
   if (error) throw error;
 
@@ -364,11 +364,11 @@ export async function getAccountSharingByGame(
   for (const row of data ?? []) {
     let entry = map[row.game_id];
     if (!entry) {
-      entry = { family: false, profileIds: [] };
+      entry = { family: false, kidIds: [] };
       map[row.game_id] = entry;
     }
-    if (row.profile_id === null) entry.family = true;
-    else entry.profileIds.push(row.profile_id);
+    if (row.kid_id === null) entry.family = true;
+    else entry.kidIds.push(row.kid_id);
   }
   return map;
 }
@@ -380,36 +380,36 @@ export async function getGameSharing(
 ): Promise<GameSharingState> {
   const { data, error } = await supabase
     .from("game_sharings")
-    .select("profile_id")
+    .select("kid_id")
     .eq("game_id", gameId);
   if (error) throw error;
 
-  const profileIds: string[] = [];
+  const kidIds: string[] = [];
   let family = false;
   for (const row of data ?? []) {
-    if (row.profile_id === null) family = true;
-    else profileIds.push(row.profile_id);
+    if (row.kid_id === null) family = true;
+    else kidIds.push(row.kid_id);
   }
-  return { family, profileIds };
+  return { family, kidIds };
 }
 
 /** Single-game visibility check (kid deep-link / play gate). */
-export async function isGameVisibleToProfile(
+export async function isGameVisibleToKid(
   supabase: Client,
-  game: Pick<Game, "id" | "is_system" | "is_active" | "profile_id">,
-  profileId: string,
+  game: Pick<Game, "id" | "is_system" | "is_active" | "kid_id">,
+  kidId: string,
 ): Promise<boolean> {
   if (game.is_system) return true;
   if (!game.is_active) return false;
-  if (game.profile_id === profileId) return true;
+  if (game.kid_id === kidId) return true;
 
   const { data, error } = await supabase
     .from("game_sharings")
-    .select("profile_id")
+    .select("kid_id")
     .eq("game_id", game.id);
   if (error) throw error;
 
   return (data ?? []).some(
-    (row) => row.profile_id === null || row.profile_id === profileId,
+    (row) => row.kid_id === null || row.kid_id === kidId,
   );
 }

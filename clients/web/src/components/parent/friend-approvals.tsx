@@ -7,7 +7,7 @@ import { useDateFormat } from "@/components/providers/date-format-provider";
 import { Row, RowMain, RowMeta, RowTitle } from "@/components/parent/rows";
 import { Section } from "@/components/parent/section";
 import { Button } from "@/components/ui/button";
-import { useProfiles } from "@/hooks/use-profiles";
+import { useKids } from "@/hooks/use-kids";
 import {
   type PendingApproval,
   fetchApprovals,
@@ -29,7 +29,7 @@ interface DecodedApproval extends PendingApproval {
  * Friendships across the parent's kids awaiting this parent's final approval,
  * split into Incoming (someone wants to add this child) and Outgoing (this child
  * is adding someone). Both kids are shown by real name: the parent's own child is
- * decrypted from the profile list, and the counterpart is decrypted client-side
+ * decrypted from the kid list, and the counterpart is decrypted client-side
  * — the kid's nickname for outgoing, the requester's sealed preview card for
  * incoming — falling back to the public `@handle` if it can't be read. Renders
  * nothing when there's nothing to approve.
@@ -37,7 +37,7 @@ interface DecodedApproval extends PendingApproval {
 export function FriendApprovals() {
   const t = useTranslations("friends");
   const { formatDate } = useDateFormat();
-  const { profiles } = useProfiles();
+  const { kids } = useKids();
   const session = useVaultStore((s) => s.session);
   const [items, setItems] = useState<PendingApproval[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -59,7 +59,7 @@ export function FriendApprovals() {
   const decoded = useMemo<DecodedApproval[]>(() => {
     if (!items) return [];
     return items.map((a) => {
-      const kid = profiles?.find((p) => p.id === a.profileId) ?? null;
+      const kid = kids?.find((p) => p.id === a.kidId) ?? null;
       const child = kid?.display_name ?? "—";
       const other =
         (session
@@ -72,7 +72,7 @@ export function FriendApprovals() {
         target: a.side === "requester" ? other : child,
       };
     });
-  }, [items, profiles, session]);
+  }, [items, kids, session]);
 
   if (!items || items.length === 0) return null;
 

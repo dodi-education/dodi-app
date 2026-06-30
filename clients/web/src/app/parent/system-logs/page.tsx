@@ -16,7 +16,7 @@ import {
 import { PageHead, Section } from "@/components/parent/section";
 import { DotSep, Row, RowMain, RowMeta, RowTitle } from "@/components/parent/rows";
 import { useDateFormat } from "@/components/providers/date-format-provider";
-import { useProfiles } from "@/hooks/use-profiles";
+import { useKids } from "@/hooks/use-kids";
 import { decryptPersona } from "@dodi/vault";
 import { useVaultStore } from "@/stores/vault-store";
 import type { Persona, SystemLog } from "@dodi/types/database";
@@ -60,12 +60,12 @@ export default function SystemLogsPage() {
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(false);
 
-  const { profiles: profileList } = useProfiles();
-  const profiles = profileList ?? [];
+  const { kids: kidList } = useKids();
+  const kids = kidList ?? [];
   const [personas, setPersonas] = useState<PersonaOption[]>([]);
   const session = useVaultStore((s) => s.session);
 
-  const [filterProfile, setFilterProfile] = useState<string>("all");
+  const [filterKid, setFilterKid] = useState<string>("all");
   const [filterPersona, setFilterPersona] = useState<string>("all");
   const [filterEvent, setFilterEvent] = useState<string>("all");
 
@@ -92,7 +92,7 @@ export default function SystemLogsPage() {
       setLoading(true);
       try {
         const params = new URLSearchParams();
-        if (filterProfile !== "all") params.set("profileId", filterProfile);
+        if (filterKid !== "all") params.set("kidId", filterKid);
         if (filterPersona !== "all") params.set("personaId", filterPersona);
         if (filterEvent !== "all") params.set("event", filterEvent);
         params.set("limit", String(PAGE_SIZE));
@@ -110,7 +110,7 @@ export default function SystemLogsPage() {
         setLoading(false);
       }
     },
-    [filterProfile, filterPersona, filterEvent],
+    [filterKid, filterPersona, filterEvent],
   );
 
   // Refetch when filters change
@@ -118,7 +118,7 @@ export default function SystemLogsPage() {
     fetchLogs(0, false);
   }, [fetchLogs]);
 
-  const profileNameMap = new Map(profiles.map((p) => [p.id, p.display_name]));
+  const kidNameMap = new Map(kids.map((p) => [p.id, p.display_name]));
 
   return (
     <div>
@@ -126,13 +126,13 @@ export default function SystemLogsPage() {
 
       {/* Filter bar */}
       <div className="mb-6 flex flex-wrap gap-3">
-        <Select value={filterProfile} onValueChange={setFilterProfile}>
+        <Select value={filterKid} onValueChange={setFilterKid}>
           <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder={t("filterProfile")} />
+            <SelectValue placeholder={t("filterKid")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">{t("filterProfile")}</SelectItem>
-            {profiles.map((p) => (
+            <SelectItem value="all">{t("filterKid")}</SelectItem>
+            {kids.map((p) => (
               <SelectItem key={p.id} value={p.id}>
                 {p.display_name}
               </SelectItem>
@@ -172,7 +172,7 @@ export default function SystemLogsPage() {
       {/* Log list */}
       {logs.length === 0 && !loading ? (
         <div className="rounded-lg border border-dashed border-border-strong px-5 py-8 text-center text-sm text-muted-foreground">
-          {filterProfile === "all" && filterPersona === "all" && filterEvent === "all"
+          {filterKid === "all" && filterPersona === "all" && filterEvent === "all"
             ? t("noLogs")
             : t("noResults")}
         </div>
@@ -185,9 +185,9 @@ export default function SystemLogsPage() {
                   <span className="line-clamp-1 font-medium">{log.message}</span>
                 </RowTitle>
                 <RowMeta>
-                  {filterProfile === "all" && profileNameMap.get(log.profile_id) && (
+                  {filterKid === "all" && kidNameMap.get(log.kid_id) && (
                     <>
-                      {profileNameMap.get(log.profile_id)}
+                      {kidNameMap.get(log.kid_id)}
                       <DotSep />
                     </>
                   )}

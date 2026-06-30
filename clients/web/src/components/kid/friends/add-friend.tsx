@@ -157,7 +157,7 @@ export function AddFriend({
     <div className="mx-auto w-full max-w-[460px] px-5 pb-8">
       <KidButton variant="back" size="sm" onClick={onBack} className="pl-3">
         <Icon name="arrow_left" stroke={2.2} />
-        {t("profileBack")}
+        {t("kidBack")}
       </KidButton>
       <h1 className="mb-4 mt-1 text-2xl font-extrabold tracking-tight text-ink">
         {t("addTitle")}

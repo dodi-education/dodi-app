@@ -4,18 +4,18 @@ import { VaultSession } from "@dodi/vault";
 import { describe, expect, it } from "vitest";
 
 import {
-  generateProfileFriendKeys,
+  generateKidFriendKeys,
   openFriendCard,
   publishedFriendKeys,
   sealFriendCard,
-  unwrapProfileSecretKeys,
-  wrapProfileSecretKeys,
+  unwrapKidSecretKeys,
+  wrapKidSecretKeys,
 } from "./friend-card";
 
 describe("friend cards", () => {
-  it("round-trips a full card sealed to the recipient profile key", () => {
-    const requester = generateProfileFriendKeys();
-    const addressee = generateProfileFriendKeys();
+  it("round-trips a full card sealed to the recipient kid key", () => {
+    const requester = generateKidFriendKeys();
+    const addressee = generateKidFriendKeys();
     const card: FriendCard = {
       displayName: "Emma",
       birthdate: "2018-04-05",
@@ -32,8 +32,8 @@ describe("friend cards", () => {
   });
 
   it("a preview card carries name + avatar but not birthdate", () => {
-    const requester = generateProfileFriendKeys();
-    const addressee = generateProfileFriendKeys();
+    const requester = generateKidFriendKeys();
+    const addressee = generateKidFriendKeys();
     const preview: FriendPreviewCard = {
       displayName: "Liam",
       avatarConfig: null,
@@ -56,9 +56,9 @@ describe("friend cards", () => {
   });
 
   it("binds the card to the expected sender and rejects an impostor", () => {
-    const requester = generateProfileFriendKeys();
-    const impostor = generateProfileFriendKeys();
-    const addressee = generateProfileFriendKeys();
+    const requester = generateKidFriendKeys();
+    const impostor = generateKidFriendKeys();
+    const addressee = generateKidFriendKeys();
     const card: FriendCard = {
       displayName: "Mia",
       birthdate: null,
@@ -90,9 +90,9 @@ describe("friend cards", () => {
   });
 
   it("rejects the wrong recipient", () => {
-    const requester = generateProfileFriendKeys();
-    const addressee = generateProfileFriendKeys();
-    const eavesdropper = generateProfileFriendKeys();
+    const requester = generateKidFriendKeys();
+    const addressee = generateKidFriendKeys();
+    const eavesdropper = generateKidFriendKeys();
     const sealed = sealFriendCard(
       publishedFriendKeys(addressee).kemPublicKey,
       { displayName: "Noah", birthdate: null, avatarConfig: null },
@@ -103,21 +103,21 @@ describe("friend cards", () => {
     ).toThrow();
   });
 
-  it("wraps and unwraps the profile secret keys under the VMK", () => {
+  it("wraps and unwraps the kid secret keys under the VMK", () => {
     const session = new VaultSession(generateVaultMasterKey());
-    const keys = generateProfileFriendKeys();
+    const keys = generateKidFriendKeys();
 
-    const blob = wrapProfileSecretKeys(session, keys);
+    const blob = wrapKidSecretKeys(session, keys);
     expect(blob.startsWith("enc:v1:")).toBe(true);
 
-    const recovered = unwrapProfileSecretKeys(session, blob);
+    const recovered = unwrapKidSecretKeys(session, blob);
     expect(recovered.kem.publicKey).toEqual(keys.kem.publicKey);
     expect(recovered.kem.secretKey).toEqual(keys.kem.secretKey);
     expect(recovered.sign.publicKey).toEqual(keys.sign.publicKey);
     expect(recovered.sign.secretKey).toEqual(keys.sign.secretKey);
 
     // The recovered keys can actually open a card sealed to the public half.
-    const sender = generateProfileFriendKeys();
+    const sender = generateKidFriendKeys();
     const sealed = sealFriendCard(
       publishedFriendKeys(keys).kemPublicKey,
       { displayName: "Ava", birthdate: "2017-01-01", avatarConfig: null },

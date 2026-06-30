@@ -2,13 +2,13 @@ import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 
 import { requireAuth } from "@/lib/resolve-auth";
-import { getGame, isGameVisibleToProfile } from "@/services/games";
-import { getProfile } from "@/services/profiles";
+import { getGame, isGameVisibleToKid } from "@/services/games";
+import { getKid } from "@/services/kids";
 import { startPlay } from "@/services/game-plays";
 import type { ProgressKind } from "@dodi/types/success";
 
 const StartPlaySchema = z.object({
-  profileId: z.string().uuid(),
+  kidId: z.string().uuid(),
 });
 
 interface RouteContext {
@@ -34,12 +34,12 @@ export async function POST(
     );
   }
 
-  const { profileId } = parsed.data;
+  const { kidId } = parsed.data;
 
   try {
-    const profile = await getProfile(supabase, profileId);
-    if (!profile || profile.account_id !== accountId) {
-      return NextResponse.json({ error: "Profile not found" }, { status: 404 });
+    const kid = await getKid(supabase, kidId);
+    if (!kid || kid.account_id !== accountId) {
+      return NextResponse.json({ error: "Kid not found" }, { status: 404 });
     }
 
     const game = await getGame(supabase, id);
@@ -48,13 +48,13 @@ export async function POST(
     }
 
     // Inactive / unshared games are not playable outside the parent studio.
-    if (!(await isGameVisibleToProfile(supabase, game, profile.id))) {
+    if (!(await isGameVisibleToKid(supabase, game, kid.id))) {
       return NextResponse.json({ error: "Game not available" }, { status: 403 });
     }
 
     const play = await startPlay(supabase, {
       accountId: accountId,
-      profileId: profile.id,
+      kidId: kid.id,
       gameId: game.id,
       progressKind: game.progress_kind as ProgressKind,
     });

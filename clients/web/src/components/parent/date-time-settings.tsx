@@ -2,7 +2,7 @@
 
 /**
  * Account-level "Date & time" settings: the family default for how dates render
- * across the parent area (and the fallback every kid profile inherits). Styles
+ * across the parent area (and the fallback every kid inherits). Styles
  * are saved plaintext; an explicit timezone is sealed with the VaultSession so
  * the server never learns the family's zone.
  */

@@ -12,18 +12,18 @@ import {
   GameStudioList,
   type GameListItem,
 } from "@/components/parent/games/game-studio-list";
-import { useProfiles } from "@/hooks/use-profiles";
+import { useKids } from "@/hooks/use-kids";
 import { dodi } from "@/lib/api";
 import type { AgentSessionRow, Game } from "@dodi/types/database";
 
 type AccountGame = Game & {
-  sharing: { family: boolean; profileIds: string[] };
+  sharing: { family: boolean; kidIds: string[] };
 };
 
 export default function GameStudioPage() {
   const t = useTranslations("gameStudio");
 
-  const { profiles } = useProfiles();
+  const { kids } = useKids();
   const [games, setGames] = useState<AccountGame[] | null>(null);
   const [activeGameIds, setActiveGameIds] = useState<string[]>([]);
 
@@ -55,13 +55,13 @@ export default function GameStudioPage() {
 
   const items: GameListItem[] = useMemo(() => {
     if (!games) return [];
-    // Decrypted names come from the profile cache (E2EE display_name).
-    const nameById = new Map((profiles ?? []).map((p) => [p.id, p.display_name]));
+    // Decrypted names come from the kid cache (E2EE display_name).
+    const nameById = new Map((kids ?? []).map((p) => [p.id, p.display_name]));
     return games.map((g) => {
-      const share = g.sharing ?? { family: false, profileIds: [] };
+      const share = g.sharing ?? { family: false, kidIds: [] };
       // The owning kid (for kid-created games) always counts as audience.
-      const audienceIds = new Set(share.profileIds);
-      if (g.profile_id) audienceIds.add(g.profile_id);
+      const audienceIds = new Set(share.kidIds);
+      if (g.kid_id) audienceIds.add(g.kid_id);
       const kidNames = Array.from(audienceIds)
         .map((id) => nameById.get(id))
         .filter((name): name is string => Boolean(name));
@@ -76,7 +76,7 @@ export default function GameStudioPage() {
         kidNames,
       };
     });
-  }, [games, profiles]);
+  }, [games, kids]);
 
   return (
     <div className="flex flex-col gap-4">

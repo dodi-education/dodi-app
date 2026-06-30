@@ -14,7 +14,7 @@ function signals(overrides: Partial<LocaleSignals> = {}): LocaleSignals {
 }
 
 describe("resolveLocale", () => {
-  it("uses the kid profile language while in kid view", () => {
+  it("uses the kid language while in kid view", () => {
     expect(
       resolveLocale(
         signals({ pathname: "/home", view: "kid", kidLocale: "de" }),

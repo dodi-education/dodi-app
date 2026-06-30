@@ -11,20 +11,20 @@ import { SaveRow } from "@/components/parent/save-row";
 import { PageHead, Section } from "@/components/parent/section";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { useProfileStore } from "@/stores/profile-store";
+import { useKidStore } from "@/stores/kid-store";
 import { useVaultStore } from "@/stores/vault-store";
 
-import type { Profile } from "@dodi/types/database";
+import type { Kid } from "@dodi/types/database";
 
 const textareaClassName =
   "block w-full resize-y rounded-md border border-input bg-card px-3 py-2 font-mono text-[12.5px] leading-relaxed outline-none transition-[color,box-shadow,border-color] placeholder:text-faint hover:border-faint focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary-soft-2";
 
-export default function ProfileMemoryPage() {
+export default function KidMemoryPage() {
   const t = useTranslations("memory");
   const tc = useTranslations("common");
   const params = useParams<{ id: string }>();
   const router = useRouter();
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const [kid, setKid] = useState<Kid | null>(null);
   const [memory, setMemory] = useState("");
   const [parentNotes, setParentNotes] = useState("");
   const [editingMemory, setEditingMemory] = useState(false);
@@ -36,20 +36,20 @@ export default function ProfileMemoryPage() {
     let cancelled = false;
     async function load() {
       try {
-        const data = await useProfileStore.getState().loadOne(params.id);
+        const data = await useKidStore.getState().loadOne(params.id);
         if (cancelled) return;
         if (!data) {
-          setError(t("profileNotFound"));
+          setError(t("kidNotFound"));
           setFetching(false);
           return;
         }
-        setProfile(data);
+        setKid(data);
         setMemory(data.memory ?? "");
         setParentNotes(data.parent_notes ?? "");
         setFetching(false);
       } catch {
         if (!cancelled) {
-          setError(t("profileNotFound"));
+          setError(t("kidNotFound"));
           setFetching(false);
         }
       }
@@ -78,7 +78,7 @@ export default function ProfileMemoryPage() {
       updates.memory = memory || null;
     }
 
-    const response = await dodi.request(`/api/profiles/${params.id}`, {
+    const response = await dodi.request(`/api/kids/${params.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(updates),
@@ -91,7 +91,7 @@ export default function ProfileMemoryPage() {
       return;
     }
 
-    useProfileStore.getState().invalidate();
+    useKidStore.getState().invalidate();
     setSaving(false);
     setEditingMemory(false);
     router.refresh();
@@ -105,21 +105,21 @@ export default function ProfileMemoryPage() {
     );
   }
 
-  if (!profile) {
+  if (!kid) {
     return (
       <div className="flex items-center justify-center py-12">
-        <p className="text-muted-foreground">{t("profileNotFound")}</p>
+        <p className="text-muted-foreground">{t("kidNotFound")}</p>
       </div>
     );
   }
 
   return (
     <div>
-      <BackLink href={`/parent/profiles/${params.id}`}>
-        {profile.display_name}
+      <BackLink href={`/parent/kids/${params.id}`}>
+        {kid.display_name}
       </BackLink>
       <PageHead
-        title={t("title", { name: profile.display_name })}
+        title={t("title", { name: kid.display_name })}
         sub={t("subtitle")}
       />
 

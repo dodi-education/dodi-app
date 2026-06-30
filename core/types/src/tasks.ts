@@ -40,7 +40,7 @@ export interface ReadGameStatePayload {
 }
 
 export interface AgentTaskRequest {
-  profileId: string;
+  kidId: string;
   taskType: AgentTaskType;
   gameId?: string;
   childContext: {

@@ -8,7 +8,7 @@ import { Section } from "@/components/parent/section";
 import { Icon } from "@/components/shared/icon";
 import { Badge } from "@/components/ui/badge";
 import { usePersonas } from "@/hooks/use-personas";
-import { useProfiles } from "@/hooks/use-profiles";
+import { useKids } from "@/hooks/use-kids";
 import { ageFromBirthdate } from "@dodi/intl";
 
 const AVATAR_PALETTE = [
@@ -22,49 +22,49 @@ function avatarColor(index: number) {
   return AVATAR_PALETTE[index % AVATAR_PALETTE.length];
 }
 
-/** Client island: the dashboard "profiles at a glance" list (decrypted). */
-export function ProfilesGlance() {
+/** Client island: the dashboard "kids at a glance" list (decrypted). */
+export function KidsGlance() {
   const t = useTranslations("dashboard");
   const tc = useTranslations("common");
-  const { profiles } = useProfiles();
+  const { kids } = useKids();
   const { nameById: personaNames } = usePersonas();
 
-  if (profiles && profiles.length === 0) return null;
+  if (kids && kids.length === 0) return null;
 
   return (
-    <Section title={t("profilesGlance")}>
-      {!profiles ? (
+    <Section title={t("kidsGlance")}>
+      {!kids ? (
         <div className="px-5 py-6 text-center text-sm text-muted-foreground">
           {tc("loading")}
         </div>
       ) : (
-        profiles.map((profile, i) => {
+        kids.map((kid, i) => {
           const color = avatarColor(i);
-          const age = ageFromBirthdate(profile.birthdate);
-          const personaName = profile.active_persona_id
-            ? personaNames.get(profile.active_persona_id)
+          const age = ageFromBirthdate(kid.birthdate);
+          const personaName = kid.active_persona_id
+            ? personaNames.get(kid.active_persona_id)
             : null;
           return (
             <Link
-              key={profile.id}
-              href={`/parent/profiles/${profile.id}`}
+              key={kid.id}
+              href={`/parent/kids/${kid.id}`}
               className="block"
             >
               <Row clickable>
                 <div
                   className={`flex size-[34px] shrink-0 items-center justify-center rounded-full text-[13px] font-bold ${color.bg} ${color.fg}`}
                 >
-                  {profile.display_name[0]?.toUpperCase()}
+                  {kid.display_name[0]?.toUpperCase()}
                 </div>
                 <RowMain>
                   <RowTitle>
-                    {profile.display_name}
+                    {kid.display_name}
                     {age !== null ? (
                       <Badge variant="gray">{t("ageYears", { age })}</Badge>
                     ) : null}
                   </RowTitle>
                   <RowMeta>
-                    {profile.language.toUpperCase()}
+                    {kid.language.toUpperCase()}
                     {personaName ? (
                       <>
                         <DotSep />

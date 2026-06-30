@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 
 import { requireAuth } from "@/lib/resolve-auth";
-import { getProfile } from "@/services/profiles";
+import { getKid } from "@/services/kids";
 import {
   getModelConfig,
   normalizeModelConfig,
@@ -41,7 +41,7 @@ const log = createLogger("agent-sessions");
  * GET /api/agent/sessions — list agent sessions for the authenticated account.
  *
  * With `limit=1` the route switches to single-result (recovery) mode and
- * returns the most recent *active* session matching the profile/context/game
+ * returns the most recent *active* session matching the kid/context/game
  * filters (an object or `null`) instead of an array.
  */
 export async function GET(request: Request): Promise<NextResponse> {
@@ -50,7 +50,7 @@ export async function GET(request: Request): Promise<NextResponse> {
   const { accountId, supabase } = auth;
 
   const { searchParams } = new URL(request.url);
-  const profileId = searchParams.get("profileId") ?? undefined;
+  const kidId = searchParams.get("kidId") ?? undefined;
   const status = searchParams.get("status") ?? undefined;
   const context = searchParams.get("context") ?? undefined;
   const gameId = searchParams.get("gameId") ?? undefined;
@@ -61,15 +61,15 @@ export async function GET(request: Request): Promise<NextResponse> {
   const offset = parseInt(searchParams.get("offset") ?? "0", 10) || 0;
 
   try {
-    // Single-result recovery mode: most recent active session for a profile.
+    // Single-result recovery mode: most recent active session for a kid.
     if (limit === 1) {
-      if (!profileId) {
+      if (!kidId) {
         return NextResponse.json(
-          { error: "profileId is required" },
+          { error: "kidId is required" },
           { status: 400 },
         );
       }
-      const session = await getActiveAgentSession(supabase, profileId, context, gameId);
+      const session = await getActiveAgentSession(supabase, kidId, context, gameId);
       // RLS should enforce ownership, but be explicit.
       if (session && session.account_id !== accountId) {
         return NextResponse.json(null);
@@ -78,7 +78,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     }
 
     const sessions = await listAgentSessions(supabase, accountId, {
-      profileId,
+      kidId,
       status,
       limit,
       offset,
@@ -111,7 +111,7 @@ function describeError(e: unknown): string {
 }
 
 const TaskSchema = z.object({
-  profileId: z.string().uuid(),
+  kidId: z.string().uuid(),
   taskType: z.enum(["generate_game", "update_game", "read_game_state"]),
   gameId: z.string().uuid().optional(),
   payload: z.record(z.string(), z.unknown()),
@@ -127,7 +127,7 @@ const TaskSchema = z.object({
   learningContext: z.string().max(20000).optional(),
   // Child's age, computed client-side from the vault-decrypted birthdate.
   age: z.number().int().min(0).max(25).optional(),
-  // Who can play: shared with the whole family and/or specific kid profiles.
+  // Who can play: shared with the whole family and/or specific kids.
   audience: z
     .object({
       isFamily: z.boolean(),
@@ -156,7 +156,7 @@ function extractTaskPrompt(taskType: string, payload: Record<string, unknown>): 
 async function persistGameResult(
   supabase: SupabaseClient<Database>,
   accountId: string,
-  profileId: string,
+  kidId: string,
   gameId: string | undefined,
   result: AgentCodeResult,
   audience?: Audience,
@@ -179,22 +179,22 @@ async function persistGameResult(
       progress_kind: result.progressKind,
     });
     // Update "who can play" when the studio sent an audience. An AI build never
-    // changes ownership (profile_id), the creator, or activation (is_active).
+    // changes ownership (kid_id), the creator, or activation (is_active).
     if (audience) {
       await replaceGameSharings(supabase, gameId, accountId, {
         family: audience.isFamily,
-        profileIds: audience.audienceIds,
+        kidIds: audience.audienceIds,
       });
     }
-    log.info("game_persisted", { profileId, gameId: game.id, created: false });
+    log.info("game_persisted", { kidId, gameId: game.id, created: false });
     return game.id;
   }
 
-  // Parent-studio create: parent-owned (no profile_id) and inactive until a
+  // Parent-studio create: parent-owned (no kid_id) and inactive until a
   // parent activates it. Sharing defaults to the whole family.
   const game = await createCustomGame(supabase, {
     accountId,
-    profileId: null,
+    kidId: null,
     title: safeTitle,
     description: result.description,
     tags: result.tags,
@@ -209,9 +209,9 @@ async function persistGameResult(
   });
   await replaceGameSharings(supabase, game.id, accountId, {
     family: audience ? audience.isFamily : true,
-    profileIds: audience?.audienceIds ?? [],
+    kidIds: audience?.audienceIds ?? [],
   });
-  log.info("game_persisted", { profileId, gameId: game.id, created: true });
+  log.info("game_persisted", { kidId, gameId: game.id, created: true });
   return game.id;
 }
 
@@ -230,18 +230,18 @@ export async function POST(request: Request): Promise<NextResponse | Response> {
     );
   }
 
-  const { profileId, taskType, gameId, payload } = parsed.data;
-  log.info("task_submitted", { profileId, taskType, gameId });
+  const { kidId, taskType, gameId, payload } = parsed.data;
+  log.info("task_submitted", { kidId, taskType, gameId });
   log.debug("task_prompt", {
-    profileId,
+    kidId,
     taskType,
     prompt: extractTaskPrompt(taskType, payload as Record<string, unknown>),
   });
 
   try {
-    const profile = await getProfile(supabase, profileId);
-    if (!profile || profile.account_id !== accountId) {
-      return NextResponse.json({ error: "Profile not found" }, { status: 404 });
+    const kid = await getKid(supabase, kidId);
+    if (!kid || kid.account_id !== accountId) {
+      return NextResponse.json({ error: "Kid not found" }, { status: 404 });
     }
 
     const rawConfig = await getModelConfig(supabase, accountId);
@@ -262,7 +262,7 @@ export async function POST(request: Request): Promise<NextResponse | Response> {
       parsed.data.provider ?? modelConfig.thinkingProvider;
     const thinkingModel =
       parsed.data.model ?? modelConfig.thinkingModel;
-    log.debug("config_resolved", { profileId, thinkingProvider: thinkingProviderId, thinkingModel });
+    log.debug("config_resolved", { kidId, thinkingProvider: thinkingProviderId, thinkingModel });
 
     if (!thinkingProviderId || !thinkingModel) {
       return NextResponse.json(
@@ -292,29 +292,29 @@ export async function POST(request: Request): Promise<NextResponse | Response> {
         : undefined;
 
     const taskRequest: AgentTaskRequest = {
-      profileId,
+      kidId,
       taskType,
       gameId,
       childContext: {
-        // Never fall back to profile.display_name — it's E2EE ciphertext here.
+        // Never fall back to kid.display_name — it's E2EE ciphertext here.
         name: parsed.data.childName ?? "",
         age,
-        language: getLanguageDisplayName(profile.language),
+        language: getLanguageDisplayName(kid.language),
         learningContext,
       },
       payload: payload as unknown as AgentTaskRequest["payload"],
     };
 
     // Get or create session
-    const session = getOrCreateSession(profileId, apiKey, thinkingModel);
+    const session = getOrCreateSession(kidId, apiKey, thinkingModel);
 
     // Reset game context if game changed
     if (gameId && gameId !== session.currentGameId) {
-      resetGameContext(profileId);
+      resetGameContext(kidId);
     }
 
     // Trim old history
-    trimHistory(profileId);
+    trimHistory(kidId);
 
     // --- DB persistence for code generation tasks ---
     const isCodeTask = taskType === "generate_game" || taskType === "update_game";
@@ -326,7 +326,7 @@ export async function POST(request: Request): Promise<NextResponse | Response> {
 
       const dbSession = await createAgentSession(supabase, {
         accountId: accountId,
-        profileId,
+        kidId,
         taskType,
         taskPrompt: extractTaskPrompt(taskType, payload as Record<string, unknown>),
         dodiContext: "game_creation",
@@ -354,29 +354,29 @@ export async function POST(request: Request): Promise<NextResponse | Response> {
 
           // Emit session ID first so client can poll if SSE disconnects
           if (dbSessionId) {
-            log.info("sse_stream_started", { profileId, dbSessionId });
+            log.info("sse_stream_started", { kidId, dbSessionId });
             send({ type: "session_started", sessionId: dbSessionId });
           }
 
           try {
             const result = await submitTask(
-              profileId,
+              kidId,
               taskRequest,
               send,
               isCodeTask ? { dbSessionId, supabase } : undefined,
             );
-            log.info("task_completed", { profileId, dbSessionId, taskType });
+            log.info("task_completed", { kidId, dbSessionId, taskType });
 
             // Persist game code to DB server-side (don't rely on client auto-save)
             if (isCodeTask && "codeBundle" in result && result.codeBundle) {
               try {
                 const savedId = await persistGameResult(
-                  supabase, accountId, profileId, gameId, result as AgentCodeResult, parsed.data.audience,
+                  supabase, accountId, kidId, gameId, result as AgentCodeResult, parsed.data.audience,
                 );
                 (result as AgentCodeResult).savedGameId = savedId;
               } catch (saveErr) {
                 const saveMsg = describeError(saveErr);
-                log.error("game_persist_failed", { profileId, gameId, error: saveMsg });
+                log.error("game_persist_failed", { kidId, gameId, error: saveMsg });
                 (result as AgentCodeResult).saveError = saveMsg;
               }
             }
@@ -384,11 +384,11 @@ export async function POST(request: Request): Promise<NextResponse | Response> {
             send({ type: "complete", result } as AgentProgressEvent);
           } catch (err) {
             if (err instanceof AgentAbortedError) {
-              log.warn("task_aborted", { profileId, dbSessionId });
+              log.warn("task_aborted", { kidId, dbSessionId });
               send({ type: "error", message: "Task was deactivated" });
             } else {
               const msg = err instanceof Error ? err.message : "Agent task failed";
-              log.error("task_failed", { profileId, dbSessionId, message: msg });
+              log.error("task_failed", { kidId, dbSessionId, message: msg });
               send({ type: "error", message: msg });
               // Mark DB session as failed
               if (dbSessionId) {
@@ -412,7 +412,7 @@ export async function POST(request: Request): Promise<NextResponse | Response> {
 
     // Standard JSON path (backward compatible)
     const result = await submitTask(
-      profileId,
+      kidId,
       taskRequest,
       undefined,
       isCodeTask ? { dbSessionId, supabase } : undefined,
@@ -421,12 +421,12 @@ export async function POST(request: Request): Promise<NextResponse | Response> {
     if (isCodeTask && "codeBundle" in result && result.codeBundle) {
       try {
         const savedId = await persistGameResult(
-          supabase, accountId, profileId, gameId, result as AgentCodeResult, parsed.data.audience,
+          supabase, accountId, kidId, gameId, result as AgentCodeResult, parsed.data.audience,
         );
         (result as AgentCodeResult).savedGameId = savedId;
       } catch (saveErr) {
         const saveMsg = describeError(saveErr);
-        log.error("game_persist_failed", { profileId, gameId, error: saveMsg });
+        log.error("game_persist_failed", { kidId, gameId, error: saveMsg });
         (result as AgentCodeResult).saveError = saveMsg;
       }
     }
@@ -436,11 +436,11 @@ export async function POST(request: Request): Promise<NextResponse | Response> {
     const message = error instanceof Error ? error.message : "Agent task failed";
 
     if (message === "Agent is busy processing another task") {
-      log.warn("agent_busy", { profileId });
+      log.warn("agent_busy", { kidId });
       return NextResponse.json({ error: message, busy: true }, { status: 429 });
     }
 
-    log.error("task_error", { profileId, error: message });
+    log.error("task_error", { kidId, error: message });
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

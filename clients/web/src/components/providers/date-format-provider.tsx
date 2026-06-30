@@ -3,9 +3,9 @@
 /**
  * Resolves the active date/time preference once per render and hands call-sites
  * bound formatters via `useDateFormat()` — the client mirror of how `useLocale`
- * is consumed. Resolution is profile → account → context default, where the
+ * is consumed. Resolution is kid → account → context default, where the
  * context is derived from the route (parent area → "account", kid area →
- * "profile"). All formatting is client-side, so the timezone never leaves the
+ * "kid"). All formatting is client-side, so the timezone never leaves the
  * browser.
  */
 import { usePathname } from "next/navigation";
@@ -14,7 +14,7 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 import { readStoredDatePref } from "@/lib/date-prefs";
 import { useDatePrefStore } from "@/stores/date-pref-store";
-import { useProfileStore } from "@/stores/profile-store";
+import { useKidStore } from "@/stores/kid-store";
 import { useVaultStore } from "@/stores/vault-store";
 import {
   formatDate,
@@ -60,19 +60,19 @@ export function DateFormatProvider({ children }: { children: React.ReactNode }) 
   const session = useVaultStore((s) => s.session);
   const accountStored = useDatePrefStore((s) => s.accountStored);
   const load = useDatePrefStore((s) => s.load);
-  const profiles = useProfileStore((s) => s.list);
+  const kids = useKidStore((s) => s.list);
 
   const context: FormatContext = pathname?.startsWith("/parent")
     ? "account"
-    : "profile";
+    : "kid";
 
-  // Active kid profile is tracked via cookie. Read it only after mount (never in
+  // Active kid is tracked via cookie. Read it only after mount (never in
   // the initial render) to avoid a hydration mismatch; reading it each render
-  // then picks up a profile switch, which re-renders the tree via router.refresh.
+  // then picks up a kid switch, which re-renders the tree via router.refresh.
   const [mounted, setMounted] = useState(false);
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setMounted(true), []);
-  const activeProfileId = mounted ? getCookie("dodi-active-profile") : null;
+  const activeKidId = mounted ? getCookie("dodi-active-kid") : null;
 
   useEffect(() => {
     void load();
@@ -83,19 +83,19 @@ export function DateFormatProvider({ children }: { children: React.ReactNode }) 
     [accountStored, session],
   );
 
-  const profilePartial = useMemo(() => {
-    if (context !== "profile" || !activeProfileId || !profiles) return null;
-    const active = profiles.find((p) => p.id === activeProfileId);
+  const kidPartial = useMemo(() => {
+    if (context !== "kid" || !activeKidId || !kids) return null;
+    const active = kids.find((p) => p.id === activeKidId);
     const stored = active?.date_preferences as
       | StoredDatePreferences
       | null
       | undefined;
     return readStoredDatePref(stored, session);
-  }, [context, activeProfileId, profiles, session]);
+  }, [context, activeKidId, kids, session]);
 
   const pref = useMemo(
-    () => resolvePref(locale, context, accountPartial, profilePartial),
-    [locale, context, accountPartial, profilePartial],
+    () => resolvePref(locale, context, accountPartial, kidPartial),
+    [locale, context, accountPartial, kidPartial],
   );
 
   const api = useMemo<DateFormatApi>(

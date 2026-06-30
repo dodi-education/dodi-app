@@ -1,24 +1,24 @@
 /**
  * Client-side friends layer: bridges the platform API with the E2EE friend-card
  * crypto. The server is blind — names/birthdates travel as `SealedEnvelope`
- * blobs that only the recipient kid's profile key can open, so all sealing and
+ * blobs that only the recipient kid's kid key can open, so all sealing and
  * opening happens here in the browser.
  */
 import {
-  type ProfileFriendKeys,
+  type KidFriendKeys,
   type SealedEnvelope,
-  generateProfileFriendKeys,
+  generateKidFriendKeys,
   openFriendCard,
   publishedFriendKeys,
   sealFriendCard,
-  unwrapProfileSecretKeys,
-  wrapProfileSecretKeys,
+  unwrapKidSecretKeys,
+  wrapKidSecretKeys,
 } from "@dodi/protocol";
 import type {
   FriendCard,
   FriendPreviewCard,
   Json,
-  Profile,
+  Kid,
 } from "@dodi/types/database";
 import type { VaultSession } from "@dodi/vault";
 
@@ -36,7 +36,7 @@ export interface FriendshipView {
   id: string;
   status: FriendshipStatus;
   role: "requester" | "addressee";
-  counterpartProfileId: string;
+  counterpartKidId: string;
   counterpartSocialId: string | null;
   counterpartSignPublicKey: string | null;
   counterpartKemPublicKey: string | null;
@@ -49,7 +49,7 @@ export interface FriendshipView {
 }
 
 export interface FriendTarget {
-  profileId: string;
+  kidId: string;
   kemPublicKey: string;
   signPublicKey: string;
 }
@@ -57,8 +57,8 @@ export interface FriendTarget {
 export interface PendingApproval {
   friendshipId: string;
   side: "requester" | "addressee";
-  profileId: string;
-  counterpartProfileId: string;
+  kidId: string;
+  counterpartKidId: string;
   counterpartSocialId: string | null;
   counterpartSignPublicKey: string | null;
   /** Requester's nickname ciphertext — set for outgoing (requester-side) approvals. */
@@ -157,18 +157,18 @@ export function parseScannedCode(value: string): string {
 // Keys + cards
 // ---------------------------------------------------------------------------
 
-/** Ensure the active profile has friend keys; generate + publish on first use. */
+/** Ensure the active kid has friend keys; generate + publish on first use. */
 export async function ensureFriendKeys(
-  profile: Profile,
+  kid: Kid,
   session: VaultSession,
-): Promise<ProfileFriendKeys> {
-  if (profile.friend_secret_keys) {
-    return unwrapProfileSecretKeys(session, profile.friend_secret_keys);
+): Promise<KidFriendKeys> {
+  if (kid.friend_secret_keys) {
+    return unwrapKidSecretKeys(session, kid.friend_secret_keys);
   }
-  const keys = generateProfileFriendKeys();
+  const keys = generateKidFriendKeys();
   const published = publishedFriendKeys(keys);
-  const sealedSecretKeys = wrapProfileSecretKeys(session, keys);
-  await jsonRequest(`/api/profiles/${profile.id}/friend-keys`, {
+  const sealedSecretKeys = wrapKidSecretKeys(session, keys);
+  await jsonRequest(`/api/kids/${kid.id}/friend-keys`, {
     method: "POST",
     body: JSON.stringify({
       kemPublicKey: published.kemPublicKey,
@@ -179,21 +179,21 @@ export async function ensureFriendKeys(
   return keys;
 }
 
-function buildCards(profile: Profile): {
+function buildCards(kid: Kid): {
   preview: FriendPreviewCard;
   full: FriendCard;
 } {
   const preview: FriendPreviewCard = {
-    displayName: profile.display_name,
-    avatarConfig: profile.avatar_config,
+    displayName: kid.display_name,
+    avatarConfig: kid.avatar_config,
   };
-  return { preview, full: { ...preview, birthdate: profile.birthdate } };
+  return { preview, full: { ...preview, birthdate: kid.birthdate } };
 }
 
 /** Open the sealed card the server delivered to me, plus my own private label. */
 export function decodeView(
   view: FriendshipView,
-  myKeys: ProfileFriendKeys,
+  myKeys: KidFriendKeys,
   session?: VaultSession,
 ): DecodedFriend {
   let name: string | null = null;
@@ -251,20 +251,20 @@ export function lookupTarget(socialId: string): Promise<FriendTarget> {
 
 /** Look up a friend by code, seal both cards to them, and send the request. */
 export async function sendFriendRequest(
-  profile: Profile,
+  kid: Kid,
   session: VaultSession,
   rawHandle: string,
   nickname: string,
 ): Promise<void> {
   const socialId = normalizeHandle(rawHandle);
-  // Catch self-adds here: lookup only returns discoverable profiles, so your own
+  // Catch self-adds here: lookup only returns discoverable kids, so your own
   // code would otherwise come back as "not found" before the server's self-check.
-  if (socialId === normalizeHandle(profile.social_id)) {
+  if (socialId === normalizeHandle(kid.social_id)) {
     throw new FriendsError("cannot_add_self");
   }
-  const keys = await ensureFriendKeys(profile, session);
+  const keys = await ensureFriendKeys(kid, session);
   const target = await lookupTarget(socialId);
-  const { preview, full } = buildCards(profile);
+  const { preview, full } = buildCards(kid);
   const previewCard = JSON.stringify(
     sealFriendCard(target.kemPublicKey, preview, keys.sign),
   );
@@ -275,8 +275,8 @@ export async function sendFriendRequest(
   await jsonRequest("/api/friends/request", {
     method: "POST",
     body: JSON.stringify({
-      requesterProfileId: profile.id,
-      targetProfileId: target.profileId,
+      requesterKidId: kid.id,
+      targetKidId: target.kidId,
       previewCard,
       fullCard,
       nickname: session.encryptField(nickname.trim()),
@@ -284,7 +284,7 @@ export async function sendFriendRequest(
   });
 }
 
-/** A friendship whose card this profile seals, plus the key to re-seal it. */
+/** A friendship whose card this kid seals, plus the key to re-seal it. */
 export interface CardRefreshTarget {
   friendshipId: string;
   side: "requester" | "addressee";
@@ -292,27 +292,27 @@ export interface CardRefreshTarget {
 }
 
 export function fetchCardRefreshTargets(
-  profileId: string,
+  kidId: string,
 ): Promise<CardRefreshTarget[]> {
   return jsonRequest<CardRefreshTarget[]>(
-    `/api/friends/card-targets?profileId=${encodeURIComponent(profileId)}`,
+    `/api/friends/card-targets?kidId=${encodeURIComponent(kidId)}`,
   );
 }
 
 /**
- * Re-seal this profile's shared card (name / avatar / birthdate) to every friend
+ * Re-seal this kid's shared card (name / avatar / birthdate) to every friend
  * so their lists always show current data. Call after editing any shared field.
- * No-op when the profile has no friendships, so it never forces friend-key
- * creation. Requires a DECRYPTED profile (display_name/avatar_config/birthdate).
+ * No-op when the kid has no friendships, so it never forces friend-key
+ * creation. Requires a DECRYPTED kid (display_name/avatar_config/birthdate).
  */
 export async function refreshFriendCards(
-  profile: Profile,
+  kid: Kid,
   session: VaultSession,
 ): Promise<void> {
-  const targets = await fetchCardRefreshTargets(profile.id);
+  const targets = await fetchCardRefreshTargets(kid.id);
   if (targets.length === 0) return;
-  const keys = await ensureFriendKeys(profile, session);
-  const { preview, full } = buildCards(profile);
+  const keys = await ensureFriendKeys(kid, session);
+  const { preview, full } = buildCards(kid);
   const cards = targets
     .filter((t) => t.counterpartKemPublicKey)
     .map((t) => {
@@ -331,28 +331,28 @@ export async function refreshFriendCards(
   if (cards.length === 0) return;
   await jsonRequest("/api/friends/refresh-cards", {
     method: "POST",
-    body: JSON.stringify({ profileId: profile.id, cards }),
+    body: JSON.stringify({ kidId: kid.id, cards }),
   });
 }
 
-export function fetchFriends(profileId: string): Promise<FriendshipView[]> {
+export function fetchFriends(kidId: string): Promise<FriendshipView[]> {
   return jsonRequest<FriendshipView[]>(
-    `/api/friends?profileId=${encodeURIComponent(profileId)}`,
+    `/api/friends?kidId=${encodeURIComponent(kidId)}`,
   );
 }
 
 export function fetchRequests(
-  profileId: string,
+  kidId: string,
   direction: "incoming" | "outgoing",
 ): Promise<FriendshipView[]> {
   return jsonRequest<FriendshipView[]>(
-    `/api/friends/requests?profileId=${encodeURIComponent(profileId)}&direction=${direction}`,
+    `/api/friends/requests?kidId=${encodeURIComponent(kidId)}&direction=${direction}`,
   );
 }
 
-export function fetchBlocked(profileId: string): Promise<FriendshipView[]> {
+export function fetchBlocked(kidId: string): Promise<FriendshipView[]> {
   return jsonRequest<FriendshipView[]>(
-    `/api/friends/blocked?profileId=${encodeURIComponent(profileId)}`,
+    `/api/friends/blocked?kidId=${encodeURIComponent(kidId)}`,
   );
 }
 
@@ -360,59 +360,59 @@ export function fetchBlocked(profileId: string): Promise<FriendshipView[]> {
 export async function acceptRequest(
   friendshipId: string,
   counterpartKemPublicKey: string | null,
-  profile: Profile,
-  myKeys: ProfileFriendKeys,
+  kid: Kid,
+  myKeys: KidFriendKeys,
 ): Promise<void> {
   if (!counterpartKemPublicKey) {
     throw new FriendsError("Missing the other kid's key");
   }
-  const { full } = buildCards(profile);
+  const { full } = buildCards(kid);
   const addresseeCard = JSON.stringify(
     sealFriendCard(counterpartKemPublicKey, full, myKeys.sign),
   );
   await jsonRequest(`/api/friends/${friendshipId}/respond`, {
     method: "POST",
-    body: JSON.stringify({ profileId: profile.id, action: "accept", addresseeCard }),
+    body: JSON.stringify({ kidId: kid.id, action: "accept", addresseeCard }),
   });
 }
 
 export function rejectRequest(
   friendshipId: string,
-  profileId: string,
+  kidId: string,
 ): Promise<void> {
   return jsonRequest(`/api/friends/${friendshipId}/respond`, {
     method: "POST",
-    body: JSON.stringify({ profileId, action: "reject" }),
+    body: JSON.stringify({ kidId, action: "reject" }),
   });
 }
 
 export function removeFriend(
   friendshipId: string,
-  profileId: string,
+  kidId: string,
 ): Promise<void> {
   return jsonRequest(`/api/friends/${friendshipId}/remove`, {
     method: "POST",
-    body: JSON.stringify({ profileId }),
+    body: JSON.stringify({ kidId }),
   });
 }
 
 export function blockFriend(
   friendshipId: string,
-  profileId: string,
+  kidId: string,
 ): Promise<void> {
   return jsonRequest(`/api/friends/${friendshipId}/block`, {
     method: "POST",
-    body: JSON.stringify({ profileId }),
+    body: JSON.stringify({ kidId }),
   });
 }
 
 export function unblockFriend(
   friendshipId: string,
-  profileId: string,
+  kidId: string,
 ): Promise<void> {
   return jsonRequest(`/api/friends/${friendshipId}/unblock`, {
     method: "POST",
-    body: JSON.stringify({ profileId }),
+    body: JSON.stringify({ kidId }),
   });
 }
 
@@ -452,7 +452,7 @@ export function readApprovalCounterpart(
       return approval.nickname ? session.decryptField(approval.nickname) : null;
     }
     if (approval.previewCard && kidSecretKeys) {
-      const keys = unwrapProfileSecretKeys(session, kidSecretKeys);
+      const keys = unwrapKidSecretKeys(session, kidSecretKeys);
       const envelope = JSON.parse(approval.previewCard) as SealedEnvelope;
       const card = openFriendCard<FriendPreviewCard>(
         keys.kem.secretKey,

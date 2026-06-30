@@ -10,11 +10,11 @@ import { SpeechBubble } from "@/components/dodi/speech-bubble";
 import { ListeningPulse } from "@/components/kid/listening-pulse";
 import { useDodiSessionStore } from "@/stores/dodi-session-store";
 import { useDodiContext } from "@/hooks/use-dodi-context";
-import { useProfiles } from "@/hooks/use-profiles";
+import { useKids } from "@/hooks/use-kids";
 import { getDodiImage } from "@/lib/dodi-image";
 
 interface DodiFullHomeProps {
-  profileId: string;
+  kidId: string;
   hasProvider: boolean;
 }
 
@@ -43,19 +43,19 @@ function MascotWrap({
 }
 
 export function DodiFullHome({
-  profileId,
+  kidId,
   hasProvider,
 }: DodiFullHomeProps) {
   const t = useTranslations("kid");
 
-  const { profiles } = useProfiles();
-  const profileName =
-    profiles?.find((p) => p.id === profileId)?.display_name ?? "";
+  const { kids } = useKids();
+  const kidName =
+    kids?.find((p) => p.id === kidId)?.display_name ?? "";
 
   useDodiContext({
     context: { type: "home" },
     displayMode: "full",
-    profileId,
+    kidId,
   });
 
   const dodiState = useDodiSessionStore((s) => s.state);
@@ -68,9 +68,9 @@ export function DodiFullHome({
   // Auto-connect on mount if provider available
   useEffect(() => {
     if (hasProvider) {
-      void connect(profileId);
+      void connect(kidId);
     }
-  }, [hasProvider, connect, profileId]);
+  }, [hasProvider, connect, kidId]);
 
   // Manual override: `?process-memory=1` force-processes the day's accumulated
   // transcript into memory now, without waiting for a day change. Read once
@@ -81,10 +81,10 @@ export function DodiFullHome({
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     if (params.get("process-memory") === "1") {
-      useDodiSessionStore.getState().processMemoryNow(profileId);
+      useDodiSessionStore.getState().processMemoryNow(kidId);
       window.history.replaceState(null, "", window.location.pathname);
     }
-  }, [profileId]);
+  }, [kidId]);
 
   const mascotButtonClass =
     "relative z-[1] size-[76%] cursor-pointer transition-transform duration-200 ease-[cubic-bezier(0.34,1.56,0.64,1)] active:scale-[0.94]";
@@ -108,7 +108,7 @@ export function DodiFullHome({
         </MascotWrap>
         <SpeechBubble className="w-full max-w-xs text-center">
           <p className="text-lg font-extrabold text-ink">
-            {t("greetingWithName", { name: profileName })}
+            {t("greetingWithName", { name: kidName })}
           </p>
           <p className="mt-1 text-sm font-bold text-ink-2">{t("needsVoice")}</p>
         </SpeechBubble>
@@ -203,7 +203,7 @@ export function DodiFullHome({
         <MascotWrap>
           <button
             type="button"
-            onClick={() => void connect(profileId)}
+            onClick={() => void connect(kidId)}
             className={mascotButtonClass}
             aria-label={t("tapToStart")}
           >
@@ -256,7 +256,7 @@ export function DodiFullHome({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => void connect(profileId)}
+            onClick={() => void connect(kidId)}
             className="cursor-pointer rounded-full font-bold"
           >
             <Icon name="refresh" className="mr-2 h-4 w-4" />
@@ -273,7 +273,7 @@ export function DodiFullHome({
       <MascotWrap>
         <button
           type="button"
-          onClick={() => void connect(profileId)}
+          onClick={() => void connect(kidId)}
           className={mascotButtonClass}
           aria-label={t("tapToStart")}
         >
@@ -289,7 +289,7 @@ export function DodiFullHome({
       </MascotWrap>
       <SpeechBubble className="w-full max-w-xs text-center">
         <p className="text-lg font-extrabold text-ink">
-          {t("greetingWithName", { name: profileName })}
+          {t("greetingWithName", { name: kidName })}
         </p>
         <p className="mt-1 text-sm font-bold text-ink-2">{t("tapToStart")}</p>
       </SpeechBubble>

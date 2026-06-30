@@ -14,7 +14,7 @@ export function DodiFullGame() {
   const t = useTranslations("games");
 
   const dodiState = useDodiSessionStore((s) => s.state);
-  const profileId = useDodiSessionStore((s) => s.profileId);
+  const kidId = useDodiSessionStore((s) => s.kidId);
   const dodiSpeaking = useDodiSessionStore((s) => s.dodiSpeaking);
   const toggleActive = useDodiSessionStore((s) => s.toggleActive);
   const connect = useDodiSessionStore((s) => s.connect);
@@ -50,8 +50,8 @@ export function DodiFullGame() {
             if (isConnecting) return;
             if (isConnected) {
               toggleActive();
-            } else if (profileId) {
-              void connect(profileId);
+            } else if (kidId) {
+              void connect(kidId);
             }
           }}
           disabled={isConnecting}

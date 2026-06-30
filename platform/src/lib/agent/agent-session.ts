@@ -1,7 +1,7 @@
 /**
  * Agent Session Manager — server-side singleton pool.
  *
- * Manages long-lived agentic coding sessions keyed by profileId.
+ * Manages long-lived agentic coding sessions keyed by kidId.
  * Each session maintains conversation history with the Anthropic API
  * and supports iterative code generation with tool use.
  *
@@ -44,7 +44,7 @@ import type { AgentProgressEvent, AgentStep } from "@dodi/types/agent-progress";
 // ---------------------------------------------------------------------------
 
 interface AgentSession {
-  profileId: string;
+  kidId: string;
   messages: Anthropic.MessageParam[];
   currentGameId: string | null;
   apiKey: string;
@@ -87,10 +87,10 @@ function startReaper(): void {
   if (reaperInterval) return;
   reaperInterval = setInterval(() => {
     const now = Date.now();
-    for (const [profileId, session] of sessions) {
+    for (const [kidId, session] of sessions) {
       if (!session.busy && now - session.lastActivity > INACTIVITY_TIMEOUT_MS) {
-        log.debug("session_reaped", { profileId });
-        sessions.delete(profileId);
+        log.debug("session_reaped", { kidId });
+        sessions.delete(kidId);
       }
     }
     if (sessions.size === 0 && reaperInterval) {
@@ -123,22 +123,22 @@ function mapStepToProgress(step: AgentStep): "planning" | "building" | "testing"
 // ---------------------------------------------------------------------------
 
 export function getOrCreateSession(
-  profileId: string,
+  kidId: string,
   apiKey: string,
   model: string,
 ): AgentSession {
-  let session = sessions.get(profileId);
+  let session = sessions.get(kidId);
   if (session) {
     // Update key/model in case they changed
     session.apiKey = apiKey;
     session.model = model;
     session.lastActivity = Date.now();
-    log.debug("session_reused", { profileId, messageCount: session.messages.length });
+    log.debug("session_reused", { kidId, messageCount: session.messages.length });
     return session;
   }
 
   session = {
-    profileId,
+    kidId,
     messages: [],
     currentGameId: null,
     apiKey,
@@ -147,43 +147,43 @@ export function getOrCreateSession(
     busy: false,
     abortController: null,
   };
-  sessions.set(profileId, session);
+  sessions.set(kidId, session);
   startReaper();
-  log.info("session_created", { profileId, model });
+  log.info("session_created", { kidId, model });
   return session;
 }
 
-export function resetGameContext(profileId: string): void {
-  const session = sessions.get(profileId);
+export function resetGameContext(kidId: string): void {
+  const session = sessions.get(kidId);
   if (session) {
     session.messages = [];
     session.currentGameId = null;
   }
 }
 
-export function destroySession(profileId: string): void {
-  sessions.delete(profileId);
+export function destroySession(kidId: string): void {
+  sessions.delete(kidId);
 }
 
 /**
- * Abort a running task for the given profile.
+ * Abort a running task for the given kid.
  * Returns true if an active task was found and aborted.
  */
-export function abortSession(profileId: string): boolean {
-  const session = sessions.get(profileId);
+export function abortSession(kidId: string): boolean {
+  const session = sessions.get(kidId);
   if (!session?.abortController) return false;
-  log.warn("session_aborted", { profileId });
+  log.warn("session_aborted", { kidId });
   session.abortController.abort();
   return true;
 }
 
 export async function submitTask(
-  profileId: string,
+  kidId: string,
   task: AgentTaskRequest,
   onProgress?: (event: AgentProgressEvent) => void,
   options?: SubmitTaskOptions,
 ): Promise<AgentTaskResult> {
-  const session = sessions.get(profileId);
+  const session = sessions.get(kidId);
   if (!session) {
     throw new Error("No agent session found. Call getOrCreateSession first.");
   }
@@ -211,7 +211,7 @@ export async function submitTask(
 
   session.busy = true;
   session.lastActivity = Date.now();
-  log.info("task_started", { profileId, taskType: task.taskType, gameId: task.gameId });
+  log.info("task_started", { kidId, taskType: task.taskType, gameId: task.gameId });
 
   try {
     if (task.taskType === "read_game_state") {
@@ -242,7 +242,7 @@ async function runAnalysisTask(
 ): Promise<AgentAnalysisResult> {
   const payload = task.payload as ReadGameStatePayload;
   log.debug("analysis_started", {
-    profileId: session.profileId,
+    kidId: session.kidId,
     hasSnapshot: !!payload.snapshot,
     questionLength: payload.question?.length ?? 0,
   });
@@ -302,7 +302,7 @@ async function runAnalysisTask(
   const analysis = textBlock ? textBlock.text : "I couldn't analyze the game state.";
 
   log.debug("analysis_complete", {
-    profileId: session.profileId,
+    kidId: session.kidId,
     responseLength: analysis.length,
   });
 
@@ -371,7 +371,7 @@ async function runCodeTask(
   for (let turn = 0; turn < MAX_AGENT_TURNS; turn++) {
     checkAborted();
     log.debug("loop_turn", {
-      profileId: session.profileId,
+      kidId: session.kidId,
       turn,
       messageCount: session.messages.length,
     });
@@ -396,7 +396,7 @@ async function runCodeTask(
     );
 
     apiTimer({
-      profileId: session.profileId,
+      kidId: session.kidId,
       turn,
       stopReason: response.stop_reason,
       toolCallCount: toolUseBlocks.length,
@@ -418,7 +418,7 @@ async function runCodeTask(
 
       // Agent responded with only text and no write — ask it to use tools.
       if (textBlocks.length > 0) {
-        log.warn("text_only_response", { profileId: session.profileId, turn });
+        log.warn("text_only_response", { kidId: session.kidId, turn });
         session.messages.push({
           role: "user",
           content:
@@ -449,7 +449,7 @@ async function runCodeTask(
         toolContext,
       );
       log.info("tool_executed", {
-        profileId: session.profileId,
+        kidId: session.kidId,
         turn,
         toolName: toolUse.name,
       });
@@ -501,7 +501,7 @@ async function runCodeTask(
     const validation = validateGameCode(lastWrite.code, goalOpts());
     if (!validation.valid && validationRetries < MAX_VALIDATION_RETRIES) {
       log.warn("validation_retry", {
-        profileId: session.profileId,
+        kidId: session.kidId,
         retryNumber: validationRetries,
         errors: validation.errors,
       });
@@ -589,7 +589,7 @@ async function runCodeTask(
     const finalValidation = validateGameCode(lastWrite.code, goalOpts());
 
     log.info("code_produced", {
-      profileId: session.profileId,
+      kidId: session.kidId,
       title: lastWrite.title,
       codeSizeBytes: lastWrite.code.length,
       validationPassed: finalValidation.valid,
@@ -637,7 +637,7 @@ async function runCodeTask(
   }
 
   // No code produced — mark as failed in DB
-  log.error("no_code_produced", { profileId: session.profileId, iterationCount });
+  log.error("no_code_produced", { kidId: session.kidId, iterationCount });
   const errorMsg = "Agent did not produce any game code";
   if (dbSessionId && supabase) {
     await failAgentSession(supabase, dbSessionId, errorMsg);
@@ -707,8 +707,8 @@ function buildCodeTaskUserMessage(task: AgentTaskRequest): string {
 // Called periodically or before each task if history is long.
 const MAX_HISTORY_PAIRS = 20;
 
-export function trimHistory(profileId: string): void {
-  const session = sessions.get(profileId);
+export function trimHistory(kidId: string): void {
+  const session = sessions.get(kidId);
   if (!session) return;
   if (session.messages.length <= MAX_HISTORY_PAIRS * 2) return;
 

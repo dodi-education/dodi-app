@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  dateFieldMask,
+  dateFieldPlaceholder,
   formatDate,
+  formatDateField,
   formatDateOnly,
   formatDateTime,
   formatElapsed,
   formatTime,
+  parseDateField,
 } from "./format";
 import type { DateFormatPref } from "./prefs";
 
@@ -165,6 +169,71 @@ describe("formatDateOnly (birthdate-safe)", () => {
     expect(formatDateOnly(null, { locale: "en", dateStyle: "long" })).toBeNull();
     expect(formatDateOnly("", { locale: "en", dateStyle: "long" })).toBeNull();
     expect(formatDateOnly("not-a-date", { locale: "en", dateStyle: "long" })).toBeNull();
+  });
+});
+
+describe("dateFieldMask + placeholder (typeable input order)", () => {
+  it("derives the locale order for numeric/long", () => {
+    expect(dateFieldMask("de", "numeric")).toEqual({
+      order: ["day", "month", "year"],
+      separator: ".",
+    });
+    expect(dateFieldMask("en", "numeric")).toEqual({
+      order: ["month", "day", "year"],
+      separator: "/",
+    });
+    // long isn't typeable → falls back to the locale's numeric order.
+    expect(dateFieldMask("de", "long")).toEqual({
+      order: ["day", "month", "year"],
+      separator: ".",
+    });
+  });
+
+  it("uses the fixed order for explicit styles, regardless of locale", () => {
+    expect(dateFieldMask("en", "dmy_dot")).toEqual({
+      order: ["day", "month", "year"],
+      separator: ".",
+    });
+    expect(dateFieldMask("de", "ymd_dash")).toEqual({
+      order: ["year", "month", "day"],
+      separator: "-",
+    });
+  });
+
+  it("renders a human-readable placeholder", () => {
+    expect(dateFieldPlaceholder(dateFieldMask("de", "numeric"))).toBe("DD.MM.YYYY");
+    expect(dateFieldPlaceholder(dateFieldMask("en", "numeric"))).toBe("MM/DD/YYYY");
+    expect(dateFieldPlaceholder(dateFieldMask("en", "ymd_dash"))).toBe("YYYY-MM-DD");
+  });
+});
+
+describe("formatDateField / parseDateField (round-trip)", () => {
+  it("formats canonical ISO into the masked order", () => {
+    expect(formatDateField("2018-06-24", dateFieldMask("de", "numeric"))).toBe("24.06.2018");
+    expect(formatDateField("2018-06-24", dateFieldMask("en", "numeric"))).toBe("06/24/2018");
+    expect(formatDateField("2018-06-24", dateFieldMask("en", "ymd_dash"))).toBe("2018-06-24");
+    expect(formatDateField("", dateFieldMask("en", "numeric"))).toBe("");
+    expect(formatDateField(null, dateFieldMask("en", "numeric"))).toBe("");
+  });
+
+  it("parses typed input back to canonical ISO using the field order", () => {
+    expect(parseDateField("24.06.2018", dateFieldMask("de", "numeric"))).toBe("2018-06-24");
+    expect(parseDateField("06/24/2018", dateFieldMask("en", "numeric"))).toBe("2018-06-24");
+    expect(parseDateField("2018-06-24", dateFieldMask("en", "ymd_dash"))).toBe("2018-06-24");
+  });
+
+  it("is separator-agnostic and zero-pads", () => {
+    expect(parseDateField("3/7/2018", dateFieldMask("en", "numeric"))).toBe("2018-03-07");
+    expect(parseDateField("7.3.2018", dateFieldMask("de", "numeric"))).toBe("2018-03-07");
+  });
+
+  it("rejects incomplete, out-of-range, and non-calendar dates", () => {
+    const de = dateFieldMask("de", "numeric");
+    expect(parseDateField("24.06", de)).toBeNull(); // only two groups
+    expect(parseDateField("24.06.18", de)).toBeNull(); // 2-digit year
+    expect(parseDateField("32.06.2018", de)).toBeNull(); // no day 32
+    expect(parseDateField("31.02.2018", de)).toBeNull(); // Feb 31 overflow
+    expect(parseDateField("", de)).toBeNull();
   });
 });
 

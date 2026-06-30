@@ -6,7 +6,7 @@ import type {
   FriendshipInsert,
   FriendshipStatus,
   FriendshipUpdate,
-  Profile,
+  Kid,
 } from "@dodi/types/database";
 
 type Client = SupabaseClient<Database>;
@@ -52,17 +52,17 @@ export function computeStatus(row: StatusInputs): FriendshipStatus {
 // Low-level row helpers
 // ---------------------------------------------------------------------------
 
-async function getProfileRow(
+async function getKidRow(
   supabase: Client,
-  profileId: string,
-): Promise<Profile | null> {
+  kidId: string,
+): Promise<Kid | null> {
   const { data, error } = await supabase
-    .from("profiles")
+    .from("kids")
     .select("*")
-    .eq("id", profileId)
+    .eq("id", kidId)
     .maybeSingle();
   if (error) throw new Error(error.message);
-  return (data ?? null) as Profile | null;
+  return (data ?? null) as Kid | null;
 }
 
 async function getFriendship(
@@ -93,24 +93,24 @@ async function updateFriendship(
   return data as Friendship;
 }
 
-/** Find an existing live relationship between two profiles, either direction. */
+/** Find an existing live relationship between two kids, either direction. */
 async function findLivePair(
   supabase: Client,
-  profileA: string,
-  profileB: string,
+  kidA: string,
+  kidB: string,
 ): Promise<Friendship | null> {
   const { data, error } = await supabase
     .from("friendships")
     .select("*")
-    .or(`requester_profile_id.eq.${profileA},addressee_profile_id.eq.${profileA}`);
+    .or(`requester_kid_id.eq.${kidA},addressee_kid_id.eq.${kidA}`);
   if (error) throw new Error(error.message);
   const rows = (data ?? []) as Friendship[];
   return (
     rows.find(
       (r) =>
         LIVE_STATUSES.includes(r.status as FriendshipStatus) &&
-        (r.requester_profile_id === profileB ||
-          r.addressee_profile_id === profileB),
+        (r.requester_kid_id === kidB ||
+          r.addressee_kid_id === kidB),
     ) ?? null
   );
 }
@@ -121,31 +121,31 @@ async function findLivePair(
 
 export interface PublishFriendKeysInput {
   accountId: string;
-  profileId: string;
+  kidId: string;
   kemPublicKey: string;
   signPublicKey: string;
   sealedSecretKeys: string;
 }
 
-/** Publish a profile's friend identity (owner-scoped). */
+/** Publish a kid's friend identity (owner-scoped). */
 export async function publishFriendKeys(
   supabase: Client,
   input: PublishFriendKeysInput,
 ): Promise<void> {
   const { error } = await supabase
-    .from("profiles")
+    .from("kids")
     .update({
       friend_kem_public_key: input.kemPublicKey,
       friend_sign_public_key: input.signPublicKey,
       friend_secret_keys: input.sealedSecretKeys,
     })
-    .eq("id", input.profileId)
+    .eq("id", input.kidId)
     .eq("account_id", input.accountId);
   if (error) throw new Error(error.message);
 }
 
 export interface FriendTarget {
-  profileId: string;
+  kidId: string;
   kemPublicKey: string;
   signPublicKey: string;
 }
@@ -160,7 +160,7 @@ export async function lookupFriendTarget(
   socialId: string,
 ): Promise<FriendTarget | null> {
   const { data, error } = await supabase
-    .from("profiles")
+    .from("kids")
     .select(
       "id, can_be_added_as_friend, friend_kem_public_key, friend_sign_public_key",
     )
@@ -182,7 +182,7 @@ export async function lookupFriendTarget(
     return null;
   }
   return {
-    profileId: row.id,
+    kidId: row.id,
     kemPublicKey: row.friend_kem_public_key,
     signPublicKey: row.friend_sign_public_key,
   };
@@ -194,8 +194,8 @@ export async function lookupFriendTarget(
 
 export interface CreateFriendRequestInput {
   requesterAccountId: string;
-  requesterProfileId: string;
-  targetProfileId: string;
+  requesterKidId: string;
+  targetKidId: string;
   /** Stringified SealedEnvelope: name + avatar, sealed to the target. */
   previewCard: string;
   /** Stringified SealedEnvelope: full card (adds birthdate), withheld until accepted. */
@@ -210,7 +210,7 @@ export async function createFriendRequest(
 ): Promise<Friendship> {
   // Errors are stable codes (not prose): the client maps them to localized,
   // kid-friendly copy — the server is locale-blind and holds no UI strings.
-  const requester = await getProfileRow(supabase, input.requesterProfileId);
+  const requester = await getKidRow(supabase, input.requesterKidId);
   if (!requester || requester.account_id !== input.requesterAccountId) {
     throw new Error("requester_not_found");
   }
@@ -221,7 +221,7 @@ export async function createFriendRequest(
     throw new Error("no_friend_keys");
   }
 
-  const target = await getProfileRow(supabase, input.targetProfileId);
+  const target = await getKidRow(supabase, input.targetKidId);
   if (
     !target ||
     !target.can_be_added_as_friend ||
@@ -242,9 +242,9 @@ export async function createFriendRequest(
 
   const insert: FriendshipInsert = {
     requester_account_id: requester.account_id,
-    requester_profile_id: requester.id,
+    requester_kid_id: requester.id,
     addressee_account_id: target.account_id,
-    addressee_profile_id: target.id,
+    addressee_kid_id: target.id,
     status: "pending",
     addressee_accepted: false,
     // The requester's own parent gates their OUTGOING requests; the addressee's
@@ -271,8 +271,8 @@ export async function createFriendRequest(
 
 export interface RespondInput {
   accountId: string;
-  /** The acting kid's profile — disambiguates siblings on the same account. */
-  profileId: string;
+  /** The acting kid's kid — disambiguates siblings on the same account. */
+  kidId: string;
   friendshipId: string;
   action: "accept" | "reject";
   /** Stringified SealedEnvelope: the addressee's full card, sealed to the requester. Required to accept. */
@@ -285,7 +285,7 @@ export async function respondToRequest(
 ): Promise<Friendship> {
   const row = await getFriendship(supabase, input.friendshipId);
   if (!row) throw new Error("Friend request not found");
-  if (participantSide(row, input.accountId, input.profileId) !== "addressee") {
+  if (participantSide(row, input.accountId, input.kidId) !== "addressee") {
     throw new Error("Not authorized to respond to this request");
   }
   if (row.status !== "pending") {
@@ -366,26 +366,26 @@ export async function setParentApproval(
 }
 
 /**
- * The acting profile's side of the row, scoped to its account — or null if this
- * (account, profile) pair isn't a participant. Identifying by profile (not just
+ * The acting kid's side of the row, scoped to its account — or null if this
+ * (account, kid) pair isn't a participant. Identifying by kid (not just
  * account) is what distinguishes two kids on the SAME account, which an account
  * id alone cannot: e.g. when sibling A blocks sibling L, the block must be
- * attributed to A's profile, not just "the account's requester side".
+ * attributed to A's kid, not just "the account's requester side".
  */
 function participantSide(
   row: Friendship,
   accountId: string,
-  profileId: string,
+  kidId: string,
 ): "requester" | "addressee" | null {
   if (
     row.requester_account_id === accountId &&
-    row.requester_profile_id === profileId
+    row.requester_kid_id === kidId
   ) {
     return "requester";
   }
   if (
     row.addressee_account_id === accountId &&
-    row.addressee_profile_id === profileId
+    row.addressee_kid_id === kidId
   ) {
     return "addressee";
   }
@@ -394,8 +394,8 @@ function participantSide(
 
 export interface BlockInput {
   accountId: string;
-  /** The acting kid's profile — sets blocked_by and disambiguates siblings. */
-  profileId: string;
+  /** The acting kid's kid — sets blocked_by and disambiguates siblings. */
+  kidId: string;
   friendshipId: string;
 }
 
@@ -405,12 +405,12 @@ export async function blockFriend(
 ): Promise<Friendship> {
   const row = await getFriendship(supabase, input.friendshipId);
   if (!row) throw new Error("Friendship not found");
-  if (!participantSide(row, input.accountId, input.profileId)) {
+  if (!participantSide(row, input.accountId, input.kidId)) {
     throw new Error("Not authorized");
   }
   return updateFriendship(supabase, row.id, {
     status: "blocked",
-    blocked_by: input.profileId,
+    blocked_by: input.kidId,
   });
 }
 
@@ -421,11 +421,11 @@ export async function unblockFriend(
 ): Promise<void> {
   const row = await getFriendship(supabase, input.friendshipId);
   if (!row) throw new Error("Friendship not found");
-  if (!participantSide(row, input.accountId, input.profileId)) {
+  if (!participantSide(row, input.accountId, input.kidId)) {
     throw new Error("Not authorized");
   }
   if (row.status !== "blocked") throw new Error("Friendship is not blocked");
-  if (row.blocked_by && row.blocked_by !== input.profileId) {
+  if (row.blocked_by && row.blocked_by !== input.kidId) {
     throw new Error("Only the kid who blocked can unblock");
   }
   const { error } = await supabase
@@ -446,7 +446,7 @@ export async function removeFriendship(
 ): Promise<void> {
   const row = await getFriendship(supabase, input.friendshipId);
   if (!row) throw new Error("Friendship not found");
-  if (!participantSide(row, input.accountId, input.profileId)) {
+  if (!participantSide(row, input.accountId, input.kidId)) {
     throw new Error("Not authorized");
   }
   if (row.status === "blocked") throw new Error("Unblock the friendship instead");
@@ -465,7 +465,7 @@ export interface FriendshipView {
   id: string;
   status: FriendshipStatus;
   role: "requester" | "addressee";
-  counterpartProfileId: string;
+  counterpartKidId: string;
   counterpartSocialId: string | null;
   /** Counterpart's published signing key — pass as expectedSenderSignPublicKey when opening the card. */
   counterpartSignPublicKey: string | null;
@@ -490,13 +490,13 @@ interface CounterpartInfo {
 
 async function counterpartInfoMap(
   supabase: Client,
-  profileIds: string[],
+  kidIds: string[],
 ): Promise<Map<string, CounterpartInfo>> {
   const map = new Map<string, CounterpartInfo>();
-  const unique = [...new Set(profileIds)];
+  const unique = [...new Set(kidIds)];
   if (unique.length === 0) return map;
   const { data, error } = await supabase
-    .from("profiles")
+    .from("kids")
     .select("id, social_id, friend_sign_public_key, friend_kem_public_key")
     .in("id", unique);
   if (error) throw new Error(error.message);
@@ -518,13 +518,13 @@ async function counterpartInfoMap(
 /** Build a viewer-scoped, card-gated view of a friendship row. */
 function toView(
   row: Friendship,
-  viewerProfileId: string,
+  viewerKidId: string,
   counterparts: Map<string, CounterpartInfo>,
 ): FriendshipView {
   const role: "requester" | "addressee" =
-    row.requester_profile_id === viewerProfileId ? "requester" : "addressee";
-  const counterpartProfileId =
-    role === "requester" ? row.addressee_profile_id : row.requester_profile_id;
+    row.requester_kid_id === viewerKidId ? "requester" : "addressee";
+  const counterpartKidId =
+    role === "requester" ? row.addressee_kid_id : row.requester_kid_id;
   const status = row.status as FriendshipStatus;
 
   // The full card (with birthdate) is delivered once the friendship is live
@@ -549,7 +549,7 @@ function toView(
     }
   }
 
-  const info = counterparts.get(counterpartProfileId);
+  const info = counterparts.get(counterpartKidId);
   // Is the viewer's own side still waiting on its parent? (false = either approved
   // or not required; the other side being pending makes it "friend's parent".)
   const myParentPending =
@@ -560,7 +560,7 @@ function toView(
     id: row.id,
     status,
     role,
-    counterpartProfileId,
+    counterpartKidId,
     counterpartSocialId: info?.socialId ?? null,
     counterpartSignPublicKey: info?.signPublicKey ?? null,
     counterpartKemPublicKey: info?.kemPublicKey ?? null,
@@ -577,57 +577,57 @@ function toView(
 async function buildViews(
   supabase: Client,
   rows: Friendship[],
-  viewerProfileId: string,
+  viewerKidId: string,
 ): Promise<FriendshipView[]> {
   const counterpartIds = rows.map((r) =>
-    r.requester_profile_id === viewerProfileId
-      ? r.addressee_profile_id
-      : r.requester_profile_id,
+    r.requester_kid_id === viewerKidId
+      ? r.addressee_kid_id
+      : r.requester_kid_id,
   );
   const counterparts = await counterpartInfoMap(supabase, counterpartIds);
-  return rows.map((r) => toView(r, viewerProfileId, counterparts));
+  return rows.map((r) => toView(r, viewerKidId, counterparts));
 }
 
-async function rowsForProfile(
+async function rowsForKid(
   supabase: Client,
   accountId: string,
-  profileId: string,
+  kidId: string,
 ): Promise<Friendship[]> {
   const { data, error } = await supabase
     .from("friendships")
     .select("*")
     .or(
-      `requester_profile_id.eq.${profileId},addressee_profile_id.eq.${profileId}`,
+      `requester_kid_id.eq.${kidId},addressee_kid_id.eq.${kidId}`,
     )
     .order("created_at", { ascending: false });
   if (error) throw new Error(error.message);
-  // Defense-in-depth: ensure the caller's account actually owns this profile's side.
+  // Defense-in-depth: ensure the caller's account actually owns this kid's side.
   return ((data ?? []) as Friendship[]).filter(
     (r) =>
-      (r.requester_profile_id === profileId &&
+      (r.requester_kid_id === kidId &&
         r.requester_account_id === accountId) ||
-      (r.addressee_profile_id === profileId &&
+      (r.addressee_kid_id === kidId &&
         r.addressee_account_id === accountId),
   );
 }
 
-export interface ProfileScopeInput {
+export interface KidScopeInput {
   accountId: string;
-  profileId: string;
+  kidId: string;
 }
 
-/** Accepted friends of a given kid profile. */
+/** Accepted friends of a given kid. */
 export async function listFriends(
   supabase: Client,
-  input: ProfileScopeInput,
+  input: KidScopeInput,
 ): Promise<FriendshipView[]> {
-  const rows = (await rowsForProfile(supabase, input.accountId, input.profileId)).filter(
+  const rows = (await rowsForKid(supabase, input.accountId, input.kidId)).filter(
     (r) => r.status === "accepted",
   );
-  return buildViews(supabase, rows, input.profileId);
+  return buildViews(supabase, rows, input.kidId);
 }
 
-export interface ListRequestsInput extends ProfileScopeInput {
+export interface ListRequestsInput extends KidScopeInput {
   direction: "incoming" | "outgoing";
 }
 
@@ -642,34 +642,34 @@ export async function listRequests(
   supabase: Client,
   input: ListRequestsInput,
 ): Promise<FriendshipView[]> {
-  const all = await rowsForProfile(supabase, input.accountId, input.profileId);
+  const all = await rowsForKid(supabase, input.accountId, input.kidId);
   const rows = all.filter((r) => {
     const inProgress = r.status === "pending" || r.status === "awaiting_parent";
     if (!inProgress) return false;
     return input.direction === "incoming"
-      ? r.addressee_profile_id === input.profileId
-      : r.requester_profile_id === input.profileId;
+      ? r.addressee_kid_id === input.kidId
+      : r.requester_kid_id === input.kidId;
   });
-  return buildViews(supabase, rows, input.profileId);
+  return buildViews(supabase, rows, input.kidId);
 }
 
 /** Friendships this kid has blocked (only the blocker sees them, so they can unblock). */
 export async function listBlocked(
   supabase: Client,
-  input: ProfileScopeInput,
+  input: KidScopeInput,
 ): Promise<FriendshipView[]> {
   const rows = (
-    await rowsForProfile(supabase, input.accountId, input.profileId)
-  ).filter((r) => r.status === "blocked" && r.blocked_by === input.profileId);
-  return buildViews(supabase, rows, input.profileId);
+    await rowsForKid(supabase, input.accountId, input.kidId)
+  ).filter((r) => r.status === "blocked" && r.blocked_by === input.kidId);
+  return buildViews(supabase, rows, input.kidId);
 }
 
 export interface PendingApproval {
   friendshipId: string;
   side: "requester" | "addressee";
-  /** The account's own kid profile on the side awaiting approval. */
-  profileId: string;
-  counterpartProfileId: string;
+  /** The account's own kid on the side awaiting approval. */
+  kidId: string;
+  counterpartKidId: string;
   counterpartSocialId: string | null;
   /** Counterpart's published signing key — verifies the incoming preview card. */
   counterpartSignPublicKey: string | null;
@@ -711,8 +711,8 @@ export async function listPendingApprovals(
       approvals.push({
         friendshipId: r.id,
         side: "requester",
-        profileId: r.requester_profile_id,
-        counterpartProfileId: r.addressee_profile_id,
+        kidId: r.requester_kid_id,
+        counterpartKidId: r.addressee_kid_id,
         nickname: r.nickname,
         previewCard: null,
         createdAt: r.created_at,
@@ -724,8 +724,8 @@ export async function listPendingApprovals(
       approvals.push({
         friendshipId: r.id,
         side: "addressee",
-        profileId: r.addressee_profile_id,
-        counterpartProfileId: r.requester_profile_id,
+        kidId: r.addressee_kid_id,
+        counterpartKidId: r.requester_kid_id,
         nickname: null,
         previewCard: r.requester_preview_card,
         createdAt: r.created_at,
@@ -734,13 +734,13 @@ export async function listPendingApprovals(
   }
   const counterparts = await counterpartInfoMap(
     supabase,
-    approvals.map((a) => a.counterpartProfileId),
+    approvals.map((a) => a.counterpartKidId),
   );
   return approvals.map((a) => ({
     ...a,
-    counterpartSocialId: counterparts.get(a.counterpartProfileId)?.socialId ?? null,
+    counterpartSocialId: counterparts.get(a.counterpartKidId)?.socialId ?? null,
     counterpartSignPublicKey:
-      counterparts.get(a.counterpartProfileId)?.signPublicKey ?? null,
+      counterparts.get(a.counterpartKidId)?.signPublicKey ?? null,
   }));
 }
 
@@ -756,33 +756,33 @@ export interface CardRefreshTarget {
 }
 
 /**
- * Friendships whose stored card was sealed BY this profile and should be
+ * Friendships whose stored card was sealed BY this kid and should be
  * re-sealed when its shared data changes, so the counterpart's list stays
  * current. Requester side: name+avatar travel from the start (preview), so every
  * non-rejected row qualifies. Addressee side: a card only exists once the kid
- * has accepted. Scoped to the caller's account via `rowsForProfile`.
+ * has accepted. Scoped to the caller's account via `rowsForKid`.
  */
 export async function listCardRefreshTargets(
   supabase: Client,
-  input: ProfileScopeInput,
+  input: KidScopeInput,
 ): Promise<CardRefreshTarget[]> {
-  const rows = await rowsForProfile(supabase, input.accountId, input.profileId);
+  const rows = await rowsForKid(supabase, input.accountId, input.kidId);
   const relevant = rows.filter((r) => {
     if (r.status === "rejected") return false;
-    const isRequester = r.requester_profile_id === input.profileId;
+    const isRequester = r.requester_kid_id === input.kidId;
     return isRequester || r.addressee_accepted;
   });
   const counterpartIds = relevant.map((r) =>
-    r.requester_profile_id === input.profileId
-      ? r.addressee_profile_id
-      : r.requester_profile_id,
+    r.requester_kid_id === input.kidId
+      ? r.addressee_kid_id
+      : r.requester_kid_id,
   );
   const counterparts = await counterpartInfoMap(supabase, counterpartIds);
   return relevant.map((r) => {
     const side: "requester" | "addressee" =
-      r.requester_profile_id === input.profileId ? "requester" : "addressee";
+      r.requester_kid_id === input.kidId ? "requester" : "addressee";
     const counterpartId =
-      side === "requester" ? r.addressee_profile_id : r.requester_profile_id;
+      side === "requester" ? r.addressee_kid_id : r.requester_kid_id;
     return {
       friendshipId: r.id,
       side,
@@ -794,7 +794,7 @@ export async function listCardRefreshTargets(
 
 export interface RefreshCardsInput {
   accountId: string;
-  profileId: string;
+  kidId: string;
   cards: Array<{
     friendshipId: string;
     /** Re-sealed preview card (name + avatar). Requester side only. */
@@ -805,8 +805,8 @@ export interface RefreshCardsInput {
 }
 
 /**
- * Overwrite this profile's already-sealed cards with freshly-sealed ones. Only
- * the side the acting (account, profile) owns is writable, and the addressee
+ * Overwrite this kid's already-sealed cards with freshly-sealed ones. Only
+ * the side the acting (account, kid) owns is writable, and the addressee
  * card is only updated once the kid has accepted. Rows the caller doesn't
  * participate in are skipped (defense-in-depth on top of the target lookup).
  * Returns the number of friendships actually updated.
@@ -819,7 +819,7 @@ export async function refreshFriendCards(
   for (const c of input.cards) {
     const row = await getFriendship(supabase, c.friendshipId);
     if (!row) continue;
-    const side = participantSide(row, input.accountId, input.profileId);
+    const side = participantSide(row, input.accountId, input.kidId);
     if (!side) continue;
     const patch: FriendshipUpdate = {};
     if (side === "requester") {

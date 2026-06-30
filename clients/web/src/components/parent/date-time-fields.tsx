@@ -3,7 +3,7 @@
 /**
  * Presentational date/time preference controls (date format, time format,
  * timezone) plus a live preview. Shared by the account settings section and the
- * per-profile editor. State and persistence live in the parent; this component
+ * per-kid editor. State and persistence live in the parent; this component
  * is pure UI.
  *
  * Option labels show a locale-aware example. Examples/preview are computed only
@@ -50,7 +50,7 @@ export interface DateTimeFieldsProps {
   onDateStyle: (value: DateStyleId | "") => void;
   onTimeStyle: (value: TimeStyleId | "") => void;
   onTimeZone: (value: string) => void;
-  /** Offer an "Inherit from account" option (per-profile editor). */
+  /** Offer an "Inherit from account" option (per-kid editor). */
   allowInherit?: boolean;
   /** Offer the "Automatic (device)" timezone option (account settings). */
   allowAuto?: boolean;

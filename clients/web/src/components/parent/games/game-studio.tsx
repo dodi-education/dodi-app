@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { STAGE } from "@/lib/games/stage";
 import { GAME_TAGS } from "@dodi/games/tags";
 import { cn } from "@/lib/utils";
-import { useProfiles } from "@/hooks/use-profiles";
+import { useKids } from "@/hooks/use-kids";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { resolveClientThinking } from "@/lib/ai/resolve-client-thinking";
 import { calculateChildAge } from "@dodi/ai/dodi-context";
@@ -44,7 +44,7 @@ export interface StudioGame {
   progressKind: ProgressKind;
   codeBundle: string;
   markdown: string;
-  /** Specific kid profile IDs this game is shared with (empty when family). */
+  /** Specific kid IDs this game is shared with (empty when family). */
   audienceIds: string[];
   /** Shared with the whole family. */
   isFamily: boolean;
@@ -156,8 +156,8 @@ export function GameStudio({ initialGame }: GameStudioProps) {
   const editing = Boolean(initialGame?.id);
 
   // Kid names are vault-encrypted at rest; decrypt them client-side.
-  const { profiles } = useProfiles();
-  const kids: KidOption[] = (profiles ?? []).map((p) => ({
+  const { kids: kidRows } = useKids();
+  const kids: KidOption[] = (kidRows ?? []).map((p) => ({
     id: p.id,
     name: p.display_name,
     birthdate: p.birthdate,
@@ -305,7 +305,7 @@ export function GameStudio({ initialGame }: GameStudioProps) {
   };
 
   // ── "Who can play" selection ───────────────────────────────────────────
-  const primaryProfileId = game.isFamily
+  const primaryKidId = game.isFamily
     ? (kids[0]?.id ?? null)
     : (game.audienceIds[0] ?? null);
   const selectedKids = game.isFamily
@@ -404,10 +404,10 @@ export function GameStudio({ initialGame }: GameStudioProps) {
   };
 
   /** Show the most recent completed task's change summary (recap on reopen). */
-  const showLastSummary = async (gameId: string, profileId: string): Promise<void> => {
+  const showLastSummary = async (gameId: string, kidId: string): Promise<void> => {
     try {
       const res = await dodi.request(
-        `/api/agent/sessions?profileId=${profileId}&status=completed&limit=10`,
+        `/api/agent/sessions?kidId=${kidId}&status=completed&limit=10`,
       );
       if (!res.ok) return;
       const sessions = (await res.json()) as Array<{
@@ -424,10 +424,10 @@ export function GameStudio({ initialGame }: GameStudioProps) {
     }
   };
 
-  const recoverSession = async (gameId: string, profileId: string): Promise<void> => {
+  const recoverSession = async (gameId: string, kidId: string): Promise<void> => {
     try {
       const res = await dodi.request(
-        `/api/agent/sessions?profileId=${profileId}&gameId=${gameId}&context=game_creation&limit=1`,
+        `/api/agent/sessions?kidId=${kidId}&gameId=${gameId}&context=game_creation&limit=1`,
       );
       if (!res.ok) return;
       const session = (await res.json()) as {
@@ -437,7 +437,7 @@ export function GameStudio({ initialGame }: GameStudioProps) {
         task_prompt: string;
       } | null;
       if (!session) {
-        void showLastSummary(gameId, profileId);
+        void showLastSummary(gameId, kidId);
         return;
       }
       if (session.status === "active") {
@@ -473,14 +473,14 @@ export function GameStudio({ initialGame }: GameStudioProps) {
   };
 
   // Re-attach to any in-flight (or recently completed) task once we know the
-  // game id and the profile it was launched for.
+  // game id and the kid it was launched for.
   useEffect(() => {
     if (recoveredRef.current) return;
-    if (!game.id || !primaryProfileId) return;
+    if (!game.id || !primaryKidId) return;
     recoveredRef.current = true;
-    void recoverSession(game.id, primaryProfileId);
+    void recoverSession(game.id, primaryKidId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [game.id, primaryProfileId]);
+  }, [game.id, primaryKidId]);
 
   useEffect(() => () => stopPolling(), []);
 
@@ -511,7 +511,7 @@ export function GameStudio({ initialGame }: GameStudioProps) {
       setError(t("needThinkingProvider"));
       return;
     }
-    if (!primaryProfileId) {
+    if (!primaryKidId) {
       setInvalid((v) => ({ ...v, audience: true }));
       setView("settings");
       return;
@@ -551,7 +551,7 @@ export function GameStudio({ initialGame }: GameStudioProps) {
         setError(t("needProviderKey"));
         return;
       }
-      const childName = kids.find((k) => k.id === primaryProfileId)?.name;
+      const childName = kids.find((k) => k.id === primaryKidId)?.name;
 
       // Memory/parent-notes and birthdate are E2EE — assemble the agent's
       // learning context and age in the browser (the server can't decrypt them)
@@ -559,18 +559,18 @@ export function GameStudio({ initialGame }: GameStudioProps) {
       const learningContext = buildLearningContext(
         kids,
         { isFamily: game.isFamily, audienceIds: game.audienceIds },
-        primaryProfileId,
+        primaryKidId,
       );
       const age =
         calculateChildAge(
-          kids.find((k) => k.id === primaryProfileId)?.birthdate ?? null,
+          kids.find((k) => k.id === primaryKidId)?.birthdate ?? null,
         ) ?? undefined;
 
       const res = await dodi.request("/api/agent/sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
         body: JSON.stringify({
-          profileId: primaryProfileId,
+          kidId: primaryKidId,
           taskType: isUpdate ? "update_game" : "generate_game",
           gameId: game.id ?? undefined,
           payload,
@@ -652,7 +652,7 @@ export function GameStudio({ initialGame }: GameStudioProps) {
     const nextInvalid = {
       title: !game.id && !game.title.trim(),
       learningGoal: !game.learningGoal.trim(),
-      audience: !primaryProfileId,
+      audience: !primaryKidId,
     };
     if (nextInvalid.title || nextInvalid.learningGoal || nextInvalid.audience) {
       setInvalid(nextInvalid);
@@ -691,7 +691,7 @@ export function GameStudio({ initialGame }: GameStudioProps) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            profileId: primaryProfileId,
+            kidId: primaryKidId,
             title: game.title.trim(),
             tags: game.tags,
             learningGoal: game.learningGoal || undefined,

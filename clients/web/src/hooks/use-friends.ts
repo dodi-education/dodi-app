@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import type { Profile } from "@dodi/types/database";
+import type { Kid } from "@dodi/types/database";
 
 import {
   type CachedFriendKeys,
-  keysForProfile,
+  keysForKid,
 } from "@/lib/friend-keys-cache";
 import {
   type DecodedFriend,
@@ -20,8 +20,8 @@ import {
   sendFriendRequest,
   unblockFriend,
 } from "@/lib/friends";
-import { useProfiles } from "@/hooks/use-profiles";
-import { useProfileStore } from "@/stores/profile-store";
+import { useKids } from "@/hooks/use-kids";
+import { useKidStore } from "@/stores/kid-store";
 import { useVaultStore } from "@/stores/vault-store";
 
 interface FriendBuckets {
@@ -34,7 +34,7 @@ interface FriendBuckets {
 const EMPTY: FriendBuckets = { friends: [], incoming: [], outgoing: [], blocked: [] };
 
 export interface UseFriends extends FriendBuckets {
-  profile: Profile | null;
+  kid: Kid | null;
   /** This kid's own public handle (social_id). */
   myHandle: string | null;
   loading: boolean;
@@ -55,9 +55,9 @@ export interface UseFriends extends FriendBuckets {
  * Loads and decrypts a kid's friends, requests and blocked list, and exposes the
  * mutating actions. Friend keys are generated + published on first use.
  */
-export function useFriends(profileId: string): UseFriends {
-  const { profiles } = useProfiles();
-  const profile = profiles?.find((p) => p.id === profileId) ?? null;
+export function useFriends(kidId: string): UseFriends {
+  const { kids } = useKids();
+  const kid = kids?.find((p) => p.id === kidId) ?? null;
 
   const keysRef = useRef<CachedFriendKeys | null>(null);
   const [buckets, setBuckets] = useState<FriendBuckets>(EMPTY);
@@ -66,7 +66,7 @@ export function useFriends(profileId: string): UseFriends {
   const [error, setError] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
-    if (!profile) return;
+    if (!kid) return;
     const session = useVaultStore.getState().session;
     if (!session) {
       setError("locked");
@@ -74,20 +74,20 @@ export function useFriends(profileId: string): UseFriends {
       return;
     }
     try {
-      // Keys are scoped to this profile: never reuse another kid's keys after a
-      // profile switch, or their sealed cards won't open (names show as "—").
-      const cached = keysForProfile(keysRef.current, profile.id);
-      const hadKeys = profile.friend_secret_keys != null || cached != null;
-      const keys = cached ?? (await ensureFriendKeys(profile, session));
-      keysRef.current = { profileId: profile.id, keys };
+      // Keys are scoped to this kid: never reuse another kid's keys after a
+      // kid switch, or their sealed cards won't open (names show as "—").
+      const cached = keysForKid(keysRef.current, kid.id);
+      const hadKeys = kid.friend_secret_keys != null || cached != null;
+      const keys = cached ?? (await ensureFriendKeys(kid, session));
+      keysRef.current = { kidId: kid.id, keys };
       // First-time publish: refresh the cache so our public key is visible.
-      if (!hadKeys) useProfileStore.getState().invalidate();
+      if (!hadKeys) useKidStore.getState().invalidate();
 
       const [friendsV, incomingV, outgoingV, blockedV] = await Promise.all([
-        fetchFriends(profileId),
-        fetchRequests(profileId, "incoming"),
-        fetchRequests(profileId, "outgoing"),
-        fetchBlocked(profileId),
+        fetchFriends(kidId),
+        fetchRequests(kidId, "incoming"),
+        fetchRequests(kidId, "outgoing"),
+        fetchBlocked(kidId),
       ]);
       setBuckets({
         friends: friendsV.map((v) => decodeView(v, keys, session)),
@@ -101,13 +101,13 @@ export function useFriends(profileId: string): UseFriends {
     } finally {
       setLoading(false);
     }
-  }, [profile, profileId]);
+  }, [kid, kidId]);
 
   useEffect(() => {
-    // Mount/profile-change fetch: reload() decrypts and sets state asynchronously.
+    // Mount/kid-change fetch: reload() decrypts and sets state asynchronously.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (profile) void reload();
-  }, [profile, reload]);
+    if (kid) void reload();
+  }, [kid, reload]);
 
   const runAction = useCallback(
     async (fn: () => Promise<void>) => {
@@ -127,32 +127,32 @@ export function useFriends(profileId: string): UseFriends {
   const sendRequest = useCallback(
     async (handle: string, nickname: string) => {
       const session = useVaultStore.getState().session;
-      if (!profile || !session) throw new Error("locked");
-      await sendFriendRequest(profile, session, handle, nickname);
+      if (!kid || !session) throw new Error("locked");
+      await sendFriendRequest(kid, session, handle, nickname);
       await reload();
     },
-    [profile, reload],
+    [kid, reload],
   );
 
   return {
     ...buckets,
-    profile,
-    myHandle: profile?.social_id ?? null,
-    loading: loading && profile != null,
+    kid,
+    myHandle: kid?.social_id ?? null,
+    loading: loading && kid != null,
     busy,
     error,
     reload: () => void reload(),
     sendRequest,
     accept: (f) =>
       runAction(() => {
-        const keys = profile ? keysForProfile(keysRef.current, profile.id) : null;
-        if (!profile || !keys) throw new Error("locked");
-        return acceptRequest(f.id, f.counterpartKemPublicKey, profile, keys);
+        const keys = kid ? keysForKid(keysRef.current, kid.id) : null;
+        if (!kid || !keys) throw new Error("locked");
+        return acceptRequest(f.id, f.counterpartKemPublicKey, kid, keys);
       }),
-    reject: (f) => runAction(() => rejectRequest(f.id, profileId)),
-    cancel: (f) => runAction(() => removeFriend(f.id, profileId)),
-    remove: (f) => runAction(() => removeFriend(f.id, profileId)),
-    block: (f) => runAction(() => blockFriend(f.id, profileId)),
-    unblock: (f) => runAction(() => unblockFriend(f.id, profileId)),
+    reject: (f) => runAction(() => rejectRequest(f.id, kidId)),
+    cancel: (f) => runAction(() => removeFriend(f.id, kidId)),
+    remove: (f) => runAction(() => removeFriend(f.id, kidId)),
+    block: (f) => runAction(() => blockFriend(f.id, kidId)),
+    unblock: (f) => runAction(() => unblockFriend(f.id, kidId)),
   };
 }

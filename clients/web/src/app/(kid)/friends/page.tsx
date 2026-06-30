@@ -7,9 +7,9 @@ import { FriendsApp } from "@/components/kid/friends/friends-app";
 export default async function FriendsPage() {
   const t = await getTranslations("friends");
   const cookieStore = await cookies();
-  const profileId = cookieStore.get("dodi-active-profile")?.value;
+  const kidId = cookieStore.get("dodi-active-kid")?.value;
 
-  if (!profileId) {
+  if (!kidId) {
     return (
       <div className="my-auto flex flex-col items-center gap-3 py-8 text-center">
         <h1 className="text-[27px] font-extrabold tracking-tight text-ink">
@@ -23,10 +23,10 @@ export default async function FriendsPage() {
   }
 
   return (
-    <BrowseContext profileId={profileId}>
-      {/* key on profileId: a profile switch (router.refresh) remounts the
+    <BrowseContext kidId={kidId}>
+      {/* key on kidId: a kid switch (router.refresh) remounts the
           subtree, so per-kid state (friend keys, lists) never bleeds across. */}
-      <FriendsApp key={profileId} profileId={profileId} />
+      <FriendsApp key={kidId} kidId={kidId} />
     </BrowseContext>
   );
 }

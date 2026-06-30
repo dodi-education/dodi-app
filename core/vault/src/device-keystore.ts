@@ -6,7 +6,7 @@
  * Security note: the secret keys are stored in IndexedDB unencrypted — this is
  * the deliberate "trusted device / stay-unlocked" tradeoff (like staying logged
  * in). A future hardening can wrap them under a device PIN / passkey / WebAuthn
- * PRF before storage. Anyone with access to the unlocked browser profile can
+ * PRF before storage. Anyone with access to the unlocked browser kid can
  * unwrap the VMK, exactly as they could read an open session.
  */
 import {

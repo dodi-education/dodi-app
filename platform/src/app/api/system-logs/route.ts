@@ -9,7 +9,7 @@ export async function GET(request: Request): Promise<NextResponse> {
   const { accountId, supabase } = auth;
 
   const { searchParams } = new URL(request.url);
-  const profileId = searchParams.get("profileId") ?? undefined;
+  const kidId = searchParams.get("kidId") ?? undefined;
   const personaId = searchParams.get("personaId") ?? undefined;
   const event = searchParams.get("event") ?? undefined;
   const limit = Math.min(
@@ -20,7 +20,7 @@ export async function GET(request: Request): Promise<NextResponse> {
 
   try {
     const logs = await listSystemLogs(supabase, accountId, {
-      profileId,
+      kidId,
       personaId,
       event,
       limit,

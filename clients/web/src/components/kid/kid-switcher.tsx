@@ -8,7 +8,7 @@ import { useTranslations } from "next-intl";
 import { AvatarPinPuzzle } from "@/components/kid/avatar-pin-puzzle";
 import { KidAvatar } from "@/components/kid/kid-avatar";
 import { Icon } from "@/components/shared/icon";
-import { useProfiles } from "@/hooks/use-profiles";
+import { useKids } from "@/hooks/use-kids";
 import { dodi } from "@/lib/api";
 import { refreshFriendCards } from "@/lib/friends";
 import {
@@ -21,11 +21,11 @@ import {
 } from "@/lib/avatars";
 import { cn } from "@/lib/utils";
 import { useDodiSessionStore } from "@/stores/dodi-session-store";
-import { useProfileStore } from "@/stores/profile-store";
+import { useKidStore } from "@/stores/kid-store";
 import { useVaultStore } from "@/stores/vault-store";
-import { encryptProfileFields } from "@dodi/vault";
+import { encryptKidFields } from "@dodi/vault";
 
-import type { Json, Profile } from "@dodi/types/database";
+import type { Json, Kid } from "@dodi/types/database";
 
 function getCookie(name: string): string | undefined {
   const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
@@ -36,11 +36,11 @@ function setCookie(name: string, value: string) {
   document.cookie = `${name}=${value}; path=/; max-age=86400`;
 }
 
-/** The target profile's decrypted PIN sequence, or null when the puzzle is off. */
-function parsePin(profile: Profile): string[] | null {
-  if (!profile.avatar_pin) return null;
+/** The target kid's decrypted PIN sequence, or null when the puzzle is off. */
+function parsePin(kid: Kid): string[] | null {
+  if (!kid.avatar_pin) return null;
   try {
-    const arr: unknown = JSON.parse(profile.avatar_pin);
+    const arr: unknown = JSON.parse(kid.avatar_pin);
     return Array.isArray(arr) && arr.length === PIN_LENGTH
       ? (arr as string[])
       : null;
@@ -49,18 +49,18 @@ function parsePin(profile: Profile): string[] | null {
   }
 }
 
-export function ProfileSwitcher() {
+export function KidSwitcher() {
   const t = useTranslations("kidProfile");
   const tn = useTranslations("nav");
   const router = useRouter();
-  const { profiles: profileList } = useProfiles();
-  const profiles = profileList ?? [];
-  const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
+  const { kids: kidList } = useKids();
+  const kids = kidList ?? [];
+  const [activeKidId, setActiveKidId] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   const cardRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const cardRefreshProfileId = useRef<string | null>(null);
+  const cardRefreshKidId = useRef<string | null>(null);
 
   // Re-seal this kid's friend cards after they edit their look, so friends see
   // the new avatar/color. Debounced while tapping; flushed when the popover
@@ -70,16 +70,16 @@ export function ProfileSwitcher() {
       clearTimeout(cardRefreshTimer.current);
       cardRefreshTimer.current = null;
     }
-    const pid = cardRefreshProfileId.current;
-    cardRefreshProfileId.current = null;
+    const pid = cardRefreshKidId.current;
+    cardRefreshKidId.current = null;
     if (!pid) return;
     const session = useVaultStore.getState().session;
-    const prof = useProfileStore.getState().byId[pid];
+    const prof = useKidStore.getState().byId[pid];
     if (session && prof) void refreshFriendCards(prof, session).catch(() => {});
   }, []);
 
-  function scheduleCardRefresh(profileId: string) {
-    cardRefreshProfileId.current = profileId;
+  function scheduleCardRefresh(kidId: string) {
+    cardRefreshKidId.current = kidId;
     if (cardRefreshTimer.current) clearTimeout(cardRefreshTimer.current);
     cardRefreshTimer.current = setTimeout(flushCardRefresh, 1200);
   }
@@ -89,21 +89,21 @@ export function ProfileSwitcher() {
   useEffect(() => {
     let cancelled = false;
     async function resolveActive() {
-      const currentId = getCookie("dodi-active-profile") ?? null;
+      const currentId = getCookie("dodi-active-kid") ?? null;
       if (cancelled) return;
       if (currentId) {
-        setActiveProfileId(currentId);
-      } else if (profileList && profileList.length > 0) {
-        setCookie("dodi-active-profile", profileList[0].id);
-        setCookie("dodi-kid-locale", profileList[0].language ?? "en");
-        setActiveProfileId(profileList[0].id);
+        setActiveKidId(currentId);
+      } else if (kidList && kidList.length > 0) {
+        setCookie("dodi-active-kid", kidList[0].id);
+        setCookie("dodi-kid-locale", kidList[0].language ?? "en");
+        setActiveKidId(kidList[0].id);
       }
     }
     void resolveActive();
     return () => {
       cancelled = true;
     };
-  }, [profileList]);
+  }, [kidList]);
 
   const closePopover = useCallback(() => {
     setOpen(false);
@@ -121,59 +121,59 @@ export function ProfileSwitcher() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [closePopover]);
 
-  const activeProfile = profiles.find((p) => p.id === activeProfileId);
-  const pendingProfile = pending
-    ? profiles.find((p) => p.id === pending)
+  const activeKid = kids.find((p) => p.id === activeKidId);
+  const pendingKid = pending
+    ? kids.find((p) => p.id === pending)
     : null;
 
-  function handleSwitch(profile: Profile) {
-    // End Dodi session for the outgoing profile (fires the memory update).
+  function handleSwitch(kid: Kid) {
+    // End Dodi session for the outgoing kid (fires the memory update).
     useDodiSessionStore.getState().endSession();
-    setCookie("dodi-active-profile", profile.id);
-    setCookie("dodi-kid-locale", profile.language ?? "en");
-    setActiveProfileId(profile.id);
+    setCookie("dodi-active-kid", kid.id);
+    setCookie("dodi-kid-locale", kid.language ?? "en");
+    setActiveKidId(kid.id);
     closePopover();
     router.refresh();
   }
 
-  function onPickProfile(profile: Profile) {
-    if (profile.id === activeProfileId) return;
-    if (parsePin(profile)) {
-      setPending(profile.id);
+  function onPickKid(kid: Kid) {
+    if (kid.id === activeKidId) return;
+    if (parsePin(kid)) {
+      setPending(kid.id);
     } else {
-      handleSwitch(profile);
+      handleSwitch(kid);
     }
   }
 
-  /** Persist a look change for the active profile: optimistic + encrypted PATCH. */
+  /** Persist a look change for the active kid: optimistic + encrypted PATCH. */
   function updateLook(partial: Partial<AvatarConfig>) {
-    const profile = activeProfile;
-    if (!profile) return;
+    const kid = activeKid;
+    if (!kid) return;
     const cfg: AvatarConfig = {
-      ...readAvatarConfig(profile.avatar_config),
+      ...readAvatarConfig(kid.avatar_config),
       ...partial,
     };
     const cfgJson: Json = { color: cfg.color, avatar: cfg.avatar };
-    useProfileStore.getState().patchLocal(profile.id, { avatar_config: cfgJson });
+    useKidStore.getState().patchLocal(kid.id, { avatar_config: cfgJson });
 
     const session = useVaultStore.getState().session;
     if (!session) return;
-    const enc = encryptProfileFields(session, { avatar_config: cfgJson });
-    void dodi.request(`/api/profiles/${profile.id}`, {
+    const enc = encryptKidFields(session, { avatar_config: cfgJson });
+    void dodi.request(`/api/kids/${kid.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ avatar_config: enc.avatar_config }),
     });
     // Propagate the new look to friends' cards (debounced across rapid taps).
-    scheduleCardRefresh(profile.id);
+    scheduleCardRefresh(kid.id);
   }
 
-  if (profiles.length === 0) {
+  if (kids.length === 0) {
     return <div className="h-10 w-10 rounded-full bg-primary-soft-2" />;
   }
 
-  const activeCfg: AvatarConfig = activeProfile
-    ? readAvatarConfig(activeProfile.avatar_config)
+  const activeCfg: AvatarConfig = activeKid
+    ? readAvatarConfig(activeKid.avatar_config)
     : { color: 0, avatar: null };
   const ringColor = KID_AVA_COLORS[activeCfg.color] ?? KID_AVA_COLORS[0];
 
@@ -182,16 +182,16 @@ export function ProfileSwitcher() {
       <button
         onClick={() => (open ? closePopover() : setOpen(true))}
         className="flex items-center gap-2.5 rounded-full bg-white/70 py-1.5 pl-1.5 pr-4 text-[15px] font-extrabold text-ink transition hover:bg-white"
-        aria-label={tn("switchProfile")}
+        aria-label={tn("switchKid")}
       >
-        {activeProfile ? (
-          <KidAvatar profile={activeProfile} size={34} />
+        {activeKid ? (
+          <KidAvatar kid={activeKid} size={34} />
         ) : (
           <span className="size-[34px] rounded-full bg-primary-soft-2" />
         )}
-        {activeProfile && (
+        {activeKid && (
           <span className="max-w-[120px] truncate">
-            {activeProfile.display_name}
+            {activeKid.display_name}
           </span>
         )}
         <Icon
@@ -221,20 +221,20 @@ export function ProfileSwitcher() {
           </div>
 
           <div className="flex flex-col gap-1">
-            {profiles.map((p) => {
-              const isActive = p.id === activeProfileId;
+            {kids.map((p) => {
+              const isActive = p.id === activeKidId;
               const isPending = p.id === pending;
               return (
                 <button
                   key={p.id}
-                  onClick={() => onPickProfile(p)}
+                  onClick={() => onPickKid(p)}
                   className={cn(
                     "flex w-full items-center gap-3 rounded-2xl px-2.5 py-[7px] text-left transition-colors hover:bg-muted",
                     isActive && "bg-primary-soft",
                     isPending && "bg-muted",
                   )}
                 >
-                  <KidAvatar profile={p} size={42} />
+                  <KidAvatar kid={p} size={42} />
                   <span className="flex-1 text-base font-extrabold text-ink">
                     {p.display_name}
                   </span>
@@ -257,11 +257,11 @@ export function ProfileSwitcher() {
 
           <div className="my-3 h-px bg-border" />
 
-          {pending && pendingProfile ? (
+          {pending && pendingKid ? (
             <div>
               <div className="mb-1 flex items-center justify-between">
                 <div className="text-[12.5px] font-extrabold uppercase tracking-[0.06em] text-faint">
-                  {t("secret", { name: pendingProfile.display_name })}
+                  {t("secret", { name: pendingKid.display_name })}
                 </div>
                 <button
                   onClick={() => setPending(null)}
@@ -276,23 +276,23 @@ export function ProfileSwitcher() {
               <AvatarPinPuzzle
                 mode="solve"
                 onSolve={(seq) => {
-                  const pin = parsePin(pendingProfile);
+                  const pin = parsePin(pendingKid);
                   const ok =
                     !!pin &&
                     pin.length === seq.length &&
                     pin.every((a, i) => a === seq[i]);
-                  if (ok) setTimeout(() => handleSwitch(pendingProfile), 250);
+                  if (ok) setTimeout(() => handleSwitch(pendingKid), 250);
                   return ok;
                 }}
               />
             </div>
-          ) : activeProfile ? (
+          ) : activeKid ? (
             <>
               <div className="mb-3 flex items-center gap-3.5">
-                <KidAvatar profile={activeProfile} size={76} pad={5} />
+                <KidAvatar kid={activeKid} size={76} pad={5} />
                 <div>
                   <div className="text-[12.5px] font-extrabold uppercase tracking-[0.06em] text-faint">
-                    {t("look", { name: activeProfile.display_name })}
+                    {t("look", { name: activeKid.display_name })}
                   </div>
                   <div className="mt-[3px] text-[13px] font-semibold text-muted-foreground">
                     {t("lookHint")}

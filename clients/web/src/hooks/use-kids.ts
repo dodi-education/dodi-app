@@ -1,37 +1,37 @@
 import { useEffect, useState } from "react";
 
-import { useProfileStore } from "@/stores/profile-store";
-import type { Profile } from "@dodi/types/database";
+import { useKidStore } from "@/stores/kid-store";
+import type { Kid } from "@dodi/types/database";
 
 /**
- * Client hook over the profile cache: loads the decrypted profile list once
+ * Client hook over the kid cache: loads the decrypted kid list once
  * (via the VaultSession) and returns it reactively. Reused across reader pages
  * so navigation shares one fetch + decrypt.
  */
-export function useProfiles(): {
-  profiles: Profile[] | null;
+export function useKids(): {
+  kids: Kid[] | null;
   loading: boolean;
   error: string | null;
   reload: () => void;
 } {
-  const list = useProfileStore((s) => s.list);
-  const loadList = useProfileStore((s) => s.loadList);
+  const list = useKidStore((s) => s.list);
+  const loadList = useKidStore((s) => s.loadList);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (list === null) {
       loadList().catch((e) =>
-        setError(e instanceof Error ? e.message : "Failed to load profiles"),
+        setError(e instanceof Error ? e.message : "Failed to load kids"),
       );
     }
   }, [list, loadList]);
 
   return {
-    profiles: list,
+    kids: list,
     loading: list === null && error === null,
     error,
     reload: () => {
-      void useProfileStore.getState().loadList(true);
+      void useKidStore.getState().loadList(true);
     },
   };
 }

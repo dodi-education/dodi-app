@@ -87,10 +87,10 @@ export async function PATCH(
       );
     }
 
-    log.info("deactivationrequested", { sessionId: id, profileId: session.profile_id });
+    log.info("deactivationrequested", { sessionId: id, kidId: session.kid_id });
 
     // Abort the in-memory agent task (if still running on this server)
-    abortSession(session.profile_id);
+    abortSession(session.kid_id);
 
     // Update DB status
     await deactivateAgentSession(supabase, id);

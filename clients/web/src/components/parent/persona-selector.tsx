@@ -9,12 +9,12 @@ import { useVaultStore } from "@/stores/vault-store";
 import type { Persona } from "@dodi/types/database";
 
 interface PersonaSelectorProps {
-  profileId: string;
+  kidId: string;
   value: string | null;
   onChange: (personaId: string | null) => void;
 }
 
-export function PersonaSelector({ profileId, value, onChange }: PersonaSelectorProps) {
+export function PersonaSelector({ kidId, value, onChange }: PersonaSelectorProps) {
   const t = useTranslations("personas");
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [loading, setLoading] = useState(true);
@@ -38,7 +38,7 @@ export function PersonaSelector({ profileId, value, onChange }: PersonaSelectorP
     const newValue = personaId || null;
     onChange(newValue);
 
-    await dodi.request(`/api/profiles/${profileId}`, {
+    await dodi.request(`/api/kids/${kidId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ active_persona_id: newValue }),

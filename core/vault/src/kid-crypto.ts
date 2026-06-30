@@ -1,5 +1,5 @@
 /**
- * Client-side encrypt/decrypt for a profile's personal fields, via a VaultSession.
+ * Client-side encrypt/decrypt for a kid's personal fields, via a VaultSession.
  *
  * Encrypted: display_name, birthdate, parent_notes, memory, avatar_config, and
  * avatar_pin — all sealed under the account VMK so the server stays blind.
@@ -14,12 +14,12 @@
  *   P2 — once it does, it encrypts the new dossier here rather than the server
  *   writing plaintext.
  */
-import type { Json, Profile } from "@dodi/types/database";
+import type { Json, Kid } from "@dodi/types/database";
 
 import type { VaultSession } from "./session";
 
-/** Decrypt the personal fields of a fetched profile row for display/editing. */
-export function decryptProfile(session: VaultSession, row: Profile): Profile {
+/** Decrypt the personal fields of a fetched kid row for display/editing. */
+export function decryptKid(session: VaultSession, row: Kid): Kid {
   return {
     ...row,
     display_name: session.decryptField(row.display_name) ?? "",
@@ -45,7 +45,7 @@ function decryptAvatarConfig(
   return raw;
 }
 
-export interface ProfilePersonalFields {
+export interface KidPersonalFields {
   display_name?: string;
   birthdate?: string | null;
   parent_notes?: string | null;
@@ -61,7 +61,7 @@ export interface ProfilePersonalFields {
  * that are present and a string (or, for avatar_config, a non-null object) are
  * sealed; absent / null pass through.
  */
-export function encryptProfileFields<T extends ProfilePersonalFields>(
+export function encryptKidFields<T extends KidPersonalFields>(
   session: VaultSession,
   fields: T,
 ): T {

@@ -138,7 +138,7 @@ const pendingKey = (pid: string) => `dodi-memory-pending-${pid}`;
 function seedCurrent(pid: string, date: string, sessions: Session[]) {
   localStorage.setItem(
     currentKey(pid),
-    JSON.stringify({ profileId: pid, date, sessions }),
+    JSON.stringify({ kidId: pid, date, sessions }),
   );
 }
 function readCurrentRaw(pid: string) {
@@ -156,7 +156,7 @@ const flush = async () => {
 
 async function connect(pid: string) {
   // Reset connection state so the "already connecting" early-return doesn't
-  // block a subsequent connect for the same profile in multi-day tests.
+  // block a subsequent connect for the same kid in multi-day tests.
   useDodiSessionStore.setState({ state: "disconnected" });
   await useDodiSessionStore.getState().connect(pid);
   await flush();
@@ -336,7 +336,7 @@ describe("dodi session store — day-batched memory outbox", () => {
     }));
     localStorage.setItem(
       pendingKey(PID),
-      JSON.stringify({ profileId: PID, sessions: big }),
+      JSON.stringify({ kidId: PID, sessions: big }),
     );
     seedCurrent(PID, "2026-06-18", [makeSession(DAY1, "new-1", "new-2", "new-3")]);
     vi.setSystemTime(new Date(DAY2));

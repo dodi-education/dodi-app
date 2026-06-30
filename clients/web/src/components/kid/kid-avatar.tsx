@@ -9,13 +9,13 @@ import {
 
 import type { Json } from "@dodi/types/database";
 
-interface KidAvatarProfile {
+interface KidAvatarData {
   display_name: string;
   avatar_config: Json | null;
 }
 
 interface KidAvatarProps {
-  profile: KidAvatarProfile;
+  kid: KidAvatarData;
   /** Rendered diameter in px. */
   size?: number;
   /** Override the avatar-image ring padding (defaults to ~8% of size). */
@@ -24,16 +24,16 @@ interface KidAvatarProps {
 }
 
 /**
- * A kid profile's avatar: the chosen animal/character image on a colored ring,
+ * A kid's avatar: the chosen animal/character image on a colored ring,
  * or — when no avatar is picked — the first letter of the name on the color.
  */
-export function KidAvatar({ profile, size = 34, pad, className }: KidAvatarProps) {
-  const cfg: AvatarConfig = readAvatarConfig(profile.avatar_config);
+export function KidAvatar({ kid, size = 34, pad, className }: KidAvatarProps) {
+  const cfg: AvatarConfig = readAvatarConfig(kid.avatar_config);
   const color = KID_AVA_COLORS[cfg.color] ?? KID_AVA_COLORS[0];
   const img = cfg.avatar ? avatarImage(cfg.avatar) : null;
 
   if (!img) {
-    const initial = (profile.display_name?.[0] ?? "?").toUpperCase();
+    const initial = (kid.display_name?.[0] ?? "?").toUpperCase();
     return (
       <span
         className={`inline-flex shrink-0 items-center justify-center rounded-full font-extrabold ${className ?? ""}`}

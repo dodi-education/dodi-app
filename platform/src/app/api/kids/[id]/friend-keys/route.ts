@@ -7,7 +7,7 @@ import { publishFriendKeys } from "@/services/friends";
 const FriendKeysSchema = z.object({
   kemPublicKey: z.string().min(1).max(10000),
   signPublicKey: z.string().min(1).max(10000),
-  // Opaque enc:v1: blob of the profile's secret keys, sealed under the VMK.
+  // Opaque enc:v1: blob of the kid's secret keys, sealed under the VMK.
   sealedSecretKeys: z.string().min(1).max(50000),
 });
 
@@ -15,7 +15,7 @@ interface RouteContext {
   params: Promise<{ id: string }>;
 }
 
-/** Publish (or rotate) a kid profile's friend identity. Owner-scoped. */
+/** Publish (or rotate) a kid's friend identity. Owner-scoped. */
 export async function POST(
   request: Request,
   context: RouteContext,
@@ -37,7 +37,7 @@ export async function POST(
   try {
     await publishFriendKeys(supabase, {
       accountId,
-      profileId: id,
+      kidId: id,
       kemPublicKey: result.data.kemPublicKey,
       signPublicKey: result.data.signPublicKey,
       sealedSecretKeys: result.data.sealedSecretKeys,

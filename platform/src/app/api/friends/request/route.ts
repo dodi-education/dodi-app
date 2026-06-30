@@ -6,8 +6,8 @@ import { serviceClient } from "@/lib/supabase";
 import { createFriendRequest } from "@/services/friends";
 
 const RequestSchema = z.object({
-  requesterProfileId: z.string().uuid(),
-  targetProfileId: z.string().uuid(),
+  requesterKidId: z.string().uuid(),
+  targetKidId: z.string().uuid(),
   // Sealed SealedEnvelope JSON strings (opaque to the server).
   previewCard: z.string().min(1).max(50000),
   fullCard: z.string().min(1).max(50000),
@@ -15,7 +15,7 @@ const RequestSchema = z.object({
   nickname: z.string().min(1).max(50000),
 });
 
-/** Send a friend request from one of the caller's kids to a target profile. */
+/** Send a friend request from one of the caller's kids to a target kid. */
 export async function POST(request: Request): Promise<NextResponse> {
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
@@ -32,8 +32,8 @@ export async function POST(request: Request): Promise<NextResponse> {
   try {
     const row = await createFriendRequest(serviceClient(), {
       requesterAccountId: auth.accountId,
-      requesterProfileId: result.data.requesterProfileId,
-      targetProfileId: result.data.targetProfileId,
+      requesterKidId: result.data.requesterKidId,
+      targetKidId: result.data.targetKidId,
       previewCard: result.data.previewCard,
       fullCard: result.data.fullCard,
       nickname: result.data.nickname,

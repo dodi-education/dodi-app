@@ -33,14 +33,14 @@ function clip(text: string, max: number): string {
 /**
  * Assemble the learning context from ALREADY-DECRYPTED kids, scoped by "who can
  * play": family → all kids; specific audienceIds → those kids; otherwise the
- * primary profile. Each kid's memory/notes are clipped to
+ * primary kid. Each kid's memory/notes are clipped to
  * LEARNING_CONTEXT_CHARS_PER_KID. Returns undefined when no selected kid has any
  * memory or notes.
  */
 export function buildLearningContext(
   kids: LearningContextKid[],
   audience: LearningAudience | undefined,
-  primaryProfileId: string,
+  primaryKidId: string,
 ): string | undefined {
   let selected: LearningContextKid[];
   if (audience?.isFamily) {
@@ -49,7 +49,7 @@ export function buildLearningContext(
     const ids = new Set(audience.audienceIds);
     selected = kids.filter((k) => ids.has(k.id));
   } else {
-    selected = kids.filter((k) => k.id === primaryProfileId);
+    selected = kids.filter((k) => k.id === primaryKidId);
   }
 
   const blocks: string[] = [];

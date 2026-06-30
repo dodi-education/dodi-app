@@ -47,7 +47,7 @@ export function FriendAvatar({
         style={{ filter: grayscale ? "grayscale(0.7)" : undefined }}
       >
         <KidAvatar
-          profile={{ display_name: safe, avatar_config: avatarConfig ?? null }}
+          kid={{ display_name: safe, avatar_config: avatarConfig ?? null }}
           size={size}
         />
       </span>

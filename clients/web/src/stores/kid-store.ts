@@ -1,5 +1,5 @@
 /**
- * Client profile cache: fetch ciphertext once, decrypt once with the VaultSession,
+ * Client kid cache: fetch ciphertext once, decrypt once with the VaultSession,
  * and reuse the plaintext across navigation. Decrypted data lives in memory only
  * (never persisted). Mutations call `invalidate()` to force a refetch.
  */
@@ -7,14 +7,14 @@ import { dodi } from "@/lib/api";
 import { create } from "zustand";
 
 import type { VaultSession } from "@dodi/vault";
-import { decryptProfile } from "@dodi/vault/profile-crypto";
-import type { Profile } from "@dodi/types/database";
+import { decryptKid } from "@dodi/vault/kid-crypto";
+import type { Kid } from "@dodi/types/database";
 
 import { useVaultStore } from "./vault-store";
 
 /**
  * Resolve once the vault has an unlocked session. On a cold load the silent
- * unlock runs in parallel with the first profiles fetch, so the session may
+ * unlock runs in parallel with the first kids fetch, so the session may
  * still be null when we get here — wait for it instead of throwing. Reject if
  * the vault settles into a terminal state without a session (unlock failed),
  * so callers don't hang forever.
@@ -41,23 +41,23 @@ function awaitSession(): Promise<VaultSession> {
   });
 }
 
-interface ProfileStoreState {
-  list: Profile[] | null;
-  byId: Record<string, Profile>;
-  loadList: (force?: boolean) => Promise<Profile[]>;
-  loadOne: (id: string, force?: boolean) => Promise<Profile | null>;
-  /** Optimistically merge a patch into a cached profile (list + byId), no refetch. */
-  patchLocal: (id: string, patch: Partial<Profile>) => void;
+interface KidStoreState {
+  list: Kid[] | null;
+  byId: Record<string, Kid>;
+  loadList: (force?: boolean) => Promise<Kid[]>;
+  loadOne: (id: string, force?: boolean) => Promise<Kid | null>;
+  /** Optimistically merge a patch into a cached kid (list + byId), no refetch. */
+  patchLocal: (id: string, patch: Partial<Kid>) => void;
   invalidate: () => void;
 }
 
-// Single-flight guards: concurrent callers (e.g. ProfileSwitcher + the home
+// Single-flight guards: concurrent callers (e.g. KidSwitcher + the home
 // view mounting together) ride the same fetch+decrypt instead of each issuing
 // their own. Cleared once settled so a later load refetches.
-let listInFlight: Promise<Profile[]> | null = null;
-const oneInFlight = new Map<string, Promise<Profile | null>>();
+let listInFlight: Promise<Kid[]> | null = null;
+const oneInFlight = new Map<string, Promise<Kid | null>>();
 
-export const useProfileStore = create<ProfileStoreState>((set, get) => ({
+export const useKidStore = create<KidStoreState>((set, get) => ({
   list: null,
   byId: {},
 
@@ -67,11 +67,11 @@ export const useProfileStore = create<ProfileStoreState>((set, get) => ({
     if (listInFlight && !force) return listInFlight;
 
     listInFlight = (async () => {
-      const res = await dodi.request("/api/profiles");
-      if (!res.ok) throw new Error("Failed to load profiles");
-      const rows = (await res.json()) as Profile[];
+      const res = await dodi.request("/api/kids");
+      if (!res.ok) throw new Error("Failed to load kids");
+      const rows = (await res.json()) as Kid[];
       const session = await awaitSession();
-      const decrypted = rows.map((row) => decryptProfile(session, row));
+      const decrypted = rows.map((row) => decryptKid(session, row));
 
       set((state) => ({
         list: decrypted,
@@ -97,10 +97,10 @@ export const useProfileStore = create<ProfileStoreState>((set, get) => ({
     if (existing && !force) return existing;
 
     const pending = (async () => {
-      const res = await dodi.request(`/api/profiles/${id}`);
+      const res = await dodi.request(`/api/kids/${id}`);
       if (!res.ok) return null;
-      const row = (await res.json()) as Profile;
-      const decrypted = decryptProfile(await awaitSession(), row);
+      const row = (await res.json()) as Kid;
+      const decrypted = decryptKid(await awaitSession(), row);
 
       set((state) => ({ byId: { ...state.byId, [id]: decrypted } }));
       return decrypted;

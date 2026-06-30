@@ -21,7 +21,7 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 CREATE TABLE IF NOT EXISTS "public"."game_plays" (
     "id" uuid DEFAULT gen_random_uuid() NOT NULL,
     "account_id" uuid NOT NULL,
-    "profile_id" uuid NOT NULL,
+    "kid_id" uuid NOT NULL,
     "game_id" uuid NOT NULL,
     "progress_kind" text DEFAULT 'open'::text NOT NULL,
     "started_at" timestamptz DEFAULT now() NOT NULL,
@@ -37,11 +37,11 @@ CREATE TABLE IF NOT EXISTS "public"."game_plays" (
     CONSTRAINT "game_plays_progress_range_check" CHECK ((("final_progress" >= (0)::numeric) AND ("final_progress" <= (1)::numeric))),
     CONSTRAINT "game_plays_account_id_fkey" FOREIGN KEY ("account_id") REFERENCES "public"."accounts"("id") ON DELETE CASCADE,
     CONSTRAINT "game_plays_game_id_fkey" FOREIGN KEY ("game_id") REFERENCES "public"."games"("id") ON DELETE CASCADE,
-    CONSTRAINT "game_plays_profile_id_fkey" FOREIGN KEY ("profile_id") REFERENCES "public"."profiles"("id") ON DELETE CASCADE
+    CONSTRAINT "game_plays_kid_id_fkey" FOREIGN KEY ("kid_id") REFERENCES "public"."kids"("id") ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS "game_plays_account_created_idx" ON "public"."game_plays" USING btree ("account_id", "created_at" DESC);
-CREATE INDEX IF NOT EXISTS "game_plays_challenge_idx" ON "public"."game_plays" USING btree ("profile_id", "succeeded", "started_at" DESC);
+CREATE INDEX IF NOT EXISTS "game_plays_challenge_idx" ON "public"."game_plays" USING btree ("kid_id", "succeeded", "started_at" DESC);
 CREATE INDEX IF NOT EXISTS "game_plays_game_idx" ON "public"."game_plays" USING btree ("game_id", "created_at" DESC);
 
 CREATE OR REPLACE TRIGGER "game_plays_updated_at" BEFORE UPDATE ON "public"."game_plays"

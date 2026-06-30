@@ -2,7 +2,7 @@
  * Client-side end-of-session memory update (E2EE). Builds the prompt from the
  * vault-decrypted current memory + persona soul + transcript, calls the thinking
  * provider in the browser, encrypts the new dossier, and writes ciphertext via
- * PATCH /api/profiles/[id]. The server never sees the transcript or the dossier.
+ * PATCH /api/kids/[id]. The server never sees the transcript or the dossier.
  *
  * Driven by the day-batch outbox in the dodi session store: the full day's
  * transcript is submitted as one chunk on the first connect of a new day (or via
@@ -17,8 +17,8 @@ import {
 } from "@dodi/ai/memory-prompt";
 import { AI_PROVIDERS } from "@dodi/ai/providers";
 import { getActivePersona } from "@/lib/ai/voice-session";
-import { encryptProfileFields } from "@dodi/vault";
-import { useProfileStore } from "@/stores/profile-store";
+import { encryptKidFields } from "@dodi/vault";
+import { useKidStore } from "@/stores/kid-store";
 import { useProvidersStore } from "@/stores/providers-store";
 import { useVaultStore } from "@/stores/vault-store";
 import type { AccountModelConfig } from "@dodi/types/ai";
@@ -31,18 +31,18 @@ import type { AccountModelConfig } from "@dodi/types/ai";
  * dropped on failure.
  */
 export async function runClientMemoryUpdate(
-  profileId: string,
+  kidId: string,
   sessionTranscript: string,
 ): Promise<boolean> {
   try {
-    // loadOne awaits the vault unlock internally (profile-store `awaitSession`),
+    // loadOne awaits the vault unlock internally (kid-store `awaitSession`),
     // so a cold-load, still-unlocking vault WAITS here instead of dropping; a
     // terminally locked vault makes it throw → caught below → false.
-    const profile = await useProfileStore.getState().loadOne(profileId);
-    if (!profile) return false;
+    const kid = await useKidStore.getState().loadOne(kidId);
+    if (!kid) return false;
 
     // Read the session only after loadOne resolved — by now the vault is
-    // unlocked (loadOne decrypted the profile with it).
+    // unlocked (loadOne decrypted the kid with it).
     const session = useVaultStore.getState().session;
     if (!session) return false;
 
@@ -66,11 +66,11 @@ export async function runClientMemoryUpdate(
     const apiKey = useProvidersStore.getState().getKey(thinkingProvider);
     if (!apiKey) return false;
 
-    const persona = await getActivePersona(profile.active_persona_id);
+    const persona = await getActivePersona(kid.active_persona_id);
     const instruction = buildMemoryUpdateInstruction(persona.soul);
     const prompt = [
       "## Current Memory Document",
-      profile.memory || "(empty — this was the first session)",
+      kid.memory || "(empty — this was the first session)",
       "",
       "## Session Transcript",
       sessionTranscript,
@@ -86,16 +86,16 @@ export async function runClientMemoryUpdate(
     }
 
     const result = parseMemoryUpdateResponse(responseText);
-    const enc = encryptProfileFields(session, { memory: result.memory });
+    const enc = encryptKidFields(session, { memory: result.memory });
 
-    const res = await dodi.request(`/api/profiles/${profileId}`, {
+    const res = await dodi.request(`/api/kids/${kidId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ memory: enc.memory }),
     });
     if (!res.ok) return false;
 
-    useProfileStore.getState().invalidate();
+    useKidStore.getState().invalidate();
     return true;
   } catch {
     // Any unexpected failure (locked vault throw, network, parse) — keep the

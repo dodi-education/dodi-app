@@ -9,7 +9,7 @@
 --
 -- Safe to run multiple times. Apply via the Supabase SQL editor or psql.
 
-ALTER TABLE "public"."profiles"
+ALTER TABLE "public"."kids"
   ADD COLUMN IF NOT EXISTS "avatar_pin" "text";
 
 DO $$
@@ -17,15 +17,15 @@ BEGIN
   IF EXISTS (
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = 'public'
-      AND table_name = 'profiles'
+      AND table_name = 'kids'
       AND column_name = 'avatar_config'
       AND data_type = 'jsonb'
   ) THEN
-    ALTER TABLE "public"."profiles"
+    ALTER TABLE "public"."kids"
       ALTER COLUMN "avatar_config" TYPE "text"
       USING ("avatar_config" #>> '{}');
   END IF;
 END $$;
 
-COMMENT ON COLUMN "public"."profiles"."avatar_config" IS 'E2EE enc:v1: JSON string { color, avatar } — the kid''s chosen look, sealed under the account VMK. Server cannot decrypt.';
-COMMENT ON COLUMN "public"."profiles"."avatar_pin" IS 'E2EE enc:v1: JSON array of 3 avatar ids — the optional avatar-PIN puzzle. NULL = disabled. Server cannot decrypt.';
+COMMENT ON COLUMN "public"."kids"."avatar_config" IS 'E2EE enc:v1: JSON string { color, avatar } — the kid''s chosen look, sealed under the account VMK. Server cannot decrypt.';
+COMMENT ON COLUMN "public"."kids"."avatar_pin" IS 'E2EE enc:v1: JSON array of 3 avatar ids — the optional avatar-PIN puzzle. NULL = disabled. Server cannot decrypt.';

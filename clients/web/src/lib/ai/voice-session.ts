@@ -1,6 +1,6 @@
 /**
  * Client-side voice-session assembly (E2EE). Replaces the server session routes:
- * fetches the vault-decrypted profile/persona/memory/notes/game + the vault-held
+ * fetches the vault-decrypted kid/persona/memory/notes/game + the vault-held
  * provider key, builds the Gemini Live system instruction with the browser-safe
  * `dodi-context` builders, and returns a ready `GeminiLiveConfig`. The server
  * never sees child data or the key.
@@ -15,7 +15,7 @@ import {
   isTodayBirthday,
 } from "@dodi/ai/dodi-context";
 import { decryptPersona } from "@dodi/vault";
-import { useProfileStore } from "@/stores/profile-store";
+import { useKidStore } from "@/stores/kid-store";
 import { useProvidersStore } from "@/stores/providers-store";
 import { useVaultStore } from "@/stores/vault-store";
 import type { AccountModelConfig } from "@dodi/types/ai";
@@ -77,23 +77,23 @@ async function getGameCatalog(): Promise<CatalogEntry[]> {
 }
 
 export async function buildHomeVoiceConfig(
-  profileId: string,
+  kidId: string,
 ): Promise<VoiceSessionConfig> {
-  const profile = await useProfileStore.getState().loadOne(profileId);
-  if (!profile) throw new Error("Profile not found");
+  const kid = await useKidStore.getState().loadOne(kidId);
+  if (!kid) throw new Error("Kid not found");
 
   const config = await getModelConfig();
   const apiKey = await getVoiceKey(config);
-  const persona = await getActivePersona(profile.active_persona_id);
+  const persona = await getActivePersona(kid.active_persona_id);
   const gameCatalog = await getGameCatalog();
 
   const { systemInstruction, tools } = buildHomeVoiceContext({
     personaSoul: persona.soul,
-    childName: profile.display_name,
-    childBirthdate: profile.birthdate,
-    childLanguage: profile.language,
-    memory: profile.memory,
-    parentNotes: profile.parent_notes,
+    childName: kid.display_name,
+    childBirthdate: kid.birthdate,
+    childLanguage: kid.language,
+    memory: kid.memory,
+    parentNotes: kid.parent_notes,
     gameCatalog,
   });
 
@@ -103,22 +103,22 @@ export async function buildHomeVoiceConfig(
     voiceName: config.voiceName,
     systemInstruction,
     ...(tools.length > 0 ? { tools } : {}),
-    language: profile.language,
-    isBirthday: isTodayBirthday(profile.birthdate),
+    language: kid.language,
+    isBirthday: isTodayBirthday(kid.birthdate),
   };
 }
 
 export async function buildGameVoiceConfig(
-  profileId: string,
+  kidId: string,
   gameId: string,
   gameState: Record<string, unknown>,
 ): Promise<VoiceSessionConfig> {
-  const profile = await useProfileStore.getState().loadOne(profileId);
-  if (!profile) throw new Error("Profile not found");
+  const kid = await useKidStore.getState().loadOne(kidId);
+  if (!kid) throw new Error("Kid not found");
 
   const config = await getModelConfig();
   const apiKey = await getVoiceKey(config);
-  const persona = await getActivePersona(profile.active_persona_id);
+  const persona = await getActivePersona(kid.active_persona_id);
 
   const gameRes = await dodi.request(`/api/games/${gameId}`);
   if (!gameRes.ok) throw new Error("Game not found");
@@ -126,11 +126,11 @@ export async function buildGameVoiceConfig(
 
   const { systemInstruction, tools } = buildGameVoiceContext({
     personaSoul: persona.soul,
-    childName: profile.display_name,
-    childBirthdate: profile.birthdate,
-    childLanguage: profile.language,
-    memory: profile.memory,
-    parentNotes: profile.parent_notes,
+    childName: kid.display_name,
+    childBirthdate: kid.birthdate,
+    childLanguage: kid.language,
+    memory: kid.memory,
+    parentNotes: kid.parent_notes,
     gameTitle: game.title,
     gameDescription: game.description,
     gameMarkdown: game.markdown,
@@ -144,7 +144,7 @@ export async function buildGameVoiceConfig(
     voiceName: config.voiceName,
     systemInstruction,
     ...(tools.length > 0 ? { tools } : {}),
-    language: profile.language,
-    isBirthday: isTodayBirthday(profile.birthdate),
+    language: kid.language,
+    isBirthday: isTodayBirthday(kid.birthdate),
   };
 }

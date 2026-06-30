@@ -9,7 +9,7 @@ import { Icon, type IconName } from "@/components/shared/icon";
 import { DodiCompact } from "@/components/dodi/dodi-compact";
 import { cn } from "@/lib/utils";
 import { clearParentUnlocked } from "@/lib/parent-lock";
-import { ProfileSwitcher } from "@/components/kid/profile-switcher";
+import { KidSwitcher } from "@/components/kid/kid-switcher";
 import { useDodiSessionStore } from "@/stores/dodi-session-store";
 import { useVaultStore } from "@/stores/vault-store";
 
@@ -120,7 +120,7 @@ export default function KidLayout({
       {/* Kid header */}
       <header className="flex items-center justify-between px-4 py-3 md:px-6 md:py-4">
         <div className="flex items-center gap-3">
-          <ProfileSwitcher />
+          <KidSwitcher />
           {displayMode === "compact" && <DodiCompact />}
         </div>
         <a

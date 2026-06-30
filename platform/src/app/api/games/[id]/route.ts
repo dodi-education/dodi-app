@@ -7,11 +7,11 @@ import type { GameUpdate, Json } from "@dodi/types/database";
 import {
   deleteCustomGame,
   getGame,
-  isGameVisibleToProfile,
+  isGameVisibleToKid,
   replaceGameSharings,
   updateCustomGame,
 } from "@/services/games";
-import { getProfile } from "@/services/profiles";
+import { getKid } from "@/services/kids";
 import { mapSuccessDefinition } from "@/lib/game-generation";
 import { getTranslation, applyTranslation } from "@/services/game-translations";
 import { createLogger } from "@/logger";
@@ -30,7 +30,7 @@ const UpdateGameSchema = z.object({
   metadata: z.record(z.string(), z.unknown()).optional(),
   learning_goal: z.string().max(2000).optional(),
   success_definition: z.string().max(2000).optional(),
-  profile_id: z.string().uuid().nullable().optional(),
+  kid_id: z.string().uuid().nullable().optional(),
   is_active: z.boolean().optional(),
   audience: z
     .object({
@@ -61,7 +61,7 @@ export async function GET(
   const { accountId, supabase } = auth;
 
   const { searchParams } = new URL(request.url);
-  const profileId = searchParams.get("profileId") ?? undefined;
+  const kidId = searchParams.get("kidId") ?? undefined;
   let locale = searchParams.get("locale") ?? "en";
 
   try {
@@ -70,15 +70,15 @@ export async function GET(
       return NextResponse.json({ error: "Game not found" }, { status: 404 });
     }
 
-    // Kid deep-link: scope the read to a profile — derive its locale and gate on
+    // Kid deep-link: scope the read to a kid — derive its locale and gate on
     // visibility so inactive/unshared games 404 even via a direct URL.
-    if (profileId) {
-      const profile = await getProfile(supabase, profileId);
-      if (!profile || profile.account_id !== accountId) {
+    if (kidId) {
+      const kid = await getKid(supabase, kidId);
+      if (!kid || kid.account_id !== accountId) {
         return NextResponse.json({ error: "Game not found" }, { status: 404 });
       }
-      locale = profile.language;
-      if (!(await isGameVisibleToProfile(supabase, game, profileId))) {
+      locale = kid.language;
+      if (!(await isGameVisibleToKid(supabase, game, kidId))) {
         return NextResponse.json({ error: "Game not found" }, { status: 404 });
       }
     }
@@ -125,7 +125,7 @@ export async function PATCH(
     }
 
     // `audience` lives in the game_sharings table; `metadata` is a column that
-    // we shallow-merge. `is_active` / `profile_id` flow through as plain columns.
+    // we shallow-merge. `is_active` / `kid_id` flow through as plain columns.
     const { audience, metadata: rawMetadata, ...columnUpdates } = parsed.data;
     const updates: GameUpdate = { ...columnUpdates };
 
@@ -179,7 +179,7 @@ export async function PATCH(
     if (audience) {
       await replaceGameSharings(supabase, id, accountId, {
         family: audience.isFamily,
-        profileIds: audience.audienceIds,
+        kidIds: audience.audienceIds,
       });
     }
 

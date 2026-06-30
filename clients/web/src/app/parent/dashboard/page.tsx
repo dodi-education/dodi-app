@@ -5,8 +5,8 @@ import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 
 import { useDateFormat } from "@/components/providers/date-format-provider";
-import { ProfileAvatar, ProfileName } from "@/components/parent/profile-bits";
-import { ProfilesGlance } from "@/components/parent/profiles-glance";
+import { KidInitialAvatar, KidNameLabel } from "@/components/parent/kid-bits";
+import { KidsGlance } from "@/components/parent/kids-glance";
 import {
   DotSep,
   Row,
@@ -19,7 +19,7 @@ import { StatCell, StatStrip } from "@/components/parent/stat-strip";
 import { Icon } from "@/components/shared/icon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useProfiles } from "@/hooks/use-profiles";
+import { useKids } from "@/hooks/use-kids";
 import { dodi } from "@/lib/api";
 import type { AgentSessionRow } from "@dodi/types/database";
 
@@ -44,9 +44,9 @@ export default function DashboardPage() {
   const ts = useTranslations("agentSessions");
   const { formatDateTime, formatElapsed } = useDateFormat();
 
-  // profiles fetched only for the count (empty state) + IDs; names/ages are
-  // decrypted client-side in the ProfileAvatar/ProfileName/ProfilesGlance islands.
-  const { profiles } = useProfiles();
+  // kids fetched only for the count (empty state) + IDs; names/ages are
+  // decrypted client-side in the KidInitialAvatar/KidNameLabel/KidsGlance islands.
+  const { kids } = useKids();
   const [stats, setStats] = useState<DashboardStats>({
     sessionsToday: 0,
     sessionsThisWeek: 0,
@@ -86,26 +86,26 @@ export default function DashboardPage() {
     update_game: ts("taskUpdate"),
   };
 
-  // Still loading the (decrypted) profile list — hold the page chrome.
-  if (profiles === null) {
+  // Still loading the (decrypted) kid list — hold the page chrome.
+  if (kids === null) {
     return <PageHead title={t("title")} sub={t("subtitle")} />;
   }
 
-  if (profiles.length === 0) {
+  if (kids.length === 0) {
     return (
       <div>
         <PageHead title={t("title")} sub={t("subtitle")} />
         <Section>
           <div className="flex flex-col items-center gap-4 px-5 py-12">
-            <Icon name="profiles" className="h-10 w-10 text-primary" />
+            <Icon name="kids" className="h-10 w-10 text-primary" />
             <div className="text-center">
-              <h3 className="font-semibold">{t("noProfilesTitle")}</h3>
+              <h3 className="font-semibold">{t("noKidsTitle")}</h3>
               <p className="text-sm text-muted-foreground">
-                {t("noProfilesDescription")}
+                {t("noKidsDescription")}
               </p>
             </div>
             <Button asChild>
-              <Link href="/parent/profiles/new">{t("createFirstProfile")}</Link>
+              <Link href="/parent/kids/new">{t("addKid")}</Link>
             </Button>
           </div>
         </Section>
@@ -120,7 +120,7 @@ export default function DashboardPage() {
         sub={t("subtitle")}
         action={
           <Button asChild>
-            <Link href="/parent/profiles/new">{t("addProfile")}</Link>
+            <Link href="/parent/kids/new">{t("addKid")}</Link>
           </Button>
         }
       />
@@ -156,8 +156,8 @@ export default function DashboardPage() {
           sessions.map((session, i) => (
             <Link key={session.id} href="/parent/agent-sessions" className="block">
               <Row clickable>
-                <ProfileAvatar
-                  profileId={session.profile_id}
+                <KidInitialAvatar
+                  kidId={session.kid_id}
                   fallbackIndex={i}
                 />
                 <RowMain>
@@ -168,7 +168,7 @@ export default function DashboardPage() {
                     </span>
                   </RowTitle>
                   <RowMeta>
-                    <ProfileName profileId={session.profile_id} />
+                    <KidNameLabel kidId={session.kid_id} />
                     <DotSep />
                     {formatDateTime(session.created_at)}
                     <DotSep />
@@ -185,7 +185,7 @@ export default function DashboardPage() {
         )}
       </Section>
 
-      <ProfilesGlance />
+      <KidsGlance />
     </div>
   );
 }

@@ -31,7 +31,7 @@ import type {
 
 interface GamePlayViewProps {
   gameId: string;
-  profileId: string;
+  kidId: string;
   title: string;
   description: string;
   codeBundle: string;
@@ -44,7 +44,7 @@ interface GamePlayViewProps {
 
 export function GamePlayView({
   gameId,
-  profileId,
+  kidId,
   title,
   description,
   codeBundle,
@@ -60,7 +60,7 @@ export function GamePlayView({
   useDodiContext({
     context: { type: "game", gameId, markdown, codeBundle, gameState: {} },
     displayMode: "full",
-    profileId,
+    kidId,
   });
 
   const sandboxRef = useRef<GameSandboxHandle | null>(null);
@@ -170,7 +170,7 @@ export function GamePlayView({
         const res = await dodi.request(`/api/games/${gameId}/plays`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ profileId }),
+          body: JSON.stringify({ kidId }),
         });
         if (!res.ok) return;
         const data = (await res.json()) as { playId?: string };
@@ -189,7 +189,7 @@ export function GamePlayView({
         true,
       );
     };
-  }, [gameId, profileId, resetGameAssistance, patchPlay]);
+  }, [gameId, kidId, resetGameAssistance, patchPlay]);
 
   const logEvent = useCallback(async (event: string, message: string) => {
     try {
@@ -197,7 +197,7 @@ export function GamePlayView({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          profileId,
+          kidId,
           event,
           message,
         }),
@@ -205,7 +205,7 @@ export function GamePlayView({
     } catch {
       // Event logging should never block gameplay.
     }
-  }, [gameId, profileId]);
+  }, [gameId, kidId]);
 
   const runCommands = useCallback((commands: GameCommand[]): void => {
     gameDebug("playview", `runCommands called with ${commands.length} commands`);

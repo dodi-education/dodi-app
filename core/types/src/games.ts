@@ -26,11 +26,11 @@ export interface GameCommand {
 
 /**
  * Normalized "who can play" sharing state, sourced from the `game_sharings`
- * table. `family` = shared with the whole account; `profileIds` = specific kids.
+ * table. `family` = shared with the whole account; `kidIds` = specific kids.
  */
 export interface GameSharingState {
   family: boolean;
-  profileIds: string[];
+  kidIds: string[];
 }
 
 export type GameMetadata = Record<string, Json | undefined> & {

@@ -10,7 +10,7 @@
     "./account-keys": "./src/account-keys.ts",
     "./device-keystore": "./src/device-keystore.ts",
     "./session": "./src/session.ts",
-    "./profile-crypto": "./src/profile-crypto.ts",
+    "./kid-crypto": "./src/kid-crypto.ts",
     "./persona-crypto": "./src/persona-crypto.ts",
     "./api-keys-crypto": "./src/api-keys-crypto.ts"
   },

@@ -3,12 +3,12 @@ import { z } from "zod/v4";
 
 import { requireAuth } from "@/lib/resolve-auth";
 import { getGame } from "@/services/games";
-import { getProfile } from "@/services/profiles";
+import { getKid } from "@/services/kids";
 import { logMemoryEvent } from "@/services/system-logs";
 import { getTranslation, applyTranslation } from "@/services/game-translations";
 
 const LogGameEventSchema = z.object({
-  profileId: z.string().uuid(),
+  kidId: z.string().uuid(),
   event: z.enum(["game_played", "game_command_executed", "game_command_failed"]),
   message: z.string().min(1).max(800),
 });
@@ -36,12 +36,12 @@ export async function POST(
     );
   }
 
-  const { profileId, event, message } = parsed.data;
+  const { kidId, event, message } = parsed.data;
 
   try {
-    const profile = await getProfile(supabase, profileId);
-    if (!profile || profile.account_id !== accountId) {
-      return NextResponse.json({ error: "Profile not found" }, { status: 404 });
+    const kid = await getKid(supabase, kidId);
+    if (!kid || kid.account_id !== accountId) {
+      return NextResponse.json({ error: "Kid not found" }, { status: 404 });
     }
 
     const rawGame = await getGame(supabase, id);
@@ -49,13 +49,13 @@ export async function POST(
       return NextResponse.json({ error: "Game not found" }, { status: 404 });
     }
 
-    const gameTranslation = await getTranslation(supabase, rawGame.id, profile.language);
+    const gameTranslation = await getTranslation(supabase, rawGame.id, kid.language);
     const game = applyTranslation(rawGame, gameTranslation);
 
     await logMemoryEvent(supabase, {
-      profile_id: profile.id,
+      kid_id: kid.id,
       account_id: accountId,
-      persona_id: profile.active_persona_id,
+      persona_id: kid.active_persona_id,
       event,
       message: `[${game.title}] ${message}`,
     });

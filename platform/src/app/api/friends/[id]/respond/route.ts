@@ -7,7 +7,7 @@ import { respondToRequest } from "@/services/friends";
 
 const RespondSchema = z.object({
   // The acting kid (the addressee) — disambiguates siblings on one account.
-  profileId: z.string().uuid(),
+  kidId: z.string().uuid(),
   action: z.enum(["accept", "reject"]),
   // The addressee's full card, sealed to the requester — required to accept.
   addresseeCard: z.string().min(1).max(50000).optional(),
@@ -38,7 +38,7 @@ export async function POST(
   try {
     const row = await respondToRequest(serviceClient(), {
       accountId: auth.accountId,
-      profileId: result.data.profileId,
+      kidId: result.data.kidId,
       friendshipId: id,
       action: result.data.action,
       addresseeCard: result.data.addresseeCard,

@@ -36,7 +36,7 @@ export async function logMemoryEvents(
 }
 
 interface ListSystemLogsOptions {
-  profileId?: string;
+  kidId?: string;
   personaId?: string;
   event?: string;
   limit?: number;
@@ -50,7 +50,7 @@ export async function listSystemLogs(
   options: ListSystemLogsOptions = {},
 ): Promise<SystemLog[]> {
   const {
-    profileId,
+    kidId,
     personaId,
     event,
     limit = 50,
@@ -64,8 +64,8 @@ export async function listSystemLogs(
     .order("created_at", { ascending: false })
     .range(offset, offset + limit - 1);
 
-  if (profileId) {
-    query = query.eq("profile_id", profileId);
+  if (kidId) {
+    query = query.eq("kid_id", kidId);
   }
 
   if (personaId) {

@@ -15,8 +15,8 @@ const { loadOne, invalidate, getKey, vaultState, provider } = vi.hoisted(() => (
   provider: { generateJson: vi.fn(), generateText: vi.fn() },
 }));
 
-vi.mock("@/stores/profile-store", () => ({
-  useProfileStore: { getState: () => ({ loadOne, invalidate }) },
+vi.mock("@/stores/kid-store", () => ({
+  useKidStore: { getState: () => ({ loadOne, invalidate }) },
 }));
 
 vi.mock("@/stores/providers-store", () => ({
@@ -34,7 +34,7 @@ vi.mock("@/lib/ai/voice-session", () => ({
 }));
 
 vi.mock("@dodi/vault", () => ({
-  encryptProfileFields: (_s: unknown, fields: { memory?: string | null }) => ({
+  encryptKidFields: (_s: unknown, fields: { memory?: string | null }) => ({
     memory: `enc:${fields.memory}`,
   }),
 }));
@@ -45,7 +45,7 @@ vi.mock("@dodi/ai/client-thinking", () => ({
 
 import { runClientMemoryUpdate } from "@/lib/ai/client-memory-update";
 
-const PROFILE = { id: "pid", memory: null, active_persona_id: null };
+const KID = { id: "pid", memory: null, active_persona_id: null };
 
 const FULL_CONFIG = {
   voiceProvider: "gemini",
@@ -59,7 +59,7 @@ function routedFetch(opts: { config?: unknown; patchOk?: boolean } = {}) {
   const { config = FULL_CONFIG, patchOk = true } = opts;
   return vi.fn(async (url: string) => {
     if (url === "/api/ai/config") return { ok: true, json: async () => config };
-    if (url.startsWith("/api/profiles/")) {
+    if (url.startsWith("/api/kids/")) {
       return { ok: patchOk, json: async () => ({}) };
     }
     throw new Error(`unexpected fetch: ${url}`);
@@ -71,7 +71,7 @@ describe("runClientMemoryUpdate", () => {
 
   beforeEach(() => {
     vaultState.session = {};
-    loadOne.mockResolvedValue(PROFILE);
+    loadOne.mockResolvedValue(KID);
     getKey.mockReturnValue("AIza-key");
     provider.generateJson.mockResolvedValue({ memory: "NEW DOSSIER" });
     provider.generateText.mockResolvedValue("NEW DOSSIER");
@@ -92,7 +92,7 @@ describe("runClientMemoryUpdate", () => {
     const calls = fetchMock.mock.calls as unknown as Array<
       [string, { body: string }]
     >;
-    const patch = calls.find((c) => c[0].startsWith("/api/profiles/"));
+    const patch = calls.find((c) => c[0].startsWith("/api/kids/"));
     expect(patch).toBeTruthy();
     expect(JSON.parse(patch![1].body)).toEqual({ memory: "enc:NEW DOSSIER" });
   });
@@ -130,10 +130,10 @@ describe("runClientMemoryUpdate", () => {
     const ok = await runClientMemoryUpdate("pid", "t");
 
     expect(ok).toBe(false);
-    const calledProfiles = fetchMock.mock.calls.some((c) =>
-      String(c[0]).startsWith("/api/profiles/"),
+    const calledKids = fetchMock.mock.calls.some((c) =>
+      String(c[0]).startsWith("/api/kids/"),
     );
-    expect(calledProfiles).toBe(false);
+    expect(calledKids).toBe(false);
   });
 
   it("returns false when the thinking provider has no API key in the vault", async () => {
