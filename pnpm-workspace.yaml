@@ -1,5 +1,6 @@
 packages:
   - "clients/*"
+  - "landing"
   - "platform"
   - "agent"
   - "core/*"
