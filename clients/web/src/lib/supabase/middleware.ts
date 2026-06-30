@@ -7,12 +7,10 @@ export async function updateSession(
   request: NextRequest,
 ): Promise<NextResponse> {
   // App-logic routes must run on the canonical app host (app.dodi.app) so the
-  // browser Origin matches the platform API's CORS allowlist. Marketing routes
-  // stay on apex/www; dev (LAN IP/localhost) and preview hosts are left alone.
-  // Done first so redirects skip the session refresh below and don't first bounce
-  // to /login on the wrong host.
+  // browser Origin matches the platform API's CORS allowlist; dev (LAN IP/
+  // localhost) and preview hosts are left alone. Done first so redirects skip the
+  // session refresh below and don't first bounce to /login on the wrong host.
   const redirectHost = canonicalRedirectHost(
-    request.nextUrl.pathname,
     request.headers.get("host"),
     process.env.NEXT_PUBLIC_APP_URL,
   );
@@ -64,11 +62,6 @@ export async function updateSession(
   } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
-  // The marketing landing lives on the apex (dodi.app); the app entrance lives
-  // on app.dodi.app. The two share one deployment, so the root path is routed
-  // by host.
-  const host = request.headers.get("host") ?? "";
-  const isAppSubdomain = host.startsWith("app.");
 
   // Public routes that don't require auth
   const publicRoutes = ["/", "/login", "/register", "/reset-password"];
@@ -82,19 +75,13 @@ export async function updateSession(
     return NextResponse.redirect(url);
   }
 
-  // Root path is host-aware: marketing landing on the apex, app entrance on app.*
+  // The marketing site is a separate deployment; this app has no landing page,
+  // so the root always routes into the app: signed-in kids to /home, everyone
+  // else (including direct/localhost access) to /login.
   if (pathname === "/") {
-    if (user) {
-      const url = request.nextUrl.clone();
-      url.pathname = "/home";
-      return NextResponse.redirect(url);
-    }
-    if (isAppSubdomain) {
-      const url = request.nextUrl.clone();
-      url.pathname = "/login";
-      return NextResponse.redirect(url);
-    }
-    // apex + logged out → fall through and serve the landing page
+    const url = request.nextUrl.clone();
+    url.pathname = user ? "/home" : "/login";
+    return NextResponse.redirect(url);
   }
 
   if (
