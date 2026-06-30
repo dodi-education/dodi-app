@@ -61,12 +61,12 @@ export function DodiFullGame() {
           )}
           aria-label={
             isConnecting
-              ? "Dodi connecting"
+              ? "dodi connecting"
               : dodiState === "active"
-                ? "Mute Dodi"
+                ? "Mute dodi"
                 : dodiState === "deaf"
-                  ? "Unmute Dodi"
-                  : "Tap to reconnect Dodi"
+                  ? "Unmute dodi"
+                  : "Tap to reconnect dodi"
           }
         >
           {dodiState === "active" && !dodiSpeaking && (
@@ -74,7 +74,7 @@ export function DodiFullGame() {
           )}
           <Image
             src={getDodiImage(dodiState, false)}
-            alt={dodiState === "active" ? "Dodi listening" : dodiState === "deaf" ? "Dodi can't hear you" : "Dodi sleeping"}
+            alt={dodiState === "active" ? "dodi listening" : dodiState === "deaf" ? "dodi can't hear you" : "dodi sleeping"}
             fill
             sizes="300px"
             className="relative z-[1] object-contain"

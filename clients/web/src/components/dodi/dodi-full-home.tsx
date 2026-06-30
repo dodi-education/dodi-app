@@ -98,7 +98,7 @@ export function DodiFullHome({
           <div className={mascotImageClass + " size-[76%]"}>
             <Image
               src={getDodiImage("disconnected", false)}
-              alt="Dodi sleeping"
+              alt="dodi sleeping"
               fill
               sizes="300px"
               className="object-contain"
@@ -124,7 +124,7 @@ export function DodiFullHome({
           <div className={mascotImageClass + " size-[76%]"}>
             <Image
               src={getDodiImage("connecting", false)}
-              alt="Dodi waking up"
+              alt="dodi waking up"
               fill
               sizes="300px"
               className="object-contain"
@@ -153,11 +153,11 @@ export function DodiFullHome({
             type="button"
             onClick={toggleActive}
             className={mascotButtonClass}
-            aria-label={dodiState === "active" ? "Mute Dodi" : "Unmute Dodi"}
+            aria-label={dodiState === "active" ? "Mute dodi" : "Unmute dodi"}
           >
             <Image
               src={getDodiImage(dodiState, false)}
-              alt={dodiState === "active" ? "Dodi listening" : "Dodi can't hear you"}
+              alt={dodiState === "active" ? "dodi listening" : "dodi can't hear you"}
               fill
               sizes="300px"
               className="object-contain"
@@ -209,7 +209,7 @@ export function DodiFullHome({
           >
             <Image
               src={getDodiImage("sleep", false)}
-              alt="Dodi sleeping — tap to wake"
+              alt="dodi sleeping — tap to wake"
               fill
               sizes="300px"
               className="object-contain"
@@ -238,7 +238,7 @@ export function DodiFullHome({
           <div className={mascotImageClass + " size-[76%]"}>
             <Image
               src={getDodiImage("disconnected", false)}
-              alt="Dodi sleeping"
+              alt="dodi sleeping"
               fill
               sizes="300px"
               className="object-contain"
@@ -279,7 +279,7 @@ export function DodiFullHome({
         >
           <Image
             src={getDodiImage("disconnected", false)}
-            alt="Dodi sleeping — tap to wake"
+            alt="dodi sleeping — tap to wake"
             fill
             sizes="300px"
             className="object-contain"

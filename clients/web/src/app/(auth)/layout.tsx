@@ -11,11 +11,11 @@ export default function AuthLayout({
       <Link href="/" className="mb-8 flex items-center gap-2">
         <Image
           src="/images/dodi-head-active.png"
-          alt="Dodi"
+          alt="dodi"
           width={48}
           height={48}
         />
-        <span className="text-2xl font-bold text-dodi-800">Dodi</span>
+        <span className="text-2xl font-bold text-dodi-800">dodi</span>
       </Link>
       <div className="w-full max-w-md">{children}</div>
     </div>

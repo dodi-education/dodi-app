@@ -4,8 +4,8 @@ import { messages } from "@/i18n/messages";
 import { SITE_URL, localePath, type Locale } from "@/lib/site";
 
 const titles: Record<Locale, string> = {
-  en: "Dodi — AI Learning Companion for Kids",
-  de: "Dodi — KI-Lernbegleiter für Kinder",
+  en: "dodi — AI Learning Companion for Kids",
+  de: "dodi — KI-Lernbegleiter für Kinder",
 };
 
 /**
@@ -31,7 +31,7 @@ export function buildMetadata(locale: Locale): Metadata {
     },
     openGraph: {
       type: "website",
-      siteName: "Dodi",
+      siteName: "dodi",
       title,
       description,
       url: localePath[locale],

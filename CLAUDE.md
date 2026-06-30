@@ -1,8 +1,8 @@
-# Dodi Web — Development Guidelines
+# dodi Web — Development Guidelines
 
 ## Project Overview
 
-Dodi is a personalized, AI-powered learning platform for kids. See `PROJECT.md` for full requirements.
+dodi is a personalized, AI-powered learning platform for kids. See `PROJECT.md` for full requirements.
 
 **Stack**: Next.js 15 (App Router) · React 19 · TypeScript · Tailwind CSS · shadcn/ui · Tabler Icons · Supabase · Vercel
 
@@ -10,7 +10,7 @@ Dodi is a personalized, AI-powered learning platform for kids. See `PROJECT.md` 
 
 ## AI-Agentic First Design Philosophy
 
-When AI is the primary consumer and producer of data, **design the format for AI comprehension first**, human readability second, machine queryability third. This principle guides all data architecture decisions in Dodi where AI companions interact with stored content.
+When AI is the primary consumer and producer of data, **design the format for AI comprehension first**, human readability second, machine queryability third. This principle guides all data architecture decisions in dodi where AI companions interact with stored content.
 
 ### Markup Over Schema
 
@@ -22,7 +22,7 @@ Prefer markdown/text documents over structured relational tables for AI-consumed
 |------------------------|--------------------------|
 | `confidence: 0.85` (float column) | "observed across 4 sessions, most recently Feb 28" |
 | `category: 'challenge'` (enum) | Lives under a `## Challenges` heading the AI reads naturally |
-| `observed_by: uuid` (FK to personas) | "First noted by Explorer Dodi, confirmed across 12+ sessions" |
+| `observed_by: uuid` (FK to personas) | "First noted by Explorer dodi, confirmed across 12+ sessions" |
 | Requires ORM, serialization, rigid schema | AI reads it as a briefing doc and writes it like a journal |
 
 The markup approach is richer, more contextual, and the AI reasons about it directly without a serialization layer.
@@ -57,6 +57,7 @@ Structured relational schemas remain correct for **operational data** — accoun
 - Explicit return types on exported functions and API route handlers
 
 ### Naming
+- **Brand Name** dodi should always be written in all small letters in the frontend UI (marketing landing etc.). Exception: When naming files (e.g. DodiAvatar) it can be written with capital "D" when needed and general code conventions would require it.
 - **Files**: kebab-case (`game-sandbox.tsx`, `ai-provider.ts`)
 - **Components**: PascalCase (`GameSandbox`, `DodiAvatar`)
 - **Hooks**: camelCase with `use` prefix (`useProfile`, `useDodiChat`)
@@ -191,7 +192,7 @@ interface AIProvider {
 - Cover critical user flows:
   - Parent registration and login
   - Profile creation
-  - Dodi chat interaction
+  - dodi chat interaction
   - Game creation and play
   - Schedule management
 - Run against a local Supabase instance with seed data
@@ -215,7 +216,7 @@ npm run test:coverage # Coverage report
 ### Commit Messages
 Follow Conventional Commits:
 ```
-feat: add Dodi voice interaction mode
+feat: add dodi voice interaction mode
 fix: correct game sandbox CSP policy
 chore: update Supabase types after migration
 docs: add API provider configuration guide
@@ -233,7 +234,7 @@ docs: add API provider configuration guide
 - Lazy-load Lottie animations and game sandbox
 - Prefetch routes for kid navigation (games, schedule, home)
 - Keep client bundles small — audit with `@next/bundle-analyzer`
-- Use React `Suspense` boundaries with meaningful loading states (Dodi thinking animation)
+- Use React `Suspense` boundaries with meaningful loading states (dodi thinking animation)
 - Cache AI responses where appropriate (e.g., game metadata, personality prompts)
 - Use Supabase realtime only where needed (friend requests, shared games)
 
@@ -243,11 +244,11 @@ docs: add API provider configuration guide
 
 - WCAG 2.1 AA compliance as baseline
 - All interactive elements keyboard-navigable
-- ARIA labels on icon-only buttons and Dodi states
+- ARIA labels on icon-only buttons and dodi states
 - High contrast mode support
 - Minimum touch targets: 44x44px (critical for kid use on tablets)
-- Screen reader support for Dodi chat messages
-- Reduce motion support for Dodi animations (`prefers-reduced-motion`)
+- Screen reader support for dodi chat messages
+- Reduce motion support for dodi animations (`prefers-reduced-motion`)
 
 ---
 

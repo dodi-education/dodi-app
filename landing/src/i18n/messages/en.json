@@ -1,27 +1,27 @@
 {
   "landing": {
-    "heroTitle": "Hi, I'm Dodi!",
-    "heroSubtitle": "A personalized AI learning companion that creates fun, targeted educational experiences for your kids. Dodi adapts to each child's age, skills, and interests.",
+    "heroTitle": "Hi, I'm dodi!",
+    "heroSubtitle": "A personalized AI learning companion that creates fun, targeted educational experiences for your kids. dodi adapts to each child's age, skills, and interests.",
     "getStarted": "Get started",
     "haveAccount": "I have an account",
     "logIn": "Log in",
-    "featuresTitle": "Why kids love Dodi",
+    "featuresTitle": "Why kids love dodi",
     "featureSmartTitle": "Smart Companion",
-    "featureSmartDesc": "Dodi answers curious questions, tells stories, and helps with homework — all tailored to your child.",
+    "featureSmartDesc": "dodi answers curious questions, tells stories, and helps with homework — all tailored to your child.",
     "featureGamesTitle": "Custom Games",
     "featureGamesDesc": "AI-generated educational games that match your child's level and interests. New games every day.",
     "featurePrivacyTitle": "Privacy First",
     "featurePrivacyDesc": "Parents have full control. All personal data is encrypted. No tracking, no ads, no third-party sharing.",
     "featurePersonalTitle": "Personalizable",
-    "featurePersonalDesc": "Customize Dodi's personality, appearance, and learning style. Make it truly your child's companion.",
+    "featurePersonalDesc": "Customize dodi's personality, appearance, and learning style. Make it truly your child's companion.",
     "howItWorksTitle": "How it works",
     "step1Title": "Create an account",
     "step1Desc": "Sign up and set up your kid with their age and interests.",
     "step2Title": "Connect your AI",
     "step2Desc": "Bring your own API key from providers like Gemini, ChatGPT, Claude, or Grok.",
-    "step3Title": "Let Dodi guide the way",
-    "step3Desc": "Your child interacts with Dodi via text or voice. Dodi creates personalized games and adapts over time.",
-    "footer": "Dodi. Made with love in Austria for kids around the world."
+    "step3Title": "Let dodi guide the way",
+    "step3Desc": "Your child interacts with dodi via text or voice. dodi creates personalized games and adapts over time.",
+    "footer": "dodi. Made with love in Austria for kids around the world."
   },
   "common": {
     "signUp": "Sign up"

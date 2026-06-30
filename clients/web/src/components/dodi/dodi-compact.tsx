@@ -20,16 +20,16 @@ export function DodiCompact() {
 
   const ariaLabel =
     dodiState === "connecting"
-      ? "Dodi connecting"
+      ? "dodi connecting"
       : dodiState === "active"
-        ? "Mute Dodi"
+        ? "Mute dodi"
         : dodiState === "deaf"
-          ? "Unmute Dodi"
+          ? "Unmute dodi"
           : dodiState === "sleep"
-            ? "Tap to wake Dodi"
+            ? "Tap to wake dodi"
             : error
-              ? "Tap to reconnect Dodi"
-              : "Tap to start Dodi";
+              ? "Tap to reconnect dodi"
+              : "Tap to start dodi";
 
   return (
     <button
@@ -41,7 +41,7 @@ export function DodiCompact() {
     >
       <Image
         src={getDodiImage(dodiState, true)}
-        alt="Dodi"
+        alt="dodi"
         width={32}
         height={32}
         className="rounded-full"

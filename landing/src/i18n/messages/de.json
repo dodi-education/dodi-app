@@ -1,27 +1,27 @@
 {
   "landing": {
-    "heroTitle": "Hallo, ich bin Dodi!",
-    "heroSubtitle": "Ein personalisierter KI-Lernbegleiter, der unterhaltsame, zielgerichtete Lernerfahrungen für deine Kinder schafft. Dodi passt sich dem Alter, den Fähigkeiten und den Interessen jedes Kindes an.",
+    "heroTitle": "Hallo, ich bin dodi!",
+    "heroSubtitle": "Ein personalisierter KI-Lernbegleiter, der unterhaltsame, zielgerichtete Lernerfahrungen für deine Kinder schafft. dodi passt sich dem Alter, den Fähigkeiten und den Interessen jedes Kindes an.",
     "getStarted": "Jetzt starten",
     "haveAccount": "Ich habe ein Konto",
     "logIn": "Anmelden",
-    "featuresTitle": "Warum Kinder Dodi lieben",
+    "featuresTitle": "Warum Kinder dodi lieben",
     "featureSmartTitle": "Schlauer Begleiter",
-    "featureSmartDesc": "Dodi beantwortet neugierige Fragen, erzählt Geschichten und hilft bei Hausaufgaben — alles auf dein Kind zugeschnitten.",
+    "featureSmartDesc": "dodi beantwortet neugierige Fragen, erzählt Geschichten und hilft bei Hausaufgaben — alles auf dein Kind zugeschnitten.",
     "featureGamesTitle": "Eigene Spiele",
     "featureGamesDesc": "KI-generierte Lernspiele, die zum Niveau und den Interessen deines Kindes passen. Jeden Tag neue Spiele.",
     "featurePrivacyTitle": "Datenschutz zuerst",
     "featurePrivacyDesc": "Eltern haben die volle Kontrolle. Alle persönlichen Daten sind verschlüsselt. Kein Tracking, keine Werbung, keine Weitergabe an Dritte.",
     "featurePersonalTitle": "Personalisierbar",
-    "featurePersonalDesc": "Passe Dodis Persönlichkeit, Aussehen und Lernstil an. Mach ihn zum Begleiter deines Kindes.",
+    "featurePersonalDesc": "Passe dodis Persönlichkeit, Aussehen und Lernstil an. Mach ihn zum Begleiter deines Kindes.",
     "howItWorksTitle": "So funktioniert's",
     "step1Title": "Konto erstellen",
     "step1Desc": "Registriere dich und richte dein Kind mit Alter und Interessen ein.",
     "step2Title": "KI verbinden",
     "step2Desc": "Bringe deinen eigenen API-Schlüssel von Anbietern wie Gemini, ChatGPT, Claude oder Grok mit.",
-    "step3Title": "Lass Dodi den Weg zeigen",
-    "step3Desc": "Dein Kind interagiert mit Dodi per Text oder Sprache. Dodi erstellt personalisierte Spiele und passt sich mit der Zeit an.",
-    "footer": "Dodi. Mit Liebe in Österreich gebaut für Kinder auf der ganzen Welt."
+    "step3Title": "Lass dodi den Weg zeigen",
+    "step3Desc": "Dein Kind interagiert mit dodi per Text oder Sprache. dodi erstellt personalisierte Spiele und passt sich mit der Zeit an.",
+    "footer": "dodi. Mit Liebe in Österreich gebaut für Kinder auf der ganzen Welt."
   },
   "common": {
     "signUp": "Registrieren"

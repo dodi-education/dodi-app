@@ -42,7 +42,7 @@ function classifyClose(
     return {
       fatal: true,
       message:
-        "Dodi has used up the AI provider's quota for now. Please check your plan and billing details for the configured API key, then reconnect.",
+        "dodi has used up the AI provider's quota for now. Please check your plan and billing details for the configured API key, then reconnect.",
     };
   }
 
@@ -57,7 +57,7 @@ function classifyClose(
     return {
       fatal: true,
       message:
-        "Dodi couldn't authenticate with the AI provider. Please check the API key in parent settings, then reconnect.",
+        "dodi couldn't authenticate with the AI provider. Please check the API key in parent settings, then reconnect.",
     };
   }
 

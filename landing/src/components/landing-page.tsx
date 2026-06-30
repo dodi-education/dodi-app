@@ -33,12 +33,12 @@ export function LandingPage({ locale }: { locale: Locale }) {
         <div className="flex items-center gap-2">
           <Image
             src="/images/dodi-head-active.png"
-            alt="Dodi"
+            alt="dodi"
             width={40}
             height={40}
             priority
           />
-          <span className="text-xl font-bold text-dodi-800">Dodi</span>
+          <span className="text-xl font-bold text-dodi-800">dodi</span>
         </div>
         <nav className="flex items-center gap-3">
           <LanguageSwitcher locale={locale} />
@@ -60,7 +60,7 @@ export function LandingPage({ locale }: { locale: Locale }) {
           <div className="relative h-48 w-48 md:h-64 md:w-64">
             <Image
               src="/images/dodi-active.png"
-              alt="Dodi — your AI learning companion"
+              alt="dodi — your AI learning companion"
               fill
               sizes="(max-width: 768px) 192px, 256px"
               className="object-contain"

@@ -93,7 +93,7 @@ export function QrCode({ value, size = 200 }: QrCodeProps) {
       >
         <Image
           src="/images/dodi-head-active.png"
-          alt="Dodi"
+          alt="dodi"
           width={Math.round(badge)}
           height={Math.round(badge)}
           className="h-full w-full scale-[1.1] object-contain"

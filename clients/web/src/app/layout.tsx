@@ -20,7 +20,7 @@ const nunito = Nunito({
 });
 
 export const metadata: Metadata = {
-  title: "Dodi — AI Learning Companion for Kids",
+  title: "dodi — AI Learning Companion for Kids",
   description:
     "A personalized, AI-powered learning platform that creates fun, targeted educational experiences for kids.",
 };
