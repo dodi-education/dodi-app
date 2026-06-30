@@ -18,13 +18,13 @@ Parents stay fully in control through a PIN-protected configuration view: they c
 
 ## Highlights
 
-- 🦤 **Dodi companion** — an animated mascot with text and voice chat that adapts to each child.
-- 🎮 **AI-generated games** — educational exercises generated as HTML/CSS/JS and run inside a locked-down sandboxed iframe.
-- 🧠 **Living memory** — the companion keeps a markdown "memory dossier" per child (an AI-agentic-first design) that parents can read and edit as plain text.
-- 🧑‍🤝‍🧑 **Friends** — kids connect via name tags / QR codes and share games, exchanged as end-to-end-encrypted friend cards.
-- 🔐 **Privacy-first** — sensitive profile and social data is end-to-end encrypted and provider-blind, built on post-quantum-ready cryptography.
-- 🌍 **Pluggable AI** — provider adapters (Anthropic, Google Gemini) selected per account.
-- 🗣️ **Internationalized** — English and German out of the box.
+- **Dodi companion** — an animated mascot with text and voice chat that adapts to each child.
+- **AI-generated games** — educational exercises generated as HTML/CSS/JS and run inside a locked-down sandboxed iframe.
+- **Living memory** — the companion keeps a markdown "memory dossier" per child (an AI-agentic-first design) that parents can read and edit as plain text.
+- **Friends** — kids connect via name tags / QR codes and share games, exchanged as end-to-end-encrypted friend cards.
+- **Privacy-first** — sensitive profile and social data is end-to-end encrypted and provider-blind, built on post-quantum-ready cryptography.
+- **Pluggable AI** — provider adapters (Anthropic, Google Gemini) selected per account.
+- **Internationalized** — English and German out of the box.
 
 See [`PROJECT.md`](PROJECT.md) for the full product specification and [`CLAUDE.md`](CLAUDE.md) for engineering guidelines.
 

@@ -512,8 +512,9 @@ parent-defined goal — and, in future, generate challenges like "Solve 3 math g
 ## TODO
 
 - Distinguish between development environment and production:
+ - Add registration mode switch (open/invite/closed). When invite is active, you can only register with an invite code.
+ - Add invite system
  - In production DB/system errors should never be displayed to the users. Only generic errors should be displayed in prodouction.
- - In Production login should redirect to https://app.dodi.app/login (so app runs always under this domain) 
 
 - Transactional e-mails
 - Onboarding wizard (Password, Seed phrase, PIN (skipable))
