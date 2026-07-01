@@ -29,6 +29,7 @@ export default function KidLayout({
   const dodiState = useDodiSessionStore((s) => s.state);
   const gestureNeeded = useDodiSessionStore((s) => s.gestureNeeded);
   const activate = useDodiSessionStore((s) => s.activate);
+  const vaultStatus = useVaultStore((s) => s.status);
 
   // Ensure the vault is unlocked in kid view (kids enter after the parent has
   // unlocked; silently re-unlocks via the device key on a fresh load).
@@ -39,6 +40,12 @@ export default function KidLayout({
     const { status, unlockSilently } = useVaultStore.getState();
     if (status !== "unlocked") void unlockSilently();
   }, []);
+
+  // Account with no vault yet (registration not finished) → force finish-setup,
+  // same as the parent VaultGate. A properly set-up account never hits this.
+  useEffect(() => {
+    if (vaultStatus === "needs-setup") router.replace("/finish-setup");
+  }, [vaultStatus, router]);
 
   // Tear down Dodi voice session when leaving the kid view entirely
   useEffect(() => {

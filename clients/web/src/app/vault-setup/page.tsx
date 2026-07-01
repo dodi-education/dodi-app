@@ -48,7 +48,8 @@ export default function VaultSetupPage() {
     router.replace("/parent/dashboard");
   }
 
-  function handleVerify() {
+  function handleVerify(e: React.FormEvent) {
+    e.preventDefault();
     const ok = verifyIndices.every(
       (i) => (answers[i] ?? "").trim().toLowerCase() === words[i],
     );
@@ -93,7 +94,7 @@ export default function VaultSetupPage() {
               </Button>
             </>
           ) : (
-            <>
+            <form onSubmit={handleVerify} className="flex flex-col gap-5">
               <div className="flex flex-col gap-3">
                 {verifyIndices.map((i) => (
                   <div key={i} className="flex flex-col gap-1.5">
@@ -113,6 +114,7 @@ export default function VaultSetupPage() {
               {error && <p className="text-sm text-destructive">{error}</p>}
               <div className="flex gap-2">
                 <Button
+                  type="button"
                   variant="outline"
                   className="flex-1"
                   onClick={() => {
@@ -122,11 +124,11 @@ export default function VaultSetupPage() {
                 >
                   Back
                 </Button>
-                <Button className="flex-1" onClick={handleVerify}>
+                <Button type="submit" className="flex-1">
                   Confirm
                 </Button>
               </div>
-            </>
+            </form>
           )}
         </CardContent>
       </Card>

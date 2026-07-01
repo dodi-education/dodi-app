@@ -89,7 +89,9 @@ export default function RegisterPage() {
       email,
       password,
       options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
+        // After the user confirms their email, land on the finish-setup step
+        // (verify password → bootstrap the E2EE vault → reveal recovery phrase).
+        emailRedirectTo: `${window.location.origin}/auth/callback?next=/finish-setup`,
         // Passed through to raw_user_meta_data; the before_user_created hook
         // validates it and handle_new_user() records the redemption.
         data:
