@@ -64,10 +64,22 @@ ALTER TYPE "public"."subscription_tier" OWNER TO "postgres";
 CREATE OR REPLACE FUNCTION "public"."handle_new_user"() RETURNS "trigger"
     LANGUAGE "plpgsql" SECURITY DEFINER
     AS $$
+declare
+  v_code text;
 begin
   insert into public.accounts (id, email)
   values (new.id, new.email)
   on conflict (id) do nothing;
+
+  -- Record an invite-code redemption if one was supplied at signup (via signUp
+  -- options.data.invite_code -> raw_user_meta_data). The before_user_created
+  -- hook already gated the code; recording must never block signup. (redeem_
+  -- invite_code is defined in the INVITE SYSTEM section below; check_function_
+  -- bodies is off so the forward reference is fine.)
+  v_code := nullif(btrim(new.raw_user_meta_data ->> 'invite_code'), '');
+  if v_code is not null then
+    perform public.redeem_invite_code(v_code, new.id);
+  end if;
 
   return new;
 end;
@@ -1165,3 +1177,133 @@ CREATE POLICY "Participants can view friendships" ON "public"."friendships" FOR 
 GRANT ALL ON TABLE "public"."friendships" TO "anon";
 GRANT ALL ON TABLE "public"."friendships" TO "authenticated";
 GRANT ALL ON TABLE "public"."friendships" TO "service_role";
+
+
+-- ===========================================================================
+-- INVITE SYSTEM + REGISTRATION MODES
+--
+-- Admin-managed invite codes and a redemption ledger. Registration mode
+-- (open/invite/closed) is enforced by the platform's before_user_created auth
+-- hook; invite codes are validated there and RECORDED here by handle_new_user()
+-- once the auth.users row (and account id) exists. RLS is enabled with no
+-- policies (default-deny): only the service role and the SECURITY DEFINER
+-- functions touch these tables. No client/admin UI — rows managed via SQL.
+-- ===========================================================================
+
+CREATE TABLE IF NOT EXISTS "public"."invite_codes" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "code" "text" NOT NULL,
+    "is_active" boolean DEFAULT true NOT NULL,
+    -- null = unlimited uses while active (reserved for future per-code limits).
+    "max_uses" integer,
+    -- Free-text admin memo (who/why the code was issued).
+    "note" "text",
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+ALTER TABLE ONLY "public"."invite_codes"
+    ADD CONSTRAINT "invite_codes_pkey" PRIMARY KEY ("id");
+
+-- Case-insensitive uniqueness so "DODI-BETA" and "dodi-beta" can't coexist.
+CREATE UNIQUE INDEX IF NOT EXISTS "invite_codes_code_lower_uniq" ON "public"."invite_codes" USING "btree" ("lower"("code"));
+
+CREATE TABLE IF NOT EXISTS "public"."invite_code_redemptions" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "invite_code_id" "uuid" NOT NULL,
+    "account_id" "uuid" NOT NULL,
+    "redeemed_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+ALTER TABLE ONLY "public"."invite_code_redemptions"
+    ADD CONSTRAINT "invite_code_redemptions_pkey" PRIMARY KEY ("id");
+
+-- One redemption row per (code, account) makes recording idempotent.
+ALTER TABLE ONLY "public"."invite_code_redemptions"
+    ADD CONSTRAINT "invite_code_redemptions_code_account_uniq" UNIQUE ("invite_code_id", "account_id");
+
+ALTER TABLE ONLY "public"."invite_code_redemptions"
+    ADD CONSTRAINT "invite_code_redemptions_invite_code_id_fkey" FOREIGN KEY ("invite_code_id") REFERENCES "public"."invite_codes"("id") ON DELETE CASCADE;
+
+ALTER TABLE ONLY "public"."invite_code_redemptions"
+    ADD CONSTRAINT "invite_code_redemptions_account_id_fkey" FOREIGN KEY ("account_id") REFERENCES "public"."accounts"("id") ON DELETE CASCADE;
+
+CREATE INDEX IF NOT EXISTS "invite_code_redemptions_account_idx" ON "public"."invite_code_redemptions" USING "btree" ("account_id");
+
+CREATE OR REPLACE TRIGGER "invite_codes_updated_at" BEFORE UPDATE ON "public"."invite_codes" FOR EACH ROW EXECUTE FUNCTION "public"."handle_updated_at"();
+
+ALTER TABLE "public"."invite_codes" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "public"."invite_code_redemptions" ENABLE ROW LEVEL SECURITY;
+
+-- redeem_invite_code(code, account_id): atomically record a redemption for an
+-- active code. Returns true if recorded, false if no active code matches (or a
+-- future max_uses limit is reached). Locks the code row so concurrent signups
+-- against a max_uses-limited code can't over-redeem.
+CREATE OR REPLACE FUNCTION "public"."redeem_invite_code"("p_code" "text", "p_account_id" "uuid") RETURNS boolean
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public', 'pg_temp'
+    AS $$
+declare
+  v_invite public.invite_codes%rowtype;
+  v_uses integer;
+begin
+  select * into v_invite
+  from public.invite_codes
+  where lower(code) = lower(btrim(p_code))
+    and is_active = true
+  for update;
+
+  if not found then
+    return false;
+  end if;
+
+  if v_invite.max_uses is not null then
+    select count(*) into v_uses
+    from public.invite_code_redemptions
+    where invite_code_id = v_invite.id;
+
+    if v_uses >= v_invite.max_uses then
+      return false;
+    end if;
+  end if;
+
+  insert into public.invite_code_redemptions (invite_code_id, account_id)
+  values (v_invite.id, p_account_id)
+  on conflict (invite_code_id, account_id) do nothing;
+
+  return true;
+end;
+$$;
+
+-- is_invite_code_active(code): read-only validity check used by the platform's
+-- before_user_created hook (via the service role). A function (not a client
+-- query) so the case-insensitive lower(code) match can't be turned into an
+-- ILIKE wildcard by user input, and so clients can't probe codes directly.
+CREATE OR REPLACE FUNCTION "public"."is_invite_code_active"("p_code" "text") RETURNS boolean
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO 'public', 'pg_temp'
+    AS $$
+  select exists (
+    select 1
+    from public.invite_codes
+    where lower(code) = lower(btrim(p_code))
+      and is_active = true
+  );
+$$;
+
+-- These invite functions must never be callable directly by clients — only by
+-- the service role and the SECURITY DEFINER trigger (which runs as owner). The
+-- ALTER DEFAULT PRIVILEGES above grants EXECUTE to anon/authenticated, so
+-- revoke it explicitly.
+REVOKE ALL ON FUNCTION "public"."redeem_invite_code"("p_code" "text", "p_account_id" "uuid") FROM PUBLIC, "anon", "authenticated";
+GRANT ALL ON FUNCTION "public"."redeem_invite_code"("p_code" "text", "p_account_id" "uuid") TO "service_role";
+REVOKE ALL ON FUNCTION "public"."is_invite_code_active"("p_code" "text") FROM PUBLIC, "anon", "authenticated";
+GRANT ALL ON FUNCTION "public"."is_invite_code_active"("p_code" "text") TO "service_role";
+
+GRANT ALL ON TABLE "public"."invite_codes" TO "anon";
+GRANT ALL ON TABLE "public"."invite_codes" TO "authenticated";
+GRANT ALL ON TABLE "public"."invite_codes" TO "service_role";
+
+GRANT ALL ON TABLE "public"."invite_code_redemptions" TO "anon";
+GRANT ALL ON TABLE "public"."invite_code_redemptions" TO "authenticated";
+GRANT ALL ON TABLE "public"."invite_code_redemptions" TO "service_role";

@@ -883,3 +883,7 @@ You can send multiple commands in sequence to build complex drawings:
 -- Translations for system games
 INSERT INTO public.game_translations (id, game_id, locale, title, description, created_at, updated_at) VALUES ('1c187c8b-ec94-4317-baa2-9cd4bb5187e2', '560b130f-80a6-4353-a750-deac44224c53', 'de', 'Zeichnen', 'Ein einfaches Zeichenspiel mit Farben, Pinselgrößen und lustigen Dodi-Zeichenbefehlen.', '2026-03-12 11:44:49.512873+00', '2026-03-12 11:44:49.512873+00');
 INSERT INTO public.game_translations (id, game_id, locale, title, description, created_at, updated_at) VALUES ('f3d2cd5e-3c1c-41f5-b481-0ec373c53c7a', '560b130f-80a6-4353-a750-deac44224c53', 'en', 'Drawing', 'A simple drawing game with colors, brush sizes, and fun Dodi drawing commands.', '2026-03-12 11:44:49.512873+00', '2026-03-12 11:44:49.512873+00');
+
+-- Dev invite code (for local testing of REGISTRATION_MODE=invite). Reusable while active.
+INSERT INTO public.invite_codes (code, is_active, note) VALUES ('DODI-BETA', true, 'Seeded dev invite code')
+ON CONFLICT DO NOTHING;

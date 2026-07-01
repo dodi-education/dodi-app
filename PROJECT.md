@@ -511,6 +511,8 @@ parent-defined goal — and, in future, generate challenges like "Solve 3 math g
 
 ## TODO
 
+- Add captchas to registration / login / pw-reset
+
 - Distinguish between development environment and production:
  - Add registration mode switch (open/invite/closed). When invite is active, you can only register with an invite code.
  - Add invite system

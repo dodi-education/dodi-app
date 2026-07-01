@@ -534,9 +534,74 @@ export interface Database {
         };
         Relationships: [];
       };
+      invite_codes: {
+        Row: {
+          id: string;
+          code: string;
+          is_active: boolean;
+          // null = unlimited uses while active (reserved for future limits).
+          max_uses: number | null;
+          note: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          code: string;
+          is_active?: boolean;
+          max_uses?: number | null;
+          note?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          code?: string;
+          is_active?: boolean;
+          max_uses?: number | null;
+          note?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      invite_code_redemptions: {
+        Row: {
+          id: string;
+          invite_code_id: string;
+          account_id: string;
+          redeemed_at: string;
+        };
+        Insert: {
+          id?: string;
+          invite_code_id: string;
+          account_id: string;
+          redeemed_at?: string;
+        };
+        Update: {
+          id?: string;
+          invite_code_id?: string;
+          account_id?: string;
+          redeemed_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      // Records an invite-code redemption for an active code; returns whether it
+      // was recorded. Called by the handle_new_user() trigger / service role.
+      redeem_invite_code: {
+        Args: { p_code: string; p_account_id: string };
+        Returns: boolean;
+      };
+      // Read-only check: is there an active invite code with this value?
+      // Used by the platform's before_user_created hook (service role).
+      is_invite_code_active: {
+        Args: { p_code: string };
+        Returns: boolean;
+      };
+    };
     Enums: {
       subscription_tier: "free" | "premium";
     };
@@ -561,6 +626,17 @@ export type Device = Database["public"]["Tables"]["devices"]["Row"];
 export type DeviceInsert = Database["public"]["Tables"]["devices"]["Insert"];
 export type DeviceUpdate = Database["public"]["Tables"]["devices"]["Update"];
 export type DeviceStatus = "pending" | "active" | "revoked";
+
+export type InviteCode = Database["public"]["Tables"]["invite_codes"]["Row"];
+export type InviteCodeInsert =
+  Database["public"]["Tables"]["invite_codes"]["Insert"];
+export type InviteCodeUpdate =
+  Database["public"]["Tables"]["invite_codes"]["Update"];
+export type InviteCodeRedemption =
+  Database["public"]["Tables"]["invite_code_redemptions"]["Row"];
+
+/** Registration gate controlled by the platform's REGISTRATION_MODE env var. */
+export type RegistrationMode = "open" | "invite" | "closed";
 export type KidInsert = Database["public"]["Tables"]["kids"]["Insert"];
 export type KidUpdate = Database["public"]["Tables"]["kids"]["Update"];
 

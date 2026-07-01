@@ -57,7 +57,7 @@ Structured relational schemas remain correct for **operational data** — accoun
 - Explicit return types on exported functions and API route handlers
 
 ### Naming
-- **Brand Name** dodi should always be written in all small letters in the frontend UI (marketing landing etc.). Exception: When naming files (e.g. DodiAvatar) it can be written with capital "D" when needed and general code conventions would require it.
+- **Brand Name** dodi should always be written in all small letters in the frontend UI (marketing landing etc.). Exception: When naming files (e.g. DodiAvatar) it can be written with capital "D" when needed and general code conventions would require it. Avoid starting sentences with "dodi".
 - **Files**: kebab-case (`game-sandbox.tsx`, `ai-provider.ts`)
 - **Components**: PascalCase (`GameSandbox`, `DodiAvatar`)
 - **Hooks**: camelCase with `use` prefix (`useProfile`, `useDodiChat`)
@@ -260,12 +260,19 @@ NEXT_PUBLIC_SUPABASE_URL=             # Supabase project URL
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY= # Supabase publishable key sb_publishable_… (safe for client)
 SUPABASE_SECRET_KEY=                  # Supabase secret key sb_secret_… (server only, bypasses RLS)
 NEXT_PUBLIC_APP_URL=                  # App URL (for OAuth redirects, QR codes)
+
+# Platform (api.dodi.app) — registration gate & auth hook. See docs/auth-setup.md
+REGISTRATION_MODE=                    # open | invite | closed (unset ⇒ open); server-only
+BEFORE_USER_CREATED_HOOK_SECRET=      # Supabase auth-hook secret "v1,whsec_…" (server only)
+RESEND_API_KEY=                       # Resend key for Supabase custom SMTP (server only)
 ```
 
 - `NEXT_PUBLIC_` prefix = exposed to client (only non-sensitive values)
 - All other env vars are server-only
 - Never commit `.env.local` — use `.env.local.example` as template
 - Vercel environment variables configured per environment (preview, production)
+- Registration modes + invite codes + Resend/email + the before_user_created hook
+  are documented end-to-end in `docs/auth-setup.md`
 
 ---
 

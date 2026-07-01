@@ -153,7 +153,13 @@ enabled = true
 # in emails.
 site_url = "http://127.0.0.1:3000"
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-additional_redirect_urls = ["https://127.0.0.1:3000"]
+# NOTE: the hosted project needs the same allow-list configured in the dashboard
+# (Authentication > URL Configuration) — this block only applies to local Supabase.
+additional_redirect_urls = [
+  "https://127.0.0.1:3000",
+  "https://localhost:3000",
+  "https://192.168.1.23:3000",
+]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to the local API URL (http://127.0.0.1:<port>/auth/v1).
@@ -172,7 +178,7 @@ enable_anonymous_sign_ins = false
 # Allow/disallow testing manual linking of accounts
 enable_manual_linking = false
 # Passwords shorter than this value will be rejected as weak. Minimum 6, recommended 8 or more.
-minimum_password_length = 6
+minimum_password_length = 8
 # Passwords that do not meet the following requirements will be rejected as weak. Supported values
 # are: `letters_digits`, `lower_upper_letters_digits`, `lower_upper_letters_digits_symbols`
 password_requirements = ""
@@ -206,7 +212,9 @@ enable_signup = true
 # addresses. If disabled, only the new email is required to confirm.
 double_confirm_changes = true
 # If enabled, users need to confirm their email address before signing in.
-enable_confirmations = false
+# Required for account-enumeration protection: with confirmations on, signUp for
+# an existing email returns a generic success instead of "User already registered".
+enable_confirmations = true
 # If enabled, users will need to reauthenticate or have logged in recently to change their password.
 secure_password_change = false
 # Controls the minimum amount of time that must pass before sending another signup confirmation or password reset email.
@@ -216,15 +224,18 @@ otp_length = 6
 # Number of seconds before the email OTP expires (defaults to 1 hour).
 otp_expiry = 3600
 
-# Use a production-ready SMTP server
+# Production email delivery via Resend (custom SMTP). Left commented so local dev
+# keeps capturing mail in Inbucket (http://127.0.0.1:54324); the HOSTED project's
+# SMTP is configured in the dashboard (Authentication > Emails > SMTP Settings)
+# with the same values. Templates remain Supabase's; Resend is the delivery layer.
 # [auth.email.smtp]
 # enabled = true
-# host = "smtp.sendgrid.net"
-# port = 587
-# user = "apikey"
-# pass = "env(SENDGRID_API_KEY)"
-# admin_email = "admin@email.com"
-# sender_name = "Admin"
+# host = "smtp.resend.com"
+# port = 465
+# user = "resend"
+# pass = "env(RESEND_API_KEY)"
+# admin_email = "no-reply@dodi.app"   # must be on a Resend-verified domain
+# sender_name = "dodi"
 
 # Uncomment to customize email template
 # [auth.email.template.invite]
@@ -258,10 +269,17 @@ max_frequency = "5s"
 # Force log out if the user has been inactive longer than the specified duration.
 # inactivity_timeout = "8h"
 
-# This hook runs before a new user is created and allows developers to reject the request based on the incoming user object.
+# Runs before a new user is created; the platform endpoint enforces the
+# registration mode (open/invite/closed) and validates the invite code, then
+# allows or rejects the signup. Uncomment to test enforcement against LOCAL
+# Supabase (GoTrue in Docker reaches the dev platform via host.docker.internal).
+# The HOSTED project points this at the deployed platform URL (dashboard >
+# Authentication > Hooks) — hosted Supabase can't reach a LAN dev machine, so
+# dev enforcement needs local Supabase or a public tunnel. See docs/auth-setup.md.
 # [auth.hook.before_user_created]
 # enabled = true
-# uri = "pg-functions://postgres/auth/before-user-created-hook"
+# uri = "http://host.docker.internal:3001/api/auth/hooks/before-user-created"
+# secrets = "env(BEFORE_USER_CREATED_HOOK_SECRET)"
 
 # This hook runs before a token is issued and allows you to add additional claims based on the authentication method used.
 # [auth.hook.custom_access_token]
