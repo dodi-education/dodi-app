@@ -24,6 +24,9 @@ export interface Database {
           date_preferences: Json | null;
           // E2EE: enc:v1: sealed 4-digit parent PIN; null = no PIN set.
           parent_pin_enc: string | null;
+          // Plaintext (NOT E2EE) account-level notification toggles; the server
+          // reads these to decide whether to send transactional email.
+          notification_preferences: Json;
           language: string;
           subscription_tier: string;
           created_at: string;
@@ -37,6 +40,7 @@ export interface Database {
           vault_keys?: Json | null;
           date_preferences?: Json | null;
           parent_pin_enc?: string | null;
+          notification_preferences?: Json;
           language?: string;
           subscription_tier?: string;
           created_at?: string;
@@ -50,6 +54,7 @@ export interface Database {
           vault_keys?: Json | null;
           date_preferences?: Json | null;
           parent_pin_enc?: string | null;
+          notification_preferences?: Json;
           language?: string;
           subscription_tier?: string;
           created_at?: string;

@@ -20,6 +20,11 @@ function useSettingsNav(): SettingsNavItem[] {
   const t = useTranslations("settings");
   return [
     { href: "/parent/settings/general", label: t("navGeneral"), icon: "settings" },
+    {
+      href: "/parent/settings/notifications",
+      label: t("navNotifications"),
+      icon: "bell",
+    },
     { href: "/parent/settings/security", label: t("navSecurity"), icon: "lock" },
     {
       href: "/parent/settings/ai-providers",

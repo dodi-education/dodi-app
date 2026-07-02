@@ -456,8 +456,8 @@ The MVP focuses on delivering a functional, delightful core experience:
 - [x] Game library (browse, filter, replay)
 
 ### Phase 4: Socialsharing
-- [ ] Unify date storage (UTC in db) and conversion to local time
-- [ ] Configure date time format
+- [x] Unify date storage (UTC in db) and conversion to local time
+- [x] Configure date time format
 - [x] Name tags and QR code generation
 - [x] Friend system (add, accept, manage)
 - [ ] Drawing game: Let the kid save drawings and share them with friends
@@ -477,7 +477,6 @@ The MVP focuses on delivering a functional, delightful core experience:
 ## Future Roadmap
 
 - **Native apps**: Port to iOS/Android via React Native or Capacitor
-- **Local-first storage**: Opt-in encrypted local storage with cloud backup
 - **Managed AI**: Offer built-in AI so parents don't need API keys
 - **Game marketplace**: Kids share and discover games from the community
 - **Curriculum alignment**: Map games to educational standards
@@ -511,20 +510,15 @@ parent-defined goal — and, in future, generate challenges like "Solve 3 math g
 
 ## TODO
 
-- Add captchas to registration / login / pw-reset
-
-- Distinguish between development environment and production:
- - Add registration mode switch (open/invite/closed). When invite is active, you can only register with an invite code.
- - Add invite system
- - In production DB/system errors should never be displayed to the users. Only generic errors should be displayed in prodouction.
-
 - Transactional e-mails
+- Optimize number of api calls
 - Onboarding wizard (Password, Seed phrase, PIN (skipable))
 
 - Let kids draw their own avatars
 - Game state analysis via screenshot (attach screenshots to game-state <> dodi exchange). This would allow fun features like asking dodi to guess what has been drawn in the drawing game.
 - Daily challenges UI: let Dodi generate + track challenges on top of `game_plays` (foundation is in place).
 - Allow games to connect with AI provider for in-game content generation (e.g. for texts, calculations, formulas etc.)
+
 - New default games:
   - Reading: Generate short stories, let kid read the text, then ask questions about the text.
   - Writing / Reading: Divide generated sentences into text blocks which are randomly laid out. Kid must put the blocks into correct order and read the sentence.
@@ -541,3 +535,11 @@ parent-defined goal — and, in future, generate challenges like "Solve 3 math g
 - Connect dodi-bot for
   - Enhanced transcript storage & learning capabilities (e.g. full transcript storage + periodic memory analysis / update)
   - Periodic (e.g. daily) challenge creation
+
+Notifications:
+- Game agent finished
+
+Security:
+- Add captchas to registration / login / pw-reset
+- Check CSRF safety
+- In production DB/system errors should never be displayed to the users. Only generic errors should be displayed in prodouction.

@@ -5,7 +5,6 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 
-import { BackLink } from "@/components/parent/back-link";
 import { StackField } from "@/components/parent/rows";
 import { SaveRow } from "@/components/parent/save-row";
 import { PageHead, Section } from "@/components/parent/section";
@@ -115,9 +114,6 @@ export default function KidMemoryPage() {
 
   return (
     <div>
-      <BackLink href={`/parent/kids/${params.id}`}>
-        {kid.display_name}
-      </BackLink>
       <PageHead
         title={t("title", { name: kid.display_name })}
         sub={t("subtitle")}

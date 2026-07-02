@@ -6,7 +6,6 @@ import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 
 import { Icon } from "@/components/shared/icon";
-import { BackLink } from "@/components/parent/back-link";
 import {
   FieldRow,
   Row,
@@ -195,7 +194,6 @@ export default function PersonaDetailPage() {
   if (persona.is_system_default) {
     return (
       <div>
-        <BackLink href="/parent/personas">{t("title")}</BackLink>
         <PageHead
           title={persona.name}
           sub={t("defaultHint")}
@@ -270,7 +268,6 @@ export default function PersonaDetailPage() {
 
   return (
     <div>
-      <BackLink href="/parent/personas">{t("title")}</BackLink>
       <PageHead
         title={t("editTitle")}
         sub={t("editDescription", { name: persona.name })}

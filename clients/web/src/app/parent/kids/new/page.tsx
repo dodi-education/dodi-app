@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 
-import { BackLink } from "@/components/parent/back-link";
 import { DateField } from "@/components/parent/date-field";
 import { FieldRow } from "@/components/parent/rows";
 import { SaveRow } from "@/components/parent/save-row";
@@ -83,7 +82,6 @@ export default function NewKidPage() {
 
   return (
     <div>
-      <BackLink href="/parent/kids">{t("title")}</BackLink>
       <PageHead title={t("createTitle")} sub={t("createDescription")} />
 
       <form onSubmit={handleSubmit}>

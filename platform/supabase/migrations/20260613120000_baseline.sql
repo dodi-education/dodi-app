@@ -149,7 +149,8 @@ CREATE TABLE IF NOT EXISTS "public"."accounts" (
     "vault_keys" "jsonb",
     "date_preferences" "jsonb",
     "language" "text" DEFAULT 'en'::"text" NOT NULL,
-    "parent_pin_enc" "text"
+    "parent_pin_enc" "text",
+    "notification_preferences" "jsonb" DEFAULT '{"friend_approval_email": true}'::"jsonb" NOT NULL
 );
 
 
@@ -163,6 +164,8 @@ COMMENT ON COLUMN "public"."accounts"."date_preferences" IS 'Plaintext account-l
 COMMENT ON COLUMN "public"."accounts"."language" IS 'Parent UI language (BCP-47 short code, e.g. en/de). Durable source of truth; cached client-side in the NEXT_LOCALE cookie and re-seeded at login.';
 
 COMMENT ON COLUMN "public"."accounts"."parent_pin_enc" IS 'enc:v1: sealed 4-digit parent PIN gating the parent area; null = no PIN. Client-set/verified; server-blind.';
+
+COMMENT ON COLUMN "public"."accounts"."notification_preferences" IS 'Plaintext account-level notification toggles ({ friend_approval_email, ... }). Deliberately NOT E2EE: the server reads these to decide whether to send transactional email (e.g. friend-request approval). Default: all on.';
 
 
 

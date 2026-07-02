@@ -5,7 +5,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 
-import { BackLink } from "@/components/parent/back-link";
 import { FieldRow, StackField } from "@/components/parent/rows";
 import { SaveRow } from "@/components/parent/save-row";
 import { PageHead, Section } from "@/components/parent/section";
@@ -101,7 +100,6 @@ export default function NewPersonaPage() {
 
   return (
     <div>
-      <BackLink href="/parent/personas">{t("title")}</BackLink>
       <PageHead
         title={isImport ? t("importTitle") : t("createTitle")}
         sub={isImport ? t("importDescription") : t("createDescription")}

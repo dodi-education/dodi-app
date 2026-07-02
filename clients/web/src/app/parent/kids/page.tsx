@@ -11,6 +11,7 @@ import {
   RowTitle,
 } from "@/components/parent/rows";
 import { FriendApprovals } from "@/components/parent/friend-approvals";
+import { KidRowActions } from "@/components/parent/kid-row-actions";
 import { PageHead, Section } from "@/components/parent/section";
 import { Icon } from "@/components/shared/icon";
 import { Badge } from "@/components/ui/badge";
@@ -81,12 +82,11 @@ export default function KidsPage() {
             const color = avatarColor(i);
             const age = ageFromBirthdate(kid.birthdate);
             return (
-              <Link
-                key={kid.id}
-                href={`/parent/kids/${kid.id}`}
-                className="block"
-              >
-                <Row clickable>
+              <Row key={kid.id} clickable>
+                <Link
+                  href={`/parent/kids/${kid.id}`}
+                  className="flex min-w-0 flex-1 items-center gap-3.5"
+                >
                   <div
                     className={`flex size-[34px] shrink-0 items-center justify-center rounded-full text-[13px] font-bold ${color.bg} ${color.fg}`}
                   >
@@ -116,9 +116,9 @@ export default function KidsPage() {
                         : t("birthdateNotSet")}
                     </RowMeta>
                   </RowMain>
-                  <Icon name="chevron_right" size={16} className="text-faint" />
-                </Row>
-              </Link>
+                </Link>
+                <KidRowActions kidId={kid.id} />
+              </Row>
             );
           })}
         </Section>

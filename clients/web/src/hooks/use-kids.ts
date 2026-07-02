@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { useKidStore } from "@/stores/kid-store";
+import { useVaultStore } from "@/stores/vault-store";
 import type { Kid } from "@dodi/types/database";
 
 /**
@@ -16,15 +17,20 @@ export function useKids(): {
 } {
   const list = useKidStore((s) => s.list);
   const loadList = useKidStore((s) => s.loadList);
+  // Consumers outside the VaultGate (e.g. the breadcrumb bar) may mount before
+  // the vault unlocks; that first load rejects with "Vault is locked". Retry
+  // once the session appears so the list resolves without a manual refresh.
+  const session = useVaultStore((s) => s.session);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (list === null) {
-      loadList().catch((e) =>
+    if (list !== null) return;
+    loadList()
+      .then(() => setError(null))
+      .catch((e) =>
         setError(e instanceof Error ? e.message : "Failed to load kids"),
       );
-    }
-  }, [list, loadList]);
+  }, [list, loadList, session]);
 
   return {
     kids: list,

@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 
 import { DotSep, Row, RowMain, RowMeta, RowTitle } from "@/components/parent/rows";
+import { KidRowActions } from "@/components/parent/kid-row-actions";
 import { Section } from "@/components/parent/section";
-import { Icon } from "@/components/shared/icon";
 import { Badge } from "@/components/ui/badge";
 import { usePersonas } from "@/hooks/use-personas";
 import { useKids } from "@/hooks/use-kids";
@@ -45,12 +45,11 @@ export function KidsGlance() {
             ? personaNames.get(kid.active_persona_id)
             : null;
           return (
-            <Link
-              key={kid.id}
-              href={`/parent/kids/${kid.id}`}
-              className="block"
-            >
-              <Row clickable>
+            <Row key={kid.id} clickable>
+              <Link
+                href={`/parent/kids/${kid.id}`}
+                className="flex min-w-0 flex-1 items-center gap-3.5"
+              >
                 <div
                   className={`flex size-[34px] shrink-0 items-center justify-center rounded-full text-[13px] font-bold ${color.bg} ${color.fg}`}
                 >
@@ -73,9 +72,9 @@ export function KidsGlance() {
                     ) : null}
                   </RowMeta>
                 </RowMain>
-                <Icon name="chevron_right" size={16} className="text-faint" />
-              </Row>
-            </Link>
+              </Link>
+              <KidRowActions kidId={kid.id} />
+            </Row>
           );
         })
       )}

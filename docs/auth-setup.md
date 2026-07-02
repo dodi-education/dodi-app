@@ -66,6 +66,16 @@ Authentication → **Emails**
   `host smtp.resend.com`, `port 465`, `user resend`, `pass <RESEND_API_KEY>`,
   sender on a **Resend-verified domain** (e.g. `no-reply@dodi.app`).
 
+> Beyond Supabase's auth emails, the platform now also sends **app-level
+> transactional email directly via the Resend SDK** (e.g. friend-request
+> approval notifications — see `platform/src/lib/email.ts` and
+> `platform/src/emails/`). It reuses the same `RESEND_API_KEY`; the sender is
+> `EMAIL_FROM` and must be on a Resend-verified domain. Verified domains:
+> **`mail.dodi.app`** on the prod Resend instance, **`dev-mail.dodi.app`** on
+> the dev instance — the apex `dodi.app` is NOT verified, so an unset
+> `EMAIL_FROM` falls back to `dodi <no-reply@mail.dodi.app>` (prod); dev must
+> set `EMAIL_FROM="dodi <no-reply@dev-mail.dodi.app>"`.
+
 ## 4. Before User Created hook
 
 Authentication → **Hooks** → *Before User Created* → **HTTPS**:

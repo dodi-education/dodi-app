@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { AccountBadge } from "@/components/parent/account-badge";
 import { KidViewButton } from "@/components/parent/kid-view-button";
 import { Icon } from "@/components/shared/icon";
+import { ParentTopBar } from "@/components/shared/parent-top-bar";
 import {
   SidebarNav,
   useCurrentNavLabel,
@@ -129,6 +130,7 @@ export function ParentShell({ children }: { children: React.ReactNode }) {
 
       {/* Main content area */}
       <div className="flex min-w-0 flex-1 flex-col">
+        <ParentTopBar />
         <main className="flex-1">
           <div className="max-w-[880px] px-4 py-5 pb-[72px] wide:px-12 wide:py-9 wide:pb-20">
             {children}

@@ -136,6 +136,8 @@ export default function DashboardPage() {
         </StatStrip>
       </Section>
 
+      <KidsGlance />
+
       <Section
         title={t("recentSessions")}
         desc={t("recentSessionsDesc")}
@@ -184,8 +186,7 @@ export default function DashboardPage() {
           ))
         )}
       </Section>
-
-      <KidsGlance />
+      
     </div>
   );
 }

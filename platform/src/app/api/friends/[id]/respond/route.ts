@@ -4,6 +4,7 @@ import { z } from "zod/v4";
 import { requireAuth } from "@/lib/resolve-auth";
 import { serviceClient } from "@/lib/supabase";
 import { respondToRequest } from "@/services/friends";
+import { notifyPendingApproval } from "@/services/notifications";
 
 const RespondSchema = z.object({
   // The acting kid (the addressee) — disambiguates siblings on one account.
@@ -36,13 +37,21 @@ export async function POST(
   }
 
   try {
-    const row = await respondToRequest(serviceClient(), {
+    const supabase = serviceClient();
+    const row = await respondToRequest(supabase, {
       accountId: auth.accountId,
       kidId: result.data.kidId,
       friendshipId: id,
       action: result.data.action,
       addresseeCard: result.data.addresseeCard,
     });
+    // The kid just accepted and a parent's final approval is still needed: email the
+    // parent(s) waiting on it. Fire-and-forget — email latency/failure must not
+    // affect the kid's response. This edge fires at most once (respondToRequest
+    // throws unless the row was still `pending`).
+    if (row.status === "awaiting_parent") {
+      void notifyPendingApproval(supabase, row);
+    }
     return NextResponse.json({ id: row.id, status: row.status });
   } catch (error) {
     const message =

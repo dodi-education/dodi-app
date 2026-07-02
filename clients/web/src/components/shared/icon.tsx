@@ -3,6 +3,7 @@ import {
   IconAlertCircle,
   IconArrowLeft,
   IconBan,
+  IconBell,
   IconBrain,
   IconCake,
   IconCalendar,
@@ -29,6 +30,7 @@ import {
   IconMicrophone,
   IconMicrophoneOff,
   IconPalette,
+  IconPencil,
   IconPlayerPlayFilled,
   IconPlus,
   IconQrcode,
@@ -41,6 +43,7 @@ import {
   IconShieldLock,
   IconSparkles,
   IconSquare,
+  IconSwitchVertical,
   IconTrash,
   IconUser,
   IconUserPlus,
@@ -57,6 +60,7 @@ export type IconName =
   | "alert"
   | "arrow_left"
   | "ban"
+  | "bell"
   | "cake"
   | "calendar"
   | "camera"
@@ -70,6 +74,7 @@ export type IconName =
   | "copy"
   | "dashboard"
   | "delete"
+  | "edit"
   | "feature_games"
   | "feature_personal"
   | "feature_privacy"
@@ -82,6 +87,7 @@ export type IconName =
   | "loading"
   | "lock"
   | "logout"
+  | "memory"
   | "menu"
   | "mic_off"
   | "mic_on"
@@ -98,6 +104,7 @@ export type IconName =
   | "sparkles"
   | "stop"
   | "success"
+  | "switch_vertical"
   | "user_plus"
   | "agent_sessions"
   | "system_logs"
@@ -108,6 +115,7 @@ const ICONS: Record<IconName, ComponentType<TablerIconProps>> = {
   alert: IconAlertCircle,
   arrow_left: IconArrowLeft,
   ban: IconBan,
+  bell: IconBell,
   cake: IconCake,
   calendar: IconCalendar,
   camera: IconCamera,
@@ -121,6 +129,7 @@ const ICONS: Record<IconName, ComponentType<TablerIconProps>> = {
   copy: IconCopy,
   dashboard: IconChartBar,
   delete: IconTrash,
+  edit: IconPencil,
   feature_games: IconDeviceGamepad2,
   feature_personal: IconPalette,
   feature_privacy: IconShieldLock,
@@ -133,6 +142,7 @@ const ICONS: Record<IconName, ComponentType<TablerIconProps>> = {
   loading: IconLoader2,
   lock: IconLock,
   logout: IconLogout,
+  memory: IconBrain,
   menu: IconMenu2,
   mic_off: IconMicrophoneOff,
   mic_on: IconMicrophone,
@@ -149,6 +159,7 @@ const ICONS: Record<IconName, ComponentType<TablerIconProps>> = {
   sparkles: IconSparkles,
   stop: IconSquare,
   success: IconCircleCheck,
+  switch_vertical: IconSwitchVertical,
   user_plus: IconUserPlus,
   agent_sessions: IconRobot,
   system_logs: IconBrain,

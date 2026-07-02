@@ -84,6 +84,47 @@ export async function updateAccountDatePreferences(
 }
 
 /**
+ * Plaintext account-level notification toggles (opt-out; unset ⇒ on). Kept
+ * plaintext deliberately: the server reads these to decide whether to send
+ * transactional email. Extend this shape as more notification types are added.
+ */
+export interface NotificationPreferences {
+  friend_approval_email?: boolean;
+}
+
+/**
+ * Merge partial notification toggles into the account's stored preferences (so
+ * updating one toggle never clobbers the others) and return the merged result.
+ */
+export async function updateAccountNotificationPreferences(
+  supabase: Client,
+  accountId: string,
+  prefs: NotificationPreferences,
+): Promise<NotificationPreferences> {
+  const { data: existing, error: readError } = await supabase
+    .from("accounts")
+    .select("notification_preferences")
+    .eq("id", accountId)
+    .single();
+  if (readError) throw readError;
+
+  const current = (existing?.notification_preferences ??
+    {}) as NotificationPreferences;
+  const merged: NotificationPreferences = { ...current, ...prefs };
+
+  const { error } = await supabase
+    .from("accounts")
+    .update({
+      notification_preferences:
+        merged as unknown as AccountUpdate["notification_preferences"],
+    })
+    .eq("id", accountId);
+  if (error) throw error;
+
+  return merged;
+}
+
+/**
  * Set or clear the account's parent PIN. The value, when present, is already
  * sealed (`enc:v1:`) by the client; `null` removes the PIN. The server never
  * sees the plaintext — it only stores/returns the opaque blob.

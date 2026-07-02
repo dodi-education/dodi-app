@@ -17,6 +17,7 @@ import { GAME_TAGS } from "@dodi/games/tags";
 import { cn } from "@/lib/utils";
 import { useKids } from "@/hooks/use-kids";
 import { useMediaQuery } from "@/hooks/use-media-query";
+import { useBreadcrumbStore } from "@/stores/breadcrumb-store";
 import { resolveClientThinking } from "@/lib/ai/resolve-client-thinking";
 import { calculateChildAge } from "@dodi/ai/dodi-context";
 import { buildLearningContext } from "@dodi/ai/learning-context";
@@ -166,6 +167,15 @@ export function GameStudio({ initialGame }: GameStudioProps) {
   }));
 
   const [game, setGame] = useState<StudioGame>(initialGame ?? emptyGame());
+
+  // Surface the live game title in the shared breadcrumb bar (the studio has no
+  // top bar of its own); clear it when leaving the studio.
+  const setLeaf = useBreadcrumbStore((s) => s.setLeaf);
+  useEffect(() => {
+    setLeaf(game.title.trim() || t("newGame"));
+    return () => setLeaf(null);
+  }, [game.title, setLeaf, t]);
+
   const [view, setView] = useState<"preview" | "code" | "settings">(
     initialGame?.id ? "preview" : "settings",
   );
@@ -729,26 +739,9 @@ export function GameStudio({ initialGame }: GameStudioProps) {
 
   return (
     <div
-      className="fixed inset-x-0 top-14 bottom-0 z-30 flex flex-col bg-background wide:top-0 wide:left-56"
+      className="fixed inset-x-0 top-[116px] bottom-0 z-30 flex flex-col bg-background wide:top-[72px] wide:left-56"
       data-screen-label={editing ? "Parent — Edit game" : "Parent — New game"}
     >
-      {/* Studio bar */}
-      <div className="flex flex-shrink-0 items-center gap-4 border-b border-border bg-card px-5 py-3 md:px-6">
-        <Link
-          href="/parent/game-studio"
-          className="inline-flex items-center gap-1.5 text-sm font-semibold text-ink-2 transition-colors hover:text-primary"
-        >
-          <Icon name="arrow_left" size={16} />
-          {t("title")}
-        </Link>
-        <div className="flex min-w-0 items-center gap-1.5 text-[13.5px] font-semibold text-ink-2">
-          <Icon name="sparkles" size={15} className="shrink-0 text-primary" />
-          <span className="truncate">
-            {game.title || (editing ? t("editing") : t("newGameHeading"))}
-          </span>
-        </div>
-      </div>
-
       {/* Mobile tab bar (vertical layout only) */}
       {vertical && (
         <div className="flex flex-shrink-0 gap-1 border-b border-border bg-card px-3 py-2">

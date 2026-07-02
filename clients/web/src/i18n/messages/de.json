@@ -132,6 +132,7 @@
     "navSecurity": "Sicherheit",
     "navAiProviders": "KI-Anbieter",
     "navDevices": "Geräte",
+    "navNotifications": "Benachrichtigungen",
     "accountTitle": "Konto",
     "accountDescription": "Deine Kontoinformationen",
     "email": "E-Mail",
@@ -155,6 +156,11 @@
     "datePreviewLabel": "Vorschau",
     "dateVaultLocked": "Dein sicherer Tresor ist gesperrt. Bitte lade die Seite neu und versuche es erneut.",
     "dateSaveFailed": "Datumseinstellungen konnten nicht gespeichert werden. Bitte versuche es erneut.",
+    "notificationsEmailTitle": "E-Mail-Benachrichtigungen",
+    "notificationsEmailDescription": "Wähle, welche E-Mails dir dodi sendet.",
+    "notifyFriendApproval": "Freigaben für Freundschaftsanfragen",
+    "notifyFriendApprovalHint": "Benachrichtige mich per E-Mail, wenn eines meiner Kinder eine Freundschaftsanfrage hat, die auf meine Freigabe wartet.",
+    "notificationsSaveFailed": "Konnte nicht gespeichert werden. Bitte versuche es erneut.",
     "aiConfigTitle": "KI-Anbieter Konfiguration",
     "aiConfigDescription": "Konfiguriere KI-Anbieter, um dodi eine Stimme zu geben und Spiele zu erstellen.",
     "addProvider": "Anbieter hinzufügen",
@@ -563,6 +569,10 @@
     "approvalsEmpty": "Nichts wartet auf deine Bestätigung.",
     "approve": "Bestätigen",
     "reject": "Ablehnen"
+  },
+  "breadcrumbs": {
+    "memory": "Erinnerung",
+    "newPersona": "Neue Persona"
   },
   "nav": {
     "dashboard": "Dashboard",

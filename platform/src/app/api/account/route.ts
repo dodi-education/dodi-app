@@ -6,6 +6,7 @@ import {
   getAccount,
   updateAccountDatePreferences,
   updateAccountLanguage,
+  updateAccountNotificationPreferences,
   updateAccountParentPin,
 } from "@/services/accounts";
 import { DATE_STYLE_IDS } from "@dodi/intl";
@@ -19,6 +20,14 @@ const DatePreferencesSchema = z.object({
   timeZoneEnc: z.string().min(1).nullable().optional(),
 });
 
+/** Plaintext (opt-out) notification toggles; the server reads these to decide
+ *  whether to send transactional email. Partial ⇒ merged server-side. */
+const NotificationPreferencesSchema = z
+  .object({
+    friend_approval_email: z.boolean(),
+  })
+  .partial();
+
 const UpdateAccountSchema = z.object({
   datePreferences: DatePreferencesSchema.optional(),
   // Parent UI language (BCP-47 short code, e.g. "en"/"de").
@@ -26,6 +35,7 @@ const UpdateAccountSchema = z.object({
   // `enc:v1:` sealed 4-digit parent PIN; `null` clears it. The server never
   // sees the plaintext PIN.
   parentPinEnc: z.string().min(1).nullable().optional(),
+  notificationPreferences: NotificationPreferencesSchema.optional(),
 });
 
 /** User-authed: the caller's account (subscription tier, preferences, etc.). */
@@ -51,7 +61,8 @@ export async function PATCH(request: Request): Promise<Response> {
     );
   }
 
-  const { datePreferences, language, parentPinEnc } = result.data;
+  const { datePreferences, language, parentPinEnc, notificationPreferences } =
+    result.data;
 
   try {
     const savedDatePreferences = datePreferences
@@ -63,9 +74,17 @@ export async function PATCH(request: Request): Promise<Response> {
     if (parentPinEnc !== undefined) {
       await updateAccountParentPin(supabase, accountId, parentPinEnc);
     }
+    const savedNotificationPreferences = notificationPreferences
+      ? await updateAccountNotificationPreferences(
+          supabase,
+          accountId,
+          notificationPreferences,
+        )
+      : undefined;
     return NextResponse.json({
       datePreferences: savedDatePreferences,
       language,
+      notificationPreferences: savedNotificationPreferences,
     });
   } catch (error) {
     const message =

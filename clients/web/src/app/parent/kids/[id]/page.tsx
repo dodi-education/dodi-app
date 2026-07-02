@@ -5,7 +5,6 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 
-import { BackLink } from "@/components/parent/back-link";
 import { DateField } from "@/components/parent/date-field";
 import { DateTimeFields } from "@/components/parent/date-time-fields";
 import {
@@ -339,7 +338,6 @@ export default function EditKidPage() {
 
   return (
     <div>
-      <BackLink href="/parent/kids">{t("title")}</BackLink>
       <PageHead
         title={kid.display_name}
         sub={t("editDescription", { name: kid.display_name })}
@@ -532,19 +530,6 @@ export default function EditKidPage() {
             {dpSaving ? t("saving") : tc("save")}
           </Button>
         </SaveRow>
-      </Section>
-
-      <Section title={t("memoryTitle")} desc={t("memoryDescription")}>
-        <Row
-          clickable
-          className="cursor-pointer"
-          onClick={() => router.push(`/parent/kids/${params.id}/memory`)}
-        >
-          <RowMain>
-            <RowTitle>{t("viewMemory")}</RowTitle>
-          </RowMain>
-          <Icon name="chevron_right" size={16} className="text-faint" />
-        </Row>
       </Section>
 
       <Section title={t("dangerZone")}>
