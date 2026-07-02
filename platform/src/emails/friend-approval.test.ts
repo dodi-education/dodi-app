@@ -30,6 +30,12 @@ describe("FriendApprovalEmail", () => {
     expect(html).not.toContain("👋");
   });
 
+  it("references no off-domain resources (no external font/@import)", async () => {
+    const html = await renderEmail("https://app.dodi.app", "en");
+    expect(html).not.toContain("googleapis");
+    expect(html).not.toContain("@import");
+  });
+
   it("honors EMAIL_ASSET_BASE_URL for the logo host", async () => {
     process.env.EMAIL_ASSET_BASE_URL = "https://cdn.example.com";
     try {

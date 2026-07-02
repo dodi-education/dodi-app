@@ -40,9 +40,7 @@ export function EmailShell({ preview, appUrl, locale, children }: EmailShellProp
 
   return (
     <Html lang={locale}>
-      <Head>
-        <style>{`@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap');`}</style>
-      </Head>
+      <Head />
       <Preview>{preview}</Preview>
       <Body
         style={{
@@ -57,8 +55,8 @@ export function EmailShell({ preview, appUrl, locale, children }: EmailShellProp
             <Img
               src={logoUrl}
               alt="dodi"
-              width={116}
-              height={45}
+              width={52}
+              height={20}
               style={{ display: "block", border: 0, outline: "none" }}
             />
           </Section>

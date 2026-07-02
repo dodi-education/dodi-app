@@ -1,8 +1,11 @@
 /** Shared email design tokens. Mirrors the web app: Nunito, and the color
  *  tokens from globals.css (muted-foreground #61758C). Text uses #27374d. */
 
-// Nunito first (loaded via <style> @import where the client supports webfonts;
-// e.g. Apple Mail), then the same system fallback stack the app degrades to.
+// Nunito first (used if the recipient has it locally installed), then the same
+// system fallback stack the app degrades to. We deliberately DON'T load Nunito
+// as a webfont: Gmail/Outlook/Yahoo ignore @font-face entirely (only ~Apple Mail
+// honors it), and an external font @import trips deliverability heuristics for a
+// cosmetic gain invisible in the dominant clients.
 export const fontStack =
   '"Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
 

@@ -33,12 +33,18 @@ export function LandingPage({ locale }: { locale: Locale }) {
         <div className="flex items-center gap-2">
           <Image
             src="/images/dodi-head-active.png"
-            alt="dodi"
+            alt=""
             width={40}
             height={40}
             priority
           />
-          <span className="text-xl font-bold text-dodi-800">dodi</span>
+          <Image
+            src="/images/dodi-logo.svg"
+            alt="dodi"
+            width={62}
+            height={24}
+            priority
+          />
         </div>
         <nav className="flex items-center gap-3">
           <LanguageSwitcher locale={locale} />

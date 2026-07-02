@@ -95,11 +95,17 @@ export function ParentShell({ children }: { children: React.ReactNode }) {
         <div className="flex items-center gap-2.5 px-2.5 pb-4">
           <Image
             src="/images/dodi-head-active.png"
-            alt="dodi"
+            alt=""
             width={30}
             height={30}
+            className="-translate-y-[5px]"
           />
-          <span className="text-[17px] font-bold tracking-tight">dodi</span>
+          <Image
+            src="/images/dodi-logo.svg"
+            alt="dodi"
+            width={52}
+            height={20}
+          />
           <div className="ml-auto flex items-center gap-1">
             <Link
               href="/parent/settings/general"
