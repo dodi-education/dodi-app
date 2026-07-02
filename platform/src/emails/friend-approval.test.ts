@@ -10,15 +10,15 @@ async function renderEmail(appUrl: string, locale: "en" | "de"): Promise<string>
 }
 
 describe("FriendApprovalEmail", () => {
-  it("renders a CTA that deep-links into the parent dashboard", async () => {
+  it("renders a CTA that deep-links to the parent Kids page (where approvals live)", async () => {
     const html = await renderEmail("https://app.dodi.app", "en");
-    expect(html).toContain("https://app.dodi.app/parent/dashboard");
+    expect(html).toContain("https://app.dodi.app/parent/kids");
     expect(html).toContain(friendApprovalCopy("en").button);
   });
 
   it("trims a trailing slash from the app url", async () => {
     const html = await renderEmail("https://app.dodi.app/", "en");
-    expect(html).toContain("https://app.dodi.app/parent/dashboard");
+    expect(html).toContain("https://app.dodi.app/parent/kids");
     expect(html).not.toContain("dodi.app//parent");
   });
 
@@ -54,8 +54,9 @@ describe("FriendApprovalEmail", () => {
 
   it("stays privacy-preserving — carries the no-names note and links to settings", async () => {
     const html = await renderEmail("https://app.dodi.app", "en");
-    // Apostrophes get HTML-entity-escaped, so match an apostrophe-free fragment.
-    expect(html).toContain("Due to our end-to-end encryption");
+    // Apostrophes get HTML-entity-escaped, so match an apostrophe-free fragment
+    // of the privacy note (kept short so copy tweaks don't break the test).
+    expect(html).toContain("end-to-end encryption");
     expect(html).toContain(
       "https://app.dodi.app/parent/settings/notifications",
     );

@@ -19,7 +19,9 @@ export interface FriendApprovalEmailProps {
 
 export function FriendApprovalEmail({ appUrl, locale }: FriendApprovalEmailProps) {
   const c = friendApprovalCopy(locale);
-  const reviewUrl = `${appUrl.replace(/\/+$/, "")}/parent/dashboard`;
+  // The pending-approval list lives on the Kids page (FriendApprovals renders in
+  // app/parent/kids), not the dashboard.
+  const reviewUrl = `${appUrl.replace(/\/+$/, "")}/parent/kids`;
 
   return (
     <EmailShell preview={c.preview} appUrl={appUrl} locale={locale}>

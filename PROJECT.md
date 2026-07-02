@@ -510,7 +510,6 @@ parent-defined goal — and, in future, generate challenges like "Solve 3 math g
 
 ## TODO
 
-- Transactional e-mails
 - Optimize number of api calls
 - Onboarding wizard (Password, Seed phrase, PIN (skipable))
 

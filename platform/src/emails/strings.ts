@@ -51,7 +51,7 @@ const FRIEND_APPROVAL: Record<EmailLocale, FriendApprovalCopy> = {
     heading: "A friend request needs your approval",
     body: "One of your kids accepted a friend request that needs a parent's final approval before they can connect.",
     privacyNote:
-      "Due to our end-to-end encryption our servers don't know the involved names. Open dodi to see who it is and approve or decline.",
+      "Due to end-to-end encryption our servers don't know the involved names. Open dodi to see who it is and approve or decline.",
     button: "Review the request",
   },
   de: {
