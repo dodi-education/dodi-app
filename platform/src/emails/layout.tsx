@@ -19,7 +19,7 @@ import {
 import type { ReactNode } from "react";
 
 import { type EmailLocale, layoutCopy } from "./strings";
-import { colors, fontStack } from "./theme";
+import { colors, emailAssetBaseUrl, fontStack } from "./theme";
 
 export interface EmailShellProps {
   /** Inbox preview text (hidden in the body). */
@@ -33,7 +33,9 @@ export interface EmailShellProps {
 export function EmailShell({ preview, appUrl, locale, children }: EmailShellProps) {
   const c = layoutCopy(locale);
   const origin = appUrl.replace(/\/+$/, "");
-  const logoUrl = `${origin}/dodi-logo.png`;
+  // Logo is served by the platform (api.dodi.app), not the web app; links point
+  // at the web app (app.dodi.app).
+  const logoUrl = `${emailAssetBaseUrl()}/dodi-logo.png`;
   const settingsUrl = `${origin}/parent/settings/notifications`;
 
   return (

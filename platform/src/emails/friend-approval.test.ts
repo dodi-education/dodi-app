@@ -22,11 +22,22 @@ describe("FriendApprovalEmail", () => {
     expect(html).not.toContain("dodi.app//parent");
   });
 
-  it("shows the logo image in the header (no text wordmark, no wave emoji)", async () => {
+  it("shows the logo from the platform origin (no text wordmark, no wave emoji)", async () => {
     const html = await renderEmail("https://app.dodi.app", "en");
-    expect(html).toContain('src="https://app.dodi.app/dodi-logo.png"');
+    // Logo is platform-hosted (api.dodi.app), independent of the web app origin.
+    expect(html).toContain('src="https://api.dodi.app/dodi-logo.png"');
     expect(html).toContain('alt="dodi"');
     expect(html).not.toContain("👋");
+  });
+
+  it("honors EMAIL_ASSET_BASE_URL for the logo host", async () => {
+    process.env.EMAIL_ASSET_BASE_URL = "https://cdn.example.com";
+    try {
+      const html = await renderEmail("https://app.dodi.app", "en");
+      expect(html).toContain('src="https://cdn.example.com/dodi-logo.png"');
+    } finally {
+      delete process.env.EMAIL_ASSET_BASE_URL;
+    }
   });
 
   it("localizes copy to the parent's language", async () => {

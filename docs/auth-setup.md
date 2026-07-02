@@ -75,6 +75,12 @@ Authentication → **Emails**
 > the dev instance — the apex `dodi.app` is NOT verified, so an unset
 > `EMAIL_FROM` falls back to `dodi <team@mail.dodi.app>` (prod); dev must
 > set `EMAIL_FROM="dodi <team@dev-mail.dodi.app>"`.
+>
+> The email **logo** is served by the platform itself
+> (`platform/public/dodi-logo.png` → `https://api.dodi.app/dodi-logo.png`), so
+> it doesn't depend on the web app's deploy — override with
+> `EMAIL_ASSET_BASE_URL`. Dashboard/settings **links** point at the web app
+> (`NEXT_PUBLIC_APP_URL`, default `https://app.dodi.app`).
 
 ## 4. Before User Created hook
 
