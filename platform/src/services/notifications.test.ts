@@ -147,6 +147,31 @@ describe("notifyPendingApproval", () => {
     );
   });
 
+  it("defaults the email's app origin to app.dodi.app when the env is unset", async () => {
+    delete process.env.NEXT_PUBLIC_APP_URL;
+    const supabase = fakeSupabase([account({ id: "acc-addr" })]);
+    await notifyPendingApproval(
+      supabase,
+      friendship({ addressee_parent_ok: false }),
+    );
+    // appUrl is passed to the email element; drives logo + dashboard/settings links.
+    expect(sendEmailMock.mock.calls[0][0].react.props.appUrl).toBe(
+      "https://app.dodi.app",
+    );
+  });
+
+  it("uses NEXT_PUBLIC_APP_URL for the email's app origin when set", async () => {
+    process.env.NEXT_PUBLIC_APP_URL = "https://staging.dodi.app";
+    const supabase = fakeSupabase([account({ id: "acc-addr" })]);
+    await notifyPendingApproval(
+      supabase,
+      friendship({ addressee_parent_ok: false }),
+    );
+    expect(sendEmailMock.mock.calls[0][0].react.props.appUrl).toBe(
+      "https://staging.dodi.app",
+    );
+  });
+
   it("does nothing when no side needs approval", async () => {
     const supabase = fakeSupabase([account({ id: "acc-addr" })]);
     await notifyPendingApproval(supabase, friendship({}));

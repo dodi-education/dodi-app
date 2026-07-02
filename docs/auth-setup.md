@@ -64,7 +64,7 @@ Authentication → **Emails**
   generic "check your email" instead of "User already registered".
 - **SMTP Settings** → Resend:
   `host smtp.resend.com`, `port 465`, `user resend`, `pass <RESEND_API_KEY>`,
-  sender on a **Resend-verified domain** (e.g. `no-reply@dodi.app`).
+  sender on a **Resend-verified domain** (e.g. `team@mail.dodi.app`).
 
 > Beyond Supabase's auth emails, the platform now also sends **app-level
 > transactional email directly via the Resend SDK** (e.g. friend-request
@@ -73,8 +73,8 @@ Authentication → **Emails**
 > `EMAIL_FROM` and must be on a Resend-verified domain. Verified domains:
 > **`mail.dodi.app`** on the prod Resend instance, **`dev-mail.dodi.app`** on
 > the dev instance — the apex `dodi.app` is NOT verified, so an unset
-> `EMAIL_FROM` falls back to `dodi <no-reply@mail.dodi.app>` (prod); dev must
-> set `EMAIL_FROM="dodi <no-reply@dev-mail.dodi.app>"`.
+> `EMAIL_FROM` falls back to `dodi <team@mail.dodi.app>` (prod); dev must
+> set `EMAIL_FROM="dodi <team@dev-mail.dodi.app>"`.
 
 ## 4. Before User Created hook
 

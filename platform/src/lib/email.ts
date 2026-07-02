@@ -12,7 +12,7 @@ import { Resend } from "resend";
 // Must be a Resend-verified sender (see docs/auth-setup.md). Overridable per
 // env: prod verifies mail.dodi.app, dev verifies dev-mail.dodi.app (set
 // EMAIL_FROM accordingly — the apex dodi.app is NOT verified on Resend).
-const FROM = process.env.EMAIL_FROM ?? "dodi <no-reply@mail.dodi.app>";
+const FROM = process.env.EMAIL_FROM ?? "dodi <team@mail.dodi.app>";
 
 let client: Resend | null = null;
 

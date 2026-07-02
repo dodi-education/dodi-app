@@ -67,7 +67,10 @@ export async function notifyPendingApproval(
       return;
     }
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://dodi.app";
+    // Web app origin — drives the email's logo, dashboard link, and settings
+    // link. The web app (and /dodi-logo.png) is served at app.dodi.app, NOT the
+    // apex dodi.app. Set NEXT_PUBLIC_APP_URL on the platform to override (dev).
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://app.dodi.app";
 
     await Promise.all(
       (data ?? []).map(async (acct) => {

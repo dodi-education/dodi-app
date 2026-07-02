@@ -265,7 +265,7 @@ NEXT_PUBLIC_APP_URL=                  # App URL (for OAuth redirects, QR codes)
 REGISTRATION_MODE=                    # open | invite | closed (unset ⇒ open); server-only
 BEFORE_USER_CREATED_HOOK_SECRET=      # Supabase auth-hook secret "v1,whsec_…" (server only)
 RESEND_API_KEY=                       # Resend key: Supabase SMTP + app-level email via the SDK (server only)
-EMAIL_FROM=                           # App-level email sender on a Resend-verified domain (server only; prod verifies mail.dodi.app, dev dev-mail.dodi.app; default "dodi <no-reply@mail.dodi.app>")
+EMAIL_FROM=                           # App-level email sender on a Resend-verified domain (server only; prod verifies mail.dodi.app, dev dev-mail.dodi.app; default "dodi <team@mail.dodi.app>")
 ```
 
 - `NEXT_PUBLIC_` prefix = exposed to client (only non-sensitive values)

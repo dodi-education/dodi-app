@@ -234,7 +234,7 @@ otp_expiry = 3600
 # port = 465
 # user = "resend"
 # pass = "env(RESEND_API_KEY)"
-# admin_email = "no-reply@dodi.app"   # must be on a Resend-verified domain
+# admin_email = "team@mail.dodi.app"   # must be on a Resend-verified domain
 # sender_name = "dodi"
 
 # Uncomment to customize email template
