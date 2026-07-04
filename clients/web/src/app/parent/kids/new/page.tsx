@@ -8,7 +8,7 @@ import { useTranslations } from "next-intl";
 import { DateField } from "@/components/parent/date-field";
 import { FieldRow } from "@/components/parent/rows";
 import { SaveRow } from "@/components/parent/save-row";
-import { PageHead, Section } from "@/components/parent/section";
+import { Section } from "@/components/parent/section";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { locales, type Locale } from "@/i18n/config";
@@ -82,10 +82,8 @@ export default function NewKidPage() {
 
   return (
     <div>
-      <PageHead title={t("createTitle")} sub={t("createDescription")} />
-
       <form onSubmit={handleSubmit}>
-        <Section>
+        <Section title={tc("details")}>
           <FieldRow label={t("displayName")} htmlFor="display-name" required>
             <Input
               id="display-name"

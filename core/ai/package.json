@@ -15,7 +15,10 @@
     "./learning-context": "./src/learning-context.ts",
     "./thinking-providers/factory": "./src/thinking-providers/factory.ts",
     "./thinking-providers/anthropic": "./src/thinking-providers/anthropic.ts",
-    "./thinking-providers/gemini": "./src/thinking-providers/gemini.ts"
+    "./thinking-providers/gemini": "./src/thinking-providers/gemini.ts",
+    "./image-providers/factory": "./src/image-providers/factory.ts",
+    "./image-providers/gemini": "./src/image-providers/gemini.ts",
+    "./image-providers/coloring-prompt": "./src/image-providers/coloring-prompt.ts"
   },
   "main": "./src/index.ts",
   "types": "./src/index.ts",

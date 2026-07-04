@@ -8,7 +8,8 @@
     "delete": "Löschen",
     "loading": "Laden...",
     "saved": "Änderungen gespeichert",
-    "openCalendar": "Kalender öffnen"
+    "openCalendar": "Kalender öffnen",
+    "details": "Details"
   },
   "auth": {
     "welcomeBack": "Willkommen zurück",
@@ -63,8 +64,10 @@
   "dashboard": {
     "title": "Dashboard",
     "subtitle": "Was deine Kinder mit dodi gemacht haben",
-    "addKid": "Kind hinzufügen",
+    "overview": "Übersicht",
+    "addGame": "Spiel erstellen",
     "noKidsTitle": "Noch keine Kinderprofile",
+    "addKid": "Kind hinzufügen",
     "noKidsDescription": "Füge ein Kinderprofil hinzu, um mit dodi zu starten",
     "born": "Geboren: {date}",
     "birthdateNotSet": "Geburtsdatum nicht gesetzt",
@@ -81,6 +84,7 @@
   "kids": {
     "title": "Kinder",
     "subtitle": "Verwalte deine Kinder",
+    "yourKids": "Deine Kinder",
     "addKid": "Kind hinzufügen",
     "noKids": "Noch keine Kinderprofile. Füge eins hinzu, um loszulegen.",
     "personaSet": "Persona gesetzt",
@@ -186,6 +190,11 @@
     "thinkingProvider": "Denkmodell-Anbieter",
     "thinkingModel": "Denkmodell",
     "thinkingProviderFallback": "Anbieter/Modell auswählen",
+    "imageConfig": "Bildgenerierung",
+    "imageConfigDescription": "Wähle ein Bildmodell, damit dodi im Malspiel Ausmalbilder zeichnen kann.",
+    "imageProvider": "Bildmodell-Anbieter",
+    "imageModel": "Bildmodell",
+    "imageProviderFallback": "Anbieter/Modell auswählen",
     "configSaved": "Konfiguration gespeichert",
     "keyEnding": "Schlüssel endet auf ...{preview}",
     "added": "Hinzugefügt {date}",
@@ -251,6 +260,7 @@
   "personas": {
     "title": "Personas",
     "subtitle": "Passe dodis Persönlichkeit und Verhalten an",
+    "yourPersonas": "Deine Personas",
     "createPersona": "Persona erstellen",
     "createTitle": "Persona erstellen",
     "createDescription": "Definiere eine neue Persönlichkeit für dodi mit einem Soul-Dokument",
@@ -344,7 +354,10 @@
     "micUnavailable": "Mikrofon ist nicht verfügbar.",
     "sandboxNotReady": "Spiel lädt noch. Versuch es gleich nochmal.",
     "unsupportedCommand": "Nicht unterstützter Befehl: {command}",
-    "unknownCommandError": "Unbekannter Befehlsfehler."
+    "unknownCommandError": "Unbekannter Befehlsfehler.",
+    "voiceCreatingImage": "Ich erstelle dein Bild…",
+    "noImageModel": "Bitte einen Erwachsenen, in den Einstellungen ein Bildmodell einzurichten, damit dodi malen kann.",
+    "drawingFailed": "dodi konnte das gerade nicht malen. Versuch es nochmal."
   },
   "kid": {
     "greeting": "Hallo!",
@@ -372,6 +385,7 @@
   "systemLogs": {
     "title": "Systemprotokoll",
     "subtitle": "Erinnerungsupdates, Sitzungsereignisse und Systemaktivitäten",
+    "heading": "Protokolleinträge",
     "filterKid": "Alle Kinder",
     "filterPersona": "Alle Personas",
     "filterEvent": "Alle Ereignisse",
@@ -387,6 +401,7 @@
   "agentSessions": {
     "title": "Agent-Sitzungen",
     "subtitle": "KI-Codegenerierung: Aufgaben, Fortschritt und Verlauf",
+    "heading": "Sitzungen",
     "filterKid": "Alle Kinder",
     "filterStatus": "Alle Status",
     "statusActive": "Aktiv",
@@ -411,7 +426,7 @@
     "subtitle": "Erstelle und bearbeite Spiele für deine Kinder — beschreibe sie einfach und dodi baut sie.",
     "tabGame": "Spiel",
     "tabDodi": "dodi",
-    "newGame": "Neues Spiel",
+    "addGame": "Spiel erstellen",
     "yourGames": "Deine Spiele",
     "yourGamesDesc": "Öffne ein Spiel, um es mit dodi weiter zu bearbeiten.",
     "noGames": "Noch keine Spiele. Beschreibe oben eines und dodi baut es.",

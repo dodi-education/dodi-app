@@ -104,6 +104,12 @@ export async function removeProvider(
       configChanged = true;
     }
 
+    if (modelConfig.imageProvider === providerId) {
+      newConfig.imageProvider = undefined;
+      newConfig.imageModel = undefined;
+      configChanged = true;
+    }
+
     if (configChanged && updates.model_config !== null) {
       updates.model_config = newConfig;
     }

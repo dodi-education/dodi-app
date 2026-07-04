@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 
 import { Row, RowMain, RowMeta, RowTitle } from "@/components/parent/rows";
-import { PageHead, Section } from "@/components/parent/section";
+import { PageActions, Section } from "@/components/parent/section";
 import { Icon } from "@/components/shared/icon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -39,25 +39,19 @@ export default function PersonasPage() {
 
   return (
     <div>
-      <PageHead
-        title={t("title")}
-        sub={t("subtitle")}
-        action={
-          <div className="flex gap-2">
-            <Button asChild variant="outline">
-              <Link href="/parent/personas/new?import=true">{t("import")}</Link>
-            </Button>
-            <Button asChild>
-              <Link href="/parent/personas/new">
-                <Icon name="add" size={16} />
-                {t("createPersona")}
-              </Link>
-            </Button>
-          </div>
-        }
-      />
+      <PageActions>
+        <Button asChild variant="outline">
+          <Link href="/parent/personas/new?import=true">{t("import")}</Link>
+        </Button>
+        <Button asChild>
+          <Link href="/parent/personas/new">
+            <Icon name="add" size={16} />
+            {t("createPersona")}
+          </Link>
+        </Button>
+      </PageActions>
 
-      <Section>
+      <Section title={t("yourPersonas")}>
         {personas.map((persona) => (
           <Link
             key={persona.id}

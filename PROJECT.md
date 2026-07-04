@@ -513,6 +513,9 @@ parent-defined goal — and, in future, generate challenges like "Solve 3 math g
 - Optimize number of api calls
 - Onboarding wizard (Password, Seed phrase, PIN (skipable))
 
+- Add specific drawing ai provider
+- Enhance drawing game to create images with nano banana (specifically mandalas and coloring sheets)
+
 - Let kids draw their own avatars
 - Game state analysis via screenshot (attach screenshots to game-state <> dodi exchange). This would allow fun features like asking dodi to guess what has been drawn in the drawing game.
 - Daily challenges UI: let Dodi generate + track challenges on top of `game_plays` (foundation is in place).

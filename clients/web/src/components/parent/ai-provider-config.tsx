@@ -42,6 +42,7 @@ import { useProvidersStore } from "@/stores/providers-store";
 import type { AIProviderId, AccountModelConfig } from "@dodi/types/ai";
 
 const THINKING_PROVIDER_NONE = "__none__";
+const IMAGE_PROVIDER_NONE = "__none__";
 
 export function AIProviderConfig() {
   const t = useTranslations("settings");
@@ -69,6 +70,8 @@ export function AIProviderConfig() {
   const [voiceName, setVoiceName] = useState("");
   const [thinkingProvider, setThinkingProvider] = useState<AIProviderId | "">("");
   const [thinkingModel, setThinkingModel] = useState("");
+  const [imageProvider, setImageProvider] = useState<AIProviderId | "">("");
+  const [imageModel, setImageModel] = useState("");
   const [configSaving, setConfigSaving] = useState(false);
   const [configSaved, setConfigSaved] = useState(false);
 
@@ -87,6 +90,8 @@ export function AIProviderConfig() {
             setVoiceName(cfg.voiceName);
             setThinkingProvider(cfg.thinkingProvider ?? cfg.gameProvider ?? "");
             setThinkingModel(cfg.thinkingModel ?? cfg.gameModel ?? "");
+            setImageProvider(cfg.imageProvider ?? "");
+            setImageModel(cfg.imageModel ?? "");
           }
         }
       } catch {
@@ -209,6 +214,8 @@ export function AIProviderConfig() {
           voiceName,
           thinkingProvider: thinkingProvider || undefined,
           thinkingModel: thinkingProvider ? thinkingModel : undefined,
+          imageProvider: imageProvider || undefined,
+          imageModel: imageProvider ? imageModel : undefined,
         }),
       });
 
@@ -216,6 +223,8 @@ export function AIProviderConfig() {
         const data: AccountModelConfig = await res.json();
         setThinkingProvider(data.thinkingProvider ?? "");
         setThinkingModel(data.thinkingModel ?? "");
+        setImageProvider(data.imageProvider ?? "");
+        setImageModel(data.imageModel ?? "");
         setConfigSaved(true);
         setTimeout(() => setConfigSaved(false), 2000);
       }
@@ -230,6 +239,7 @@ export function AIProviderConfig() {
 
   const activeProviderDef = AI_PROVIDERS.find((p) => p.id === voiceProvider);
   const activeThinkingProviderDef = AI_PROVIDERS.find((p) => p.id === thinkingProvider);
+  const activeImageProviderDef = AI_PROVIDERS.find((p) => p.id === imageProvider);
 
   if (loading) {
     return (
@@ -515,6 +525,66 @@ export function AIProviderConfig() {
                 </Select>
               </FieldRow>
             ) : null}
+          </Section>
+
+          <Section title={t("imageConfig")} desc={t("imageConfigDescription")}>
+            <FieldRow label={t("imageProvider")}>
+              <Select
+                value={imageProvider || IMAGE_PROVIDER_NONE}
+                onValueChange={(value) => {
+                  if (value === IMAGE_PROVIDER_NONE) {
+                    setImageProvider("");
+                    setImageModel("");
+                    return;
+                  }
+                  const providerId = value as AIProviderId;
+                  setImageProvider(providerId);
+                  const providerDef = AI_PROVIDERS.find((provider) => provider.id === providerId);
+                  const defaultModel = providerDef?.models.find((model) =>
+                    model.capabilities.includes("image"),
+                  );
+                  setImageModel(defaultModel?.id ?? "");
+                }}
+              >
+                <SelectTrigger className="w-full sm:w-[260px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={IMAGE_PROVIDER_NONE}>
+                    {t("imageProviderFallback")}
+                  </SelectItem>
+                  {providers
+                    .filter((provider) => {
+                      const def = AI_PROVIDERS.find((p) => p.id === provider.id);
+                      return def?.supportsImage;
+                    })
+                    .map((provider) => (
+                      <SelectItem key={provider.id} value={provider.id}>
+                        {provider.name}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </FieldRow>
+
+            {imageProvider && activeImageProviderDef ? (
+              <FieldRow label={t("imageModel")}>
+                <Select value={imageModel} onValueChange={setImageModel}>
+                  <SelectTrigger className="w-full sm:w-[260px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {activeImageProviderDef.models
+                      .filter((model) => model.capabilities.includes("image"))
+                      .map((model) => (
+                        <SelectItem key={model.id} value={model.id}>
+                          {model.name}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </FieldRow>
+            ) : null}
 
             <SaveRow note={configSaved ? t("configSaved") : undefined}>
               <Button
@@ -524,7 +594,8 @@ export function AIProviderConfig() {
                   !voiceModel ||
                   !voiceName ||
                   configSaving ||
-                  (Boolean(thinkingProvider) && !thinkingModel)
+                  (Boolean(thinkingProvider) && !thinkingModel) ||
+                  (Boolean(imageProvider) && !imageModel)
                 }
                 className="cursor-pointer"
               >

@@ -8,7 +8,8 @@
     "delete": "Delete",
     "loading": "Loading...",
     "saved": "Changes saved",
-    "openCalendar": "Open calendar"
+    "openCalendar": "Open calendar",
+    "details": "Details"
   },
   "auth": {
     "welcomeBack": "Welcome back",
@@ -63,8 +64,10 @@
   "dashboard": {
     "title": "Dashboard",
     "subtitle": "What your kids have been up to with dodi",
-    "addKid": "Add kid",
+    "overview": "Overview",
+    "addGame": "Add game",
     "noKidsTitle": "No kid profiles yet",
+    "addKid": "Add kid",
     "noKidsDescription": "Add a kid profile to get started with dodi",
     "born": "Born: {date}",
     "birthdateNotSet": "Birthdate not set",
@@ -81,6 +84,7 @@
   "kids": {
     "title": "Kids",
     "subtitle": "Manage your kids",
+    "yourKids": "Your kids",
     "addKid": "Add kid",
     "noKids": "No kid profiles yet. Add one to get started.",
     "personaSet": "Persona set",
@@ -186,6 +190,11 @@
     "thinkingProvider": "Thinking model provider",
     "thinkingModel": "Thinking model",
     "thinkingProviderFallback": "Select provider/model",
+    "imageConfig": "Image Generation",
+    "imageConfigDescription": "Choose an image model to let dodi draw coloring sheets in the Drawing game.",
+    "imageProvider": "Image model provider",
+    "imageModel": "Image model",
+    "imageProviderFallback": "Select provider/model",
     "configSaved": "Configuration saved",
     "keyEnding": "Key ending in ...{preview}",
     "added": "Added {date}",
@@ -251,6 +260,7 @@
   "personas": {
     "title": "Personas",
     "subtitle": "Customize dodi's personality and behavior",
+    "yourPersonas": "Your personas",
     "createPersona": "Create persona",
     "createTitle": "Create persona",
     "createDescription": "Define a new personality for dodi with a soul document",
@@ -344,7 +354,10 @@
     "micUnavailable": "Microphone is unavailable.",
     "sandboxNotReady": "Game is still loading. Try again.",
     "unsupportedCommand": "Unsupported command: {command}",
-    "unknownCommandError": "Unknown command error."
+    "unknownCommandError": "Unknown command error.",
+    "voiceCreatingImage": "I'm creating your picture…",
+    "noImageModel": "Ask a grown-up to set up an image model in Settings so dodi can draw.",
+    "drawingFailed": "dodi could not draw that right now. Try again."
   },
   "kid": {
     "greeting": "Hi there!",
@@ -372,6 +385,7 @@
   "systemLogs": {
     "title": "System Log",
     "subtitle": "Memory updates, session events, and system activity",
+    "heading": "Log entries",
     "filterKid": "All kids",
     "filterPersona": "All personas",
     "filterEvent": "All events",
@@ -387,6 +401,7 @@
   "agentSessions": {
     "title": "Agent Sessions",
     "subtitle": "AI code generation tasks, progress, and history",
+    "heading": "Sessions",
     "filterKid": "All kids",
     "filterStatus": "All statuses",
     "statusActive": "Active",
@@ -411,7 +426,7 @@
     "subtitle": "Create and edit games for your kids — just describe them and dodi builds them.",
     "tabGame": "Game",
     "tabDodi": "dodi",
-    "newGame": "New game",
+    "addGame": "Add game",
     "yourGames": "Your games",
     "yourGamesDesc": "Open a game to keep editing it with dodi.",
     "noGames": "No games yet. Describe one above and dodi will build it.",

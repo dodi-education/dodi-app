@@ -4,7 +4,7 @@
   "private": true,
   "license": "AGPL-3.0-only",
   "scripts": {
-    "dev": "next dev --port 3002",
+    "dev": "next dev --experimental-https --experimental-https-key ../certs/dev-key.pem --experimental-https-cert ../certs/dev.pem -H 0.0.0.0 --port 3002",
     "build": "next build",
     "preview": "npx serve out",
     "typecheck": "tsc --noEmit"

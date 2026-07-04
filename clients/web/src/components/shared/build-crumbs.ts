@@ -75,7 +75,7 @@ export function buildCrumbs(
       const id = seg[1];
       if (id) {
         const fallback =
-          id === "new" ? t("gameStudio.newGame") : t("gameStudio.editing");
+          id === "new" ? t("gameStudio.addGame") : t("gameStudio.editing");
         crumbs.push({ label: opts.leafOverride || fallback });
       }
       return crumbs;

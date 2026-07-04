@@ -15,7 +15,7 @@ import {
   StackField,
 } from "@/components/parent/rows";
 import { SaveRow } from "@/components/parent/save-row";
-import { PageHead, Section } from "@/components/parent/section";
+import { PageActions, Section } from "@/components/parent/section";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -194,11 +194,9 @@ export default function PersonaDetailPage() {
   if (persona.is_system_default) {
     return (
       <div>
-        <PageHead
-          title={persona.name}
-          sub={t("defaultHint")}
-          action={<Badge variant="blue">{t("default")}</Badge>}
-        />
+        <PageActions>
+          <Badge variant="blue">{t("default")}</Badge>
+        </PageActions>
 
         <Section
           title={t("soulLabel")}
@@ -240,7 +238,7 @@ export default function PersonaDetailPage() {
         </Section>
 
         {showClone ? (
-          <Section>
+          <Section title={t("clone")}>
             <form onSubmit={handleClone}>
               <FieldRow label={t("cloneNameLabel")} htmlFor="clone-name" required>
                 <Input
@@ -268,13 +266,8 @@ export default function PersonaDetailPage() {
 
   return (
     <div>
-      <PageHead
-        title={t("editTitle")}
-        sub={t("editDescription", { name: persona.name })}
-      />
-
       <form onSubmit={handleUpdate}>
-        <Section>
+        <Section title={tc("details")}>
           <FieldRow label={t("nameLabel")} htmlFor="name" required>
             <Input
               id="name"

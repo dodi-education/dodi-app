@@ -73,6 +73,12 @@
     background: linear-gradient(180deg, #eaf2fb 0%, #f2f8fd 70%, #ffffff 100%)
       fixed;
     @apply text-foreground;
+    /* Bridge the marketing site's font tokens (site.css) to the fonts loaded by
+       next/font in root-html.tsx. Set here on <body> — where next/font puts
+       --font-nunito / --font-hanken — because custom properties inherit down,
+       not up to the :root rule where site.css declares its literal fallbacks. */
+    --font-display: var(--font-nunito), "Nunito", system-ui, sans-serif;
+    --font-body: var(--font-hanken), "Hanken Grotesk", system-ui, sans-serif;
   }
   a,
   button,

@@ -205,7 +205,7 @@ function buildExecuteGameCommandTool(): GeminiLiveToolDeclaration {
         type: {
           type: "string",
           description:
-            "The command type to execute (e.g. draw_shape, clear_canvas, set_color). " +
+            "The command type to execute (e.g. set_color, clear_canvas). " +
             "Must match a command defined in the game.",
         },
         payload: {
@@ -304,7 +304,8 @@ export function buildGameVoiceContext(
     "",
     "CRITICAL — Executing game commands:",
     "- When the child asks you to do something in the game, you MUST call the execute_game_command tool immediately. Do not describe or plan what you would do — just do it.",
-    "- For multi-step actions (e.g. drawing a snowman), call the tool multiple times in the same turn (e.g. set_color, then draw_shape for body, then draw_shape for head, etc.)",
+    "- Announcing an action is NOT the same as doing it. Whenever you tell the child you will do, make, draw, or change something in the game, you MUST call execute_game_command in that SAME turn. A spoken sentence alone changes nothing on screen — the tool call is what makes it happen.",
+    "- For multi-step actions, call the tool multiple times in the same turn, using only the command types defined in this game's briefing and source code",
     "- Use command types and payloads exactly as defined in the Game Briefing and source code",
     "- Only skip the tool call if the child is purely chatting and NOT requesting any game action",
     "",

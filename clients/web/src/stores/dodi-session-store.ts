@@ -103,6 +103,11 @@ export interface DodiSessionState {
   // Game snapshot callback (for read_game_state vision analysis)
   onRequestSnapshot: (() => Promise<string | null>) | null;
 
+  // True while a client-side coloring sheet is being generated (drives the
+  // companion's "creating image" thinking state).
+  generatingImage: boolean;
+  setGeneratingImage: (value: boolean) => void;
+
   // Count of kid turns ("asking Dodi") while a game is open — feeds the
   // hintsUsed metric for success evaluation. Reset per play by the play view.
   gameAssistanceCount: number;
@@ -700,6 +705,7 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
 
   onRunCommands: null,
   onRequestSnapshot: null,
+  generatingImage: false,
 
   gameAssistanceCount: 0,
   resetGameAssistance: () => {
@@ -722,6 +728,10 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
 
   setOnRequestSnapshot: (handler) => {
     set({ onRequestSnapshot: handler });
+  },
+
+  setGeneratingImage: (value) => {
+    set({ generatingImage: value });
   },
 
   setContext: async (newContext: DodiContext, kidId: string) => {
@@ -1235,11 +1245,23 @@ function createEventHandler(
             onRunCommands([command]);
           }
 
-          // Respond immediately
-          client?.sendToolResponse(event.id, event.name, {
-            ok: true,
-            command: commandType,
-          });
+          if (commandType === "generate_drawing") {
+            // Image generation runs client-side and takes a few seconds. Tell the
+            // model it is in progress so it says the picture is on the way rather
+            // than claiming it is already on the canvas.
+            client?.sendToolResponse(event.id, event.name, {
+              ok: true,
+              status: "generating",
+              message:
+                "The picture is being created now and will appear on the canvas in a few seconds. Tell the child it is on the way — do NOT say it is already finished or visible yet.",
+            });
+          } else {
+            // Respond immediately
+            client?.sendToolResponse(event.id, event.name, {
+              ok: true,
+              command: commandType,
+            });
+          }
         } else if (event.name === "read_game_state" && isGameContext) {
           // Offload complex state analysis to the thinking model
           const question = typeof event.args.question === "string" ? event.args.question : "What is the current game state?";

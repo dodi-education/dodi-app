@@ -146,7 +146,7 @@ INSERT INTO public.games (id, account_id, kid_id, source_game_id, system_key, is
     (function () {
       var palette = [''#111111'', ''#e53935'', ''#fb8c00'', ''#fdd835'', ''#43a047'', ''#1e88e5'', ''#8e24aa'', ''#ff5ca8''];
       var brushOptions = [4, 8, 12, 18, 24];
-      var capabilities = [''set_color'', ''set_brush_size'', ''draw_shape'', ''draw_line'', ''draw_curve'', ''clear_canvas'', ''undo'', ''get_snapshot''];
+      var capabilities = [''set_color'', ''set_brush_size'', ''clear_canvas'', ''undo'', ''get_snapshot'', ''set_generated_image''];
 
       var canvas = document.getElementById(''board'');
       var ctx = canvas.getContext(''2d'');
@@ -225,15 +225,22 @@ INSERT INTO public.games (id, account_id, kid_id, source_game_id, system_key, is
       }
 
       function resizeCanvas() {
-        var existing = ctx.getImageData(0, 0, canvas.width || 1, canvas.height || 1);
         var ratio = window.devicePixelRatio || 1;
         // Size the drawing buffer to the canvas'' own (flex-allocated) box so it fills
         // the fixed game stage exactly — no assumptions about the device viewport.
         var nextW = Math.max(1, Math.floor(canvas.clientWidth));
         var nextH = Math.max(1, Math.floor(canvas.clientHeight));
+        var targetW = Math.floor(nextW * ratio);
+        var targetH = Math.floor(nextH * ratio);
 
-        canvas.width = Math.floor(nextW * ratio);
-        canvas.height = Math.floor(nextH * ratio);
+        // Skip when the buffer already matches the laid-out size — avoids
+        // re-scaling the drawing on every ResizeObserver tick.
+        if (canvas.width === targetW && canvas.height === targetH) return;
+
+        var existing = ctx.getImageData(0, 0, canvas.width || 1, canvas.height || 1);
+
+        canvas.width = targetW;
+        canvas.height = targetH;
 
         ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
         ctx.lineCap = ''round'';
@@ -284,176 +291,27 @@ INSERT INTO public.games (id, account_id, kid_id, source_game_id, system_key, is
         }
       }
 
-      function drawCurve(x1, y1, cx1, cy1, cx2, cy2, x2, y2, color, width, countStroke) {
-        ctx.strokeStyle = color || state.color;
-        ctx.lineWidth = width || state.brushSize;
-        ctx.beginPath();
-        ctx.moveTo(x1, y1);
-        if (cx2 != null && cy2 != null) {
-          ctx.bezierCurveTo(cx1, cy1, cx2, cy2, x2, y2);
-        } else {
-          ctx.quadraticCurveTo(cx1, cy1, x2, y2);
-        }
-        ctx.stroke();
-        if (countStroke) {
+      function drawGeneratedImage(dataUrl, done) {
+        var img = new Image();
+        img.onload = function () {
+          snapshot();
+          clearCanvas(false);
+          var cw = canvas.clientWidth;
+          var ch = canvas.clientHeight;
+          var scale = Math.min(cw / img.width, ch / img.height);
+          var dw = img.width * scale;
+          var dh = img.height * scale;
+          ctx.drawImage(img, (cw - dw) / 2, (ch - dh) / 2, dw, dh);
+          state.actions = [];
+          pushAction({ action: ''generated_image'', region: ''center'' });
           state.strokeCount += 1;
           emitState();
-        }
-      }
-
-      function drawShape(shape, centerX, centerY, scale, color, width) {
-        var x = centerX || (canvas.clientWidth / 2);
-        var y = centerY || (canvas.clientHeight / 2);
-        var s = Math.max(20, Math.min(220, scale || 90));
-        var strokeW = width || state.brushSize;
-
-        snapshot();
-
-        switch (shape) {
-          case ''sun'':
-            ctx.fillStyle = color || ''#fdd835'';
-            ctx.beginPath();
-            ctx.arc(x, y, s * 0.28, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.strokeStyle = ''#fb8c00'';
-            ctx.lineWidth = 4;
-            for (var i = 0; i < 12; i++) {
-              var angle = (Math.PI * 2 * i) / 12;
-              drawLine(
-                x + Math.cos(angle) * s * 0.36,
-                y + Math.sin(angle) * s * 0.36,
-                x + Math.cos(angle) * s * 0.52,
-                y + Math.sin(angle) * s * 0.52,
-                ''#fb8c00'',
-                4,
-                false
-              );
-            }
-            break;
-          case ''house'':
-            ctx.fillStyle = color || ''#90caf9'';
-            ctx.fillRect(x - s * 0.35, y - s * 0.1, s * 0.7, s * 0.5);
-            ctx.fillStyle = ''#ef5350'';
-            ctx.beginPath();
-            ctx.moveTo(x - s * 0.42, y - s * 0.1);
-            ctx.lineTo(x, y - s * 0.5);
-            ctx.lineTo(x + s * 0.42, y - s * 0.1);
-            ctx.closePath();
-            ctx.fill();
-            ctx.fillStyle = ''#6d4c41'';
-            ctx.fillRect(x - s * 0.1, y + s * 0.15, s * 0.2, s * 0.25);
-            break;
-          case ''tree'':
-            ctx.fillStyle = ''#8d6e63'';
-            ctx.fillRect(x - s * 0.08, y, s * 0.16, s * 0.4);
-            ctx.fillStyle = color || ''#43a047'';
-            ctx.beginPath();
-            ctx.arc(x, y - s * 0.1, s * 0.3, 0, Math.PI * 2);
-            ctx.fill();
-            break;
-          case ''star'': {
-            ctx.fillStyle = color || ''#ffca28'';
-            var spikes = 5;
-            var outer = s * 0.35;
-            var inner = s * 0.16;
-            var rot = Math.PI / 2 * 3;
-            var step = Math.PI / spikes;
-            ctx.beginPath();
-            ctx.moveTo(x, y - outer);
-            for (var i = 0; i < spikes; i++) {
-              ctx.lineTo(x + Math.cos(rot) * outer, y + Math.sin(rot) * outer);
-              rot += step;
-              ctx.lineTo(x + Math.cos(rot) * inner, y + Math.sin(rot) * inner);
-              rot += step;
-            }
-            ctx.closePath();
-            ctx.fill();
-            break;
-          }
-          case ''heart'':
-            ctx.fillStyle = color || ''#ec407a'';
-            ctx.beginPath();
-            ctx.moveTo(x, y + s * 0.3);
-            ctx.bezierCurveTo(x + s * 0.45, y - s * 0.05, x + s * 0.4, y - s * 0.4, x, y - s * 0.2);
-            ctx.bezierCurveTo(x - s * 0.4, y - s * 0.4, x - s * 0.45, y - s * 0.05, x, y + s * 0.3);
-            ctx.fill();
-            break;
-          case ''cloud'':
-            ctx.fillStyle = color || ''#e3f2fd'';
-            ctx.beginPath();
-            ctx.arc(x - s * 0.2, y, s * 0.18, 0, Math.PI * 2);
-            ctx.arc(x, y - s * 0.1, s * 0.22, 0, Math.PI * 2);
-            ctx.arc(x + s * 0.22, y, s * 0.18, 0, Math.PI * 2);
-            ctx.fill();
-            break;
-          case ''flower'':
-            ctx.fillStyle = ''#66bb6a'';
-            ctx.fillRect(x - 3, y, 6, s * 0.35);
-            ctx.fillStyle = color || ''#ab47bc'';
-            for (var i = 0; i < 6; i++) {
-              var angle = (Math.PI * 2 * i) / 6;
-              ctx.beginPath();
-              ctx.arc(x + Math.cos(angle) * s * 0.18, y, s * 0.1, 0, Math.PI * 2);
-              ctx.fill();
-            }
-            ctx.fillStyle = ''#fdd835'';
-            ctx.beginPath();
-            ctx.arc(x, y, s * 0.08, 0, Math.PI * 2);
-            ctx.fill();
-            break;
-          case ''circle'':
-            ctx.strokeStyle = color || state.color;
-            ctx.lineWidth = strokeW;
-            ctx.beginPath();
-            ctx.arc(x, y, s * 0.4, 0, Math.PI * 2);
-            ctx.stroke();
-            break;
-          case ''filled-circle'':
-            ctx.fillStyle = color || state.color;
-            ctx.beginPath();
-            ctx.arc(x, y, s * 0.4, 0, Math.PI * 2);
-            ctx.fill();
-            break;
-          case ''rectangle'':
-            ctx.strokeStyle = color || state.color;
-            ctx.lineWidth = strokeW;
-            ctx.strokeRect(x - s * 0.4, y - s * 0.3, s * 0.8, s * 0.6);
-            break;
-          case ''filled-rectangle'':
-            ctx.fillStyle = color || state.color;
-            ctx.fillRect(x - s * 0.4, y - s * 0.3, s * 0.8, s * 0.6);
-            break;
-          case ''triangle'': {
-            ctx.strokeStyle = color || state.color;
-            ctx.lineWidth = strokeW;
-            var r = s * 0.45;
-            ctx.beginPath();
-            ctx.moveTo(x, y - r);
-            ctx.lineTo(x + r * Math.cos(Math.PI / 6), y + r * Math.sin(Math.PI / 6));
-            ctx.lineTo(x - r * Math.cos(Math.PI / 6), y + r * Math.sin(Math.PI / 6));
-            ctx.closePath();
-            ctx.stroke();
-            break;
-          }
-          case ''filled-triangle'': {
-            ctx.fillStyle = color || state.color;
-            var r = s * 0.45;
-            ctx.beginPath();
-            ctx.moveTo(x, y - r);
-            ctx.lineTo(x + r * Math.cos(Math.PI / 6), y + r * Math.sin(Math.PI / 6));
-            ctx.lineTo(x - r * Math.cos(Math.PI / 6), y + r * Math.sin(Math.PI / 6));
-            ctx.closePath();
-            ctx.fill();
-            break;
-          }
-          default:
-            return false;
-        }
-
-        pushAction({ action: ''shape'', shape: shape, x: Math.round(x), y: Math.round(y), scale: s, color: color || null, region: getRegion(x, y) });
-        state.strokeCount += 1;
-        emitState();
-        return true;
+          if (done) done(true);
+        };
+        img.onerror = function () {
+          if (done) done(false);
+        };
+        img.src = dataUrl;
       }
 
       function clearCanvas(countStroke) {
@@ -566,57 +424,17 @@ INSERT INTO public.games (id, account_id, kid_id, source_game_id, system_key, is
             var ok = setBrushSize(size);
             return ok ? { ok: true } : { ok: false, error: ''Unsupported brush size'' };
           }
-          case ''draw_shape'': {
-            var shape = String(payload.shape || '''');
-            var x = payload.x == null ? undefined : Number(payload.x);
-            var y = payload.y == null ? undefined : Number(payload.y);
-            var scale = payload.scale == null ? undefined : Number(payload.scale);
-            var color = payload.color == null ? undefined : String(payload.color);
-            var width = payload.width == null ? undefined : Number(payload.width);
-            var ok = drawShape(shape, x, y, scale, color, width);
-            return ok ? { ok: true } : { ok: false, error: ''Unsupported shape'' };
-          }
-          case ''draw_line'': {
-            var x1 = Number(payload.x1);
-            var y1 = Number(payload.y1);
-            var x2 = Number(payload.x2);
-            var y2 = Number(payload.y2);
-            if ([x1, y1, x2, y2].some(function (n) { return Number.isNaN(n); })) {
-              return { ok: false, error: ''Invalid coordinates'' };
+          case ''set_generated_image'': {
+            var url = String(payload.dataUrl || '''');
+            if (url.indexOf(''data:image'') !== 0) {
+              return { ok: false, error: ''Invalid image data'' };
             }
-            snapshot();
-            drawLine(x1, y1, x2, y2, String(payload.color || state.color), Number(payload.size || state.brushSize), true);
-            pushAction({
-              action: ''line'',
-              x1: Math.round(x1), y1: Math.round(y1),
-              x2: Math.round(x2), y2: Math.round(y2),
-              color: payload.color ? String(payload.color) : state.color,
-              region: getRegion((x1 + x2) / 2, (y1 + y2) / 2),
-            });
-            return { ok: true };
-          }
-          case ''draw_curve'': {
-            var x1 = Number(payload.x1), y1 = Number(payload.y1);
-            var x2 = Number(payload.x2), y2 = Number(payload.y2);
-            var cx1 = Number(payload.cx1), cy1 = Number(payload.cy1);
-            if ([x1, y1, x2, y2, cx1, cy1].some(function (n) { return Number.isNaN(n); })) {
-              return { ok: false, error: ''Invalid coordinates'' };
-            }
-            var cx2 = payload.cx2 != null ? Number(payload.cx2) : null;
-            var cy2 = payload.cy2 != null ? Number(payload.cy2) : null;
-            if ((cx2 != null && Number.isNaN(cx2)) || (cy2 != null && Number.isNaN(cy2))) {
-              return { ok: false, error: ''Invalid control point coordinates'' };
-            }
-            snapshot();
-            drawCurve(x1, y1, cx1, cy1, cx2, cy2, x2, y2,
-              payload.color != null ? String(payload.color) : null,
-              payload.size != null ? Number(payload.size) : null, true);
-            pushAction({
-              action: ''curve'',
-              x1: Math.round(x1), y1: Math.round(y1),
-              x2: Math.round(x2), y2: Math.round(y2),
-              color: payload.color ? String(payload.color) : state.color,
-              region: getRegion((x1 + x2) / 2, (y1 + y2) / 2),
+            drawGeneratedImage(url, function (rendered) {
+              if (rendered) {
+                postToParent(''game:event'', { event: ''generated_image'', message: ''Drawing ready'' });
+              } else {
+                postToParent(''game:error'', { error: ''Failed to render generated image'' });
+              }
             });
             return { ok: true };
           }
@@ -727,6 +545,18 @@ INSERT INTO public.games (id, account_id, kid_id, source_game_id, system_key, is
       resizeCanvas();
       window.addEventListener(''resize'', resizeCanvas);
 
+      // The canvas lives in a flex box whose height is derived from the parent
+      // stage. When the game loads before that layout settles, clientHeight is 0
+      // and the drawing buffer collapses to 1px — so freehand strokes and
+      // generated images render into nothing even though the element looks full
+      // size. window "resize" does NOT fire for that initial 0 -> real transition
+      // inside the iframe; a ResizeObserver does, and also catches every later
+      // size change.
+      if (typeof ResizeObserver !== ''undefined'') {
+        var resizeObserver = new ResizeObserver(function () { resizeCanvas(); });
+        resizeObserver.observe(canvas);
+      }
+
       clearCanvas(false);
 
       canvas.addEventListener(''pointerdown'', startDraw);
@@ -743,14 +573,15 @@ INSERT INTO public.games (id, account_id, kid_id, source_game_id, system_key, is
   </script>
 </body>
 </html>
-', '{"version": "1.3.0", "category": "drawing", "capabilities": ["set_color", "set_brush_size", "draw_shape", "draw_line", "draw_curve", "clear_canvas", "undo", "get_snapshot"], "supportsVoiceCommands": true}', 'system', '2026-03-06 16:44:18.288505+00', '2026-03-21 14:11:01.921611+00', '# Drawing
+', '{"version": "2.0.0", "category": "drawing", "capabilities": ["set_color", "set_brush_size", "clear_canvas", "undo", "get_snapshot", "generate_drawing"], "supportsVoiceCommands": true}', 'system', '2026-03-06 16:44:18.288505+00', '2026-03-21 14:11:01.921611+00', '# Drawing
 
 ## Game Overview
-A freeform drawing canvas where kids create art using colors, brushes, and shape stamps. There are no win/lose conditions — this is a creative sandbox.
+A freeform drawing canvas where kids create art using colors and brushes. There are no win/lose conditions — this is a creative sandbox. Dodi can also generate a printable-style **coloring sheet** (a black-and-white mandala outline) of anything the child asks for, which the child then colors in.
 
 ## Rules
 - The child draws freely on a canvas using touch or pointer input
-- Dodi can help by drawing shapes, changing colors, or suggesting creative ideas
+- When the child asks Dodi to draw or make a picture of something, Dodi generates a coloring-sheet outline with the `generate_drawing` command — Dodi never tries to draw the subject stroke by stroke
+- Dodi can also help by changing colors or suggesting creative ideas
 - There is no score or levels — creativity is the goal
 
 ## Available Commands
@@ -765,56 +596,15 @@ Change the brush thickness.
 - `payload.size` (number, required): One of `4`, `8`, `12`, `18`, `24`
 - Example: `{"type":"set_brush_size","payload":{"size":12}}`
 
-### draw_shape
-Stamp a shape onto the canvas. Shapes are split into two categories:
-
-**Decorative shapes** have built-in colors (overridable via `payload.color`):
-- `sun` — yellow sun with orange rays
-- `house` — blue house with red roof and brown door
-- `tree` — brown trunk with green canopy
-- `star` — golden five-pointed star
-- `heart` — pink heart
-- `cloud` — light blue cloud
-- `flower` — purple petals with yellow center and green stem
-
-**Geometric shapes** use the current brush color by default:
-- `circle` — outline circle
-- `filled-circle` — solid circle
-- `rectangle` — outline rectangle (4:3 ratio)
-- `filled-rectangle` — solid rectangle (4:3 ratio)
-- `triangle` — outline equilateral triangle
-- `filled-triangle` — solid equilateral triangle
-
-**Parameters:**
-- `payload.shape` (string, required): Shape name from the lists above
-- `payload.x` (number, optional): Horizontal center in pixels. Defaults to canvas center
-- `payload.y` (number, optional): Vertical center in pixels. Defaults to canvas center
-- `payload.scale` (number, optional): Size 20-220, default 90
-- `payload.color` (string, optional): Override fill/stroke color. Accepts any CSS color. For decorative shapes, overrides the primary element color
-- `payload.width` (number, optional): Override stroke width for outline shapes (`circle`, `rectangle`, `triangle`). Defaults to the current brush size
-
-**Examples:**
-- `{"type":"draw_shape","payload":{"shape":"sun","scale":120}}`
-- `{"type":"draw_shape","payload":{"shape":"circle","x":200,"y":150,"scale":80,"color":"#e53935"}}`
-- `{"type":"draw_shape","payload":{"shape":"filled-rectangle","x":300,"y":200,"scale":100,"color":"#1e88e5"}}`
-
-### draw_line
-Draw a line between two points.
-- `payload.x1`, `payload.y1`, `payload.x2`, `payload.y2` (number, required): Start and end coordinates
-- `payload.color` (string, optional): Override color
-- `payload.size` (number, optional): Override brush size
-- Example: `{"type":"draw_line","payload":{"x1":10,"y1":10,"x2":200,"y2":200}}`
-
-### draw_curve
-Draw a curved line (Bezier curve) between two points.
-- `payload.x1`, `payload.y1` (number, required): Start point
-- `payload.x2`, `payload.y2` (number, required): End point
-- `payload.cx1`, `payload.cy1` (number, required): Control point — the curve bends toward this point
-- `payload.cx2`, `payload.cy2` (number, optional): Second control point for S-curves (cubic Bezier)
-- `payload.color` (string, optional): Override color
-- `payload.size` (number, optional): Override brush size
-- Simple curve: `{"type":"draw_curve","payload":{"x1":50,"y1":200,"cx1":150,"cy1":50,"x2":250,"y2":200}}`
-- S-curve: `{"type":"draw_curve","payload":{"x1":50,"y1":150,"cx1":100,"cy1":50,"cx2":200,"cy2":250,"x2":250,"y2":150}}`
+### generate_drawing
+Create a black-and-white mandala **coloring sheet** of whatever the child asks for and place it on the canvas as a fresh base to color in. This is how Dodi draws ANY subject — animals, objects, characters, or scenes.
+- `payload.subject` (string, required): What to draw, e.g. `"owl"`, `"a friendly dragon"`, `"a flower"`
+- MANDATORY: whenever the child asks you to draw, make, or show a picture of something, you MUST emit this generate_drawing command in the SAME turn. Saying "I will draw it" without emitting the command does nothing and leaves the canvas blank — the command is the only thing that draws
+- Speak a short acknowledgment TOGETHER WITH the command (e.g. "I am creating your picture — it will be there in a moment!"). The words accompany the command; they never replace it
+- Do NOT say the picture is already done or already on the canvas; it appears on its own a few seconds after you emit the command
+- The canvas is cleared and the generated outline becomes the new base layer; the child colors on top with their brush
+- Do NOT try to build the picture yourself from lines or shapes — always use this command for anything the child wants drawn
+- Example: `{"type":"generate_drawing","payload":{"subject":"owl"}}`
 
 ### clear_canvas
 Erase everything on the canvas. No payload needed.
@@ -829,53 +619,26 @@ Capture a PNG image of the current canvas. Used by the AI to visually analyze wh
 - Returns the snapshot as a `game:event` with `event: "snapshot"` and a `snapshot` field containing a data URL
 - Example: `{"type":"get_snapshot"}`
 
-## Combining Commands
-You can send multiple commands in sequence to build complex drawings:
-
-**Snowman** (3 stacked circles):
-1. `{"type":"draw_shape","payload":{"shape":"filled-circle","x":200,"y":280,"scale":120,"color":"#e3f2fd"}}` — bottom
-2. `{"type":"draw_shape","payload":{"shape":"filled-circle","x":200,"y":190,"scale":90,"color":"#e3f2fd"}}` — middle
-3. `{"type":"draw_shape","payload":{"shape":"filled-circle","x":200,"y":120,"scale":60,"color":"#e3f2fd"}}` — head
-
-**House from geometric shapes:**
-1. `{"type":"draw_shape","payload":{"shape":"filled-rectangle","x":200,"y":220,"scale":140,"color":"#90caf9"}}` — walls
-2. `{"type":"draw_shape","payload":{"shape":"filled-triangle","x":200,"y":130,"scale":160,"color":"#ef5350"}}` — roof
-3. `{"type":"draw_shape","payload":{"shape":"filled-rectangle","x":200,"y":250,"scale":40,"color":"#6d4c41"}}` — door
-
-**Smiley face** (circle + eyes + curved mouth):
-1. `{"type":"draw_shape","payload":{"shape":"filled-circle","x":200,"y":200,"scale":180,"color":"#fdd835"}}` — face
-2. `{"type":"draw_shape","payload":{"shape":"filled-circle","x":170,"y":170,"scale":20,"color":"#111111"}}` — left eye
-3. `{"type":"draw_shape","payload":{"shape":"filled-circle","x":230,"y":170,"scale":20,"color":"#111111"}}` — right eye
-4. `{"type":"draw_curve","payload":{"x1":160,"y1":220,"cx1":200,"cy1":260,"x2":240,"y2":220,"color":"#111111","size":4}}` — smile
-
-**Tips:**
-- Draw back-to-front — later shapes cover earlier ones
-- Use `payload.color` for per-shape colors instead of `set_color` to avoid changing the kid''s brush
-- Geometric shapes are great for teaching: "How many sides does a triangle have?"
-- Mix decorative and geometric shapes for rich scenes
-- Use draw_curve for organic shapes: smiles, waves, hills, rainbow arcs
+## Tips
+- To draw something for the child, always use `generate_drawing` with a clear `subject` — do not attempt to build pictures from lines or shapes
+- Generating a new drawing clears the canvas, so if the child is in the middle of their own artwork, check before replacing it
+- After the outline appears, encourage the child to color it in with different colors
 
 ## State Fields
 - `currentColor` (string): Currently selected color hex
 - `brushSize` (number): Currently selected brush width
 - `strokeCount` (number): How many drawing actions have been performed
 - `actions` (array): History of drawing actions (last 50). Each entry has:
-  - `action`: type — `"shape"`, `"freehand"`, `"line"`, or `"curve"`
+  - `action`: type — `"freehand"` or `"generated_image"`
   - `region`: where on the canvas — `"top-left"`, `"center"`, `"bottom-right"`, etc.
-  - Shape actions include: `shape`, `x`, `y`, `scale`, `color`
   - Freehand actions include: `color`, `brushSize`, `boundingBox` (with `x`, `y`, `w`, `h`)
-  - Line/curve actions include: `x1`, `y1`, `x2`, `y2`, `color`
 
 ## Teaching Strategy
-- Encourage experimentation with different colors and shapes
-- Suggest drawing scenes ("Let us draw a garden with flowers and a sun!")
+- Encourage experimentation with different colors
+- When the child names something they want to see, use `generate_drawing` to make a coloring sheet of it, then color it in together
+- Suggest fun subjects ("Want me to draw an owl mandala for you to color?")
 - Celebrate creativity — there are no wrong answers
-- Use draw_shape to demonstrate or collaborate ("I will add a sun to your sky!")
-- Use geometric shapes to teach about shapes: names, sides, corners, sizes
-- Ask questions: "Can you tell me what shape has 3 sides?" then draw a triangle
-- Build compositions together: "Let us make a snowman using circles!"
-- Compare filled vs outline: "Look, this circle is empty inside, and this one is full!"
-- Use draw_curve to draw expressive features: smiley mouths, waves, arches, rainbow arcs
+- Talk about the picture while coloring: the colors, the patterns, and what the subject is
 - When the child asks "Can you guess what I drew?", use get_snapshot + read_game_state to see their drawing and make a fun guess
 - Keep interactions playful and age-appropriate
 ');

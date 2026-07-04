@@ -39,14 +39,16 @@ export function GameViewShell({
 }: GameViewShellProps) {
   return (
     <div className="flex w-full flex-col gap-4 pb-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-3.5">
+      <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[300px_1fr] lg:items-center">
+        <div className="flex">
           <KidButton asChild variant="back" size="sm">
             <Link href={backHref}>
               <Icon name="arrow_left" size={15} stroke={2.2} />
               {backLabel}
             </Link>
           </KidButton>
+        </div>
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
             <h1 className="truncate text-[21px] font-extrabold text-ink">
               {title}
@@ -57,8 +59,8 @@ export function GameViewShell({
               </p>
             ) : null}
           </div>
+          {action}
         </div>
-        {action}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[300px_1fr]">

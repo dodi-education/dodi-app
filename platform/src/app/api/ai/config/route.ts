@@ -17,6 +17,8 @@ const UpdateConfigSchema = z.object({
   voiceName: z.string().min(1),
   thinkingProvider: providerEnum.optional(),
   thinkingModel: z.string().min(1).optional(),
+  imageProvider: providerEnum.optional(),
+  imageModel: z.string().min(1).optional(),
   // Legacy fields accepted for backward compat
   gameProvider: providerEnum.optional(),
   gameModel: z.string().min(1).optional(),
@@ -62,6 +64,8 @@ export async function PATCH(request: Request): Promise<NextResponse> {
       voiceName: result.data.voiceName,
       thinkingProvider: result.data.thinkingProvider ?? result.data.gameProvider,
       thinkingModel: result.data.thinkingModel ?? result.data.gameModel,
+      imageProvider: result.data.imageProvider,
+      imageModel: result.data.imageModel,
     };
     await updateModelConfig(supabase, accountId, config);
     return NextResponse.json(config);

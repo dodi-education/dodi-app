@@ -7,7 +7,7 @@ import { useTranslations } from "next-intl";
 
 import { FieldRow, StackField } from "@/components/parent/rows";
 import { SaveRow } from "@/components/parent/save-row";
-import { PageHead, Section } from "@/components/parent/section";
+import { Section } from "@/components/parent/section";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { encryptPersonaFields } from "@dodi/vault";
@@ -100,13 +100,8 @@ export default function NewPersonaPage() {
 
   return (
     <div>
-      <PageHead
-        title={isImport ? t("importTitle") : t("createTitle")}
-        sub={isImport ? t("importDescription") : t("createDescription")}
-      />
-
       <form onSubmit={handleSubmit}>
-        <Section>
+        <Section title={tc("details")}>
           <FieldRow label={t("nameLabel")} htmlFor="name" required>
             <Input
               id="name"

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 
-import { PageHead, Section } from "@/components/parent/section";
+import { PageActions, Section } from "@/components/parent/section";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/shared/icon";
 import {
@@ -79,21 +79,17 @@ export default function GameStudioPage() {
   }, [games, kids]);
 
   return (
-    <div className="flex flex-col gap-4">
-      <PageHead
-        title={t("title")}
-        sub={t("subtitle")}
-        action={
-          <Button asChild>
-            <Link href="/parent/game-studio/new">
-              <Icon name="sparkles" size={16} />
-              {t("newGame")}
-            </Link>
-          </Button>
-        }
-      />
+    <div>
+      <PageActions>
+        <Button asChild>
+          <Link href="/parent/game-studio/new">
+            <Icon name="sparkles" size={16} />
+            {t("addGame")}
+          </Link>
+        </Button>
+      </PageActions>
 
-      <Section title={t("yourGames")} desc={t("yourGamesDesc")}>
+      <Section title={t("yourGames")}>
         {games === null ? (
           <p className="px-1 py-6 text-center text-sm text-muted-foreground">
             …

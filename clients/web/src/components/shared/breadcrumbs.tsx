@@ -39,7 +39,7 @@ export function Breadcrumbs() {
   return (
     <nav
       aria-label="Breadcrumb"
-      className="flex min-w-0 items-center gap-1 text-sm"
+      className="flex min-w-0 items-center gap-1 text-[22px] tracking-tight"
     >
       {crumbs.map((crumb, i) => {
         const isLast = i === crumbs.length - 1;
@@ -48,7 +48,7 @@ export function Breadcrumbs() {
             {i > 0 ? (
               <Icon
                 name="chevron_right"
-                size={14}
+                size={18}
                 className="shrink-0 text-faint"
               />
             ) : null}

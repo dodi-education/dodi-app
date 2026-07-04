@@ -16,6 +16,7 @@ export function DodiFullGame() {
   const dodiState = useDodiSessionStore((s) => s.state);
   const kidId = useDodiSessionStore((s) => s.kidId);
   const dodiSpeaking = useDodiSessionStore((s) => s.dodiSpeaking);
+  const generatingImage = useDodiSessionStore((s) => s.generatingImage);
   const toggleActive = useDodiSessionStore((s) => s.toggleActive);
   const connect = useDodiSessionStore((s) => s.connect);
   const chatMessages = useDodiSessionStore((s) => s.chatMessages);
@@ -32,13 +33,15 @@ export function DodiFullGame() {
   const isConnecting = dodiState === "connecting";
   const isConnected = dodiState === "active" || dodiState === "deaf";
 
-  const stateLine = isConnecting
-    ? t("voiceConnecting")
-    : dodiState === "active"
-      ? dodiSpeaking
-        ? t("voiceSpeaking")
-        : t("voiceListening")
-      : t("tapToReconnect");
+  const stateLine = generatingImage
+    ? t("voiceCreatingImage")
+    : isConnecting
+      ? t("voiceConnecting")
+      : dodiState === "active"
+        ? dodiSpeaking
+          ? t("voiceSpeaking")
+          : t("voiceListening")
+        : t("tapToReconnect");
 
   return (
     <section className="flex h-full flex-col rounded-[20px] bg-white p-[18px] shadow-[0_2px_10px_rgba(34,56,78,0.05)]">
@@ -69,12 +72,12 @@ export function DodiFullGame() {
                   : "Tap to reconnect dodi"
           }
         >
-          {dodiState === "active" && !dodiSpeaking && (
+          {dodiState === "active" && !dodiSpeaking && !generatingImage && (
             <ListeningPulse className="-inset-2" />
           )}
           <Image
-            src={getDodiImage(dodiState, false)}
-            alt={dodiState === "active" ? "dodi listening" : dodiState === "deaf" ? "dodi can't hear you" : "dodi sleeping"}
+            src={generatingImage ? "/images/dodi-thinking.png" : getDodiImage(dodiState, false)}
+            alt={generatingImage ? "dodi is creating a picture" : dodiState === "active" ? "dodi listening" : dodiState === "deaf" ? "dodi can't hear you" : "dodi sleeping"}
             fill
             sizes="300px"
             className="relative z-[1] object-contain"
@@ -86,7 +89,7 @@ export function DodiFullGame() {
             {isConnecting && (
               <Icon name="loading" className="h-3.5 w-3.5 animate-spin text-primary" />
             )}
-            {dodiSpeaking && dodiState === "active" && (
+            {(generatingImage || (dodiSpeaking && dodiState === "active")) && (
               <span className="flex gap-1">
                 <span className="animate-kdot inline-block size-1.5 rounded-full bg-primary" />
                 <span className="animate-kdot inline-block size-1.5 rounded-full bg-primary [animation-delay:200ms]" />

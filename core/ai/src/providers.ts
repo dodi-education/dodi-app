@@ -7,6 +7,7 @@ export const AI_PROVIDERS: AIProviderDefinition[] = [
     supportsVoice: true,
     supportsLiveStreaming: true,
     supportsThinking: true,
+    supportsImage: true,
     models: [
       {
         id: "gemini-3.1-flash-live-preview",
@@ -17,6 +18,16 @@ export const AI_PROVIDERS: AIProviderDefinition[] = [
         id: "gemini-3.5-flash",
         name: "Gemini 3.5 Flash",
         capabilities: ["text", "thinking"],
+      },
+      {
+        id: "gemini-3.1-flash-image",
+        name: "Nano Banana 2 (Gemini 3.1 Flash Image)",
+        capabilities: ["image"],
+      },
+      {
+        id: "gemini-3-pro-image",
+        name: "Nano Banana Pro (Gemini 3 Pro Image)",
+        capabilities: ["image"],
       },
     ],
     voices: [
@@ -36,6 +47,7 @@ export const AI_PROVIDERS: AIProviderDefinition[] = [
     supportsVoice: false,
     supportsLiveStreaming: false,
     supportsThinking: true,
+    supportsImage: false,
     models: [
       {
         id: "claude-opus-4-8",

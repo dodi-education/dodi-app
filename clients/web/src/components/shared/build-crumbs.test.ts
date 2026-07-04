@@ -76,7 +76,7 @@ describe("buildCrumbs", () => {
   it("prefers the live leaf override for game-studio, else a fallback", () => {
     expect(buildCrumbs("/parent/game-studio/new", t)).toEqual([
       { label: "nav.gameStudio", href: "/parent/game-studio" },
-      { label: "gameStudio.newGame" },
+      { label: "gameStudio.addGame" },
     ]);
     expect(buildCrumbs("/parent/game-studio/gid", t)).toEqual([
       { label: "nav.gameStudio", href: "/parent/game-studio" },

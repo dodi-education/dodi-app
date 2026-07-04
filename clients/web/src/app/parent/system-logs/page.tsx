@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { PageHead, Section } from "@/components/parent/section";
+import { Section } from "@/components/parent/section";
 import { DotSep, Row, RowMain, RowMeta, RowTitle } from "@/components/parent/rows";
 import { useDateFormat } from "@/components/providers/date-format-provider";
 import { useKids } from "@/hooks/use-kids";
@@ -122,8 +122,6 @@ export default function SystemLogsPage() {
 
   return (
     <div>
-      <PageHead title={t("title")} sub={t("subtitle")} />
-
       {/* Filter bar */}
       <div className="mb-6 flex flex-wrap gap-3">
         <Select value={filterKid} onValueChange={setFilterKid}>
@@ -177,7 +175,7 @@ export default function SystemLogsPage() {
             : t("noResults")}
         </div>
       ) : (
-        <Section>
+        <Section title={t("heading")}>
           {logs.map((log) => (
             <Row key={log.id}>
               <RowMain>

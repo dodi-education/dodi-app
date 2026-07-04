@@ -22,6 +22,10 @@ import {
 } from "@dodi/games/success";
 import { useDodiContext } from "@/hooks/use-dodi-context";
 import { useDodiSessionStore } from "@/stores/dodi-session-store";
+import {
+  generateDrawing,
+  NoImageModelError,
+} from "@/lib/ai/client-generate-drawing";
 import type {
   DodiProgressState,
   GameCommand,
@@ -70,6 +74,7 @@ export function GamePlayView({
   const updateGameState = useDodiSessionStore((s) => s.updateGameState);
   const setOnRunCommands = useDodiSessionStore((s) => s.setOnRunCommands);
   const setOnRequestSnapshot = useDodiSessionStore((s) => s.setOnRequestSnapshot);
+  const setGeneratingImage = useDodiSessionStore((s) => s.setGeneratingImage);
   const resetGameAssistance = useDodiSessionStore((s) => s.resetGameAssistance);
 
   // ── Progress & success tracking ────────────────────────────────────────
@@ -207,6 +212,36 @@ export function GamePlayView({
     }
   }, [gameId, kidId]);
 
+  // `generate_drawing` is a client-only meta-command: image generation needs the
+  // vault key and can't run inside the sandbox (CSP: connect-src 'none'). We
+  // generate the coloring sheet here, then push a `set_generated_image` command
+  // with the resulting data URL into the sandbox.
+  const handleGenerateDrawing = useCallback(
+    async (command: GameCommand): Promise<void> => {
+      const subject =
+        typeof command.payload?.subject === "string" ? command.payload.subject : "";
+      setGameError(null);
+      setGeneratingImage(true);
+      try {
+        const dataUrl = await generateDrawing(subject);
+        sandboxRef.current?.sendCommand({
+          type: "set_generated_image",
+          payload: { dataUrl },
+        });
+      } catch (error) {
+        gameDebugWarn("playview", "generate_drawing failed:", error);
+        setGameError(
+          error instanceof NoImageModelError
+            ? t("noImageModel")
+            : t("drawingFailed"),
+        );
+      } finally {
+        setGeneratingImage(false);
+      }
+    },
+    [t, setGeneratingImage],
+  );
+
   const runCommands = useCallback((commands: GameCommand[]): void => {
     gameDebug("playview", `runCommands called with ${commands.length} commands`);
 
@@ -222,10 +257,14 @@ export function GamePlayView({
     }
 
     for (const command of commands) {
+      if (command.type === "generate_drawing") {
+        void handleGenerateDrawing(command);
+        continue;
+      }
       gameDebug("playview", `Sending command to sandbox:`, command);
       sandboxRef.current.sendCommand(command);
     }
-  }, [t]);
+  }, [t, handleGenerateDrawing]);
 
   // Request a canvas snapshot from the sandbox (used by read_game_state)
   const requestSnapshot = useCallback((): Promise<string | null> => {
@@ -320,6 +359,7 @@ export function GamePlayView({
         gameId={gameId}
         codeBundle={codeBundle}
         goal={goal}
+        align="start"
         reserved={STAGE.reservedKid}
         onStateChange={handleStateChange}
         onCommandResult={handleCommandResult}

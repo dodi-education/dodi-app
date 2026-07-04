@@ -2,23 +2,11 @@ import { cn } from "@/lib/utils";
 
 import { RequiredMark } from "./rows";
 
-interface PageHeadProps {
-  title: string;
-  sub?: string;
-  action?: React.ReactNode;
-}
-
-export function PageHead({ title, sub, action }: PageHeadProps) {
+/** Right-aligned toolbar row for a page's primary action(s), sits above the
+ * first Section. The page title now lives in the top-bar breadcrumb. */
+export function PageActions({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mb-7 flex items-start justify-between gap-4">
-      <div>
-        <h1 className="text-[22px] font-bold tracking-tight">{title}</h1>
-        {sub ? (
-          <p className="mt-0.5 text-[13.5px] text-muted-foreground">{sub}</p>
-        ) : null}
-      </div>
-      {action ?? null}
-    </div>
+    <div className="flex items-center justify-end gap-2">{children}</div>
   );
 }
 

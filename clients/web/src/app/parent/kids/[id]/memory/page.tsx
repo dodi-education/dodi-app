@@ -7,7 +7,7 @@ import { useTranslations } from "next-intl";
 
 import { StackField } from "@/components/parent/rows";
 import { SaveRow } from "@/components/parent/save-row";
-import { PageHead, Section } from "@/components/parent/section";
+import { Section } from "@/components/parent/section";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useKidStore } from "@/stores/kid-store";
@@ -114,11 +114,6 @@ export default function KidMemoryPage() {
 
   return (
     <div>
-      <PageHead
-        title={t("title", { name: kid.display_name })}
-        sub={t("subtitle")}
-      />
-
       <Section
         title={t("memoryTitle")}
         desc={t("memoryHint")}

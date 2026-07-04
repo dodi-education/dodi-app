@@ -15,7 +15,7 @@ import {
   RowTitle,
 } from "@/components/parent/rows";
 import { SaveRow } from "@/components/parent/save-row";
-import { PageHead, Section } from "@/components/parent/section";
+import { Section } from "@/components/parent/section";
 import { Icon } from "@/components/shared/icon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -338,11 +338,6 @@ export default function EditKidPage() {
 
   return (
     <div>
-      <PageHead
-        title={kid.display_name}
-        sub={t("editDescription", { name: kid.display_name })}
-      />
-
       <form onSubmit={handleUpdate}>
         <Section title={t("editTitle")}>
           <FieldRow label={t("displayName")} htmlFor="display-name" required>
@@ -473,10 +468,7 @@ export default function EditKidPage() {
         </Section>
       </form>
 
-      <Section
-        title={t("pinPuzzleTitle")}
-        desc={t("pinPuzzleDesc", { name: kid.display_name })}
-      >
+      <Section title={t("pinPuzzleTitle")}>
         <FieldRow
           label={t("pinPuzzleToggle")}
           hint={t("pinPuzzleToggleHint", { name: kid.display_name })}
@@ -506,7 +498,7 @@ export default function EditKidPage() {
         </SaveRow>
       </Section>
 
-      <Section title={ts("dateTimeTitle")} desc={t("dateTimeOverrideHint")}>
+      <Section title={ts("dateTimeTitle")}>
         <DateTimeFields
           dateStyle={dpDateStyle}
           timeStyle={dpTimeStyle}

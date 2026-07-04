@@ -12,7 +12,7 @@ import {
 } from "@/components/parent/rows";
 import { FriendApprovals } from "@/components/parent/friend-approvals";
 import { KidRowActions } from "@/components/parent/kid-row-actions";
-import { PageHead, Section } from "@/components/parent/section";
+import { PageActions, Section } from "@/components/parent/section";
 import { Icon } from "@/components/shared/icon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -42,32 +42,28 @@ export default function KidsPage() {
 
   return (
     <div>
-      <PageHead
-        title={t("title")}
-        sub={t("subtitle")}
-        action={
-          <Button asChild>
-            <Link href="/parent/kids/new">{t("addKid")}</Link>
-          </Button>
-        }
-      />
+      <PageActions>
+        <Button asChild>
+          <Link href="/parent/kids/new">{t("addKid")}</Link>
+        </Button>
+      </PageActions>
 
       <FriendApprovals />
 
       {loading ? (
-        <Section>
+        <Section title={t("yourKids")}>
           <div className="px-5 py-12 text-center text-sm text-muted-foreground">
             {tc("loading")}
           </div>
         </Section>
       ) : error ? (
-        <Section>
+        <Section title={t("yourKids")}>
           <div className="px-5 py-12 text-center text-sm text-danger">
             {error}
           </div>
         </Section>
       ) : !kids || kids.length === 0 ? (
-        <Section>
+        <Section title={t("yourKids")}>
           <div className="flex flex-col items-center gap-4 px-5 py-12">
             <Icon name="kids" className="h-10 w-10 text-primary" />
             <p className="text-sm text-muted-foreground">{t("noKids")}</p>
@@ -77,7 +73,7 @@ export default function KidsPage() {
           </div>
         </Section>
       ) : (
-        <Section>
+        <Section title={t("yourKids")}>
           {kids.map((kid, i) => {
             const color = avatarColor(i);
             const age = ageFromBirthdate(kid.birthdate);

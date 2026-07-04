@@ -172,7 +172,7 @@ export function GameStudio({ initialGame }: GameStudioProps) {
   // top bar of its own); clear it when leaving the studio.
   const setLeaf = useBreadcrumbStore((s) => s.setLeaf);
   useEffect(() => {
-    setLeaf(game.title.trim() || t("newGame"));
+    setLeaf(game.title.trim() || t("addGame"));
     return () => setLeaf(null);
   }, [game.title, setLeaf, t]);
 

@@ -14,7 +14,7 @@ import {
   RowMeta,
   RowTitle,
 } from "@/components/parent/rows";
-import { PageHead, Section } from "@/components/parent/section";
+import { PageActions, Section } from "@/components/parent/section";
 import { StatCell, StatStrip } from "@/components/parent/stat-strip";
 import { Icon } from "@/components/shared/icon";
 import { Badge } from "@/components/ui/badge";
@@ -86,15 +86,14 @@ export default function DashboardPage() {
     update_game: ts("taskUpdate"),
   };
 
-  // Still loading the (decrypted) kid list — hold the page chrome.
+  // Still loading the (decrypted) kid list — the breadcrumb carries the title.
   if (kids === null) {
-    return <PageHead title={t("title")} sub={t("subtitle")} />;
+    return null;
   }
 
   if (kids.length === 0) {
     return (
       <div>
-        <PageHead title={t("title")} sub={t("subtitle")} />
         <Section>
           <div className="flex flex-col items-center gap-4 px-5 py-12">
             <Icon name="kids" className="h-10 w-10 text-primary" />
@@ -115,17 +114,16 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <PageHead
-        title={t("title")}
-        sub={t("subtitle")}
-        action={
-          <Button asChild>
-            <Link href="/parent/kids/new">{t("addKid")}</Link>
-          </Button>
-        }
-      />
+      <PageActions>
+        <Button asChild>
+          <Link href="/parent/game-studio/new">
+            <Icon name="sparkles" size={16} />
+            {t("addGame")}
+          </Link>
+        </Button>
+      </PageActions>
 
-      <Section>
+      <Section title={t("overview")}>
         <StatStrip>
           <StatCell num={stats.sessionsToday} label={t("statSessionsToday")} />
           <StatCell
@@ -140,7 +138,6 @@ export default function DashboardPage() {
 
       <Section
         title={t("recentSessions")}
-        desc={t("recentSessionsDesc")}
         action={
           <Link
             href="/parent/agent-sessions"

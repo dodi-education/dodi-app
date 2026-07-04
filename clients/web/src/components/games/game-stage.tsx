@@ -30,6 +30,13 @@ interface GameStageProps {
    * `bleed`  — fills the parent and centers both axes, no card chrome (voice create).
    */
   variant?: "framed" | "bleed";
+  /**
+   * Horizontal placement of the framed card within its column.
+   * `center` (default) — mx-auto, used by the studio preview.
+   * `start` — pinned to the column's left edge, so it lines up with the title bar
+   *   and Dodi sidebar in the kid play view.
+   */
+  align?: "center" | "start";
   /** Vertical chrome reserved around the stage for the dvh height budget. */
   reserved?: number;
   /** Extra classes on the outer wrapper. */
@@ -51,6 +58,7 @@ export function GameStage({
   onCommandResult,
   onProgress,
   variant = "framed",
+  align = "center",
   reserved = STAGE.reservedKid,
   className,
 }: GameStageProps) {
@@ -60,7 +68,8 @@ export function GameStage({
     <div
       style={stageSizeStyle(reserved)}
       className={cn(
-        "mx-auto overflow-hidden",
+        "overflow-hidden",
+        align === "start" ? "mr-auto" : "mx-auto",
         framed
           ? "rounded-[18px] border border-border bg-white shadow-[0_8px_28px_rgba(34,56,78,0.10)]"
           : "rounded-xl bg-white",
