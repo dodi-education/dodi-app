@@ -1,4 +1,5 @@
 import { LandingInteractions } from "@/components/landing-interactions";
+import { NewsletterForm } from "@/components/newsletter-form";
 import { buildLinks, createT, SiteFooter, SiteHeader } from "@/components/site/chrome";
 import {
   ArrowRight,
@@ -19,8 +20,9 @@ import type { Locale } from "@/lib/site";
 
 /**
  * The Companion device page, ported from the design's companion.html. Its header
- * CTA is "Reserve yours" (anchoring to the on-page reserve form). The E2EE
- * scramble demo and reserve-form confirmation are driven by <LandingInteractions>.
+ * CTA is "Reserve yours" (anchoring to the on-page newsletter section). The E2EE
+ * scramble demo is driven by <LandingInteractions>; the newsletter signup is the
+ * client <NewsletterForm>.
  */
 export function CompanionPage({ locale }: { locale: Locale }) {
   const links = buildLinks(locale);
@@ -31,7 +33,7 @@ export function CompanionPage({ locale }: { locale: Locale }) {
         locale={locale}
         links={links}
         active="companion"
-        headerCta={{ label: t("reserve"), href: "#reserve" }}
+        headerCta={{ label: t("reserve"), href: "#newsletter" }}
       />
       <main>
         <section className="page-hero">
@@ -43,7 +45,7 @@ export function CompanionPage({ locale }: { locale: Locale }) {
               <h1 style={{ marginTop: 18 }}>{t("heroTitle")}</h1>
               <p className="lead">{t("heroLead")}</p>
               <div className="hero-cta">
-                <a className="btn btn--coral btn--lg" href="#reserve">
+                <a className="btn btn--coral btn--lg" href="#newsletter">
                   {t("reserve")}
                 </a>
                 <a className="btn btn--ghost btn--lg" href="#privacy">
@@ -168,7 +170,7 @@ export function CompanionPage({ locale }: { locale: Locale }) {
                 <p style={{ marginTop: 18 }}>{t("encryptionCaption")}</p>
                 <a
                   className="textlink"
-                  href={links.platformAi}
+                  href={links.appAi}
                   style={{ color: "#9FC2F2", justifyContent: "center" }}
                 >
                   {t("seeDataHandled")} <ArrowRight />
@@ -288,31 +290,30 @@ export function CompanionPage({ locale }: { locale: Locale }) {
           </div>
         </section>
 
-        {/* Reserve */}
+        {/* Newsletter */}
         <section
           className="section section--tight"
-          id="reserve"
+          id="newsletter"
           style={{ background: "linear-gradient(180deg,#fff,var(--sky-bot))" }}
         >
           <div className="wrap">
-            <div className="reserve-box reveal">
-              <span className="avail-badge soon" style={{ marginBottom: 6 }}>
-                <Clock sw={2.2} /> {t("shipping2027")}
-              </span>
-              <h3 style={{ marginTop: 14 }}>{t("reserveTitle")}</h3>
-              <p>{t("reserveBody")}</p>
-              <form className="reserve-form" noValidate>
-                <input
-                  type="email"
-                  placeholder={t("emailPlaceholder")}
-                  aria-label="Email address"
-                  required
-                />
-                <button className="btn btn--coral" type="submit" data-done={t("reserveDone")}>
-                  {t("notifyMe")}
-                </button>
-              </form>
-              <p className="reserve-note">{t("reserveNote")}</p>
+            <div className="newsletter-box reveal">
+              <h3>{t("newsletterTitle")}</h3>
+              <p>{t("newsletterBody")}</p>
+              <NewsletterForm
+                locale={locale}
+                list="newsletter"
+                labels={{
+                  placeholder: t("emailPlaceholder"),
+                  notifyMe: t("notifyMe"),
+                  sending: t("newsletterSending"),
+                  done: t("newsletterDone"),
+                  invalid: t("newsletterInvalid"),
+                  rateLimited: t("newsletterRateLimited"),
+                  error: t("newsletterError"),
+                }}
+              />
+              <p className="newsletter-note">{t("newsletterNote")}</p>
             </div>
           </div>
         </section>

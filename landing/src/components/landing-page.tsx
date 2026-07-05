@@ -16,12 +16,12 @@ import {
   Gear,
   Github,
   Globe,
+  HeartHandshake,
   Home,
   Key,
   Lock,
   Mic,
   Shield,
-  Smiley,
   Sparkle,
 } from "@/components/site/icons";
 import type { Locale } from "@/lib/site";
@@ -31,7 +31,7 @@ import type { Locale } from "@/lib/site";
  * Rendered per-locale as a server component: translations resolve at build time
  * via `createTranslator` (sync, no provider), so /en and /de are fully static
  * with correct <html lang> and SEO metadata. Header, footer, icons and the
- * link map are shared with the Platform / Companion / About pages via
+ * link map are shared with the App / Companion / About pages via
  * components/site/*. Interactive behaviour (sticky header, mobile nav, reveal,
  * the scroll-driven dodo animation) lives in the <LandingInteractions> island.
  */
@@ -136,10 +136,10 @@ function Pillars({ locale, links }: SectionProps) {
           <p className="lead">{t("pillars.lead")}</p>
         </div>
         <div className="pillars">
-          <a className="pillar reveal" href={links.platformMemory}>
+          <a className="pillar reveal" href={links.appMemory}>
             <span className="pill-glow" style={{ background: "var(--brand-soft)" }} />
             <span className="icon-chip blue">
-              <Smiley />
+              <HeartHandshake />
             </span>
             <h3>{t("pillars.p1Title")}</h3>
             <p>{t("pillars.p1Body")}</p>
@@ -148,7 +148,7 @@ function Pillars({ locale, links }: SectionProps) {
             </span>
           </a>
 
-          <a className="pillar coral reveal d1" href={links.platformGames}>
+          <a className="pillar coral reveal d1" href={links.appGames}>
             <span className="pill-glow" style={{ background: "var(--coral-soft)" }} />
             <span className="icon-chip coral">
               <Gear />
@@ -253,7 +253,7 @@ function Products({ locale, links }: SectionProps) {
           <p className="lead">{t("products.lead")}</p>
         </div>
         <div className="product-cards">
-          <a className="product-card reveal" href={links.platform}>
+          <a className="product-card reveal" href={links.appPage}>
             <div className="product-media platform">
               <span className="product-tag now">
                 <Check sw={2.4} /> {t("products.tagNow")}
@@ -261,14 +261,14 @@ function Products({ locale, links }: SectionProps) {
               <img
                 className="platform-pos"
                 src="/site/assets/platform-shot.jpg"
-                alt="Child using the dodi platform on a tablet"
+                alt="Child using the dodi app on a tablet"
               />
             </div>
             <div className="product-body">
-              <h3>{t("products.platformTitle")}</h3>
-              <p>{t("products.platformBody")}</p>
+              <h3>{t("products.appTitle")}</h3>
+              <p>{t("products.appBody")}</p>
               <span className="textlink">
-                {t("products.platformLink")} <ArrowRight />
+                {t("products.appLink")} <ArrowRight />
               </span>
             </div>
           </a>
@@ -425,15 +425,6 @@ function FinalCta({ locale, links }: SectionProps) {
         <div className="hero-cta">
           <a className="btn btn--primary btn--lg" href={links.register}>
             {t("cta.getStarted")}
-          </a>
-          <a
-            className="btn btn--ghost btn--lg"
-            href={links.github}
-            target="_blank"
-            rel="noopener"
-          >
-            <Github style={{ width: "1.15em", height: "1.15em" }} />
-            {t("cta.starGithub")}
           </a>
         </div>
       </div>

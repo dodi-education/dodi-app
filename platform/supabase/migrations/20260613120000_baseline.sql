@@ -1310,3 +1310,108 @@ GRANT ALL ON TABLE "public"."invite_codes" TO "service_role";
 GRANT ALL ON TABLE "public"."invite_code_redemptions" TO "anon";
 GRANT ALL ON TABLE "public"."invite_code_redemptions" TO "authenticated";
 GRANT ALL ON TABLE "public"."invite_code_redemptions" TO "service_role";
+
+
+-- ===========================================================================
+-- NEWSLETTER SIGNUPS
+--
+-- Emails captured by the static marketing site's forms (dodi.app) via the
+-- public POST /api/newsletter endpoint. Each row belongs to a named `list`
+-- (e.g. the marketing site's newsletter form binds to 'newsletter'); the set of
+-- valid lists is configured in the app via the NEWSLETTER_LISTS env, not in the
+-- schema. These are anonymous prospects with no account/vault, so this is
+-- plaintext OPERATIONAL data (like invite_codes) — the E2EE rules don't apply.
+-- RLS is enabled with no policies (default-deny): only the service role and the
+-- SECURITY DEFINER function below touch these rows. Spam defense: unique
+-- (list, lower(email)) for dedupe and a per-ip_hash rate limit enforced inside
+-- record_newsletter_signup(). ip_hash is an HMAC of the IP (never the raw IP)
+-- so we can throttle without storing PII.
+-- ===========================================================================
+
+CREATE TABLE IF NOT EXISTS "public"."newsletter_signups" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "email" "text" NOT NULL,
+    "locale" "text" DEFAULT 'en'::"text" NOT NULL,
+    -- Which newsletter/list this signup is for. Valid values are enforced in the
+    -- app (NEWSLETTER_LISTS env), so no CHECK here — lists change without a migration.
+    "list" "text" DEFAULT 'newsletter'::"text" NOT NULL,
+    "status" "text" DEFAULT 'confirmed'::"text" NOT NULL,
+    -- HMAC-SHA256(ip, pepper) — never the raw IP. Null when unknown.
+    "ip_hash" "text",
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "newsletter_signups_locale_check" CHECK (("locale" = ANY (ARRAY['en'::"text", 'de'::"text"]))),
+    CONSTRAINT "newsletter_signups_status_check" CHECK (("status" = ANY (ARRAY['confirmed'::"text", 'unsubscribed'::"text"])))
+);
+
+ALTER TABLE ONLY "public"."newsletter_signups"
+    ADD CONSTRAINT "newsletter_signups_pkey" PRIMARY KEY ("id");
+
+-- Dedupe per list, case-insensitive: one row per (list, email). Also the
+-- ON CONFLICT target in record_newsletter_signup().
+CREATE UNIQUE INDEX IF NOT EXISTS "newsletter_signups_list_email_uniq" ON "public"."newsletter_signups" USING "btree" ("list", "lower"("email"));
+
+-- Supports the per-IP rate-limit window count.
+CREATE INDEX IF NOT EXISTS "newsletter_signups_ip_window_idx" ON "public"."newsletter_signups" USING "btree" ("ip_hash", "created_at");
+
+CREATE OR REPLACE TRIGGER "newsletter_signups_updated_at" BEFORE UPDATE ON "public"."newsletter_signups" FOR EACH ROW EXECUTE FUNCTION "public"."handle_updated_at"();
+
+ALTER TABLE "public"."newsletter_signups" ENABLE ROW LEVEL SECURITY;
+
+-- record_newsletter_signup(...): atomically enforce a per-ip_hash rate limit
+-- (p_max_per_ip within p_window) and idempotently insert a signup. Returns one
+-- row: (id, is_new, rate_limited). id is null when rate-limited; is_new is false
+-- for a duplicate email (dedupe hit). Doing the count + insert in one function
+-- avoids a check-then-insert race under concurrent submissions.
+CREATE OR REPLACE FUNCTION "public"."record_newsletter_signup"("p_email" "text", "p_locale" "text", "p_list" "text", "p_ip_hash" "text", "p_max_per_ip" integer, "p_window" interval) RETURNS TABLE("id" "uuid", "is_new" boolean, "rate_limited" boolean)
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public', 'pg_temp'
+    AS $$
+declare
+  v_email  text := lower(btrim(p_email));
+  v_locale text := coalesce(nullif(p_locale, ''), 'en');
+  v_list   text := coalesce(nullif(p_list, ''), 'newsletter');
+  v_count  integer;
+  v_id     uuid;
+begin
+  -- Per-IP rate limit (only when we have a hash to key on).
+  if p_ip_hash is not null then
+    select count(*) into v_count
+    from public.newsletter_signups w
+    where w.ip_hash = p_ip_hash
+      and w.created_at > now() - p_window;
+
+    if v_count >= p_max_per_ip then
+      return query select null::uuid, false, true;
+      return;
+    end if;
+  end if;
+
+  -- Idempotent insert; dedupe on (list, lower(email)).
+  insert into public.newsletter_signups (email, locale, list, ip_hash)
+  values (v_email, v_locale, v_list, p_ip_hash)
+  on conflict (list, lower(email)) do nothing
+  returning newsletter_signups.id into v_id;
+
+  if v_id is not null then
+    return query select v_id, true, false;
+  else
+    select w.id into v_id
+    from public.newsletter_signups w
+    where w.list = v_list
+      and lower(w.email) = v_email
+    limit 1;
+    return query select v_id, false, false;
+  end if;
+end;
+$$;
+
+-- Only the service role may record signups; the public route calls it via
+-- serviceClient(). The ALTER DEFAULT PRIVILEGES grants EXECUTE to
+-- anon/authenticated, so revoke it explicitly (clients must never call directly).
+REVOKE ALL ON FUNCTION "public"."record_newsletter_signup"("p_email" "text", "p_locale" "text", "p_list" "text", "p_ip_hash" "text", "p_max_per_ip" integer, "p_window" interval) FROM PUBLIC, "anon", "authenticated";
+GRANT ALL ON FUNCTION "public"."record_newsletter_signup"("p_email" "text", "p_locale" "text", "p_list" "text", "p_ip_hash" "text", "p_max_per_ip" integer, "p_window" interval) TO "service_role";
+
+GRANT ALL ON TABLE "public"."newsletter_signups" TO "anon";
+GRANT ALL ON TABLE "public"."newsletter_signups" TO "authenticated";
+GRANT ALL ON TABLE "public"."newsletter_signups" TO "service_role";

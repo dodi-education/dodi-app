@@ -27,16 +27,32 @@ export interface EmailShellProps {
   /** Web app origin (NEXT_PUBLIC_APP_URL) — used for the logo + settings link. */
   appUrl: string;
   locale: EmailLocale;
+  /**
+   * Footer override. Account emails default (undefined) to the "notifications
+   * are on for your account" reason + a Manage-notifications link. Emails to
+   * people without an account (e.g. newsletter subscribers) pass their own
+   * reason and omit the manage link.
+   */
+  footer?: {
+    reason: string;
+    manageHref?: string;
+    manageLabel?: string;
+  };
   children: ReactNode;
 }
 
-export function EmailShell({ preview, appUrl, locale, children }: EmailShellProps) {
+export function EmailShell({ preview, appUrl, locale, footer, children }: EmailShellProps) {
   const c = layoutCopy(locale);
   const origin = appUrl.replace(/\/+$/, "");
   // Logo is served by the platform (api.dodi.app), not the web app; links point
   // at the web app (app.dodi.app).
   const logoUrl = `${emailAssetBaseUrl()}/dodi-logo.png`;
   const settingsUrl = `${origin}/parent/settings/notifications`;
+
+  // Default (account) footer vs. an explicit override for account-less emails.
+  const footerReason = footer ? footer.reason : c.footerReason;
+  const manageHref = footer ? footer.manageHref : settingsUrl;
+  const manageLabel = footer ? footer.manageLabel : c.footerManage;
 
   return (
     <Html lang={locale}>
@@ -82,14 +98,20 @@ export function EmailShell({ preview, appUrl, locale, children }: EmailShellProp
                 color: colors.muted,
               }}
             >
-              {c.footerReason}{" "}<br />
-              <Link
-                href={settingsUrl}
-                style={{ color: colors.muted, textDecoration: "underline" }}
-              >
-                {c.footerManage}
-              </Link>
-              .
+              {footerReason}
+              {manageHref && manageLabel ? (
+                <>
+                  {" "}
+                  <br />
+                  <Link
+                    href={manageHref}
+                    style={{ color: colors.muted, textDecoration: "underline" }}
+                  >
+                    {manageLabel}
+                  </Link>
+                  .
+                </>
+              ) : null}
             </Text>
             <Text
               style={{

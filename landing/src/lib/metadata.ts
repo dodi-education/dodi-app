@@ -37,13 +37,13 @@ export function buildMetadata(locale: Locale): Metadata {
 }
 
 /**
- * Metadata for an interior page (Platform / Companion / About). Title and
+ * Metadata for an interior page (App / Companion / About). Title and
  * description come from that page's message namespace; canonical/hreflang point
- * at the locale-prefixed route (e.g. /platform and /de/platform).
+ * at the locale-prefixed route (e.g. /app and /de/app).
  */
 export function buildPageMetadata(
   locale: Locale,
-  page: "platform" | "companion" | "about",
+  page: "app" | "companion" | "about",
 ): Metadata {
   const ns = messages[locale][page];
   const title = ns.metaTitle;

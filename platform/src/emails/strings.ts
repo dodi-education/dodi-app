@@ -29,18 +29,29 @@ interface FriendApprovalCopy {
   button: string;
 }
 
+/** Newsletter subscription welcome (single opt-in) email copy. */
+interface NewsletterWelcomeCopy {
+  subject: string;
+  preview: string;
+  heading: string;
+  body: string;
+  button: string;
+  /** Footer override — these subscribers have no account/settings page. */
+  footerReason: string;
+}
+
 const LAYOUT: Record<EmailLocale, LayoutCopy> = {
   en: {
     footerReason:
       "You're receiving this because email notifications are on for your dodi account.",
     footerManage: "Manage notifications",
-    tagline: "dodi · do education differently",
+    tagline: "dodi · do things differently",
   },
   de: {
     footerReason:
       "Du erhältst diese E-Mail, weil E-Mail-Benachrichtigungen für dein dodi-Konto aktiviert sind.",
     footerManage: "Benachrichtigungen verwalten",
-    tagline: "dodi · do education differently",
+    tagline: "dodi · do things differently",
   },
 };
 
@@ -65,10 +76,35 @@ const FRIEND_APPROVAL: Record<EmailLocale, FriendApprovalCopy> = {
   },
 };
 
+const NEWSLETTER_WELCOME: Record<EmailLocale, NewsletterWelcomeCopy> = {
+  en: {
+    subject: "Welcome to the dodi newsletter",
+    preview: "Thanks for subscribing — updates on the Companion and new features are on the way.",
+    heading: "You're subscribed",
+    body: "Thanks for subscribing to the dodi newsletter. We'll send occasional updates about the Companion device and new app features. In the meantime, you can start with dodi today.",
+    button: "Explore dodi",
+    footerReason:
+      "You're receiving this because you subscribed to the dodi newsletter.",
+  },
+  de: {
+    subject: "Willkommen beim dodi-Newsletter",
+    preview: "Danke fürs Abonnieren – Neuigkeiten zum Companion und zu neuen Funktionen folgen.",
+    heading: "Du hast abonniert",
+    body: "Danke, dass du den dodi-Newsletter abonniert hast. Wir schicken dir ab und zu Neuigkeiten zum Companion-Gerät und zu neuen App-Funktionen. In der Zwischenzeit kannst du dodi schon heute ausprobieren.",
+    button: "dodi entdecken",
+    footerReason:
+      "Du erhältst diese E-Mail, weil du den dodi-Newsletter abonniert hast.",
+  },
+};
+
 export function layoutCopy(locale: EmailLocale): LayoutCopy {
   return LAYOUT[locale];
 }
 
 export function friendApprovalCopy(locale: EmailLocale): FriendApprovalCopy {
   return FRIEND_APPROVAL[locale];
+}
+
+export function newsletterWelcomeCopy(locale: EmailLocale): NewsletterWelcomeCopy {
+  return NEWSLETTER_WELCOME[locale];
 }

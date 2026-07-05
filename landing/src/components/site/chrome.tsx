@@ -34,12 +34,12 @@ export function buildLinks(locale: Locale) {
   const base = locale === "de" ? "/de" : "";
   return {
     home: localePath[locale],
-    platform: `${base}/platform`,
+    appPage: `${base}/app`,
     companion: `${base}/companion`,
     about: `${base}/about`,
-    platformMemory: `${base}/platform#memory`,
-    platformGames: `${base}/platform#games`,
-    platformAi: `${base}/platform#ai`,
+    appMemory: `${base}/app#memory`,
+    appGames: `${base}/app#games`,
+    appAi: `${base}/app#ai`,
     companionPrivacy: `${base}/companion#privacy`,
     app: APP_URL,
     register: `${APP_URL}/register`,
@@ -50,7 +50,7 @@ export function buildLinks(locale: Locale) {
 
 export type Links = ReturnType<typeof buildLinks>;
 
-type NavKey = "home" | "platform" | "companion" | "about";
+type NavKey = "home" | "app" | "companion" | "about";
 
 export function SiteHeader({
   locale,
@@ -73,8 +73,8 @@ export function SiteHeader({
           <img src="/site/assets/dodi-logo.png" alt="dodi" />
         </a>
         <nav className="main-nav" aria-label="Primary">
-          <a href={links.platform} className={active === "platform" ? "active" : undefined}>
-            {t("nav.platform")}
+          <a href={links.appPage} className={active === "app" ? "active" : undefined}>
+            {t("nav.app")}
           </a>
           <a href={links.companion} className={active === "companion" ? "active" : undefined}>
             {t("nav.companion")}
@@ -93,7 +93,7 @@ export function SiteHeader({
             aria-label="dodi on GitHub"
           >
             <Github />
-            {t("nav.star")}
+            {t("nav.openSource")}
           </a>
           <a className="btn btn--primary" href={cta.href}>
             {cta.label}
@@ -123,7 +123,7 @@ export function SiteFooter({ locale, links }: { locale: Locale; links: Links }) 
           </div>
           <div className="footer-col">
             <h5>{t("footer.product")}</h5>
-            <a href={links.platform}>{t("nav.platform")}</a>
+            <a href={links.appPage}>{t("nav.app")}</a>
             <a href={links.companion}>{t("nav.companion")}</a>
             <a href={links.app}>{t("nav.openApp")}</a>
           </div>
@@ -136,8 +136,8 @@ export function SiteFooter({ locale, links }: { locale: Locale; links: Links }) 
           </div>
           <div className="footer-col">
             <h5>{t("footer.howItWorks")}</h5>
-            <a href={links.platformMemory}>{t("footer.linkMemory")}</a>
-            <a href={links.platformGames}>{t("footer.linkGames")}</a>
+            <a href={links.appMemory}>{t("footer.linkMemory")}</a>
+            <a href={links.appGames}>{t("footer.linkGames")}</a>
             <a href={links.companionPrivacy}>{t("footer.linkPrivacy")}</a>
           </div>
         </div>

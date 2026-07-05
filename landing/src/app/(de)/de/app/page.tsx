@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 
-import { PlatformPage } from "@/components/platform-page";
+import { AppPage } from "@/components/app-page";
 import { buildPageMetadata } from "@/lib/metadata";
 
-export const metadata: Metadata = buildPageMetadata("de", "platform");
+export const metadata: Metadata = buildPageMetadata("de", "app");
 
 export default function Page() {
-  return <PlatformPage locale="de" />;
+  return <AppPage locale="de" />;
 }

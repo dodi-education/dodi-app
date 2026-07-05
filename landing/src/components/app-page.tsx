@@ -1,16 +1,10 @@
 import { LandingInteractions } from "@/components/landing-interactions";
 import { buildLinks, createT, SiteFooter, SiteHeader } from "@/components/site/chrome";
 import {
-  ArrowRight,
   Caret,
   Check,
   Gamepad,
-  GameHeart,
-  Globe,
   Home,
-  Play,
-  Plus,
-  Refresh,
   SendUp,
   Smiley,
   SmileyHappy,
@@ -20,17 +14,17 @@ import {
 import type { Locale } from "@/lib/site";
 
 /**
- * The Platform feature page, ported from the design's platform.html. Server
- * component; strings come from the "platform" namespace (shared nav/footer/CTA
+ * The App feature page, ported from the design's platform.html. Server
+ * component; strings come from the "app" namespace (shared nav/footer/CTA
  * labels from "landing"). Reuses site.css + mocks.css and the shared chrome.
  */
-export function PlatformPage({ locale }: { locale: Locale }) {
+export function AppPage({ locale }: { locale: Locale }) {
   const links = buildLinks(locale);
-  const t = createT(locale, "platform");
+  const t = createT(locale, "app");
   const tl = createT(locale, "landing");
   return (
     <>
-      <SiteHeader locale={locale} links={links} active="platform" />
+      <SiteHeader locale={locale} links={links} active="app" />
       <main>
         <section className="page-hero">
           <div className="wrap device-hero-grid">
@@ -138,7 +132,7 @@ export function PlatformPage({ locale }: { locale: Locale }) {
             </div>
           </div>
 
-          {/* 3 · Custom games */}
+          {/* 3 · Game studio */}
           <div className="feature-row" id="games">
             <div className="fr-copy reveal">
               <span className="eyebrow coral">{t("f3Eyebrow")}</span>
@@ -152,56 +146,45 @@ export function PlatformPage({ locale }: { locale: Locale }) {
             </div>
             <div className="fr-visual reveal d1">
               <div className="fr-visual-inner halo">
-                <div className="mk-frame">
-                  <MkBar label={t("gamesLabel")} />
+                <div className="mk-frame gs-demo" id="gs-demo">
+                  <MkBar label={t("gsLabel")} />
                   <div className="mk-body">
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        marginBottom: 14,
-                        gap: 12,
-                      }}
-                    >
-                      <span className="mk-h">{t("gamesHeading")}</span>
-                      <span className="mk-newgame">
-                        <Plus /> {t("newGame")}
+                    {/* 1 · parent types a wish */}
+                    <div className="mk-composer gs-input">
+                      <span className="gs-typed">
+                        <span className="gs-text" data-type-text={t("gsWish")} />
+                        <span className="gs-caret" />
+                      </span>
+                      <span className="mk-send">
+                        <SendUp />
                       </span>
                     </div>
-                    <div className="mk-stack">
-                      <div className="mk-game">
-                        <div className="gtop">
-                          <span
-                            className="mk-gicon"
-                            style={{ background: "var(--coral-soft)", color: "var(--coral-700)" }}
-                          >
-                            <GameHeart />
-                          </span>
-                          <div>
-                            <h4>{t("gameName")}</h4>
-                            <div className="gby">{t("gameBy")}</div>
-                          </div>
+                    {/* 2 · dodi thinks (agent mode) */}
+                    <div className="gs-agent">
+                      <img src="/site/assets/dodi-head.png" alt="" />
+                      <div className="gs-agent-body">
+                        <div className="gs-agent-name">
+                          dodi <span className="gs-badge">{t("gsThinking")}</span>
                         </div>
-                        <div className="mk-tags">
-                          <span className="mk-tag">{t("tagMath")}</span>
-                          <span className="mk-tag hash">{t("tagCounting")}</span>
-                          <span className="mk-tag hash">{t("tagDinosaurs")}</span>
-                        </div>
-                        <div className="mk-gbtns">
-                          <span className="mk-pill play">
-                            <Play /> {t("play")}
-                          </span>
-                          <span className="mk-pill ghost">
-                            <Refresh /> {t("remix")}
-                          </span>
-                        </div>
+                        <div className="gs-agent-text" data-think-text={t("gsThink")} />
                       </div>
-                      <div className="mk-composer">
-                        <span className="ph">{t("composer")}</span>
-                        <span className="mk-send">
-                          <SendUp />
-                        </span>
+                    </div>
+                    {/* 3 · the game appears */}
+                    <div className="gs-game">
+                      <div className="gs-game-head">
+                        <span className="gs-game-title">{t("gsGameTitle")}</span>
+                        <span className="gs-game-q">{t("gsGameQ")}</span>
+                      </div>
+                      <div className="gs-dinos" aria-hidden="true">
+                        <span className="gs-dino">🦖</span>
+                        <span className="gs-dino">🦖</span>
+                        <span className="gs-dino">🦖</span>
+                        <span className="gs-dino">🦖</span>
+                      </div>
+                      <div className="gs-answers" aria-hidden="true">
+                        <span>3</span>
+                        <span className="hit">4</span>
+                        <span>5</span>
                       </div>
                     </div>
                   </div>
@@ -315,8 +298,8 @@ export function PlatformPage({ locale }: { locale: Locale }) {
             </div>
           </div>
 
-          {/* 6 · Profiles & languages */}
-          <div className="feature-row flip">
+          {/* 6 · Friends */}
+          <div className="feature-row flip" id="friends">
             <div className="fr-copy reveal">
               <span className="eyebrow">{t("f6Eyebrow")}</span>
               <h3>{t("f6Title")}</h3>
@@ -329,36 +312,40 @@ export function PlatformPage({ locale }: { locale: Locale }) {
             </div>
             <div className="fr-visual reveal d1">
               <div className="fr-visual-inner halo">
-                <div className="mk-frame">
-                  <MkBar label={t("profilesLabel")} />
+                <div className="mk-frame fs-demo" id="fs-demo">
+                  <MkBar label={t("frLabel")} />
                   <div className="mk-body">
-                    <div className="mk-h" style={{ marginBottom: 10 }}>
-                      {t("profilesHeading")}
+                    <div className="fs-stage">
+                      {/* 1 · Nora's friend code as a QR card */}
+                      <div className="fs-qr">
+                        <div className="mk-h">{t("frQrHeading")}</div>
+                        <MockQr />
+                        <div className="fs-code">AX7Q2F</div>
+                        <div className="fs-hint">{t("frQrHint")}</div>
+                      </div>
+                      {/* 2 · …which turns into the friend list */}
+                      <div className="fs-list">
+                        <div className="mk-h">{t("frListHeading")}</div>
+                        <FriendRow
+                          initial="B"
+                          bg="var(--mint-soft)"
+                          color="var(--mint)"
+                          name="Ben"
+                          meta={t("frBenMeta")}
+                          status="ok"
+                          statusLabel={t("frFriends")}
+                        />
+                        <FriendRow
+                          initial="A"
+                          bg="var(--amber-soft)"
+                          color="var(--amber)"
+                          name="Ayla"
+                          meta={t("frAylaMeta")}
+                          status="wait"
+                          statusLabel={t("frAwaiting")}
+                        />
+                      </div>
                     </div>
-                    <ProfileRow
-                      initial="N"
-                      bg="var(--brand-soft-2)"
-                      color="var(--brand)"
-                      name="Nora"
-                      age={t("age6")}
-                      lang="Deutsch"
-                    />
-                    <ProfileRow
-                      initial="L"
-                      bg="var(--coral-soft)"
-                      color="var(--coral-700)"
-                      name="Leo"
-                      age={t("age8")}
-                      lang="English"
-                    />
-                    <ProfileRow
-                      initial="M"
-                      bg="var(--mint-soft)"
-                      color="var(--mint)"
-                      name="Mia"
-                      age={t("age4")}
-                      lang="Español"
-                    />
                   </div>
                 </div>
               </div>
@@ -427,33 +414,94 @@ function MkBar({ label, mono }: { label: string; mono?: boolean }) {
   );
 }
 
-function ProfileRow({
+function FriendRow({
   initial,
   bg,
   color,
   name,
-  age,
-  lang,
+  meta,
+  status,
+  statusLabel,
 }: {
   initial: string;
   bg: string;
   color: string;
   name: string;
-  age: string;
-  lang: string;
+  meta: string;
+  status: "ok" | "wait";
+  statusLabel: string;
 }) {
   return (
-    <div className="mk-profile">
+    <div className="mk-profile fs-friend">
       <span className="mk-pava" style={{ background: bg, color }}>
         {initial}
       </span>
       <div>
         <div className="pn">{name}</div>
-        <div className="pa">{age}</div>
+        <div className="pa">{meta}</div>
       </div>
-      <span className="mk-lang">
-        <Globe sw={1.9} /> {lang}
+      <span className={`fs-status ${status}`}>
+        {status === "ok" ? <Check sw={2.6} /> : <span className="d" />}
+        {statusLabel}
       </span>
+    </div>
+  );
+}
+
+/**
+ * Decorative stand-in for a friend-code QR card: real finder/timing patterns
+ * plus seeded pseudo-random data modules (deterministic, so the server render
+ * is stable), with a blank centre window for the dodi head.
+ */
+const QR_N = 21;
+
+function buildQrModules(): boolean[][] {
+  const m: boolean[][] = Array.from({ length: QR_N }, () => Array<boolean>(QR_N).fill(false));
+  const finder = (r: number, c: number) => {
+    for (let y = 0; y < 7; y++)
+      for (let x = 0; x < 7; x++) {
+        const ring = y === 0 || y === 6 || x === 0 || x === 6;
+        const core = y >= 2 && y <= 4 && x >= 2 && x <= 4;
+        m[r + y][c + x] = ring || core;
+      }
+  };
+  finder(0, 0);
+  finder(0, QR_N - 7);
+  finder(QR_N - 7, 0);
+  for (let i = 8; i < QR_N - 8; i++) {
+    m[6][i] = i % 2 === 0;
+    m[i][6] = i % 2 === 0;
+  }
+  const isReserved = (r: number, c: number) =>
+    (r < 8 && (c < 8 || c >= QR_N - 8)) ||
+    (r >= QR_N - 8 && c < 8) ||
+    r === 6 ||
+    c === 6 ||
+    (r >= 8 && r <= 12 && c >= 8 && c <= 12); // centre window for the mascot
+  let seed = 42;
+  const rnd = () => {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    return seed / 0x7fffffff;
+  };
+  for (let r = 0; r < QR_N; r++)
+    for (let c = 0; c < QR_N; c++) if (!isReserved(r, c)) m[r][c] = rnd() < 0.46;
+  return m;
+}
+
+const QR_MODULES = buildQrModules();
+
+function MockQr() {
+  return (
+    <div className="fs-qr-code" aria-hidden="true">
+      <svg viewBox={`0 0 ${QR_N} ${QR_N}`} shapeRendering="crispEdges">
+        {QR_MODULES.flatMap((row, y) =>
+          row.map((on, x) =>
+            on ? <rect key={`${x}-${y}`} x={x} y={y} width={1} height={1} /> : null,
+          ),
+        )}
+      </svg>
+      <img src="/site/assets/dodi-head.png" alt="" />
+      <span className="fs-scanline" />
     </div>
   );
 }

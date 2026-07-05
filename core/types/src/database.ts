@@ -591,6 +591,42 @@ export interface Database {
         };
         Relationships: [];
       };
+      newsletter_signups: {
+        Row: {
+          id: string;
+          email: string;
+          locale: string;
+          // Which newsletter/list this signup is for (validated against the
+          // NEWSLETTER_LISTS env in the app), e.g. "newsletter".
+          list: string;
+          status: string;
+          // HMAC-SHA256(ip, pepper) — never the raw IP. Null when unknown.
+          ip_hash: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          email: string;
+          locale?: string;
+          list?: string;
+          status?: string;
+          ip_hash?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          email?: string;
+          locale?: string;
+          list?: string;
+          status?: string;
+          ip_hash?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -605,6 +641,25 @@ export interface Database {
       is_invite_code_active: {
         Args: { p_code: string };
         Returns: boolean;
+      };
+      // Atomically rate-limit (per ip_hash within p_window) and idempotently
+      // insert a newsletter signup. Returns exactly one row: the signup id (null
+      // when rate-limited), whether a new row was created, and whether the
+      // per-IP cap was hit. Called by the public /api/newsletter route (service role).
+      record_newsletter_signup: {
+        Args: {
+          p_email: string;
+          p_locale: string;
+          p_list: string;
+          p_ip_hash: string | null;
+          p_max_per_ip: number;
+          p_window: string;
+        };
+        Returns: {
+          id: string | null;
+          is_new: boolean;
+          rate_limited: boolean;
+        }[];
       };
     };
     Enums: {
@@ -639,6 +694,11 @@ export type InviteCodeUpdate =
   Database["public"]["Tables"]["invite_codes"]["Update"];
 export type InviteCodeRedemption =
   Database["public"]["Tables"]["invite_code_redemptions"]["Row"];
+
+export type NewsletterSignup =
+  Database["public"]["Tables"]["newsletter_signups"]["Row"];
+export type NewsletterSignupInsert =
+  Database["public"]["Tables"]["newsletter_signups"]["Insert"];
 
 /** Registration gate controlled by the platform's REGISTRATION_MODE env var. */
 export type RegistrationMode = "open" | "invite" | "closed";

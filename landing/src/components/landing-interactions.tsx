@@ -3,11 +3,13 @@
 import { useEffect } from "react";
 
 /**
- * Client-side enhancements for the marketing home page, ported from the design
+ * Client-side enhancements for the marketing pages, ported from the design
  * project's `site/site.js`. It only wires behaviour onto the server-rendered
- * markup (sticky header shadow, mobile nav toggle, scroll-reveal, and the
- * scroll-stepped dodo jump), so it renders nothing itself. Everything is
- * progressive: with JS off, the page is fully visible and readable.
+ * markup (sticky header shadow, mobile nav toggle, scroll-reveal, the
+ * scroll-stepped dodo jump, the Companion E2EE scramble, and the App page's
+ * Game studio and Friends demos), so it renders nothing itself. Each block guards on the
+ * elements it needs, so it's a no-op on pages that don't have them. Everything
+ * is progressive: with JS off, the page is fully visible and readable.
  */
 export function LandingInteractions() {
   useEffect(() => {
@@ -221,24 +223,6 @@ export function LandingInteractions() {
       });
     }
 
-    // ── Reserve form (Companion): friendly inline confirmation, no backend ──
-    const rf = document.querySelector<HTMLFormElement>(".reserve-form");
-    if (rf) {
-      const onSubmit = (e: Event) => {
-        e.preventDefault();
-        const input = rf.querySelector("input");
-        const btn = rf.querySelector("button");
-        if (input && btn && input.value.trim()) {
-          btn.textContent = btn.getAttribute("data-done") || "✓";
-          btn.disabled = true;
-          btn.style.background = "var(--mint)";
-          input.disabled = true;
-        }
-      };
-      rf.addEventListener("submit", onSubmit);
-      cleanups.push(() => rf.removeEventListener("submit", onSubmit));
-    }
-
     // ── E2EE scramble demo (Companion): plaintext ⇄ ciphertext loop ──
     const e2ee = document.getElementById("e2ee-demo");
     const tEl = e2ee?.querySelector<HTMLElement>(".e2ee-text");
@@ -293,6 +277,149 @@ export function LandingInteractions() {
         };
         tick();
         cleanups.push(() => window.clearTimeout(timer));
+      }
+    }
+
+    // ── Game studio demo (App page): type a wish → dodi thinks → game pops in ──
+    // The visible text is typed in by JS; the wish/thought strings live in
+    // data-* attributes (already localised at build time). Dinos are rendered
+    // in the markup, so the whole reveal is CSS-driven via the p-* classes.
+    const gs = document.getElementById("gs-demo");
+    const gsText = gs?.querySelector<HTMLElement>(".gs-text");
+    const gsThink = gs?.querySelector<HTMLElement>(".gs-agent-text");
+    if (gs && gsText && gsThink) {
+      const wish = gsText.getAttribute("data-type-text") ?? "";
+      const think = gsThink.getAttribute("data-think-text") ?? "";
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        gsText.textContent = wish;
+        gsThink.textContent = think;
+        gs.classList.add("p-think", "p-game");
+      } else {
+        let runId = 0;
+        const timers = new Set<number>();
+        const wait = (ms: number, fn: () => void) => {
+          const id = window.setTimeout(() => {
+            timers.delete(id);
+            fn();
+          }, ms);
+          timers.add(id);
+        };
+        const typeInto = (
+          el: HTMLElement,
+          str: string,
+          speed: number,
+          id: number,
+          done: () => void,
+        ) => {
+          let i = 0;
+          const step = () => {
+            if (id !== runId) return; // superseded by a newer run
+            el.textContent = str.slice(0, i);
+            if (i++ <= str.length) wait(speed, step);
+            else done();
+          };
+          step();
+        };
+        const run = () => {
+          const id = ++runId;
+          gs.classList.remove("p-think", "p-game");
+          gs.classList.add("p-typing");
+          gsText.textContent = "";
+          gsThink.textContent = "";
+          typeInto(gsText, wish, 45, id, () => {
+            gs.classList.remove("p-typing");
+            gs.classList.add("p-think");
+            wait(500, () => {
+              if (id !== runId) return;
+              typeInto(gsThink, think, 28, id, () => {
+                wait(350, () => {
+                  if (id === runId) gs.classList.add("p-game");
+                });
+                wait(9000, () => {
+                  if (id === runId) run(); // loop
+                });
+              });
+            });
+          });
+        };
+        let started = false;
+        const start = () => {
+          if (started) return;
+          started = true;
+          run();
+        };
+        if ("IntersectionObserver" in window) {
+          const gsIO = new IntersectionObserver(
+            (entries) => {
+              if (entries.some((en) => en.isIntersecting)) {
+                gsIO.disconnect();
+                start();
+              }
+            },
+            { threshold: 0.4 },
+          );
+          gsIO.observe(gs);
+          cleanups.push(() => gsIO.disconnect());
+        } else {
+          start();
+        }
+        cleanups.push(() => {
+          runId++; // invalidate any in-flight typing loop
+          timers.forEach((id) => window.clearTimeout(id));
+          timers.clear();
+        });
+      }
+    }
+
+    // ── Friends demo (App page): the friend-code QR flips into the friend
+    // list and back. Both phases are fully rendered in the markup; JS only
+    // toggles the p-list class, so the transition is CSS-driven. With reduced
+    // motion the list (the more informative state) is shown statically.
+    const fs = document.getElementById("fs-demo");
+    if (fs) {
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        fs.classList.add("p-list");
+      } else {
+        const timers = new Set<number>();
+        const wait = (ms: number, fn: () => void) => {
+          const id = window.setTimeout(() => {
+            timers.delete(id);
+            fn();
+          }, ms);
+          timers.add(id);
+        };
+        const run = () => {
+          fs.classList.remove("p-list"); // QR phase; the scanline loops in CSS
+          wait(4200, () => {
+            fs.classList.add("p-list");
+            wait(6000, run);
+          });
+        };
+        let started = false;
+        const start = () => {
+          if (started) return;
+          started = true;
+          run();
+        };
+        if ("IntersectionObserver" in window) {
+          const fsIO = new IntersectionObserver(
+            (entries) => {
+              if (entries.some((en) => en.isIntersecting)) {
+                fsIO.disconnect();
+                start();
+              }
+            },
+            { threshold: 0.4 },
+          );
+          fsIO.observe(fs);
+          cleanups.push(() => fsIO.disconnect());
+        } else {
+          start();
+        }
+        cleanups.push(() => {
+          timers.forEach((id) => window.clearTimeout(id));
+          timers.clear();
+        });
       }
     }
 

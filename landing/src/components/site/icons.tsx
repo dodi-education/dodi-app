@@ -2,7 +2,7 @@ import type { CSSProperties, ReactNode } from "react";
 
 /**
  * Inline SVG icon set, ported from the design markup. Shared across the home
- * page and the Platform / Companion / About pages. Each stroke icon takes an
+ * page and the App / Companion / About pages. Each stroke icon takes an
  * optional `sw` (stroke width) so call sites can match the design exactly.
  */
 export interface IconProps {
@@ -220,7 +220,7 @@ export function Gamepad({ sw = 1.7 }: IconProps) {
   );
 }
 
-/** Two-figure users icon (Platform "Friends", Companion "whole family"). */
+/** Two-figure users icon (App "Friends", Companion "whole family"). */
 export function Users({ sw = 1.8 }: IconProps) {
   return (
     <Stroke sw={sw}>
@@ -292,6 +292,18 @@ export function Heart({ sw = 1.8 }: IconProps) {
   return (
     <Stroke sw={sw}>
       <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 1 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z" />
+    </Stroke>
+  );
+}
+
+/** Heart with handshake (Tabler heart-handshake) — "self-improving companion" pillar. */
+export function HeartHandshake({ sw = 1.8 }: IconProps) {
+  return (
+    <Stroke sw={sw}>
+      <path d="M19.5 12.572 12 20l-7.5-7.428A5 5 0 1 1 12 6.006a5 5 0 1 1 7.5 6.572" />
+      <path d="m12 6-3.293 3.293a1 1 0 0 0 0 1.414l.543.543c.69.69 1.81.69 2.5 0l1-1a3.182 3.182 0 0 1 4.5 0l2.25 2.25" />
+      <path d="m12.5 15.5 2 2" />
+      <path d="m15 13 2 2" />
     </Stroke>
   );
 }
