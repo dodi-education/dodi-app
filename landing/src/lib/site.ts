@@ -7,7 +7,7 @@ export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://dodi.app";
 export const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://app.dodi.app";
 
 /** Public source repository — linked from the marketing site's GitHub CTAs. */
-export const GITHUB_URL = "https://github.com/dodi-learning/dodi-app";
+export const GITHUB_URL = "https://github.com/dodi-education/dodi-app";
 
 export const locales = ["en", "de"] as const;
 export type Locale = (typeof locales)[number];
