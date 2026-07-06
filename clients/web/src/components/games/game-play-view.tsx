@@ -44,6 +44,7 @@ interface GamePlayViewProps {
   successDefinition: string;
   successCriteria: SuccessCriteria;
   progressKind: ProgressKind;
+  capabilities: string[];
 }
 
 export function GamePlayView({
@@ -57,12 +58,13 @@ export function GamePlayView({
   successDefinition,
   successCriteria,
   progressKind,
+  capabilities,
 }: GamePlayViewProps) {
   const t = useTranslations("games");
 
   // Declare Dodi context for this game
   useDodiContext({
-    context: { type: "game", gameId, markdown, codeBundle, gameState: {} },
+    context: { type: "game", gameId, markdown, codeBundle, gameState: {}, capabilities },
     displayMode: "full",
     kidId,
   });
@@ -74,7 +76,8 @@ export function GamePlayView({
   const updateGameState = useDodiSessionStore((s) => s.updateGameState);
   const setOnRunCommands = useDodiSessionStore((s) => s.setOnRunCommands);
   const setOnRequestSnapshot = useDodiSessionStore((s) => s.setOnRequestSnapshot);
-  const setGeneratingImage = useDodiSessionStore((s) => s.setGeneratingImage);
+  const beginAiActivity = useDodiSessionStore((s) => s.beginAiActivity);
+  const endAiActivity = useDodiSessionStore((s) => s.endAiActivity);
   const resetGameAssistance = useDodiSessionStore((s) => s.resetGameAssistance);
 
   // ── Progress & success tracking ────────────────────────────────────────
@@ -221,25 +224,32 @@ export function GamePlayView({
       const subject =
         typeof command.payload?.subject === "string" ? command.payload.subject : "";
       setGameError(null);
-      setGeneratingImage(true);
+      beginAiActivity("image");
       try {
         const dataUrl = await generateDrawing(subject);
         sandboxRef.current?.sendCommand({
           type: "set_generated_image",
           payload: { dataUrl },
         });
+        // Picture is on the canvas → release the held-open voice tool call so
+        // Dodi announces it (she stayed silent while it generated). No-op if the
+        // drawing wasn't triggered by a voice tool call.
+        useDodiSessionStore.getState().resolveDrawingGeneration({ ok: true });
       } catch (error) {
         gameDebugWarn("playview", "generate_drawing failed:", error);
-        setGameError(
+        const message =
           error instanceof NoImageModelError
             ? t("noImageModel")
-            : t("drawingFailed"),
-        );
+            : t("drawingFailed");
+        setGameError(message);
+        useDodiSessionStore
+          .getState()
+          .resolveDrawingGeneration({ ok: false, error: message });
       } finally {
-        setGeneratingImage(false);
+        endAiActivity("image");
       }
     },
-    [t, setGeneratingImage],
+    [t, beginAiActivity, endAiActivity],
   );
 
   const runCommands = useCallback((commands: GameCommand[]): void => {

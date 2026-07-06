@@ -55,6 +55,17 @@ export class AudioStreamer {
   }
 
   /**
+   * Seconds of already-scheduled audio still waiting to play — the playback
+   * backlog. The model streams faster than realtime, so this grows while Dodi
+   * talks and drains as it plays; a large value means the child is hearing audio
+   * generated well in the past.
+   */
+  backlogSeconds(): number {
+    if (!this.context) return 0;
+    return Math.max(0, this.scheduledTime - this.context.currentTime);
+  }
+
+  /**
    * Resume AudioContext from a user gesture (required on mobile).
    */
   primeFromGesture(): void {

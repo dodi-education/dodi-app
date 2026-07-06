@@ -71,6 +71,8 @@ export default function EditGameStudioPage() {
         // "Built" once Dodi has replaced the unbuilt placeholder with real code.
         built: !isUnbuiltBundle(game.code_bundle),
         isActive: game.is_active,
+        // Sealed prior conversation — the studio unseals it to resume editing.
+        agentTranscriptEnc: game.agent_transcript_enc,
       });
     }
     load().catch(() => {

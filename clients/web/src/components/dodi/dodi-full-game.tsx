@@ -6,7 +6,12 @@ import { useTranslations } from "next-intl";
 
 import { Icon } from "@/components/shared/icon";
 import { ListeningPulse } from "@/components/kid/listening-pulse";
-import { useDodiSessionStore, type CompanionMessage } from "@/stores/dodi-session-store";
+import {
+  useDodiSessionStore,
+  selectDodiThinking,
+  selectDodiActivityKind,
+  type CompanionMessage,
+} from "@/stores/dodi-session-store";
 import { cn } from "@/lib/utils";
 import { getDodiImage } from "@/lib/dodi-image";
 
@@ -16,7 +21,8 @@ export function DodiFullGame() {
   const dodiState = useDodiSessionStore((s) => s.state);
   const kidId = useDodiSessionStore((s) => s.kidId);
   const dodiSpeaking = useDodiSessionStore((s) => s.dodiSpeaking);
-  const generatingImage = useDodiSessionStore((s) => s.generatingImage);
+  const isThinking = useDodiSessionStore(selectDodiThinking);
+  const activityKind = useDodiSessionStore(selectDodiActivityKind);
   const toggleActive = useDodiSessionStore((s) => s.toggleActive);
   const connect = useDodiSessionStore((s) => s.connect);
   const chatMessages = useDodiSessionStore((s) => s.chatMessages);
@@ -33,15 +39,18 @@ export function DodiFullGame() {
   const isConnecting = dodiState === "connecting";
   const isConnected = dodiState === "active" || dodiState === "deaf";
 
-  const stateLine = generatingImage
-    ? t("voiceCreatingImage")
-    : isConnecting
-      ? t("voiceConnecting")
-      : dodiState === "active"
-        ? dodiSpeaking
-          ? t("voiceSpeaking")
-          : t("voiceListening")
-        : t("tapToReconnect");
+  const stateLine =
+    activityKind === "image"
+      ? t("voiceCreatingImage")
+      : activityKind === "thinking"
+        ? t("voiceThinking")
+        : isConnecting
+          ? t("voiceConnecting")
+          : dodiState === "active"
+            ? dodiSpeaking
+              ? t("voiceSpeaking")
+              : t("voiceListening")
+            : t("tapToReconnect");
 
   return (
     <section className="flex h-full flex-col rounded-[20px] bg-white p-[18px] shadow-[0_2px_10px_rgba(34,56,78,0.05)]">
@@ -72,12 +81,12 @@ export function DodiFullGame() {
                   : "Tap to reconnect dodi"
           }
         >
-          {dodiState === "active" && !dodiSpeaking && !generatingImage && (
+          {dodiState === "active" && !dodiSpeaking && !isThinking && (
             <ListeningPulse className="-inset-2" />
           )}
           <Image
-            src={generatingImage ? "/images/dodi-thinking.png" : getDodiImage(dodiState, false)}
-            alt={generatingImage ? "dodi is creating a picture" : dodiState === "active" ? "dodi listening" : dodiState === "deaf" ? "dodi can't hear you" : "dodi sleeping"}
+            src={isThinking ? "/images/dodi-thinking.png" : getDodiImage(dodiState, false)}
+            alt={activityKind === "image" ? "dodi is creating a picture" : activityKind === "thinking" ? "dodi is thinking" : dodiState === "active" ? "dodi listening" : dodiState === "deaf" ? "dodi can't hear you" : "dodi sleeping"}
             fill
             sizes="300px"
             className="relative z-[1] object-contain"
@@ -89,14 +98,14 @@ export function DodiFullGame() {
             {isConnecting && (
               <Icon name="loading" className="h-3.5 w-3.5 animate-spin text-primary" />
             )}
-            {(generatingImage || (dodiSpeaking && dodiState === "active")) && (
+            {(isThinking || (dodiSpeaking && dodiState === "active")) && (
               <span className="flex gap-1">
                 <span className="animate-kdot inline-block size-1.5 rounded-full bg-primary" />
                 <span className="animate-kdot inline-block size-1.5 rounded-full bg-primary [animation-delay:200ms]" />
                 <span className="animate-kdot inline-block size-1.5 rounded-full bg-primary [animation-delay:400ms]" />
               </span>
             )}
-            <span className="truncate">{stateLine}</span>
+            <span className="min-w-0">{stateLine}</span>
           </div>
         </div>
       </div>

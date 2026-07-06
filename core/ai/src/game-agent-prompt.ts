@@ -1,13 +1,15 @@
 /**
- * System prompt for the coding agent.
+ * System prompt for the game-coding agent.
  *
- * Provides bridge protocol specification, sandbox constraints,
- * and game structure requirements.
+ * Provides bridge protocol specification, sandbox constraints, and game
+ * structure requirements. Pure — runs in the browser agent loop (client-side,
+ * server-blind generation) as well as any node job.
  */
 
 import { BRIDGE_INTERFACE_TEMPLATE } from "@dodi/games/game-spec";
 import { GAME_CANVAS_TEMPLATE } from "@dodi/games/stage";
 import { SUCCESS_SYSTEM_TEMPLATE } from "@dodi/games/success";
+import { standardCommandsDoc } from "@dodi/games/toolbox";
 
 export interface AgentPromptContext {
   age?: number;
@@ -67,6 +69,15 @@ Total code size must be under 200KB.
 
 ${BRIDGE_INTERFACE_TEMPLATE}
 
+${standardCommandsDoc()}
+
+Implement command handlers ONLY for commands from the Standard Command Vocabulary above — do NOT
+invent new command types. In write_game_code, pass a "capabilities" array listing EVERY standard
+command your game implements; these become Dodi's first-class voice tools. Read each command's
+payload keys exactly as named. If your game has a visual surface, implement get_snapshot and declare
+it so Dodi can "see" it (via read_game_state); if it supports AI-drawn pictures, declare
+generate_drawing and implement the set_generated_image command the app sends back.
+
 ${SUCCESS_SYSTEM_TEMPLATE}
 
 When the task provides a learning goal and/or success definition, set "progressKind" via write_game_code,
@@ -89,7 +100,7 @@ ${GAME_CANVAS_TEMPLATE}
 - Clean, readable code with comments for complex logic
 - Proper error handling in bridge message handlers
 - State management that accurately reflects game progress
-- The capabilities array in game:ready must list ALL command types the game supports
+- Your game:ready capabilities array AND the write_game_code "capabilities" param must both list the standard commands the game implements (see the Standard Command Vocabulary)
 
 ## Validation
 Before considering your code complete, use the validate_game tool to check for errors.

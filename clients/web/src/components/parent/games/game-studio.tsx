@@ -12,18 +12,30 @@ import { RequiredMark } from "@/components/parent/rows";
 import { Icon, type IconName } from "@/components/shared/icon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { STAGE } from "@/lib/games/stage";
 import { GAME_TAGS } from "@dodi/games/tags";
+import { sanitizeGameBundle } from "@dodi/games/sanitizer";
 import { cn } from "@/lib/utils";
 import { useKids } from "@/hooks/use-kids";
 import { useMediaQuery } from "@/hooks/use-media-query";
+import { useNavigationGuard } from "@/hooks/use-navigation-guard";
 import { useBreadcrumbStore } from "@/stores/breadcrumb-store";
-import { resolveClientThinking } from "@/lib/ai/resolve-client-thinking";
-import { calculateChildAge } from "@dodi/ai/dodi-context";
+import { useVaultStore } from "@/stores/vault-store";
+import { resolveClientGame } from "@/lib/ai/resolve-client-game";
+import { calculateChildAge, getLanguageDisplayName } from "@dodi/ai/dodi-context";
 import { buildLearningContext } from "@dodi/ai/learning-context";
-import type { AgentProgressEvent, AgentStep } from "@dodi/types/agent-progress";
-import type { AgentCodeResult } from "@dodi/types/tasks";
-import type { AgentSessionResult } from "@dodi/types/database";
+import { runGameAgent, AgentAbortedError, type PriorTurn } from "@dodi/ai/game-agent";
+import { mapSuccessDefinition } from "@dodi/ai/success-mapping";
+import type { AgentStep } from "@dodi/types/agent-progress";
+import type { AgentCodeResult, AgentTaskRequest } from "@dodi/types/tasks";
 import type { ProgressKind } from "@dodi/games/success";
 
 interface KidOption {
@@ -33,6 +45,8 @@ interface KidOption {
   birthdate: string | null;
   memory: string | null;
   parent_notes: string | null;
+  /** Operational (non-encrypted) locale, used for the agent's output language. */
+  language: string;
 }
 
 export interface StudioGame {
@@ -53,6 +67,8 @@ export interface StudioGame {
   built: boolean;
   /** Playable by kids. Parent-created games start inactive until activated. */
   isActive: boolean;
+  /** enc:v1: sealed prior studio conversation, restored on re-entry. */
+  agentTranscriptEnc?: string | null;
 }
 
 interface GameStudioProps {
@@ -90,57 +106,6 @@ function emptyGame(): StudioGame {
   };
 }
 
-/** Map a persisted agent_sessions.progress value to a visual step. */
-function progressToStep(progress: string): AgentStep {
-  switch (progress) {
-    case "planning":
-      return "reading_docs";
-    case "building":
-      return "writing_code";
-    case "testing":
-      return "validating";
-    case "done":
-      return "finalizing";
-    default:
-      return "reading_docs";
-  }
-}
-
-/** Read a /api/agent/sessions SSE stream, invoking callbacks, returning the terminal event. */
-async function readAgentStream(
-  body: ReadableStream<Uint8Array>,
-  onStep: (step: AgentStep) => void,
-  onSession?: (sessionId: string) => void,
-): Promise<{ type: "complete"; result: AgentCodeResult } | { type: "error"; message: string }> {
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
-    for (const line of lines) {
-      if (!line.startsWith("data: ")) continue;
-      const json = line.slice(6).trim();
-      if (!json) continue;
-      let event: AgentProgressEvent;
-      try {
-        event = JSON.parse(json) as AgentProgressEvent;
-      } catch {
-        continue;
-      }
-      if (event.type === "session_started") onSession?.(event.sessionId);
-      else if (event.type === "step") onStep(event.step);
-      else if (event.type === "complete") return event;
-      else if (event.type === "error") return event;
-    }
-  }
-  return { type: "error", message: "Stream ended unexpectedly" };
-}
-
 /** Pull the server's error message from a failed JSON response. */
 async function readError(res: Response): Promise<string> {
   try {
@@ -148,6 +113,28 @@ async function readError(res: Response): Promise<string> {
     return data.error || `HTTP ${res.status}`;
   } catch {
     return `HTTP ${res.status}`;
+  }
+}
+
+/** Read a persisted panel size from localStorage, clamped to [min, max]. */
+function readStoredSize(key: string, min: number, max: number, fallback: number): number {
+  if (typeof window === "undefined") return fallback;
+  const v = parseInt(window.localStorage.getItem(key) ?? "", 10);
+  return v >= min && v <= max ? v : fallback;
+}
+
+/** Unseal a persisted conversation transcript for the initial thread (resume). */
+function restoreTranscript(initialGame?: StudioGame): ChatMessage[] {
+  const enc = initialGame?.agentTranscriptEnc;
+  if (!enc) return [];
+  const session = useVaultStore.getState().session;
+  if (!session) return [];
+  try {
+    const restored = session.decryptJson<ChatMessage[]>(enc);
+    return Array.isArray(restored) ? restored : [];
+  } catch {
+    // malformed / wrong key — start clean
+    return [];
   }
 }
 
@@ -164,6 +151,7 @@ export function GameStudio({ initialGame }: GameStudioProps) {
     birthdate: p.birthdate,
     memory: p.memory,
     parent_notes: p.parent_notes,
+    language: p.language,
   }));
 
   const [game, setGame] = useState<StudioGame>(initialGame ?? emptyGame());
@@ -179,7 +167,8 @@ export function GameStudio({ initialGame }: GameStudioProps) {
   const [view, setView] = useState<"preview" | "code" | "settings">(
     initialGame?.id ? "preview" : "settings",
   );
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  // Initial thread = the unsealed prior conversation (resume), or empty.
+  const [messages, setMessages] = useState<ChatMessage[]>(() => restoreTranscript(initialGame));
   const [draft, setDraft] = useState("");
   const [thinking, setThinking] = useState(false);
   const [step, setStep] = useState<AgentStep | null>(null);
@@ -195,11 +184,15 @@ export function GameStudio({ initialGame }: GameStudioProps) {
   // Whether an explicit thinking model is configured (model_config.thinkingProvider).
   // Game build/edit needs it — the voice model alone can't drive the agent.
   // null = still loading, so we don't flash the warning before we know.
-  const [hasThinkingProvider, setHasThinkingProvider] = useState<boolean | null>(null);
-  // DB id of the in-flight / recovered agent task (drives the Stop button).
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [sideWidth, setSideWidth] = useState(SIDE_DEFAULT);
-  const [composerHeight, setComposerHeight] = useState(COMPOSER_DEFAULT);
+  const [hasGameProvider, setHasGameProvider] = useState<boolean | null>(null);
+  // Destructive "clear history" confirmation dialog.
+  const [clearOpen, setClearOpen] = useState(false);
+  const [sideWidth, setSideWidth] = useState(() =>
+    readStoredSize("dodi-studio-side-width", SIDE_MIN, SIDE_MAX, SIDE_DEFAULT),
+  );
+  const [composerHeight, setComposerHeight] = useState(() =>
+    readStoredSize("dodi-studio-input-height", COMPOSER_MIN, COMPOSER_MAX, COMPOSER_DEFAULT),
+  );
   // Portrait phones + upright tablets get a vertical, tab-switched layout
   // (matches the `compact` CSS variant). Landscape/desktop keep the resizable
   // side-by-side panes.
@@ -210,39 +203,24 @@ export function GameStudio({ initialGame }: GameStudioProps) {
     initialGame?.id ? "chat" : "game",
   );
   const threadRef = useRef<HTMLDivElement | null>(null);
-  const sideWidthRef = useRef(SIDE_DEFAULT);
-  const composerHeightRef = useRef(COMPOSER_DEFAULT);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const stoppingRef = useRef(false);
-  const recoveredRef = useRef(false);
+  const sideWidthRef = useRef(sideWidth);
+  const composerHeightRef = useRef(composerHeight);
+  // The in-flight build's abort handle — drives Stop + navigation guards.
+  const abortRef = useRef<AbortController | null>(null);
 
   // The chat is locked until a draft has been persisted (new-game hard gate):
   // the parent fills mandatory settings + saves, which redirects to /[id].
   const locked = !game.id;
 
   // Building/editing a game is a complex task that requires an explicitly
-  // configured thinking model. Without one we lock the composer (just like the
-  // unsaved-draft gate) and surface a subtle warning above the input box.
-  const needsThinkingProvider = hasThinkingProvider === false;
-  const composerLocked = locked || needsThinkingProvider;
+  // configured Game generation model. Without one we lock the composer (just
+  // like the unsaved-draft gate) and surface a subtle warning above the input.
+  const needsGameProvider = hasGameProvider === false;
+  const composerLocked = locked || needsGameProvider;
 
-  // Restore persisted panel sizes.
-  useEffect(() => {
-    const w = parseInt(localStorage.getItem("dodi-studio-side-width") ?? "", 10);
-    if (w >= SIDE_MIN && w <= SIDE_MAX) {
-      sideWidthRef.current = w;
-      setSideWidth(w);
-    }
-    const h = parseInt(localStorage.getItem("dodi-studio-input-height") ?? "", 10);
-    if (h >= COMPOSER_MIN && h <= COMPOSER_MAX) {
-      composerHeightRef.current = h;
-      setComposerHeight(h);
-    }
-  }, []);
-
-  // Resolve whether a thinking model is configured (legacy gameProvider counts).
-  // Drives the composer lock + warning so we never fall back to the voice model
-  // for a build, which is what surfaced the "invalid x-api-key" failures.
+  // Resolve whether a Game generation model is configured. Drives the composer
+  // lock + warning so we never fall back to the voice/thinking model for a
+  // build (the game agent needs an Anthropic tool-use model).
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -250,15 +228,13 @@ export function GameStudio({ initialGame }: GameStudioProps) {
         const res = await dodi.request("/api/ai/config");
         if (cancelled) return;
         if (!res.ok) {
-          setHasThinkingProvider(false);
+          setHasGameProvider(false);
           return;
         }
-        const cfg = (await res.json()) as
-          | { thinkingProvider?: string; gameProvider?: string }
-          | null;
-        setHasThinkingProvider(Boolean(cfg?.thinkingProvider ?? cfg?.gameProvider));
+        const cfg = (await res.json()) as { gameProvider?: string } | null;
+        setHasGameProvider(Boolean(cfg?.gameProvider));
       } catch {
-        if (!cancelled) setHasThinkingProvider(false);
+        if (!cancelled) setHasGameProvider(false);
       }
     })();
     return () => {
@@ -337,162 +313,71 @@ export function GameStudio({ initialGame }: GameStudioProps) {
     setInvalid((v) => ({ ...v, audience: false }));
   };
 
-  // ── Agent task recovery / polling ──────────────────────────────────────
-  // The server task keeps running even if the SSE stream is dropped (e.g. the
-  // parent navigated away). On reopen we re-attach to the active session, mirror
-  // its progress, and poll the DB until it reaches a terminal state — and we
-  // surface the most recent change summary so the recap survives a reload.
-  const stopPolling = (): void => {
-    if (pollRef.current) {
-      clearInterval(pollRef.current);
-      pollRef.current = null;
-    }
+  // Resume: the initial thread is unsealed from the persisted transcript in the
+  // useState initializer above (restoreTranscript), so re-entry picks up where
+  // the parent left off — a locked vault or wrong key just yields an empty thread.
+
+  // Persist the (sealed) conversation alongside the game. `null` clears it.
+  const persistTranscript = async (transcript: ChatMessage[] | null): Promise<void> => {
+    if (!game.id) return;
+    const session = useVaultStore.getState().session;
+    const agent_transcript_enc =
+      transcript && transcript.length > 0 && session ? session.encryptJson(transcript) : null;
+    await dodi.request(`/api/games/${game.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ agent_transcript_enc }),
+    });
   };
 
-  /** Merge a completed result (live or recovered) into the editable game state. */
-  const applyResult = (r: AgentSessionResult): void => {
-    setGame((g) => ({
-      ...g,
-      built: true,
-      title: r.title,
-      tags: r.tags,
-      description: r.description,
-      learningGoal: r.learningGoal,
-      successDefinition: r.successDefinition,
-      progressKind: r.progressKind,
-      codeBundle: r.codeBundle,
-      markdown: r.markdown,
-    }));
-    setView("preview");
+  // Persist a completed build — game fields + sealed transcript, no provider key
+  // (generation already happened in the browser). The studio always has a game id
+  // here (the composer is locked until the draft is saved).
+  const persistBuild = async (
+    result: AgentCodeResult,
+    safeCode: string,
+    transcript: ChatMessage[],
+  ): Promise<void> => {
+    if (!game.id) return;
+    const session = useVaultStore.getState().session;
+    const agent_transcript_enc = session ? session.encryptJson(transcript) : null;
+    const res = await dodi.request(`/api/games/${game.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: result.title || undefined,
+        description: result.description,
+        tags: result.tags,
+        code_bundle: safeCode,
+        markdown: result.markdown,
+        learning_goal: result.learningGoal,
+        success_definition: result.successDefinition,
+        success_criteria: result.successCriteria,
+        progress_kind: result.progressKind,
+        metadata: result.metadata,
+        agent_transcript_enc,
+        audience: { isFamily: game.isFamily, audienceIds: game.audienceIds },
+      }),
+    });
+    if (!res.ok) throw new Error(await readError(res));
   };
 
-  const pollSession = (id: string): void => {
-    stopPolling();
-    pollRef.current = setInterval(() => {
-      void (async () => {
-        try {
-          const res = await dodi.request(`/api/agent/sessions/${id}`);
-          if (!res.ok) {
-            stopPolling();
-            setThinking(false);
-            setStep(null);
-            return;
-          }
-          const session = (await res.json()) as {
-            status: string;
-            progress: string;
-            result: AgentSessionResult | null;
-            error: string | null;
-            title: string;
-          };
-          if (session.status === "active") {
-            setStep(progressToStep(session.progress));
-            return;
-          }
-          stopPolling();
-          setThinking(false);
-          setStep(null);
-          setSessionId(null);
-          if (session.status === "completed" && session.result) {
-            applyResult(session.result);
-            const summary = session.result.changeSummary?.trim();
-            setMessages((m) => [
-              ...m,
-              { role: "assistant", text: summary || `Updated **${session.result!.title}**.` },
-            ]);
-            router.refresh();
-          } else if (session.status === "failed") {
-            setError(session.error || t("buildFailed"));
-          }
-        } catch {
-          stopPolling();
-          setThinking(false);
-          setStep(null);
-        }
-      })();
-    }, 3000);
+  // Clear the conversation — the local thread and the persisted (sealed) copy.
+  const clearHistory = (): void => {
+    setClearOpen(false);
+    setMessages([]);
+    void persistTranscript(null).catch(() => {
+      /* best effort — the local thread is already cleared */
+    });
   };
 
-  /** Show the most recent completed task's change summary (recap on reopen). */
-  const showLastSummary = async (gameId: string, kidId: string): Promise<void> => {
-    try {
-      const res = await dodi.request(
-        `/api/agent/sessions?kidId=${kidId}&status=completed&limit=10`,
-      );
-      if (!res.ok) return;
-      const sessions = (await res.json()) as Array<{
-        game_id: string | null;
-        result: AgentSessionResult | null;
-      }>;
-      const match = sessions.find((s) => s.game_id === gameId && s.result);
-      const summary = match?.result?.changeSummary?.trim();
-      if (summary) {
-        setMessages((m) => (m.length === 0 ? [{ role: "assistant", text: summary }] : m));
-      }
-    } catch {
-      /* non-critical */
-    }
+  // Stop the in-browser agent loop; send()'s finally block resets the UI.
+  const stop = (): void => {
+    abortRef.current?.abort();
   };
 
-  const recoverSession = async (gameId: string, kidId: string): Promise<void> => {
-    try {
-      const res = await dodi.request(
-        `/api/agent/sessions?kidId=${kidId}&gameId=${gameId}&context=game_creation&limit=1`,
-      );
-      if (!res.ok) return;
-      const session = (await res.json()) as {
-        id: string;
-        status: string;
-        progress: string;
-        task_prompt: string;
-      } | null;
-      if (!session) {
-        void showLastSummary(gameId, kidId);
-        return;
-      }
-      if (session.status === "active") {
-        setSessionId(session.id);
-        setThinking(true);
-        setStep(progressToStep(session.progress));
-        if (session.task_prompt) {
-          setMessages([{ role: "user", text: session.task_prompt }]);
-        }
-        pollSession(session.id);
-      }
-    } catch {
-      /* non-critical */
-    }
-  };
-
-  const stop = async (): Promise<void> => {
-    if (!sessionId) return;
-    stoppingRef.current = true;
-    stopPolling();
-    try {
-      await dodi.request(`/api/agent/sessions/${sessionId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "inactive" }),
-      });
-    } catch {
-      /* best effort */
-    }
-    setThinking(false);
-    setStep(null);
-    setSessionId(null);
-  };
-
-  // Re-attach to any in-flight (or recently completed) task once we know the
-  // game id and the kid it was launched for.
-  useEffect(() => {
-    if (recoveredRef.current) return;
-    if (!game.id || !primaryKidId) return;
-    recoveredRef.current = true;
-    void recoverSession(game.id, primaryKidId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [game.id, primaryKidId]);
-
-  useEffect(() => () => stopPolling(), []);
+  // The loop runs inside this tab — warn before any action that would kill it.
+  useNavigationGuard(thinking, t("leaveWhileRunningConfirm"));
 
   const stepLabel = (s: AgentStep): string => {
     const map: Record<AgentStep, string> = {
@@ -517,7 +402,7 @@ export function GameStudio({ initialGame }: GameStudioProps) {
     }
     // Defensive: the composer is disabled when no thinking model is configured,
     // but starter buttons / Enter could still reach here.
-    if (needsThinkingProvider) {
+    if (needsGameProvider) {
       setError(t("needThinkingProvider"));
       return;
     }
@@ -528,14 +413,18 @@ export function GameStudio({ initialGame }: GameStudioProps) {
     }
     setError(null);
     setDraft("");
-    setMessages((m) => [...m, { role: "user", text }]);
+    // Capture the conversation before this prompt so we can seed the agent's
+    // continuity on resume, then show the new user turn.
+    const history = messages;
+    const withUser: ChatMessage[] = [...history, { role: "user", text }];
+    setMessages(withUser);
     setThinking(true);
     setStep(null);
 
     // First build of a freshly-saved draft uses generate_game semantics (build
     // from scratch) even though the game id exists; later edits are updates.
     const isUpdate = game.built;
-    const payload: Record<string, unknown> = isUpdate
+    const payload = isUpdate
       ? {
           instruction: text,
           existingCode: game.codeBundle,
@@ -552,91 +441,88 @@ export function GameStudio({ initialGame }: GameStudioProps) {
           successDefinition: game.successDefinition || undefined,
         };
 
+    const controller = new AbortController();
+    abortRef.current = controller;
     try {
       // The provider key lives only in the unlocked vault — resolve it here and
-      // hand it to the server agent (which cannot decrypt it itself).
-      const thinking = await resolveClientThinking();
-      if (!thinking) {
+      // run the ENTIRE agent loop in the browser, so it never reaches our servers.
+      const gameCfg = await resolveClientGame();
+      if (!gameCfg) {
         setThinking(false);
         setError(t("needProviderKey"));
         return;
       }
-      const childName = kids.find((k) => k.id === primaryKidId)?.name;
+      const kid = kids.find((k) => k.id === primaryKidId);
 
-      // Memory/parent-notes and birthdate are E2EE — assemble the agent's
-      // learning context and age in the browser (the server can't decrypt them)
-      // and pass them in, mirroring how the vault-decrypted apiKey is handed over.
+      // Memory/parent-notes, birthdate and name are E2EE — assemble the agent's
+      // learning context, age and language in the browser. None of this leaves
+      // the tab: the loop calls the provider directly with the vault key.
       const learningContext = buildLearningContext(
         kids,
         { isFamily: game.isFamily, audienceIds: game.audienceIds },
         primaryKidId,
       );
-      const age =
-        calculateChildAge(
-          kids.find((k) => k.id === primaryKidId)?.birthdate ?? null,
-        ) ?? undefined;
+      const age = calculateChildAge(kid?.birthdate ?? null) ?? undefined;
 
-      const res = await dodi.request("/api/agent/sessions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
-        body: JSON.stringify({
-          kidId: primaryKidId,
-          taskType: isUpdate ? "update_game" : "generate_game",
-          gameId: game.id ?? undefined,
-          payload,
-          apiKey: thinking.apiKey,
-          provider: thinking.provider,
-          model: thinking.model,
-          childName,
-          learningContext,
+      const task: AgentTaskRequest = {
+        kidId: primaryKidId,
+        taskType: isUpdate ? "update_game" : "generate_game",
+        gameId: game.id ?? undefined,
+        childContext: {
+          name: kid?.name ?? "",
           age,
-          audience: { isFamily: game.isFamily, audienceIds: game.audienceIds },
-        }),
-      });
-      if (!res.ok || !res.body) {
-        throw new Error(`HTTP ${res.status}`);
-      }
-      const outcome = await readAgentStream(res.body, setStep, setSessionId);
-      if (outcome.type === "error") throw new Error(outcome.message);
+          language: getLanguageDisplayName(kid?.language ?? "en"),
+          learningContext,
+        },
+        payload: payload as AgentTaskRequest["payload"],
+      };
 
-      const r = outcome.result;
+      const result = await runGameAgent({
+        apiKey: gameCfg.apiKey,
+        model: gameCfg.model,
+        task,
+        priorTurns: history as PriorTurn[],
+        signal: controller.signal,
+        onStep: setStep,
+      });
+
+      // Sanitize client-side before it touches state/persistence (the games route
+      // sanitizes again server-side as defense-in-depth).
+      const safeCode = sanitizeGameBundle(result.codeBundle).code;
+      const summary = result.changeSummary?.trim();
+      const dodiText = summary
+        ? summary
+        : isUpdate
+          ? `Updated **${result.title}** — the preview and code are refreshed.`
+          : `Here's **${result.title}** — it's live in the preview; flip to Code to see what I wrote.`;
+      const withDodi: ChatMessage[] = [...withUser, { role: "assistant", text: dodiText }];
+
       setGame((g) => ({
         ...g,
-        id: r.savedGameId ?? g.id,
         built: true,
-        title: r.title,
-        tags: r.tags,
-        description: r.description,
-        learningGoal: r.learningGoal,
-        successDefinition: r.successDefinition,
-        progressKind: r.progressKind,
-        codeBundle: r.codeBundle,
-        markdown: r.markdown,
+        title: result.title,
+        tags: result.tags,
+        description: result.description,
+        learningGoal: result.learningGoal,
+        successDefinition: result.successDefinition,
+        progressKind: result.progressKind,
+        codeBundle: safeCode,
+        markdown: result.markdown,
       }));
-      const summary = r.changeSummary?.trim();
-      setMessages((m) => [
-        ...m,
-        {
-          role: "assistant",
-          text: summary
-            ? summary
-            : isUpdate
-              ? `Updated **${r.title}** — the preview and code are refreshed.`
-              : `Here's **${r.title}** — it's live in the preview; flip to Code to see what I wrote.`,
-        },
-      ]);
+      setMessages(withDodi);
       setView("preview");
-      if (r.saveError) {
-        // The game was generated but not persisted — tell the user why.
-        setError(t("saveFailed", { reason: r.saveError }));
-      } else {
-        // Bust the router cache so the game appears in the library list.
+
+      // Persist the built game + the sealed transcript (no provider key involved).
+      try {
+        await persistBuild(result, safeCode, withDodi);
         router.refresh();
+      } catch (saveErr) {
+        const reason = saveErr instanceof Error ? saveErr.message : "";
+        setError(reason ? t("saveFailed", { reason }) : t("saveFailedGeneric"));
       }
-    } catch {
-      // A deactivation (user pressed Stop) surfaces as a stream error — don't
-      // dress that up as a failure.
-      if (stoppingRef.current) {
+    } catch (err) {
+      // Pressing Stop aborts the loop — don't dress that up as a failure.
+      if (err instanceof AgentAbortedError || controller.signal.aborted) {
         setMessages((m) => [...m, { role: "assistant", text: t("stopped") }]);
       } else {
         setError(t("buildFailed"));
@@ -645,8 +531,7 @@ export function GameStudio({ initialGame }: GameStudioProps) {
     } finally {
       setThinking(false);
       setStep(null);
-      setSessionId(null);
-      stoppingRef.current = false;
+      abortRef.current = null;
       requestAnimationFrame(() => {
         if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight;
       });
@@ -674,11 +559,28 @@ export function GameStudio({ initialGame }: GameStudioProps) {
     setSaving(true);
     try {
       if (game.id) {
-        // Re-mapping the success definition to structured criteria needs the
-        // thinking provider key, which lives only in the unlocked vault — resolve
-        // it here and hand it over (the server cannot decrypt it). Absent (no
-        // provider configured), the server just persists the text unchanged.
-        const thinking = await resolveClientThinking();
+        // Map the success definition to structured criteria IN THE BROWSER (the
+        // provider key stays in the vault); send only the mapped result. With no
+        // provider configured (or on a mapping error) we persist the text and
+        // leave the existing criteria untouched.
+        let mappedCriteria: { success_criteria: unknown; progress_kind: ProgressKind } | null = null;
+        try {
+          const gameCfg = await resolveClientGame();
+          const mapped = await mapSuccessDefinition(
+            gameCfg
+              ? { providerId: gameCfg.provider, modelId: gameCfg.model, apiKey: gameCfg.apiKey }
+              : null,
+            game.successDefinition,
+            { learningGoal: game.learningGoal },
+          );
+          mappedCriteria = {
+            success_criteria: mapped.successCriteria,
+            progress_kind: mapped.progressKind,
+          };
+        } catch {
+          /* no provider / mapping failed — persist the text, keep criteria as-is */
+        }
+        if (mappedCriteria) setField("progressKind", mappedCriteria.progress_kind);
         const res = await dodi.request(`/api/games/${game.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -687,11 +589,9 @@ export function GameStudio({ initialGame }: GameStudioProps) {
             tags: game.tags,
             learning_goal: game.learningGoal,
             success_definition: game.successDefinition,
+            ...(mappedCriteria ?? {}),
             is_active: game.isActive,
             audience: { isFamily: game.isFamily, audienceIds: game.audienceIds },
-            apiKey: thinking?.apiKey,
-            provider: thinking?.provider,
-            model: thinking?.model,
           }),
         });
         if (!res.ok) throw new Error(await readError(res));
@@ -739,11 +639,12 @@ export function GameStudio({ initialGame }: GameStudioProps) {
 
   return (
     <div
-      className="fixed inset-x-0 top-[116px] bottom-0 z-30 flex flex-col bg-background wide:top-[72px] wide:left-56"
+      className="fixed inset-x-0 top-[116px] bottom-0 z-30 flex flex-col border-t border-border bg-background wide:top-[72px] wide:left-56"
       data-screen-label={editing ? "Parent — Edit game" : "Parent — New game"}
     >
-      {/* Mobile tab bar (vertical layout only) */}
-      {vertical && (
+      {/* Mobile tab bar (vertical layout only; hidden until the draft is saved,
+          since the Dodi pane is gated away for a brand-new game). */}
+      {vertical && !locked && (
         <div className="flex flex-shrink-0 gap-1 border-b border-border bg-card px-3 py-2">
           <StudioTab
             active={mtab === "game"}
@@ -834,22 +735,8 @@ export function GameStudio({ initialGame }: GameStudioProps) {
               >
                 <Icon name="settings" size={17} />
               </button>
-              <Button
-                size="sm"
-                onClick={saveSettings}
-                disabled={saving || (!game.id && !game.title.trim())}
-              >
-                {justSaved ? (
-                  <>
-                    <Icon name="check" size={14} />
-                    {t("saved")}
-                  </>
-                ) : game.id ? (
-                  t("saveChanges")
-                ) : (
-                  t("saveAndBuild")
-                )}
-              </Button>
+              {/* No global Save button: the built game auto-saves, and settings
+                  edits are saved from the bottom of the settings form itself. */}
             </div>
           </div>
 
@@ -885,17 +772,24 @@ export function GameStudio({ initialGame }: GameStudioProps) {
                 setField={setField}
                 selectFamily={selectFamily}
                 toggleKid={toggleKid}
+                onSave={saveSettings}
+                saving={saving}
+                justSaved={justSaved}
+                error={error}
                 t={t}
               />
             )}
           </div>
         </div>
 
-        {/* Chat sidebar */}
+        {/* Chat sidebar — the right menu stays hidden for a brand-new game
+            until the draft is saved (which mints the game id and unlocks the
+            studio); the settings form fills the pane on its own until then. */}
         <div
           style={vertical ? undefined : { width: sideWidth }}
           className={cn(
             "relative flex min-h-0 flex-col border-border bg-card",
+            locked && "hidden",
             vertical
               ? cn("w-full flex-1", mtab !== "chat" && "hidden")
               : "flex-none border-l",
@@ -923,7 +817,7 @@ export function GameStudio({ initialGame }: GameStudioProps) {
                 className="h-full w-full object-contain"
               />
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <div className="text-sm font-bold text-ink">{t("designerName")}</div>
               <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
                 <span
@@ -935,6 +829,17 @@ export function GameStudio({ initialGame }: GameStudioProps) {
                 <span className="truncate">{statusText}</span>
               </div>
             </div>
+            {/* Clear the conversation history (also available by typing /clear). */}
+            <button
+              type="button"
+              onClick={() => setClearOpen(true)}
+              disabled={thinking || messages.length === 0}
+              title={t("clearHistory")}
+              aria-label={t("clearHistory")}
+              className="ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-danger-soft hover:text-danger disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
+            >
+              <Icon name="delete" size={16} />
+            </button>
           </div>
 
           {/* Thread */}
@@ -950,12 +855,12 @@ export function GameStudio({ initialGame }: GameStudioProps) {
                     className="mb-3 h-14 w-14 object-contain"
                   />
                   <h2 className="text-[18px] font-bold tracking-tight text-ink">
-                    {locked ? t("lockedTitle") : t("welcomeTitle")}
+                    {t("welcomeTitle")}
                   </h2>
                   <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
-                    {locked ? t("lockedHint") : t("welcomeDesc")}
+                    {t("welcomeDesc")}
                   </p>
-                  {!locked && !needsThinkingProvider && (
+                  {!needsGameProvider && (
                     <div className="mt-[18px] flex w-full flex-col gap-2">
                       {starters.map((s) => (
                         <button
@@ -1016,7 +921,7 @@ export function GameStudio({ initialGame }: GameStudioProps) {
 
           {/* Composer */}
           <div className="flex-shrink-0 px-4 pb-3.5 pt-2">
-            {needsThinkingProvider && (
+            {needsGameProvider && (
               <div className="mb-2 flex items-start gap-1.5 rounded-lg bg-warning-soft px-2.5 py-1.5 text-xs font-medium text-warning">
                 <Icon name="alert" size={14} className="mt-px shrink-0" />
                 <span>
@@ -1028,6 +933,12 @@ export function GameStudio({ initialGame }: GameStudioProps) {
                     {t("openSettings")}
                   </Link>
                 </span>
+              </div>
+            )}
+            {thinking && (
+              <div className="mb-2 flex items-start gap-1.5 rounded-lg bg-primary-soft px-2.5 py-1.5 text-xs font-medium text-primary">
+                <Icon name="alert" size={14} className="mt-px shrink-0" />
+                <span>{t("agentRunningWarning")}</span>
               </div>
             )}
             {error && (
@@ -1051,19 +962,23 @@ export function GameStudio({ initialGame }: GameStudioProps) {
                 disabled={composerLocked}
                 className="block w-full resize-none border-0 bg-transparent p-0 pb-1.5 text-[14.5px] leading-normal text-ink outline-none placeholder:text-faint disabled:cursor-not-allowed"
                 placeholder={
-                  locked
-                    ? t("composerPlaceholderLocked")
-                    : needsThinkingProvider
-                      ? t("composerPlaceholderNoThinking")
-                      : messages.length === 0
-                        ? t("composerPlaceholderEmpty")
-                        : t("composerPlaceholder")
+                  needsGameProvider
+                    ? t("composerPlaceholderNoThinking")
+                    : messages.length === 0
+                      ? t("composerPlaceholderEmpty")
+                      : t("composerPlaceholder")
                 }
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
+                    // Slash-command: "/clear" wipes the conversation (with confirm).
+                    if (draft.trim() === "/clear") {
+                      setDraft("");
+                      setClearOpen(true);
+                      return;
+                    }
                     void send();
                   }
                 }}
@@ -1071,12 +986,12 @@ export function GameStudio({ initialGame }: GameStudioProps) {
               <div className="flex items-center justify-end">
                 <button
                   type="button"
-                  onClick={() => (thinking ? void stop() : void send())}
-                  disabled={composerLocked || (thinking ? !sessionId : !draft.trim())}
+                  onClick={() => (thinking ? stop() : void send())}
+                  disabled={composerLocked || (thinking ? false : !draft.trim())}
                   aria-label={thinking ? t("stop") : t("send")}
                   className={cn(
                     "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white transition-colors active:scale-95",
-                    (thinking ? sessionId : draft.trim() && !composerLocked)
+                    (thinking ? true : draft.trim() && !composerLocked)
                       ? "bg-primary hover:bg-primary-hover"
                       : "bg-border-strong",
                   )}
@@ -1089,6 +1004,24 @@ export function GameStudio({ initialGame }: GameStudioProps) {
           </div>
         </div>
       </div>
+
+      {/* Destructive confirm for clearing the conversation history. */}
+      <Dialog open={clearOpen} onOpenChange={setClearOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("clearHistoryConfirmTitle")}</DialogTitle>
+            <DialogDescription>{t("clearHistoryConfirmDescription")}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setClearOpen(false)}>
+              {t("clearHistoryCancel")}
+            </Button>
+            <Button variant="destructive" onClick={clearHistory}>
+              {t("clearHistoryConfirmButton")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -1205,6 +1138,10 @@ function SettingsForm({
   setField,
   selectFamily,
   toggleKid,
+  onSave,
+  saving,
+  justSaved,
+  error,
   t,
 }: {
   game: StudioGame;
@@ -1213,6 +1150,10 @@ function SettingsForm({
   setField: <K extends keyof StudioGame>(key: K, value: StudioGame[K]) => void;
   selectFamily: () => void;
   toggleKid: (id: string) => void;
+  onSave: () => void;
+  saving: boolean;
+  justSaved: boolean;
+  error: string | null;
   t: ReturnType<typeof useTranslations>;
 }) {
   // Predefined catalog plus any extra tags the agent already added to the game.
@@ -1341,6 +1282,39 @@ function SettingsForm({
           })}
         </div>
       </Field>
+
+      {/* The settings form owns the save action — the built game auto-saves, so
+          there is no global Save button. A new game shows "Save & start building"
+          (its Dodi panel is still hidden until the draft exists); an existing game
+          shows "Save changes". A new game's save failures surface here since its
+          composer is hidden; an existing game keeps its visible Dodi-panel error. */}
+      <div className="mt-2 flex flex-col gap-3 border-t border-border pt-6">
+        {!game.id && error && (
+          <div className="rounded-lg bg-danger-soft px-3 py-2 text-xs font-medium text-danger">
+            {error}
+          </div>
+        )}
+        <Button
+          size="lg"
+          className="w-full"
+          onClick={onSave}
+          disabled={saving || (!game.id && !game.title.trim())}
+        >
+          {justSaved ? (
+            <>
+              <Icon name="check" size={16} />
+              {t("saved")}
+            </>
+          ) : game.id ? (
+            t("saveChanges")
+          ) : (
+            <>
+              <Icon name="sparkles" size={16} />
+              {t("saveAndBuild")}
+            </>
+          )}
+        </Button>
+      </div>
     </div>
   );
 }

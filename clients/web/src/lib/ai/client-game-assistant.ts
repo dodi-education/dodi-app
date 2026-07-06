@@ -14,7 +14,7 @@ import { normalizeCommands } from "@dodi/games/normalize-commands";
 import { buildGameTextContext } from "@dodi/ai/dodi-context";
 import { useKidStore } from "@/stores/kid-store";
 import type { Game } from "@dodi/types/database";
-import type { GameAssistantResponse } from "@dodi/types/games";
+import type { GameAssistantResponse, GameMetadata } from "@dodi/types/games";
 
 export async function runGameTextAssistant(
   kidId: string,
@@ -35,6 +35,8 @@ export async function runGameTextAssistant(
   const gameRes = await dodi.request(`/api/games/${gameId}?locale=${kid.language}`);
   if (!gameRes.ok) throw new Error("Game not found");
   const game = (await gameRes.json()) as Game;
+  const capabilities =
+    (game.metadata as unknown as GameMetadata | null)?.capabilities ?? [];
 
   const { systemInstruction } = buildGameTextContext({
     personaSoul: persona.soul,
@@ -48,6 +50,7 @@ export async function runGameTextAssistant(
     gameMarkdown: game.markdown,
     gameCodeBundle: game.code_bundle,
     gameState,
+    capabilities,
   });
 
   const provider = createClientThinkingProvider(

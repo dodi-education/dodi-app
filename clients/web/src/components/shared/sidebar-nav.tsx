@@ -39,11 +39,6 @@ export function useNavGroups(): NavGroup[] {
       label: t("navGroupActivity"),
       items: [
         {
-          href: "/parent/agent-sessions",
-          label: t("agentSessions"),
-          icon: "agent_sessions",
-        },
-        {
           href: "/parent/system-logs",
           label: t("systemLogs"),
           icon: "system_logs",

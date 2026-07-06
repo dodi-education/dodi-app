@@ -42,6 +42,8 @@ export interface CreateCustomGameInput {
   successDefinition?: string;
   successCriteria?: SuccessCriteria;
   progressKind?: ProgressKind;
+  /** enc:v1: sealed studio conversation transcript (server-blind). */
+  agentTranscriptEnc?: string | null;
 }
 
 function castGame(row: unknown): Game {
@@ -249,6 +251,7 @@ export async function createCustomGame(
     success_definition: input.successDefinition ?? "",
     success_criteria: (input.successCriteria ?? {}) as unknown as Json,
     progress_kind: input.progressKind ?? "open",
+    agent_transcript_enc: input.agentTranscriptEnc ?? null,
   };
 
   const { data, error } = await supabase

@@ -96,9 +96,6 @@ export function buildCrumbs(
       return crumbs;
     }
 
-    case "agent-sessions":
-      return [{ label: t("nav.agentSessions") }];
-
     case "system-logs":
       return [{ label: t("nav.systemLogs") }];
 

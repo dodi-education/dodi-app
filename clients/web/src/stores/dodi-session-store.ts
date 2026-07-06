@@ -1,4 +1,3 @@
-import { dodi } from "@/lib/api";
 import { create } from "zustand";
 
 import {
@@ -11,8 +10,13 @@ import { AudioRecorder } from "@/lib/ai/audio-recorder";
 import { buildGameVoiceConfig, buildHomeVoiceConfig } from "@/lib/ai/voice-session";
 import { runClientMemoryUpdate } from "@/lib/ai/client-memory-update";
 import { runGameTextAssistant } from "@/lib/ai/client-game-assistant";
+import { resolveClientThinking } from "@/lib/ai/resolve-client-thinking";
+import { useKidStore } from "@/stores/kid-store";
+import { analyzeGameState } from "@dodi/ai/game-analysis";
+import { getLanguageDisplayName } from "@dodi/ai/dodi-context";
 import { extractCommandMarkers } from "@dodi/games/command-markers";
 import { gameDebug, gameDebugWarn } from "@dodi/games/debug";
+import { STANDARD_TOOLS_BY_NAME } from "@dodi/games/toolbox";
 import type { GameCommand } from "@dodi/types/games";
 
 // ---------------------------------------------------------------------------
@@ -30,9 +34,16 @@ export type DodiContext =
       markdown: string;
       codeBundle: string;
       gameState: Record<string, unknown>;
+      /** Standardized commands the game implements (drives snapshot gating etc.). */
+      capabilities: string[];
     };
 
 export type DodiState = "disconnected" | "connecting" | "active" | "deaf" | "sleep";
+
+// In-game AI provider work the companion should visibly "think" through.
+// "image" = image provider (drawing); "thinking" = thinking provider
+// (game-state analysis, and future in-game text assistant).
+export type DodiActivity = "image" | "thinking";
 
 export interface CompanionMessage {
   id: string;
@@ -103,10 +114,16 @@ export interface DodiSessionState {
   // Game snapshot callback (for read_game_state vision analysis)
   onRequestSnapshot: (() => Promise<string | null>) | null;
 
-  // True while a client-side coloring sheet is being generated (drives the
-  // companion's "creating image" thinking state).
-  generatingImage: boolean;
-  setGeneratingImage: (value: boolean) => void;
+  // Ref-counted active in-game AI provider work by category. Drives the
+  // companion's "thinking" avatar + status line. Ref-counted so overlapping
+  // calls don't clear the state early. Flip via withAiActivity / begin/endAiActivity.
+  aiActivity: Record<DodiActivity, number>;
+  beginAiActivity: (kind: DodiActivity) => void;
+  endAiActivity: (kind: DodiActivity) => void;
+  // Release a held-open generate_drawing tool call once the client-side image is
+  // on the canvas (or failed). Dodi stays silent while the call is pending, then
+  // announces the finished picture. See the generate_drawing tool-call branch.
+  resolveDrawingGeneration: (result: { ok: boolean; error?: string }) => void;
 
   // Count of kid turns ("asking Dodi") while a game is open — feeds the
   // hintsUsed metric for success evaluation. Reset per play by the play view.
@@ -132,6 +149,26 @@ export interface DodiSessionState {
   updateGameState: (state: Record<string, unknown>, immediate?: boolean) => void;
   setOnRunCommands: (handler: ((commands: GameCommand[]) => void) | null) => void;
   setOnRequestSnapshot: (handler: (() => Promise<string | null>) | null) => void;
+}
+
+// Is any in-game AI provider currently working? Drives the "thinking" avatar.
+export const selectDodiThinking = (s: DodiSessionState): boolean =>
+  s.aiActivity.image > 0 || s.aiActivity.thinking > 0;
+
+// Which activity's copy to show; image wins when both are active.
+export const selectDodiActivityKind = (s: DodiSessionState): DodiActivity | null =>
+  s.aiActivity.image > 0 ? "image" : s.aiActivity.thinking > 0 ? "thinking" : null;
+
+// Wrap any in-game AI provider call so the companion shows its "thinking" state
+// for the call's whole lifetime, cleared even on throw. The one place call sites
+// hook into — no per-feature boolean.
+async function withAiActivity<T>(kind: DodiActivity, fn: () => Promise<T>): Promise<T> {
+  useDodiSessionStore.getState().beginAiActivity(kind);
+  try {
+    return await fn();
+  } finally {
+    useDodiSessionStore.getState().endAiActivity(kind);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -173,6 +210,18 @@ let stateDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 let stateSequenceNumber = 0;
 let pendingGameState: string | null = null;
 
+// Deferred generate_drawing: hold the tool response until the client-side image
+// lands so the voice model stays silent (a pending function call yields no audio)
+// instead of looping filler while the picture generates. Resolved by
+// resolveDrawingGeneration() from the play view; timed out as a safety net so a
+// dropped/failed generation can never freeze the turn open forever.
+let pendingDrawingCall: { id: string; name: string } | null = null;
+let drawingTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
+// After a drawing resolves, briefly suppress interrupting [GAME STATE UPDATE]
+// pushes so the set_generated_image state result doesn't cut off Dodi's spoken
+// completion line (the tool response already conveyed the finished picture).
+let suppressStateSendUntilTs = 0;
+
 // Turn tracking (debugging)
 let turnNumber = 0;
 let turnAudioChunks = 0;
@@ -193,6 +242,13 @@ const MIN_MEMORY_BATCH_ENTRIES = 3;
 const MAX_PENDING_ENTRIES = 2000;
 const MAX_MESSAGES = 40;
 const STATE_DEBOUNCE_MS = 500;
+// How long to hold a generate_drawing tool call open before giving up (so a
+// dropped/hung generation can't freeze the voice turn) — comfortably longer than
+// image generation, which the Live API tolerates (verified silent holds ≥12s).
+const DRAWING_TIMEOUT_MS = 30000;
+// Quiet window after a drawing lands, during which game-state updates refresh
+// local context but skip the interrupting context push (see updateGameState).
+const DRAWING_COMPLETION_QUIET_MS = 2500;
 const INACTIVITY_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
 // ---------------------------------------------------------------------------
@@ -489,6 +545,13 @@ function clearStateDebounce(): void {
   }
 }
 
+function clearDrawingTimeout(): void {
+  if (drawingTimeoutTimer) {
+    clearTimeout(drawingTimeoutTimer);
+    drawingTimeoutTimer = null;
+  }
+}
+
 function flushPendingState(): void {
   if (!stateDebounceTimer || !pendingGameState || !client) return;
   clearStateDebounce();
@@ -517,6 +580,9 @@ function cleanup(): void {
   client = null;
 
   clearStateDebounce();
+  clearDrawingTimeout();
+  pendingDrawingCall = null;
+  suppressStateSendUntilTs = 0;
   clearInactivityTimer();
   stopInteractionListeners();
   turnNumber = 0;
@@ -705,7 +771,7 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
 
   onRunCommands: null,
   onRequestSnapshot: null,
-  generatingImage: false,
+  aiActivity: { image: 0, thinking: 0 },
 
   gameAssistanceCount: 0,
   resetGameAssistance: () => {
@@ -730,8 +796,49 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
     set({ onRequestSnapshot: handler });
   },
 
-  setGeneratingImage: (value) => {
-    set({ generatingImage: value });
+  beginAiActivity: (kind) => {
+    set((s) => ({ aiActivity: { ...s.aiActivity, [kind]: s.aiActivity[kind] + 1 } }));
+  },
+
+  endAiActivity: (kind) => {
+    set((s) => ({
+      aiActivity: { ...s.aiActivity, [kind]: Math.max(0, s.aiActivity[kind] - 1) },
+    }));
+  },
+
+  resolveDrawingGeneration: (result) => {
+    // Called by the play view when the client-side drawing has landed on the
+    // canvas (or failed). Answers the held-open generate_drawing tool call so
+    // Dodi finally speaks — announcing the finished picture on success, or that
+    // it didn't work on failure. No-ops for marker-triggered drawings that never
+    // opened a tool call, and for a call already resolved by the safety timeout.
+    if (!pendingDrawingCall) return;
+    clearDrawingTimeout();
+    const call = pendingDrawingCall;
+    pendingDrawingCall = null;
+    // [TEMP DEBUG drawing-repeat] Drawing landed: answering the held call now.
+    gameDebug(
+      "voice",
+      `resolveDrawingGeneration ok=${result.ok} → sending deferred response; playback backlog=${streamer?.backlogSeconds().toFixed(1)}s`,
+    );
+    // Give the completion line a clean runway: the imminent set_generated_image
+    // state result would otherwise push an interrupting [GAME STATE UPDATE].
+    suppressStateSendUntilTs = Date.now() + DRAWING_COMPLETION_QUIET_MS;
+    if (result.ok) {
+      client?.sendToolResponse(call.id, call.name, {
+        ok: true,
+        status: "done",
+        message:
+          "The coloring sheet is now on the canvas. In ONE short, cheerful sentence, tell the child it's ready to color in — do not repeat yourself.",
+      });
+    } else {
+      client?.sendToolResponse(call.id, call.name, {
+        ok: false,
+        error:
+          result.error ??
+          "The picture could not be created. In one short sentence, gently tell the child it didn't work this time.",
+      });
+    }
   },
 
   setContext: async (newContext: DodiContext, kidId: string) => {
@@ -1087,6 +1194,16 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
     const stateJson = JSON.stringify(state);
     if (stateJson === lastSentGameState) return;
 
+    // A drawing just landed: keep local context fresh but skip the interrupting
+    // [GAME STATE UPDATE] push for a moment so the set_generated_image result
+    // doesn't cut off Dodi's spoken "your picture is ready!" line.
+    if (Date.now() < suppressStateSendUntilTs) {
+      lastSentGameState = stateJson;
+      clearStateDebounce();
+      pendingGameState = null;
+      return;
+    }
+
     const sendStateUpdate = () => {
       lastSentGameState = stateJson;
       pendingGameState = null;
@@ -1154,6 +1271,14 @@ function createEventHandler(
         turnAudioChunks++;
         if (turnAudioChunks === 1) {
           gameDebug("voice", "First audio chunk this turn");
+        }
+        // [TEMP DEBUG drawing-repeat] Is the model producing NEW audio while the
+        // drawing tool call is held open? If so, deferral isn't keeping it silent.
+        if (pendingDrawingCall) {
+          gameDebug(
+            "voice",
+            `⚠ NEW audio chunk #${turnAudioChunks} while drawing PENDING (backlog=${streamer?.backlogSeconds().toFixed(1)}s)`,
+          );
         }
         if (tapStartedAtMs !== null) {
           const elapsed = Math.round(performance.now() - tapStartedAtMs);
@@ -1225,41 +1350,57 @@ function createEventHandler(
             ok: true,
             action,
           });
-        } else if (event.name === "execute_game_command" && isGameContext) {
-          const commandType = typeof event.args.type === "string" ? event.args.type : "";
-          if (!commandType) {
-            gameDebugWarn("voice", "Tool call missing command type");
-            client?.sendToolResponse(event.id, event.name, {
-              ok: false,
-              error: "Missing command type",
-            });
-            return;
-          }
-
-          const payload = event.args.payload as GameCommand["payload"];
-          const command: GameCommand = { type: commandType, payload };
-
+        } else if (
+          isGameContext &&
+          (STANDARD_TOOLS_BY_NAME[event.name]?.kind === "bridge" ||
+            STANDARD_TOOLS_BY_NAME[event.name]?.kind === "client")
+        ) {
+          // First-class standardized game command → forward to the sandbox as a
+          // {type, payload} bridge command (game-play-view intercepts the
+          // client-kind generate_drawing before it reaches the sandbox).
+          const command: GameCommand = {
+            type: event.name,
+            payload: event.args as GameCommand["payload"],
+          };
           gameDebug("voice", "Executing game command from tool call:", command);
           const { onRunCommands } = get();
           if (onRunCommands) {
             onRunCommands([command]);
           }
 
-          if (commandType === "generate_drawing") {
-            // Image generation runs client-side and takes a few seconds. Tell the
-            // model it is in progress so it says the picture is on the way rather
-            // than claiming it is already on the canvas.
-            client?.sendToolResponse(event.id, event.name, {
-              ok: true,
-              status: "generating",
-              message:
-                "The picture is being created now and will appear on the canvas in a few seconds. Tell the child it is on the way — do NOT say it is already finished or visible yet.",
-            });
+          if (STANDARD_TOOLS_BY_NAME[event.name].kind === "client") {
+            // Client-intercepted (generate_drawing): image generation runs in the
+            // app and takes a few seconds. HOLD the tool response open until the
+            // picture is on the canvas — while a function call is pending the
+            // native-audio model produces no audio, so Dodi stays silent during
+            // generation instead of looping filler until the drawing lands. The
+            // play view calls resolveDrawingGeneration() when it resolves/fails.
+            clearDrawingTimeout();
+            pendingDrawingCall = { id: event.id, name: event.name };
+            gameDebug(
+              "voice",
+              `${event.name} → DEFERRING response; playback backlog=${streamer?.backlogSeconds().toFixed(1)}s`,
+            );
+            // Flush the playback backlog so the generation window is actually
+            // silent; the deferred response then drives one clean completion line.
+            streamer?.stop();
+            set({ dodiSpeaking: false });
+            drawingTimeoutTimer = setTimeout(() => {
+              if (!pendingDrawingCall) return;
+              gameDebugWarn("voice", `${pendingDrawingCall.name} timed out — sending fallback response`);
+              client?.sendToolResponse(pendingDrawingCall.id, pendingDrawingCall.name, {
+                ok: false,
+                error:
+                  "Image generation timed out. In one short sentence, gently tell the child it didn't work this time.",
+              });
+              pendingDrawingCall = null;
+              drawingTimeoutTimer = null;
+            }, DRAWING_TIMEOUT_MS);
           } else {
-            // Respond immediately
+            // Plain bridge command → respond immediately.
             client?.sendToolResponse(event.id, event.name, {
               ok: true,
-              command: commandType,
+              command: event.name,
             });
           }
         } else if (event.name === "read_game_state" && isGameContext) {
@@ -1277,57 +1418,65 @@ function createEventHandler(
             return;
           }
 
-          // Request canvas snapshot (if available), then send to thinking model.
-          // Gemini holds the turn open until the tool response arrives.
-          const snapshotHandler = get().onRequestSnapshot;
-          const snapshotPromise = snapshotHandler
-            ? snapshotHandler().catch(() => null)
-            : Promise.resolve(null);
+          // The whole analysis runs IN THE BROWSER: the provider key is E2EE
+          // (only the vault can decrypt it), so we resolve the thinking
+          // provider/model/key here and call the provider directly — nothing
+          // touches our servers. Also grab a fresh canvas snapshot when the game
+          // supports get_snapshot (gated to avoid the 3s requestSnapshot timeout
+          // for games with no visual surface).
+          void (async () => {
+            try {
+              const thinking = await resolveClientThinking();
+              if (!thinking) {
+                client?.sendToolResponse(event.id, event.name, {
+                  ok: false,
+                  error:
+                    "No thinking model is configured, so I can't look closely right now. " +
+                    "Answer briefly from what you already know about the game state.",
+                });
+                return;
+              }
 
-          snapshotPromise
-            .then((snapshot) => {
-              if (snapshot) {
-                gameDebug("voice", `read_game_state: got snapshot (${snapshot.length} chars)`);
-              }
-              return dodi.request("/api/agent/sessions", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  kidId,
-                  taskType: "read_game_state",
-                  gameId: ctx.gameId,
-                  payload: {
-                    gameState: ctx.gameState,
-                    question,
-                    gameMarkdown: ctx.markdown,
-                    gameCodeBundle: ctx.codeBundle,
-                    snapshot,
-                  },
-                }),
+              // Show the companion's "thinking" state for the whole analysis
+              // window (snapshot grab + provider call), cleared even on throw.
+              const analysis = await withAiActivity("thinking", async () => {
+                const snapshotHandler = get().onRequestSnapshot;
+                const snapshot =
+                  snapshotHandler && ctx.capabilities.includes("get_snapshot")
+                    ? await snapshotHandler().catch(() => null)
+                    : null;
+                if (snapshot) {
+                  gameDebug("voice", `read_game_state: got snapshot (${snapshot.length} chars)`);
+                }
+
+                const kid = await useKidStore.getState().loadOne(kidId);
+                return analyzeGameState({
+                  provider: thinking.provider,
+                  model: thinking.model,
+                  apiKey: thinking.apiKey,
+                  gameState: ctx.gameState,
+                  question,
+                  gameMarkdown: ctx.markdown,
+                  gameCodeBundle: ctx.codeBundle,
+                  snapshot,
+                  childName: kid?.display_name,
+                  language: getLanguageDisplayName(kid?.language ?? "en"),
+                });
               });
-            })
-            .then(async (res) => {
-              if (!res.ok) {
-                const data = await res.json().catch(() => ({ error: "Analysis failed" }));
-                throw new Error(data.error || "Analysis failed");
-              }
-              return res.json();
-            })
-            .then((result: { analysis: string }) => {
-              gameDebug("voice", `read_game_state result: "${result.analysis.slice(0, 200)}"`);
+              gameDebug("voice", `read_game_state result: "${analysis.slice(0, 200)}"`);
               client?.sendToolResponse(event.id, event.name, {
                 ok: true,
-                analysis: result.analysis,
+                analysis,
               });
-            })
-            .catch((err) => {
+            } catch (err) {
               const errMsg = err instanceof Error ? err.message : "Analysis failed";
               gameDebugWarn("voice", `read_game_state failed: ${errMsg}`);
               client?.sendToolResponse(event.id, event.name, {
                 ok: false,
                 error: `Analysis failed: ${errMsg}. Respond based on what you know from the game state.`,
               });
-            });
+            }
+          })();
         } else {
           gameDebugWarn("voice", `Unknown or unavailable tool: ${event.name}`);
           client?.sendToolResponse(event.id, event.name, {

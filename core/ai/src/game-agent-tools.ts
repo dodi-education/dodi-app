@@ -1,22 +1,21 @@
 /**
- * Tool definitions and execution for the coding agent's agentic loop.
+ * Tool definitions and execution for the game-coding agent's agentic loop.
  *
- * The agent can call these tools during its multi-turn conversation
- * to write, validate, and read game code.
+ * The agent calls these during its multi-turn conversation to write, validate,
+ * and read game code. Pure execution (no I/O) so it runs client-side in the
+ * browser loop — the provider key never leaves the vault.
  */
 
 import Anthropic from "@anthropic-ai/sdk";
 
-import { validateGameCode, type ValidationResult } from "./agent-validator";
+import { validateGameCode, type ValidationResult } from "@dodi/games/agent-validator";
 import {
   BRIDGE_INTERFACE_TEMPLATE,
   coerceProgressKind,
   coerceSuccessCriteria,
 } from "@dodi/games/game-spec";
 import { SUCCESS_SYSTEM_TEMPLATE, type ProgressKind, type SuccessCriteria } from "@dodi/games/success";
-import { createLogger } from "@/logger";
-
-const log = createLogger("agent-tools");
+import { DECLARABLE_CAPABILITY_NAMES, standardCommandsDoc } from "@dodi/games/toolbox";
 
 // ---------------------------------------------------------------------------
 // Tool definitions (Anthropic format)
@@ -70,6 +69,16 @@ export const AGENT_TOOLS: Anthropic.Tool[] = [
           description:
             "'goal' if the game has a measurable success objective; 'open' for free/creative play.",
         },
+        capabilities: {
+          type: "array",
+          items: { type: "string", enum: [...DECLARABLE_CAPABILITY_NAMES] },
+          description:
+            "EVERY standardized command your game implements — chosen ONLY from the standard " +
+            "vocabulary (see 'Standard Command Vocabulary' in your system prompt / read_bridge_docs). " +
+            "These become Dodi's first-class voice tools. Declare 'get_snapshot' if your game has a " +
+            "visual surface (lets Dodi see it), and 'generate_drawing' if it supports AI-drawn pictures. " +
+            "Do NOT invent command names. Use an empty array only if the game has no Dodi-driven actions.",
+        },
         successCriteria: {
           type: "object",
           description:
@@ -94,7 +103,7 @@ export const AGENT_TOOLS: Anthropic.Tool[] = [
           required: ["description", "match", "conditions", "requiredMetrics"],
         },
       },
-      required: ["code", "markdown", "title"],
+      required: ["code", "markdown", "title", "capabilities"],
     },
   },
   {
@@ -159,6 +168,8 @@ export interface LastWriteResult {
   progressKind: ProgressKind;
   successCriteria: SuccessCriteria;
   changeSummary: string;
+  /** Standardized commands the game implements (→ metadata.capabilities). */
+  capabilities: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -183,9 +194,26 @@ export function executeTool(
         : [];
       const progressKind = coerceProgressKind(toolInput.progressKind);
       const successCriteria = coerceSuccessCriteria(toolInput.successCriteria);
+      const capabilities = Array.isArray(toolInput.capabilities)
+        ? toolInput.capabilities.filter((c): c is string => typeof c === "string")
+        : [];
 
       if (!code.trim()) {
         return { result: JSON.stringify({ ok: false, error: "Code cannot be empty" }) };
+      }
+
+      const invalidCaps = capabilities.filter(
+        (c) => !DECLARABLE_CAPABILITY_NAMES.includes(c),
+      );
+      if (invalidCaps.length > 0) {
+        return {
+          result: JSON.stringify({
+            ok: false,
+            error:
+              `Unknown capabilities: ${invalidCaps.join(", ")}. Use ONLY the standard vocabulary ` +
+              `(${DECLARABLE_CAPABILITY_NAMES.join(", ")}).`,
+          }),
+        };
       }
 
       const writeResult: LastWriteResult = {
@@ -197,13 +225,8 @@ export function executeTool(
         progressKind,
         successCriteria,
         changeSummary,
+        capabilities,
       };
-
-      log.info("write_game_code", {
-        title,
-        codeSize: code.length,
-        markdownSize: markdown.length,
-      });
 
       return {
         result: JSON.stringify({
@@ -218,12 +241,6 @@ export function executeTool(
       const code = typeof toolInput.code === "string" ? toolInput.code : "";
       const validation: ValidationResult = validateGameCode(code);
 
-      log.info("validate_game", {
-        codeSize: code.length,
-        valid: validation.valid,
-        errors: validation.errors,
-      });
-
       return {
         result: JSON.stringify({
           valid: validation.valid,
@@ -236,7 +253,6 @@ export function executeTool(
     }
 
     case "read_bridge_docs": {
-      log.debug("read_bridge_docs", {});
       return {
         result: [
           BRIDGE_INTERFACE_TEMPLATE,
@@ -256,16 +272,14 @@ export function executeTool(
           "- Game must proactively send 'game:state' after any user interaction, score/level change, or timed event that changes state",
           "- Always send COMPLETE state after the change is applied",
           "",
+          standardCommandsDoc(),
+          "",
           SUCCESS_SYSTEM_TEMPLATE,
         ].join("\n"),
       };
     }
 
     case "read_existing_game": {
-      log.debug("read_existing_game", {
-        hasCode: !!context.existingCode,
-        codeSize: context.existingCode?.length ?? 0,
-      });
       if (!context.existingCode) {
         return {
           result: JSON.stringify({
@@ -289,7 +303,6 @@ export function executeTool(
     }
 
     default:
-      log.warn("unknown_tool", { toolName });
       return {
         result: JSON.stringify({ ok: false, error: `Unknown tool: ${toolName}` }),
       };

@@ -7,6 +7,9 @@ export interface AIProviderDefinition {
   supportsLiveStreaming: boolean;
   supportsThinking: boolean;
   supportsImage: boolean;
+  // Can drive the game-coding agent's tool-use loop (runGameAgent). Today only
+  // Anthropic; the Game generation picker filters providers on this flag.
+  supportsAgentic: boolean;
   models: AIModel[];
   voices: AIVoice[];
 }
@@ -14,7 +17,7 @@ export interface AIProviderDefinition {
 export interface AIModel {
   id: string;
   name: string;
-  capabilities: ("voice" | "text" | "live" | "thinking" | "image")[];
+  capabilities: ("voice" | "text" | "live" | "thinking" | "image" | "agentic")[];
 }
 
 export interface AIVoice {
@@ -41,11 +44,12 @@ export interface AccountModelConfig {
   voiceName: string;
   thinkingProvider?: AIProviderId;
   thinkingModel?: string;
-  imageProvider?: AIProviderId;
-  imageModel?: string;
-  // Legacy fields — normalizeModelConfig() maps these to thinking*
+  // Game generation (creation/editing, success-definition mapping). Runs the
+  // Anthropic tool-use agent, so this must be an agentic (tool-use) provider.
   gameProvider?: AIProviderId;
   gameModel?: string;
+  imageProvider?: AIProviderId;
+  imageModel?: string;
 }
 
 // What the GET /api/ai/providers endpoint returns (no actual keys)

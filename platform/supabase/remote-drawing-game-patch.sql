@@ -3,14 +3,11 @@
 -- db reset / db seed will not re-apply to the linked remote).
 --
 -- Refreshes the drawing-basic system game in place:
---  1) Adds the AI image-generation flow: dodi draws any subject as a black-and-
---     white mandala coloring sheet via the generate_drawing command, rendered
---     onto the canvas by the internal set_generated_image command.
---  2) Removes the old procedural draw commands and their briefing so image
---     generation is the single draw path.
---  3) Fixes the canvas-sizing race: a ResizeObserver re-sizes the drawing buffer
---     when the flex layout settles, so freehand strokes and generated images no
---     longer render into a collapsed 1px buffer.
+--  1) AI image-generation flow (generate_drawing -> set_generated_image).
+--  2) Standardized toolbox command names (set_color -> set_drawing_color); the
+--     voice-facing vocabulary is declared in metadata.capabilities.
+--  3) Canvas-sizing race fix: a ResizeObserver re-sizes the drawing buffer when
+--     the flex layout settles.
 --
 -- Only touches the one system game row. Safe to run multiple times.
 -- Apply via the Supabase SQL editor or psql.
@@ -73,6 +70,30 @@ UPDATE public.games SET
       border-radius: 999px;
       padding: 0;
     }
+    .size-btn {
+      width: 36px;
+      height: 36px;
+      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .size-btn .dot {
+      display: block;
+      border-radius: 999px;
+      background: #123;
+    }
+    .icon-btn {
+      width: 36px;
+      height: 36px;
+      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: #234;
+    }
+    .icon-btn svg { display: block; }
+    #clear { color: #e53935; }
     #board {
       flex: 1;
       min-height: 0;
@@ -88,8 +109,12 @@ UPDATE public.games SET
     <div class="group" id="colors"></div>
     <div class="group" id="sizes"></div>
     <div class="group">
-      <button id="undo" type="button">Undo</button>
-      <button id="clear" type="button">Clear</button>
+      <button id="undo" class="icon-btn" type="button" title="Undo" aria-label="Undo">
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14l-4 -4l4 -4" /><path d="M5 10h11a4 4 0 1 1 0 8h-1" /></svg>
+      </button>
+      <button id="clear" class="icon-btn" type="button" title="Clear canvas" aria-label="Clear canvas">
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7l16 0" /><path d="M10 11l0 6" /><path d="M14 11l0 6" /><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" /><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" /></svg>
+      </button>
     </div>
   </div>
   <canvas id="board"></canvas>
@@ -98,7 +123,7 @@ UPDATE public.games SET
     (function () {
       var palette = [''#111111'', ''#e53935'', ''#fb8c00'', ''#fdd835'', ''#43a047'', ''#1e88e5'', ''#8e24aa'', ''#ff5ca8''];
       var brushOptions = [4, 8, 12, 18, 24];
-      var capabilities = [''set_color'', ''set_brush_size'', ''clear_canvas'', ''undo'', ''get_snapshot'', ''set_generated_image''];
+      var capabilities = [''set_drawing_color'', ''set_brush_size'', ''clear_canvas'', ''undo'', ''get_snapshot'', ''set_generated_image''];
 
       var canvas = document.getElementById(''board'');
       var ctx = canvas.getContext(''2d'');
@@ -367,7 +392,7 @@ UPDATE public.games SET
         var payload = command.payload || {};
 
         switch (type) {
-          case ''set_color'': {
+          case ''set_drawing_color'': {
             var ok = setColor(String(payload.color || ''''));
             return ok ? { ok: true } : { ok: false, error: ''Unsupported color'' };
           }
@@ -418,6 +443,8 @@ UPDATE public.games SET
         });
         sizesEl.querySelectorAll(''button'').forEach(function (el) {
           el.classList.toggle(''active'', Number(el.dataset.size) === state.brushSize);
+          var dot = el.querySelector(''.dot'');
+          if (dot) dot.style.background = state.color;
         });
       }
 
@@ -436,8 +463,15 @@ UPDATE public.games SET
         brushOptions.forEach(function (size) {
           var button = document.createElement(''button'');
           button.type = ''button'';
+          button.className = ''size-btn'';
           button.dataset.size = String(size);
-          button.textContent = String(size);
+          button.title = size + ''px'';
+          button.setAttribute(''aria-label'', size + ''px brush'');
+          var dot = document.createElement(''span'');
+          dot.className = ''dot'';
+          dot.style.width = size + ''px'';
+          dot.style.height = size + ''px'';
+          button.appendChild(dot);
           button.addEventListener(''click'', function () { setBrushSize(size); });
           sizesEl.appendChild(button);
         });
@@ -526,7 +560,7 @@ UPDATE public.games SET
 </body>
 </html>
 ',
-  metadata = '{"version": "2.0.0", "category": "drawing", "capabilities": ["set_color", "set_brush_size", "clear_canvas", "undo", "get_snapshot", "generate_drawing"], "supportsVoiceCommands": true}',
+  metadata = '{"version": "2.1.0", "category": "drawing", "capabilities": ["generate_drawing", "set_drawing_color", "set_brush_size", "clear_canvas", "undo", "get_snapshot"], "supportsVoiceCommands": true}',
   markdown = '# Drawing
 
 ## Game Overview
@@ -540,10 +574,10 @@ A freeform drawing canvas where kids create art using colors and brushes. There 
 
 ## Available Commands
 
-### set_color
+### set_drawing_color
 Change the active brush color.
 - `payload.color` (string, required): A hex color from the palette: `#111111`, `#e53935`, `#fb8c00`, `#fdd835`, `#43a047`, `#1e88e5`, `#8e24aa`, `#ff5ca8`
-- Example: `{"type":"set_color","payload":{"color":"#e53935"}}`
+- Example: `{"type":"set_drawing_color","payload":{"color":"#e53935"}}`
 
 ### set_brush_size
 Change the brush thickness.
@@ -554,7 +588,7 @@ Change the brush thickness.
 Create a black-and-white mandala **coloring sheet** of whatever the child asks for and place it on the canvas as a fresh base to color in. This is how Dodi draws ANY subject — animals, objects, characters, or scenes.
 - `payload.subject` (string, required): What to draw, e.g. `"owl"`, `"a friendly dragon"`, `"a flower"`
 - MANDATORY: whenever the child asks you to draw, make, or show a picture of something, you MUST emit this generate_drawing command in the SAME turn. Saying "I will draw it" without emitting the command does nothing and leaves the canvas blank — the command is the only thing that draws
-- Speak a short acknowledgment TOGETHER WITH the command (e.g. "I am creating your picture — it will be there in a moment!"). The words accompany the command; they never replace it
+- First emit the tool call, THEN speak a very short acknowledgement in the language of the child e.g. "Here it is!"
 - Do NOT say the picture is already done or already on the canvas; it appears on its own a few seconds after you emit the command
 - The canvas is cleared and the generated outline becomes the new base layer; the child colors on top with their brush
 - Do NOT try to build the picture yourself from lines or shapes — always use this command for anything the child wants drawn

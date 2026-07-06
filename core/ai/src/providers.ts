@@ -8,6 +8,7 @@ export const AI_PROVIDERS: AIProviderDefinition[] = [
     supportsLiveStreaming: true,
     supportsThinking: true,
     supportsImage: true,
+    supportsAgentic: false,
     models: [
       {
         id: "gemini-3.1-flash-live-preview",
@@ -48,21 +49,22 @@ export const AI_PROVIDERS: AIProviderDefinition[] = [
     supportsLiveStreaming: false,
     supportsThinking: true,
     supportsImage: false,
+    supportsAgentic: true,
     models: [
       {
         id: "claude-opus-4-8",
         name: "Claude Opus 4.8",
-        capabilities: ["text", "thinking"],
+        capabilities: ["text", "thinking", "agentic"],
       },
       {
         id: "claude-sonnet-4-6",
         name: "Claude Sonnet 4.6",
-        capabilities: ["text", "thinking"],
+        capabilities: ["text", "thinking", "agentic"],
       },
       {
         id: "claude-haiku-4-5-20251001",
         name: "Claude Haiku 4.5",
-        capabilities: ["text", "thinking"],
+        capabilities: ["text", "thinking", "agentic"],
       },
     ],
     voices: [],

@@ -1,0 +1,51 @@
+import { describe, expect, it } from "vitest";
+
+import { validateGameCode } from "./agent-validator";
+
+// Minimal bridge-compliant bundle; per-test we splice in the command handlers.
+function bundle(handlers: string): string {
+  return `<!doctype html><html><body><script>
+    window.addEventListener('message', function (e) {
+      var m = e.data;
+      if (m.type === 'dodi:init') { parent.postMessage({ type: 'game:ready', payload: { capabilities: [] } }, '*'); }
+      if (m.type === 'dodi:command') {
+        var type = m.payload.command.type;
+        ${handlers}
+        parent.postMessage({ type: 'game:result' }, '*');
+      }
+    });
+  </script></body></html>`;
+}
+
+describe("validateGameCode — capabilities", () => {
+  it("passes when declared bridge commands are handled in code", () => {
+    const code = bundle(`if (type === 'submit_answer') {} if (type === 'next_task') {}`);
+    const r = validateGameCode(code, { capabilities: ["submit_answer", "next_task"] });
+    expect(r.valid).toBe(true);
+    expect(r.errors).toEqual([]);
+  });
+
+  it("rejects a capability outside the standard vocabulary", () => {
+    const code = bundle(`if (type === 'submit_answer') {}`);
+    const r = validateGameCode(code, { capabilities: ["submit_answer", "make_pizza"] });
+    expect(r.valid).toBe(false);
+    expect(r.errors.some((e) => e.includes("make_pizza"))).toBe(true);
+  });
+
+  it("flags a declared bridge command with no handler in code", () => {
+    const code = bundle(`if (type === 'submit_answer') {}`);
+    const r = validateGameCode(code, { capabilities: ["submit_answer", "next_task"] });
+    expect(r.valid).toBe(false);
+    expect(r.errors.some((e) => e.includes("next_task"))).toBe(true);
+  });
+
+  it("checks generate_drawing via its set_generated_image handler", () => {
+    const withHandler = bundle(`if (type === 'set_generated_image') {}`);
+    expect(validateGameCode(withHandler, { capabilities: ["generate_drawing"] }).valid).toBe(true);
+
+    const without = bundle(`if (type === 'submit_answer') {}`);
+    const r = validateGameCode(without, { capabilities: ["generate_drawing"] });
+    expect(r.valid).toBe(false);
+    expect(r.errors.some((e) => e.includes("set_generated_image"))).toBe(true);
+  });
+});

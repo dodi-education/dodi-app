@@ -2,11 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 
 import { requireAuth } from "@/lib/resolve-auth";
-import {
-  getModelConfig,
-  normalizeModelConfig,
-  updateModelConfig,
-} from "@/services/ai-providers";
+import { getModelConfig, updateModelConfig } from "@/services/ai-providers";
 import type { AccountModelConfig } from "@dodi/types/ai";
 
 const providerEnum = z.enum(["gemini", "openai", "anthropic", "xai"]);
@@ -17,11 +13,10 @@ const UpdateConfigSchema = z.object({
   voiceName: z.string().min(1),
   thinkingProvider: providerEnum.optional(),
   thinkingModel: z.string().min(1).optional(),
-  imageProvider: providerEnum.optional(),
-  imageModel: z.string().min(1).optional(),
-  // Legacy fields accepted for backward compat
   gameProvider: providerEnum.optional(),
   gameModel: z.string().min(1).optional(),
+  imageProvider: providerEnum.optional(),
+  imageModel: z.string().min(1).optional(),
 });
 
 export async function GET(request: Request): Promise<NextResponse> {
@@ -31,9 +26,7 @@ export async function GET(request: Request): Promise<NextResponse> {
 
   try {
     const config = await getModelConfig(supabase, accountId);
-    // Normalize so clients always see `thinkingProvider`/`thinkingModel`
-    // (migrated from the legacy gameProvider/gameModel shape at read time).
-    return NextResponse.json(config ? normalizeModelConfig(config) : null);
+    return NextResponse.json(config);
   } catch {
     return NextResponse.json(
       { error: "Failed to fetch config" },
@@ -62,8 +55,10 @@ export async function PATCH(request: Request): Promise<NextResponse> {
       voiceProvider: result.data.voiceProvider,
       voiceModel: result.data.voiceModel,
       voiceName: result.data.voiceName,
-      thinkingProvider: result.data.thinkingProvider ?? result.data.gameProvider,
-      thinkingModel: result.data.thinkingModel ?? result.data.gameModel,
+      thinkingProvider: result.data.thinkingProvider,
+      thinkingModel: result.data.thinkingModel,
+      gameProvider: result.data.gameProvider,
+      gameModel: result.data.gameModel,
       imageProvider: result.data.imageProvider,
       imageModel: result.data.imageModel,
     };

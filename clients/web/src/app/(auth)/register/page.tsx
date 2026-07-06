@@ -144,6 +144,32 @@ export default function RegisterPage() {
     );
   }
 
+  // Successful signup: replace the whole form with just the confirmation
+  // message so nothing else competes for attention.
+  if (info) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("createAccountTitle")}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-success">{info}</p>
+        </CardContent>
+        <CardFooter className="text-sm">
+          <p className="text-muted-foreground">
+            {t("alreadyHaveAccount")}{" "}
+            <Link
+              href="/login"
+              className="font-medium text-primary hover:underline"
+            >
+              {tc("signIn")}
+            </Link>
+          </p>
+        </CardFooter>
+      </Card>
+    );
+  }
+
   if (mode === "closed") {
     return (
       <Card>
@@ -219,7 +245,6 @@ export default function RegisterPage() {
               required
             />
           </div>
-          {info && <p className="text-sm text-success">{info}</p>}
           {error && <p className="text-sm text-destructive">{error}</p>}
           <Button type="submit" disabled={loading} className="w-full">
             {loading ? t("creatingAccount") : t("createAccount")}

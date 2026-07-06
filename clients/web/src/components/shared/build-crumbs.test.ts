@@ -16,9 +16,6 @@ describe("buildCrumbs", () => {
     expect(buildCrumbs("/parent/dashboard", t)).toEqual([
       { label: "nav.dashboard" },
     ]);
-    expect(buildCrumbs("/parent/agent-sessions", t)).toEqual([
-      { label: "nav.agentSessions" },
-    ]);
     expect(buildCrumbs("/parent/system-logs", t)).toEqual([
       { label: "nav.systemLogs" },
     ]);

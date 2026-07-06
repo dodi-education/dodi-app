@@ -10,10 +10,13 @@
     "./game-spec": "./src/game-spec.ts",
     "./stage": "./src/stage.ts",
     "./bridge-protocol": "./src/bridge-protocol.ts",
+    "./toolbox": "./src/toolbox.ts",
     "./command-markers": "./src/command-markers.ts",
     "./normalize-commands": "./src/normalize-commands.ts",
     "./placeholder": "./src/placeholder.ts",
     "./tags": "./src/tags.ts",
+    "./sanitizer": "./src/sanitizer.ts",
+    "./agent-validator": "./src/agent-validator.ts",
     "./debug": "./src/debug.ts"
   },
   "main": "./src/index.ts",

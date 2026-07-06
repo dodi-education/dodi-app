@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
@@ -14,7 +13,7 @@ import {
 } from "@/components/parent/games/game-studio-list";
 import { useKids } from "@/hooks/use-kids";
 import { dodi } from "@/lib/api";
-import type { AgentSessionRow, Game } from "@dodi/types/database";
+import type { Game } from "@dodi/types/database";
 
 type AccountGame = Game & {
   sharing: { family: boolean; kidIds: string[] };
@@ -25,7 +24,6 @@ export default function GameStudioPage() {
 
   const { kids } = useKids();
   const [games, setGames] = useState<AccountGame[] | null>(null);
-  const [activeGameIds, setActiveGameIds] = useState<string[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -38,16 +36,6 @@ export default function GameStudioPage() {
       .catch(() => {
         if (!cancelled) setGames([]);
       });
-    dodi
-      .request("/api/agent/sessions?status=active")
-      .then((r) => (r.ok ? r.json() : []))
-      .then((d: AgentSessionRow[]) => {
-        if (cancelled || !Array.isArray(d)) return;
-        setActiveGameIds(
-          d.map((s) => s.game_id).filter((id): id is string => Boolean(id)),
-        );
-      })
-      .catch(() => {});
     return () => {
       cancelled = true;
     };
@@ -99,7 +87,7 @@ export default function GameStudioPage() {
             {t("noGames")}
           </p>
         ) : (
-          <GameStudioList items={items} activeGameIds={activeGameIds} />
+          <GameStudioList items={items} />
         )}
       </Section>
     </div>

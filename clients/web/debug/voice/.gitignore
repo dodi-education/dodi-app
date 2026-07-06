@@ -1,0 +1,6 @@
+# Secrets and run artifacts — never commit
+key.env
+run-*/
+batch/
+long-*/
+*.wav

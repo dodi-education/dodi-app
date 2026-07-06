@@ -12,9 +12,39 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  * mocked, and `localStorage` / `window` / `document` are stubbed manually.
  */
 
-const { runClientMemoryUpdate, liveHandler } = vi.hoisted(() => ({
+const {
+  runClientMemoryUpdate,
+  liveHandler,
+  sendToolResponseSpy,
+  sendContextSpy,
+  streamerStopSpy,
+  dodiRequestSpy,
+  resolveThinkingSpy,
+  analyzeSpy,
+} = vi.hoisted(() => ({
   runClientMemoryUpdate: vi.fn(),
   liveHandler: { current: null as ((e: unknown) => void) | null },
+  sendToolResponseSpy: vi.fn(),
+  sendContextSpy: vi.fn(),
+  streamerStopSpy: vi.fn(),
+  dodiRequestSpy: vi.fn(),
+  resolveThinkingSpy: vi.fn(),
+  analyzeSpy: vi.fn(),
+}));
+
+vi.mock("@/lib/api", () => ({ dodi: { request: dodiRequestSpy } }));
+vi.mock("@/lib/ai/resolve-client-thinking", () => ({
+  resolveClientThinking: resolveThinkingSpy,
+}));
+
+// Game-state analysis now runs fully in the browser (BYOK server-blindness).
+vi.mock("@dodi/ai/game-analysis", () => ({ analyzeGameState: analyzeSpy }));
+vi.mock("@/stores/kid-store", () => ({
+  useKidStore: {
+    getState: () => ({
+      loadOne: async () => ({ display_name: "Ada", language: "en" }),
+    }),
+  },
 }));
 
 vi.mock("@/lib/ai/client-memory-update", () => ({ runClientMemoryUpdate }));
@@ -28,20 +58,29 @@ vi.mock("@/lib/ai/gemini-live-client", () => ({
     disconnect() {}
     sendGreeting() {}
     sendAudio() {}
-    sendContext() {}
-    sendToolResponse() {}
+    sendContext(...args: unknown[]) {
+      sendContextSpy(...args);
+    }
+    sendToolResponse(...args: unknown[]) {
+      sendToolResponseSpy(...args);
+    }
   },
 }));
 
 vi.mock("@/lib/ai/audio-streamer", () => ({
   AudioStreamer: class {
-    stop() {}
+    stop() {
+      streamerStopSpy();
+    }
     destroy() {}
     primeFromGesture() {}
     async tryResume() {
       return true;
     }
     addPcmChunk() {}
+    backlogSeconds() {
+      return 0;
+    }
   },
 }));
 
@@ -82,7 +121,11 @@ vi.mock("@dodi/games/debug", () => ({
   gameDebugWarn: () => {},
 }));
 
-import { useDodiSessionStore } from "@/stores/dodi-session-store";
+import {
+  useDodiSessionStore,
+  selectDodiThinking,
+  selectDodiActivityKind,
+} from "@/stores/dodi-session-store";
 
 // --- localStorage stub -----------------------------------------------------
 
@@ -166,32 +209,42 @@ function fire(event: unknown) {
   liveHandler.current?.(event);
 }
 
+// Shared per-test setup: stub browser globals, reset the store's module state and
+// all mocks, and install fake timers. Used by every describe block below.
+function installTestEnv() {
+  (globalThis as unknown as { window: unknown }).window = {
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  };
+  (globalThis as unknown as { document: unknown }).document = {
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  };
+  (globalThis as unknown as { localStorage: unknown }).localStorage = makeLocalStorage();
+
+  // Reset the store's module-level session state, then start from a clean
+  // localStorage so prior tests don't leak.
+  useDodiSessionStore.getState().endSession();
+  (globalThis as unknown as { localStorage: unknown }).localStorage = makeLocalStorage();
+
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date(DAY1));
+
+  runClientMemoryUpdate.mockReset();
+  runClientMemoryUpdate.mockResolvedValue(true);
+  sendToolResponseSpy.mockReset();
+  sendContextSpy.mockReset();
+  streamerStopSpy.mockReset();
+  dodiRequestSpy.mockReset();
+  resolveThinkingSpy.mockReset();
+  analyzeSpy.mockReset();
+  liveHandler.current = null;
+  useDodiSessionStore.setState({ state: "disconnected", context: { type: "home" } });
+}
+
 describe("dodi session store — day-batched memory outbox", () => {
   beforeEach(() => {
-    (globalThis as unknown as { window: unknown }).window = {
-      addEventListener: () => {},
-      removeEventListener: () => {},
-    };
-    (globalThis as unknown as { document: unknown }).document = {
-      addEventListener: () => {},
-      removeEventListener: () => {},
-    };
-    (globalThis as unknown as { localStorage: unknown }).localStorage =
-      makeLocalStorage();
-
-    // Reset the store's module-level session state, then start from a clean
-    // localStorage so prior tests don't leak.
-    useDodiSessionStore.getState().endSession();
-    (globalThis as unknown as { localStorage: unknown }).localStorage =
-      makeLocalStorage();
-
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date(DAY1));
-
-    runClientMemoryUpdate.mockReset();
-    runClientMemoryUpdate.mockResolvedValue(true);
-    liveHandler.current = null;
-    useDodiSessionStore.setState({ state: "disconnected", context: { type: "home" } });
+    installTestEnv();
   });
 
   afterEach(() => {
@@ -397,5 +450,286 @@ describe("dodi session store — day-batched memory outbox", () => {
       role: "dodi",
       text: "Mmmh, Mangos! Superlecker! Magst du sie?",
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// generate_drawing deferral: the voice tool response is held open until the
+// client-side image lands, so the native-audio model stays silent (a pending
+// function call yields no audio) instead of looping "a doggy coming right up!"
+// through the whole generation window.
+// ---------------------------------------------------------------------------
+
+describe("dodi session store — generate_drawing deferral", () => {
+  beforeEach(() => {
+    installTestEnv();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  async function connectGame(pid: string) {
+    useDodiSessionStore.setState({
+      state: "disconnected",
+      context: {
+        type: "game",
+        gameId: "g1",
+        markdown: "",
+        codeBundle: "",
+        gameState: {},
+        capabilities: ["generate_drawing", "set_drawing_color", "get_snapshot"],
+      },
+    });
+    await useDodiSessionStore.getState().connect(pid);
+    await flush();
+    fire({ type: "setupComplete" });
+    await flush();
+  }
+
+  // First-class generate_drawing tool call (subject is the direct tool arg).
+  const drawCall = (id: string, subject: string) => ({
+    type: "toolCall" as const,
+    id,
+    name: "generate_drawing",
+    args: { subject },
+  });
+
+  it("holds the generate_drawing tool response until the drawing resolves", async () => {
+    const runCommands = vi.fn();
+    useDodiSessionStore.getState().setOnRunCommands(runCommands);
+    await connectGame(PID);
+
+    streamerStopSpy.mockClear(); // ignore stop() calls from connect/cleanup
+    fire(drawCall("call-1", "dog"));
+
+    // Generation kicked off, but the tool call is held open — no response yet, so
+    // the model has nothing to speak over (stays silent while it generates).
+    expect(runCommands).toHaveBeenCalledWith([
+      { type: "generate_drawing", payload: { subject: "dog" } },
+    ]);
+    expect(sendToolResponseSpy).not.toHaveBeenCalled();
+    // The queued (faster-than-realtime) ack audio is flushed so it can't keep
+    // playing over the thinking animation while the picture generates.
+    expect(streamerStopSpy).toHaveBeenCalledTimes(1);
+
+    // Play view reports the picture is on the canvas → the held call is answered.
+    useDodiSessionStore.getState().resolveDrawingGeneration({ ok: true });
+
+    expect(sendToolResponseSpy).toHaveBeenCalledTimes(1);
+    const [id, name, response] = sendToolResponseSpy.mock.calls[0] as [
+      string,
+      string,
+      Record<string, unknown>,
+    ];
+    expect(id).toBe("call-1");
+    expect(name).toBe("generate_drawing");
+    expect(response).toMatchObject({ ok: true, status: "done" });
+  });
+
+  it("forwards a first-class bridge command and answers immediately", async () => {
+    const runCommands = vi.fn();
+    useDodiSessionStore.getState().setOnRunCommands(runCommands);
+    await connectGame(PID);
+
+    fire({
+      type: "toolCall",
+      id: "call-color",
+      name: "set_drawing_color",
+      args: { color: "#e53935" },
+    });
+
+    // Router forwards {type: toolName, payload: args} to the sandbox…
+    expect(runCommands).toHaveBeenCalledWith([
+      { type: "set_drawing_color", payload: { color: "#e53935" } },
+    ]);
+    // …and echoes the real tool name back to Gemini.
+    expect(sendToolResponseSpy).toHaveBeenCalledTimes(1);
+    expect(sendToolResponseSpy.mock.calls[0][1]).toBe("set_drawing_color");
+    expect(sendToolResponseSpy.mock.calls[0][2]).toMatchObject({
+      ok: true,
+      command: "set_drawing_color",
+    });
+  });
+
+  it("rejects an unknown tool name", async () => {
+    useDodiSessionStore.getState().setOnRunCommands(vi.fn());
+    await connectGame(PID);
+
+    fire({ type: "toolCall", id: "call-x", name: "definitely_not_a_tool", args: {} });
+
+    expect(sendToolResponseSpy).toHaveBeenCalledTimes(1);
+    expect(sendToolResponseSpy.mock.calls[0][2]).toMatchObject({ ok: false });
+  });
+
+  it("answers with an error response when the drawing fails", async () => {
+    useDodiSessionStore.getState().setOnRunCommands(vi.fn());
+    await connectGame(PID);
+    fire(drawCall("call-2", "cat"));
+    expect(sendToolResponseSpy).not.toHaveBeenCalled();
+
+    useDodiSessionStore
+      .getState()
+      .resolveDrawingGeneration({ ok: false, error: "No image model configured" });
+
+    expect(sendToolResponseSpy).toHaveBeenCalledTimes(1);
+    const response = sendToolResponseSpy.mock.calls[0][2] as Record<string, unknown>;
+    expect(response.ok).toBe(false);
+    expect(String(response.error)).toContain("No image model configured");
+  });
+
+  it("times out a stuck generation so the voice turn can never hang open", async () => {
+    useDodiSessionStore.getState().setOnRunCommands(vi.fn());
+    await connectGame(PID);
+    fire(drawCall("call-3", "fish"));
+    expect(sendToolResponseSpy).not.toHaveBeenCalled();
+
+    // Nobody ever resolves it → the safety timeout fires a fallback response.
+    await vi.advanceTimersByTimeAsync(30000);
+    expect(sendToolResponseSpy).toHaveBeenCalledTimes(1);
+    expect(sendToolResponseSpy.mock.calls[0][2]).toMatchObject({ ok: false });
+
+    // A late resolve after the timeout is a no-op (the call is already answered).
+    useDodiSessionStore.getState().resolveDrawingGeneration({ ok: true });
+    expect(sendToolResponseSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("read_game_state analyzes in-browser with the vault key (no server call) and returns it", async () => {
+    useDodiSessionStore.getState().setOnRunCommands(vi.fn());
+    resolveThinkingSpy.mockResolvedValue({
+      provider: "gemini",
+      model: "gemini-3.5-flash",
+      apiKey: "vault-key",
+    });
+    analyzeSpy.mockResolvedValue("You drew a lovely heart!");
+    await connectGame(PID);
+
+    fire({ type: "toolCall", id: "call-r", name: "read_game_state", args: { question: "What did I draw?" } });
+    await flush();
+
+    // The whole analysis runs client-side: the vault key goes straight to the
+    // provider via analyzeGameState — it must NEVER reach our servers.
+    expect(dodiRequestSpy.mock.calls.find((c) => c[0] === "/api/agent/sessions")).toBeUndefined();
+    expect(analyzeSpy).toHaveBeenCalledTimes(1);
+    expect(analyzeSpy.mock.calls[0][0]).toMatchObject({
+      provider: "gemini",
+      model: "gemini-3.5-flash",
+      apiKey: "vault-key",
+      question: "What did I draw?",
+    });
+
+    const toolResp = sendToolResponseSpy.mock.calls.find((c) => c[1] === "read_game_state");
+    expect(toolResp![2]).toMatchObject({ ok: true, analysis: "You drew a lovely heart!" });
+  });
+
+  it("read_game_state fails gracefully (no analysis call) when no thinking model is configured", async () => {
+    useDodiSessionStore.getState().setOnRunCommands(vi.fn());
+    resolveThinkingSpy.mockResolvedValue(null);
+    await connectGame(PID);
+
+    fire({ type: "toolCall", id: "call-r2", name: "read_game_state", args: { question: "What is this?" } });
+    await flush();
+
+    expect(analyzeSpy).not.toHaveBeenCalled();
+    const toolResp = sendToolResponseSpy.mock.calls.find((c) => c[1] === "read_game_state");
+    expect(toolResp![2]).toMatchObject({ ok: false });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AI-activity tracking: a single ref-counted map (keyed by provider category)
+// drives the companion's "thinking" avatar so ANY in-game AI call lights it up,
+// not just image generation. Analysis and drawing both flip it through the same
+// begin/endAiActivity primitive.
+// ---------------------------------------------------------------------------
+
+describe("dodi session store — AI activity (thinking) tracking", () => {
+  beforeEach(() => {
+    installTestEnv();
+    useDodiSessionStore.setState({ aiActivity: { image: 0, thinking: 0 } });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const state = () => useDodiSessionStore.getState();
+
+  it("ref-counts begin/end per category so overlapping calls don't clear early", () => {
+    const { beginAiActivity, endAiActivity } = state();
+
+    beginAiActivity("thinking");
+    beginAiActivity("thinking");
+    expect(state().aiActivity.thinking).toBe(2);
+    expect(selectDodiThinking(state())).toBe(true);
+
+    endAiActivity("thinking");
+    expect(state().aiActivity.thinking).toBe(1);
+    expect(selectDodiThinking(state())).toBe(true); // second call still in flight
+
+    endAiActivity("thinking");
+    expect(state().aiActivity.thinking).toBe(0);
+    expect(selectDodiThinking(state())).toBe(false);
+  });
+
+  it("clamps an unbalanced end at zero (never negative)", () => {
+    state().endAiActivity("image");
+    expect(state().aiActivity.image).toBe(0);
+    expect(selectDodiThinking(state())).toBe(false);
+  });
+
+  it("selectDodiActivityKind prioritizes image copy over thinking", () => {
+    const { beginAiActivity } = state();
+    expect(selectDodiActivityKind(state())).toBeNull();
+
+    beginAiActivity("thinking");
+    expect(selectDodiActivityKind(state())).toBe("thinking");
+
+    beginAiActivity("image");
+    expect(selectDodiActivityKind(state())).toBe("image"); // image wins when both active
+  });
+
+  it("shows the thinking state while read_game_state analysis is in flight, then clears it", async () => {
+    useDodiSessionStore.getState().setOnRunCommands(vi.fn());
+    resolveThinkingSpy.mockResolvedValue({
+      provider: "gemini",
+      model: "gemini-3.5-flash",
+      apiKey: "vault-key",
+    });
+    let resolveAnalysis!: (v: string) => void;
+    analyzeSpy.mockReturnValueOnce(
+      new Promise<string>((r) => {
+        resolveAnalysis = r;
+      }),
+    );
+
+    useDodiSessionStore.setState({
+      state: "disconnected",
+      context: {
+        type: "game",
+        gameId: "g1",
+        markdown: "",
+        codeBundle: "",
+        gameState: {},
+        capabilities: ["get_snapshot"],
+      },
+    });
+    await useDodiSessionStore.getState().connect(PID);
+    await flush();
+    fire({ type: "setupComplete" });
+    await flush();
+
+    fire({ type: "toolCall", id: "call-a", name: "read_game_state", args: { question: "What did I draw?" } });
+    await flush();
+
+    // Provider call is parked → the companion is "thinking" the whole time.
+    expect(selectDodiThinking(state())).toBe(true);
+    expect(selectDodiActivityKind(state())).toBe("thinking");
+
+    resolveAnalysis("You drew a heart!");
+    await flush();
+
+    // Analysis done → thinking state cleared even without any manual toggle.
+    expect(selectDodiThinking(state())).toBe(false);
   });
 });

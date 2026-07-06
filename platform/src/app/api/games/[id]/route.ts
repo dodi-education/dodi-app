@@ -12,11 +12,7 @@ import {
   updateCustomGame,
 } from "@/services/games";
 import { getKid } from "@/services/kids";
-import { mapSuccessDefinition } from "@/lib/game-generation";
 import { getTranslation, applyTranslation } from "@/services/game-translations";
-import { createLogger } from "@/logger";
-
-const log = createLogger("game-update");
 
 const UpdateGameSchema = z.object({
   title: z.string().min(1).max(120).optional(),
@@ -30,6 +26,12 @@ const UpdateGameSchema = z.object({
   metadata: z.record(z.string(), z.unknown()).optional(),
   learning_goal: z.string().max(2000).optional(),
   success_definition: z.string().max(2000).optional(),
+  // The client maps the success definition to structured criteria in the browser
+  // (BYOK: the provider key never reaches the server) and sends the result here.
+  success_criteria: z.record(z.string(), z.unknown()).optional(),
+  progress_kind: z.enum(["goal", "open"]).optional(),
+  // enc:v1: sealed studio conversation transcript (server stays blind).
+  agent_transcript_enc: z.string().nullable().optional(),
   kid_id: z.string().uuid().nullable().optional(),
   is_active: z.boolean().optional(),
   audience: z
@@ -38,12 +40,6 @@ const UpdateGameSchema = z.object({
       audienceIds: z.array(z.string().uuid()),
     })
     .optional(),
-  // Vault-decrypted thinking key + provider/model, supplied by the client only
-  // when a `success_definition` change needs re-mapping to structured criteria.
-  // The server cannot decrypt the key itself (E2EE), so it relies on these.
-  apiKey: z.string().min(1).optional(),
-  provider: z.enum(["gemini", "openai", "anthropic", "xai"]).optional(),
-  model: z.string().min(1).optional(),
 });
 
 interface RouteContext {
@@ -126,7 +122,12 @@ export async function PATCH(
 
     // `audience` lives in the game_sharings table; `metadata` is a column that
     // we shallow-merge. `is_active` / `kid_id` flow through as plain columns.
-    const { audience, metadata: rawMetadata, ...columnUpdates } = parsed.data;
+    const {
+      audience,
+      metadata: rawMetadata,
+      success_criteria: rawCriteria,
+      ...columnUpdates
+    } = parsed.data;
     const updates: GameUpdate = { ...columnUpdates };
 
     if (rawMetadata !== undefined) {
@@ -137,38 +138,15 @@ export async function PATCH(
       updates.metadata = { ...existingMeta, ...rawMetadata } as GameUpdate["metadata"];
     }
 
-    if (updates.code_bundle) {
-      updates.code_bundle = sanitizeGameBundle(updates.code_bundle).code;
+    // The structured success criteria are mapped client-side (the provider key
+    // that drives the mapping lives only in the unlocked vault) and arrive as a
+    // plain object; progress_kind flows through as a plain column.
+    if (rawCriteria !== undefined) {
+      updates.success_criteria = rawCriteria as unknown as Json;
     }
 
-    // When the success definition changes, re-derive the structured criteria so
-    // the host can evaluate it — without regenerating the game code. Mapping a
-    // non-empty definition needs the vault-decrypted thinking key the client
-    // supplies; absent it, persist the text and leave the criteria unchanged.
-    if (parsed.data.success_definition !== undefined) {
-      const model =
-        parsed.data.apiKey && parsed.data.provider && parsed.data.model
-          ? {
-              providerId: parsed.data.provider,
-              modelId: parsed.data.model,
-              apiKey: parsed.data.apiKey,
-            }
-          : null;
-      try {
-        const mapped = await mapSuccessDefinition(
-          model,
-          parsed.data.success_definition,
-          { learningGoal: parsed.data.learning_goal ?? existing.learning_goal },
-        );
-        updates.success_criteria = mapped.successCriteria as unknown as Json;
-        updates.progress_kind = mapped.progressKind;
-      } catch (mapErr) {
-        // Persist the text even if mapping fails; criteria stay as-is.
-        log.warn("success_mapping_failed", {
-          gameId: id,
-          error: mapErr instanceof Error ? mapErr.message : "unknown",
-        });
-      }
+    if (updates.code_bundle) {
+      updates.code_bundle = sanitizeGameBundle(updates.code_bundle).code;
     }
 
     const game =

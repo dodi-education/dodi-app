@@ -20,6 +20,7 @@ import { useProvidersStore } from "@/stores/providers-store";
 import { useVaultStore } from "@/stores/vault-store";
 import type { AccountModelConfig } from "@dodi/types/ai";
 import type { Game, Persona } from "@dodi/types/database";
+import type { GameMetadata } from "@dodi/types/games";
 
 export interface VoiceSessionConfig extends GeminiLiveConfig {
   isBirthday?: boolean;
@@ -123,6 +124,8 @@ export async function buildGameVoiceConfig(
   const gameRes = await dodi.request(`/api/games/${gameId}`);
   if (!gameRes.ok) throw new Error("Game not found");
   const game = (await gameRes.json()) as Game;
+  const capabilities =
+    (game.metadata as unknown as GameMetadata | null)?.capabilities ?? [];
 
   const { systemInstruction, tools } = buildGameVoiceContext({
     personaSoul: persona.soul,
@@ -136,6 +139,7 @@ export async function buildGameVoiceConfig(
     gameMarkdown: game.markdown,
     gameCodeBundle: game.code_bundle,
     gameState,
+    capabilities,
   });
 
   return {

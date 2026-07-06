@@ -13,6 +13,11 @@
     "./memory-prompt": "./src/memory-prompt.ts",
     "./dodi-context": "./src/dodi-context.ts",
     "./learning-context": "./src/learning-context.ts",
+    "./game-agent": "./src/game-agent.ts",
+    "./game-agent-tools": "./src/game-agent-tools.ts",
+    "./game-agent-prompt": "./src/game-agent-prompt.ts",
+    "./game-analysis": "./src/game-analysis.ts",
+    "./success-mapping": "./src/success-mapping.ts",
     "./thinking-providers/factory": "./src/thinking-providers/factory.ts",
     "./thinking-providers/anthropic": "./src/thinking-providers/anthropic.ts",
     "./thinking-providers/gemini": "./src/thinking-providers/gemini.ts",
@@ -29,6 +34,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",
+    "@dodi/games": "workspace:*",
     "@dodi/intl": "workspace:*",
     "@dodi/types": "workspace:*",
     "@google/generative-ai": "^0.24.1"

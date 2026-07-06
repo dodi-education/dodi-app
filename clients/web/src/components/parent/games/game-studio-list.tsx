@@ -1,9 +1,6 @@
 "use client";
 
-import { dodi } from "@/lib/api";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 
 import { Icon } from "@/components/shared/icon";
@@ -35,66 +32,18 @@ function editedKey(iso: string): { key: EditedKey; values?: Record<string, numbe
   return { key: "editedWeeksAgo", values: { weeks: Math.floor(days / 7) } };
 }
 
-const POLL_MS = 4000;
-
 /**
- * Renders the studio's game list with live "Dodi is building…" badges. The
- * server provides the initial active set; we keep it fresh by polling the
- * account's active agent sessions, and refresh the route when a build finishes
- * so the row reflects the newly-built game.
+ * Renders the studio's game list. Builds now run inside the studio tab itself
+ * (client-side), so there is no cross-page "building" state to track here.
  */
-export function GameStudioList({
-  items,
-  activeGameIds,
-}: {
-  items: GameListItem[];
-  activeGameIds: string[];
-}) {
+export function GameStudioList({ items }: { items: GameListItem[] }) {
   const t = useTranslations("gameStudio");
-  const router = useRouter();
-  const [activeIds, setActiveIds] = useState<Set<string>>(() => new Set(activeGameIds));
-  const activeRef = useRef<Set<string>>(new Set(activeGameIds));
-
-  useEffect(() => {
-    let cancelled = false;
-    const timer = setInterval(() => {
-      void (async () => {
-        try {
-          const res = await dodi.request("/api/agent/sessions?status=active&limit=100");
-          if (!res.ok) return;
-          const sessions = (await res.json()) as Array<{ game_id: string | null }>;
-          if (cancelled) return;
-          const next = new Set<string>();
-          for (const s of sessions) if (s.game_id) next.add(s.game_id);
-
-          // A task that was building is no longer active → pull fresh row data.
-          let finished = false;
-          for (const id of activeRef.current) {
-            if (!next.has(id)) {
-              finished = true;
-              break;
-            }
-          }
-          activeRef.current = next;
-          setActiveIds(next);
-          if (finished) router.refresh();
-        } catch {
-          /* ignore transient poll errors */
-        }
-      })();
-    }, POLL_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
-  }, [router]);
 
   return (
     <>
       {items.map((g) => {
         const primaryTag = g.tags[0] ?? "";
         const s = tagStyle(primaryTag);
-        const building = activeIds.has(g.id);
         const e = editedKey(g.updatedAt);
         return (
           <Link
@@ -119,12 +68,7 @@ export function GameStudioList({
                     {capitalize(primaryTag)}
                   </span>
                 )}
-                {building ? (
-                  <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-semibold text-primary">
-                    <span className="h-[7px] w-[7px] animate-pulse rounded-full bg-primary" />
-                    {t("building")}
-                  </span>
-                ) : g.isActive ? (
+                {g.isActive ? (
                   <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-semibold text-primary">
                     <span className="h-[7px] w-[7px] rounded-full bg-primary" />
                     {t("active")}

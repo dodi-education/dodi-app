@@ -1,8 +1,6 @@
 // Manual database types — will be replaced with auto-generated types
 // once a Supabase project is created and `npx supabase gen types typescript` is run.
 
-import type { ProgressKind, SuccessCriteria } from "./success";
-
 export type Json =
   | string
   | number
@@ -253,6 +251,8 @@ export interface Database {
           metadata: Json;
           is_active: boolean;
           created_by: "system" | "parent" | "kid";
+          /** enc:v1: sealed JSON of the studio conversation (user + dodi messages); server-blind. */
+          agent_transcript_enc: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -278,6 +278,7 @@ export interface Database {
           metadata?: Json;
           is_active?: boolean;
           created_by?: "system" | "parent" | "kid";
+          agent_transcript_enc?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -303,6 +304,7 @@ export interface Database {
           metadata?: Json;
           is_active?: boolean;
           created_by?: "system" | "parent" | "kid";
+          agent_transcript_enc?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -407,60 +409,6 @@ export interface Database {
           description?: string;
           created_at?: string;
           updated_at?: string;
-        };
-        Relationships: [];
-      };
-      agent_sessions: {
-        Row: {
-          id: string;
-          account_id: string;
-          kid_id: string;
-          task_type: string;
-          task_prompt: string;
-          dodi_context: string;
-          status: string;
-          progress: string;
-          result: Json | null;
-          error: string | null;
-          game_id: string | null;
-          created_at: string;
-          updated_at: string;
-          finished_at: string | null;
-          deactivated_at: string | null;
-        };
-        Insert: {
-          id?: string;
-          account_id: string;
-          kid_id: string;
-          task_type: string;
-          task_prompt?: string;
-          dodi_context?: string;
-          status?: string;
-          progress?: string;
-          result?: Json | null;
-          error?: string | null;
-          game_id?: string | null;
-          created_at?: string;
-          updated_at?: string;
-          finished_at?: string | null;
-          deactivated_at?: string | null;
-        };
-        Update: {
-          id?: string;
-          account_id?: string;
-          kid_id?: string;
-          task_type?: string;
-          task_prompt?: string;
-          dodi_context?: string;
-          status?: string;
-          progress?: string;
-          result?: Json | null;
-          error?: string | null;
-          game_id?: string | null;
-          created_at?: string;
-          updated_at?: string;
-          finished_at?: string | null;
-          deactivated_at?: string | null;
         };
         Relationships: [];
       };
@@ -748,28 +696,3 @@ export type GameSharingUpdate =
   Database["public"]["Tables"]["game_sharings"]["Update"];
 export type GameTranslation =
   Database["public"]["Tables"]["game_translations"]["Row"];
-
-export type AgentSessionRow =
-  Database["public"]["Tables"]["agent_sessions"]["Row"];
-export type AgentSessionInsert =
-  Database["public"]["Tables"]["agent_sessions"]["Insert"];
-export type AgentSessionUpdate =
-  Database["public"]["Tables"]["agent_sessions"]["Update"];
-
-/** Shape of the `result` JSONB column on agent_sessions. */
-export interface AgentSessionResult {
-  title: string;
-  description: string;
-  tags: string[];
-  codeBundle: string;
-  markdown: string;
-  metadata: Record<string, unknown>;
-  learningGoal: string;
-  successDefinition: string;
-  successCriteria: SuccessCriteria;
-  progressKind: ProgressKind;
-  /** Short, friendly recap of what the agent built or changed (bullet lines). */
-  changeSummary: string;
-  validationPassed: boolean;
-  iterationCount: number;
-}

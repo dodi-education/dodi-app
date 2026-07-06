@@ -510,18 +510,34 @@ parent-defined goal — and, in future, generate challenges like "Solve 3 math g
 
 ## TODO
 
+- Split drawing game
+ - Current drawing game: When requested to draw something, it should create 2d drawings freely
+ - New mandala game: Same interface as drawing game but when asked to draw something it should always create mandalas (current functionality)
+ - Add a game_preview_image (small preview image), static for system games, otherwise created after each game creation / edit process as screenshot
+ 
+ - Add pricing
+  - Add to landing page and onboarding flow
+  - Track token usage
+  - Add "Usage & cost" item under "Activity" in parent view where we want to display token usage over time and cost including summary per month etc. 
+
+- Optimize read_game_state -> Add new config category "Game generation"
+  - Trim payload: Stop sending the full game HTML/markdown to the vision model for read_game_state; the image + a short state summary is enough. Fewer input tokens
+
 - Optimize number of api calls
 - Onboarding wizard (Password, Seed phrase, PIN (skipable))
 
-- Add specific drawing ai provider
-- Enhance drawing game to create images with nano banana (specifically mandalas and coloring sheets)
+- Game snapshots: Allow taking a snapshot which persists a screenshot, together with the logical game state as metadata. The idea is that kids can share snapshots to share their pictures and also saved games (e.g. to show a parent a special achievement). Games can load the snapshot which reproduces the game state.
 
 - Let kids draw their own avatars
-- Game state analysis via screenshot (attach screenshots to game-state <> dodi exchange). This would allow fun features like asking dodi to guess what has been drawn in the drawing game.
 - Daily challenges UI: let Dodi generate + track challenges on top of `game_plays` (foundation is in place).
 - Allow games to connect with AI provider for in-game content generation (e.g. for texts, calculations, formulas etc.)
 
-- New default games:
+- Game library for parents
+ - Allow parents to publish to games lib
+ - Publication needs to go through specific harness (Filter out harmful/adult content, secret keys, personal infos, ...)
+ - Report inappropriate content system
+
+- New system games:
   - Reading: Generate short stories, let kid read the text, then ask questions about the text.
   - Writing / Reading: Divide generated sentences into text blocks which are randomly laid out. Kid must put the blocks into correct order and read the sentence.
   - Math tower: Dodi must climb a tower, tower is sinking into water, kid must solve calculation to jump to upper floor, before water reaches the current floor. 10 calculations per level, each level creates harder calculations. At the top, dodi reaches a hot air ballon where she can jump in and fly away. E.g.:

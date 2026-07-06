@@ -3,9 +3,10 @@
  * (browser + node), prompt + context builders. Consumed by web (browser
  * thinking/voice) and the agent (node jobs). Subpath exports mirror the files.
  *
- * Deferred (still in web/platform until consumed): the game-generation agent
- * loop (agent-session/agent-tools/agent-system-prompt/agent-validator) and the
- * pure consolidateMemory extraction — both land when the agent jobs need them.
+ * The browser-side game agent lives here too (subpath exports: game-agent,
+ * game-agent-tools, game-agent-prompt, game-analysis, success-mapping) so game
+ * creation + game-state analysis run fully client-side with the vault key —
+ * imported by subpath, not re-exported here, to keep the root import lean.
  */
 export * from "./providers";
 export * from "./thinking-config";

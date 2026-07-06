@@ -12,6 +12,7 @@ import {
   coerceSuccessCriteria,
 } from "@dodi/games/game-spec";
 import type { Game } from "@dodi/types/database";
+import type { GameMetadata } from "@dodi/types/games";
 
 export default function GamePlayPage() {
   const params = useParams<{ id: string }>();
@@ -103,6 +104,7 @@ export default function GamePlayPage() {
       successDefinition={game.success_definition}
       successCriteria={coerceSuccessCriteria(game.success_criteria)}
       progressKind={coerceProgressKind(game.progress_kind)}
+      capabilities={(game.metadata as unknown as GameMetadata | null)?.capabilities ?? []}
     />
   );
 }

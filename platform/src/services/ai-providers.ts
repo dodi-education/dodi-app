@@ -137,25 +137,6 @@ export async function getModelConfig(
   return (data.model_config as unknown as AccountModelConfig) ?? null;
 }
 
-/**
- * Normalize old config shape (gameProvider/gameModel) to new shape
- * (thinkingProvider/thinkingModel). Applied at read time — no SQL migration needed.
- */
-export function normalizeModelConfig(config: AccountModelConfig): AccountModelConfig {
-  if (config.thinkingProvider) return config;
-
-  // Migrate old gameProvider/gameModel to thinkingProvider/thinkingModel
-  if (config.gameProvider || config.gameModel) {
-    return {
-      ...config,
-      thinkingProvider: config.thinkingProvider ?? config.gameProvider,
-      thinkingModel: config.thinkingModel ?? config.gameModel,
-    };
-  }
-
-  return config;
-}
-
 export async function updateModelConfig(
   supabase: Client,
   accountId: string,

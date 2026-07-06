@@ -119,6 +119,8 @@ Structured relational schemas remain correct for **operational data** — accoun
 
 ## AI Provider Abstraction
 
+AI providers should always be abstract. The user should be able to switch AI providers for each category (e.g. Voice, Image generation, Thinking, etc.). At some point it should also be possible to provide open models, running on local user hardware.
+
 ### Interface
 All AI providers implement a common interface:
 
@@ -138,10 +140,10 @@ interface AIProvider {
 - `src/lib/ai/router.ts` selects the correct provider based on the parent's configuration
 - Dodi chat uses the voice-capable model configured for the profile
 - Game generation uses the game model configured for the account
-- All AI calls go through API routes — never call AI providers from client-side code
+- Anthropic models can be directly called client-side.
 
 ### API Key Handling
-- Keys are decrypted server-side only in API route handlers
+- Keys, like other encrypted data, should always be decrypted client-side
 - Keys are passed to provider adapters in-memory, never logged or serialized
 - Provider adapters do not store keys between requests
 
@@ -149,9 +151,14 @@ interface AIProvider {
 
 ## Security Guidelines
 
+We want to ensure server blindness via end-to-end encryption and running AI calls client side.
+At a a later stage, we also want to provide the possibility to choose between two setups:
+1. BYOK: Bring your own key, for tech/ai savy people (free/cheap). In the BYOK (default) scenario we MUST ensure provider blindness as this is a key promise for the user. This means, no client secrets are transferred to our server (not even transitory)
+2. Hosted: We (dodi company) provides temporary, isolated keys (monthly subscription or pay for token usage)
+
 ### API Keys
 - End-to-end encrypted: keys are sealed **client-side** under the account vault key and stored in Supabase as a single opaque blob (`accounts.encrypted_api_keys`). The server stores/returns it verbatim and can never decrypt it.
-- The provider key is decrypted only in the unlocked browser vault. Server flows that need it (agent tasks, success-criteria mapping) receive it from the client per-request — there is no server-side decryption path or shared encryption secret.
+- The provider key is decrypted only in the unlocked browser vault. 
 - Never include in client bundles, logs, or error messages
 
 ### Game Sandboxing

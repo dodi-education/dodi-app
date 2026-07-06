@@ -2,10 +2,12 @@
  * Static validation of AI-generated game code.
  *
  * Checks that the code bundle is safe for sandbox execution and
- * correctly implements the bridge protocol.
+ * correctly implements the bridge protocol. Pure + isomorphic — runs in the
+ * browser agent loop (client-side generation) and anywhere else.
  */
 
-import type { MetricKey, ProgressKind } from "@dodi/games/success";
+import type { MetricKey, ProgressKind } from "./success";
+import { STANDARD_TOOLS_BY_NAME } from "./toolbox";
 
 const MAX_BUNDLE_BYTES = 200 * 1024;
 
@@ -19,6 +21,8 @@ export interface ValidateGameOptions {
   progressKind?: ProgressKind;
   /** Metric keys the game's success criteria depend on. */
   requiredMetrics?: MetricKey[];
+  /** Standardized commands the game declared — checked ⊆ registry + present in code. */
+  capabilities?: string[];
 }
 
 const BLOCKED_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
@@ -89,6 +93,21 @@ export function validateGameCode(
       if (!new RegExp(`\\b${metric}\\b`).test(code)) {
         errors.push(`Goal game must report the '${metric}' metric required by its success criteria`);
       }
+    }
+  }
+
+  // Standardized capabilities: each declared command must be in the registry and
+  // (best-effort) implemented in the code's bridge handler.
+  for (const cap of options?.capabilities ?? []) {
+    const tool = STANDARD_TOOLS_BY_NAME[cap];
+    if (!tool || !tool.declarable) {
+      errors.push(`Unknown capability '${cap}' — use only the standard command vocabulary`);
+      continue;
+    }
+    // generate_drawing is client-intercepted: the game implements set_generated_image.
+    const needle = tool.kind === "client" ? "set_generated_image" : cap;
+    if (!code.includes(needle)) {
+      errors.push(`Declares capability '${cap}' but the code has no '${needle}' handler`);
     }
   }
 

@@ -42,6 +42,7 @@ import { useProvidersStore } from "@/stores/providers-store";
 import type { AIProviderId, AccountModelConfig } from "@dodi/types/ai";
 
 const THINKING_PROVIDER_NONE = "__none__";
+const GAME_PROVIDER_NONE = "__none__";
 const IMAGE_PROVIDER_NONE = "__none__";
 
 export function AIProviderConfig() {
@@ -70,6 +71,8 @@ export function AIProviderConfig() {
   const [voiceName, setVoiceName] = useState("");
   const [thinkingProvider, setThinkingProvider] = useState<AIProviderId | "">("");
   const [thinkingModel, setThinkingModel] = useState("");
+  const [gameProvider, setGameProvider] = useState<AIProviderId | "">("");
+  const [gameModel, setGameModel] = useState("");
   const [imageProvider, setImageProvider] = useState<AIProviderId | "">("");
   const [imageModel, setImageModel] = useState("");
   const [configSaving, setConfigSaving] = useState(false);
@@ -88,8 +91,10 @@ export function AIProviderConfig() {
             setVoiceProvider(cfg.voiceProvider);
             setVoiceModel(cfg.voiceModel);
             setVoiceName(cfg.voiceName);
-            setThinkingProvider(cfg.thinkingProvider ?? cfg.gameProvider ?? "");
-            setThinkingModel(cfg.thinkingModel ?? cfg.gameModel ?? "");
+            setThinkingProvider(cfg.thinkingProvider ?? "");
+            setThinkingModel(cfg.thinkingModel ?? "");
+            setGameProvider(cfg.gameProvider ?? "");
+            setGameModel(cfg.gameModel ?? "");
             setImageProvider(cfg.imageProvider ?? "");
             setImageModel(cfg.imageModel ?? "");
           }
@@ -214,6 +219,8 @@ export function AIProviderConfig() {
           voiceName,
           thinkingProvider: thinkingProvider || undefined,
           thinkingModel: thinkingProvider ? thinkingModel : undefined,
+          gameProvider: gameProvider || undefined,
+          gameModel: gameProvider ? gameModel : undefined,
           imageProvider: imageProvider || undefined,
           imageModel: imageProvider ? imageModel : undefined,
         }),
@@ -223,6 +230,8 @@ export function AIProviderConfig() {
         const data: AccountModelConfig = await res.json();
         setThinkingProvider(data.thinkingProvider ?? "");
         setThinkingModel(data.thinkingModel ?? "");
+        setGameProvider(data.gameProvider ?? "");
+        setGameModel(data.gameModel ?? "");
         setImageProvider(data.imageProvider ?? "");
         setImageModel(data.imageModel ?? "");
         setConfigSaved(true);
@@ -239,6 +248,7 @@ export function AIProviderConfig() {
 
   const activeProviderDef = AI_PROVIDERS.find((p) => p.id === voiceProvider);
   const activeThinkingProviderDef = AI_PROVIDERS.find((p) => p.id === thinkingProvider);
+  const activeGameProviderDef = AI_PROVIDERS.find((p) => p.id === gameProvider);
   const activeImageProviderDef = AI_PROVIDERS.find((p) => p.id === imageProvider);
 
   if (loading) {
@@ -467,7 +477,7 @@ export function AIProviderConfig() {
             )}
           </Section>
 
-          <Section title={t("thinkingModel")}>
+          <Section title={t("thinkingModel")} desc={t("thinkingModelDescription")}>
             <FieldRow label={t("thinkingProvider")}>
               <Select
                 value={thinkingProvider || THINKING_PROVIDER_NONE}
@@ -516,6 +526,66 @@ export function AIProviderConfig() {
                   <SelectContent>
                     {activeThinkingProviderDef.models
                       .filter((model) => model.capabilities.includes("thinking"))
+                      .map((model) => (
+                        <SelectItem key={model.id} value={model.id}>
+                          {model.name}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </FieldRow>
+            ) : null}
+          </Section>
+
+          <Section title={t("gameConfig")} desc={t("gameConfigDescription")}>
+            <FieldRow label={t("gameProvider")}>
+              <Select
+                value={gameProvider || GAME_PROVIDER_NONE}
+                onValueChange={(value) => {
+                  if (value === GAME_PROVIDER_NONE) {
+                    setGameProvider("");
+                    setGameModel("");
+                    return;
+                  }
+                  const providerId = value as AIProviderId;
+                  setGameProvider(providerId);
+                  const providerDef = AI_PROVIDERS.find((provider) => provider.id === providerId);
+                  const defaultModel = providerDef?.models.find((model) =>
+                    model.capabilities.includes("agentic"),
+                  );
+                  setGameModel(defaultModel?.id ?? "");
+                }}
+              >
+                <SelectTrigger className="w-full sm:w-[260px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={GAME_PROVIDER_NONE}>
+                    {t("gameProviderFallback")}
+                  </SelectItem>
+                  {providers
+                    .filter((provider) => {
+                      const def = AI_PROVIDERS.find((p) => p.id === provider.id);
+                      return def?.supportsAgentic;
+                    })
+                    .map((provider) => (
+                      <SelectItem key={provider.id} value={provider.id}>
+                        {provider.name}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </FieldRow>
+
+            {gameProvider && activeGameProviderDef ? (
+              <FieldRow label={t("gameModel")}>
+                <Select value={gameModel} onValueChange={setGameModel}>
+                  <SelectTrigger className="w-full sm:w-[260px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {activeGameProviderDef.models
+                      .filter((model) => model.capabilities.includes("agentic"))
                       .map((model) => (
                         <SelectItem key={model.id} value={model.id}>
                           {model.name}
@@ -595,6 +665,7 @@ export function AIProviderConfig() {
                   !voiceName ||
                   configSaving ||
                   (Boolean(thinkingProvider) && !thinkingModel) ||
+                  (Boolean(gameProvider) && !gameModel) ||
                   (Boolean(imageProvider) && !imageModel)
                 }
                 className="cursor-pointer"
