@@ -11,8 +11,16 @@
  */
 import Anthropic from "@anthropic-ai/sdk";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import type OpenAI from "openai";
 
 import type { AIProviderId } from "@dodi/types/ai";
+import type { TokenUsage } from "@dodi/types/usage";
+
+import { createXaiClient } from "./xai";
+import { anthropicUsage, geminiUsage, xaiUsage } from "./usage-map";
+
+/** Fired after each underlying model call with that call's token usage. */
+export type UsageSink = (usage: TokenUsage) => void;
 
 export interface ThinkingProvider {
   generateJson(system: string, prompt: string): Promise<Record<string, unknown>>;
@@ -27,10 +35,12 @@ function stripJsonFences(text: string): string {
 class GeminiClientThinking implements ThinkingProvider {
   #client: GoogleGenerativeAI;
   #model: string;
+  #onUsage?: UsageSink;
 
-  constructor(apiKey: string, model: string) {
+  constructor(apiKey: string, model: string, onUsage?: UsageSink) {
     this.#client = new GoogleGenerativeAI(apiKey);
     this.#model = model;
+    this.#onUsage = onUsage;
   }
 
   async generateJson(system: string, prompt: string): Promise<Record<string, unknown>> {
@@ -40,6 +50,7 @@ class GeminiClientThinking implements ThinkingProvider {
       generationConfig: { responseMimeType: "application/json" },
     });
     const res = await model.generateContent(prompt);
+    this.#onUsage?.(geminiUsage(res.response.usageMetadata));
     const parsed: unknown = JSON.parse(stripJsonFences(res.response.text()));
     if (typeof parsed !== "object" || parsed === null) {
       throw new Error("Gemini did not return a JSON object");
@@ -53,6 +64,7 @@ class GeminiClientThinking implements ThinkingProvider {
       systemInstruction: system,
     });
     const res = await model.generateContent(prompt);
+    this.#onUsage?.(geminiUsage(res.response.usageMetadata));
     return res.response.text().trim();
   }
 }
@@ -60,10 +72,12 @@ class GeminiClientThinking implements ThinkingProvider {
 class AnthropicClientThinking implements ThinkingProvider {
   #client: Anthropic;
   #model: string;
+  #onUsage?: UsageSink;
 
-  constructor(apiKey: string, model: string) {
+  constructor(apiKey: string, model: string, onUsage?: UsageSink) {
     this.#client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
     this.#model = model;
+    this.#onUsage = onUsage;
   }
 
   async #text(system: string, prompt: string): Promise<string> {
@@ -73,6 +87,7 @@ class AnthropicClientThinking implements ThinkingProvider {
       system,
       messages: [{ role: "user", content: prompt }],
     });
+    this.#onUsage?.(anthropicUsage(res.usage));
     const block = res.content.find((b) => b.type === "text");
     return block && block.type === "text" ? block.text.trim() : "";
   }
@@ -94,16 +109,62 @@ class AnthropicClientThinking implements ThinkingProvider {
   }
 }
 
+class XaiClientThinking implements ThinkingProvider {
+  #client: OpenAI;
+  #model: string;
+  #onUsage?: UsageSink;
+
+  constructor(apiKey: string, model: string, onUsage?: UsageSink) {
+    this.#client = createXaiClient(apiKey, true);
+    this.#model = model;
+    this.#onUsage = onUsage;
+  }
+
+  async #text(system: string, prompt: string, jsonMode: boolean): Promise<string> {
+    const res = await this.#client.chat.completions.create({
+      model: this.#model,
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: prompt },
+      ],
+      ...(jsonMode ? { response_format: { type: "json_object" as const } } : {}),
+    });
+    this.#onUsage?.(xaiUsage(res.usage));
+    return res.choices[0]?.message?.content?.trim() ?? "";
+  }
+
+  async generateJson(system: string, prompt: string): Promise<Record<string, unknown>> {
+    // json_object mode requires the word "json" in the prompt (OpenAI contract).
+    const text = await this.#text(
+      `${system}\n\nRespond with a single JSON object and nothing else.`,
+      prompt,
+      true,
+    );
+    const parsed: unknown = JSON.parse(stripJsonFences(text));
+    if (typeof parsed !== "object" || parsed === null) {
+      throw new Error("xAI did not return a JSON object");
+    }
+    return parsed as Record<string, unknown>;
+  }
+
+  generateText(system: string, prompt: string): Promise<string> {
+    return this.#text(system, prompt, false);
+  }
+}
+
 export function createClientThinkingProvider(
   providerId: AIProviderId,
   apiKey: string,
   model: string,
+  onUsage?: UsageSink,
 ): ThinkingProvider {
   switch (providerId) {
     case "gemini":
-      return new GeminiClientThinking(apiKey, model);
+      return new GeminiClientThinking(apiKey, model, onUsage);
     case "anthropic":
-      return new AnthropicClientThinking(apiKey, model);
+      return new AnthropicClientThinking(apiKey, model, onUsage);
+    case "xai":
+      return new XaiClientThinking(apiKey, model, onUsage);
     default:
       throw new Error(`Provider "${providerId}" is not supported for client-side thinking`);
   }

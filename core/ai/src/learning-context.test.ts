@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildLearningContext,
   LEARNING_CONTEXT_CHARS_PER_KID,
+  LEARNING_CONTEXT_MAX_TOTAL_CHARS,
   type LearningContextKid,
 } from "./learning-context";
 
@@ -79,5 +80,18 @@ describe("buildLearningContext", () => {
     // Clipped body is exactly the cap length (plus the ellipsis).
     expect(out).toContain("x".repeat(LEARNING_CONTEXT_CHARS_PER_KID));
     expect(out).not.toContain("x".repeat(LEARNING_CONTEXT_CHARS_PER_KID + 1));
+  });
+
+  it("caps the total assembled context across many family kids", () => {
+    const kids: LearningContextKid[] = Array.from({ length: 10 }, (_, i) => ({
+      id: `k${i}`,
+      memory: "m".repeat(LEARNING_CONTEXT_CHARS_PER_KID),
+      parent_notes: null,
+    }));
+    const out = buildLearningContext(kids, { isFamily: true, audienceIds: [] }, "k0");
+    expect(out).toBeDefined();
+    // clip() adds a single "…" when it truncates, so cap + 1 is the ceiling.
+    expect(out!.length).toBeLessThanOrEqual(LEARNING_CONTEXT_MAX_TOTAL_CHARS + 1);
+    expect(out).toContain("…");
   });
 });

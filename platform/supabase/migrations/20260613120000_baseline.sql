@@ -31,13 +31,8 @@ CREATE EXTENSION IF NOT EXISTS "supabase_vault" WITH SCHEMA "vault";
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA "extensions";
 
 
-CREATE TYPE "public"."subscription_tier" AS ENUM (
-    'free',
-    'premium'
-);
-
-
-ALTER TYPE "public"."subscription_tier" OWNER TO "postgres";
+-- (subscription_tier enum removed — accounts.subscribed_plan is a text plan handle
+--  referencing platform_plans.handle; entitlements are copied onto the account.)
 
 
 CREATE OR REPLACE FUNCTION "public"."handle_new_user"() RETURNS "trigger"
@@ -122,14 +117,19 @@ CREATE TABLE IF NOT EXISTS "public"."accounts" (
     "email" "text" NOT NULL,
     "encrypted_api_keys" "jsonb",
     "model_config" "jsonb",
-    "subscription_tier" "public"."subscription_tier" DEFAULT 'free'::"public"."subscription_tier" NOT NULL,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "vault_keys" "jsonb",
     "date_preferences" "jsonb",
     "language" "text" DEFAULT 'en'::"text" NOT NULL,
     "parent_pin_enc" "text",
-    "notification_preferences" "jsonb" DEFAULT '{"friend_approval_email": true}'::"jsonb" NOT NULL
+    "notification_preferences" "jsonb" DEFAULT '{"friend_approval_email": true}'::"jsonb" NOT NULL,
+    "subscribed_plan" "text" DEFAULT 'free'::"text" NOT NULL,
+    "max_kids" integer DEFAULT 1 NOT NULL,
+    "max_custom_personas" integer DEFAULT 1 NOT NULL,
+    "max_snapshots_per_kid" integer DEFAULT 25 NOT NULL,
+    "memory_tier" "text" DEFAULT 'basic'::"text" NOT NULL,
+    CONSTRAINT "accounts_memory_tier_check" CHECK (("memory_tier" = ANY (ARRAY['basic'::"text", 'advanced'::"text", 'full'::"text"])))
 );
 
 
@@ -235,6 +235,45 @@ CREATE TABLE IF NOT EXISTS "public"."game_plays" (
 ALTER TABLE "public"."game_plays" OWNER TO "postgres";
 
 
+-- Append-only AI usage ledger. One row per client-side AI provider call (plus
+-- voice active-minute cycles). Token counts + model/provider + measured context
+-- sizes only (meta_*) — never prompt/response content, so it stays provider-blind.
+-- Cost is NOT tracked (BYOK: the provider's own dashboards are the source of truth
+-- for money). No updated_at / no UPDATE|DELETE policy: rows are immutable facts.
+-- kid_id/game_id SET NULL on delete so usage history survives profile/game removal.
+CREATE TABLE IF NOT EXISTS "public"."usage_events" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "account_id" "uuid" NOT NULL,
+    "kid_id" "uuid",
+    "game_id" "uuid",
+    "event_type" "text" NOT NULL,
+    "provider" "text" NOT NULL,
+    "model" "text" NOT NULL,
+    "input_tokens" integer,
+    "output_tokens" integer,
+    "cache_write_tokens" integer,
+    "cache_read_tokens" integer,
+    "voice_seconds" integer,
+    -- Client-measured context/output sizes per call (chars/counts), one column
+    -- per component so we can track how they evolve across users over time.
+    "meta_turns" integer,
+    "meta_validation_retries" integer,
+    "meta_output_chars" integer,
+    "meta_memory_chars" integer,
+    "meta_parent_notes_chars" integer,
+    "meta_learning_goal_chars" integer,
+    "meta_success_def_chars" integer,
+    "meta_prompt_chars" integer,
+    "meta_tags_chars" integer,
+    "meta_persona_chars" integer,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "usage_events_event_type_check" CHECK (("event_type" = ANY (ARRAY['game_create'::"text", 'game_edit'::"text", 'game_analysis'::"text", 'memory_update'::"text", 'voice_minutes'::"text"])))
+);
+
+
+ALTER TABLE "public"."usage_events" OWNER TO "postgres";
+
+
 CREATE TABLE IF NOT EXISTS "public"."personas" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "account_id" "uuid",
@@ -334,6 +373,12 @@ CREATE INDEX "game_plays_challenge_idx" ON "public"."game_plays" USING "btree" (
 CREATE INDEX "game_plays_game_idx" ON "public"."game_plays" USING "btree" ("game_id", "created_at" DESC);
 
 
+CREATE INDEX "usage_events_account_created_idx" ON "public"."usage_events" USING "btree" ("account_id", "created_at" DESC);
+
+
+CREATE INDEX "usage_events_account_kid_created_idx" ON "public"."usage_events" USING "btree" ("account_id", "kid_id", "created_at" DESC);
+
+
 CREATE INDEX "games_account_kid_created_idx" ON "public"."games" USING "btree" ("account_id", "kid_id", "created_at" DESC);
 
 
@@ -407,6 +452,22 @@ ALTER TABLE ONLY "public"."game_plays"
     ADD CONSTRAINT "game_plays_kid_id_fkey" FOREIGN KEY ("kid_id") REFERENCES "public"."kids"("id") ON DELETE CASCADE;
 
 
+ALTER TABLE ONLY "public"."usage_events"
+    ADD CONSTRAINT "usage_events_pkey" PRIMARY KEY ("id");
+
+
+ALTER TABLE ONLY "public"."usage_events"
+    ADD CONSTRAINT "usage_events_account_id_fkey" FOREIGN KEY ("account_id") REFERENCES "public"."accounts"("id") ON DELETE CASCADE;
+
+
+ALTER TABLE ONLY "public"."usage_events"
+    ADD CONSTRAINT "usage_events_kid_id_fkey" FOREIGN KEY ("kid_id") REFERENCES "public"."kids"("id") ON DELETE SET NULL;
+
+
+ALTER TABLE ONLY "public"."usage_events"
+    ADD CONSTRAINT "usage_events_game_id_fkey" FOREIGN KEY ("game_id") REFERENCES "public"."games"("id") ON DELETE SET NULL;
+
+
 ALTER TABLE ONLY "public"."game_sharings"
     ADD CONSTRAINT "game_sharings_game_id_fkey" FOREIGN KEY ("game_id") REFERENCES "public"."games"("id") ON DELETE CASCADE;
 
@@ -466,6 +527,12 @@ CREATE POLICY "Users can update own game plays" ON "public"."game_plays" FOR UPD
 
 
 CREATE POLICY "Users can view own game plays" ON "public"."game_plays" FOR SELECT USING (("auth"."uid"() = "account_id"));
+
+
+CREATE POLICY "Users can create own usage events" ON "public"."usage_events" FOR INSERT WITH CHECK (("auth"."uid"() = "account_id"));
+
+
+CREATE POLICY "Users can view own usage events" ON "public"."usage_events" FOR SELECT USING (("auth"."uid"() = "account_id"));
 
 
 CREATE POLICY "Users can create own game sharings" ON "public"."game_sharings" FOR INSERT WITH CHECK (("auth"."uid"() = "account_id"));
@@ -529,6 +596,9 @@ ALTER TABLE "public"."accounts" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."game_plays" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."usage_events" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."game_sharings" ENABLE ROW LEVEL SECURITY;
@@ -599,6 +669,11 @@ GRANT ALL ON TABLE "public"."accounts" TO "service_role";
 GRANT ALL ON TABLE "public"."game_plays" TO "anon";
 GRANT ALL ON TABLE "public"."game_plays" TO "authenticated";
 GRANT ALL ON TABLE "public"."game_plays" TO "service_role";
+
+
+GRANT ALL ON TABLE "public"."usage_events" TO "anon";
+GRANT ALL ON TABLE "public"."usage_events" TO "authenticated";
+GRANT ALL ON TABLE "public"."usage_events" TO "service_role";
 
 
 GRANT ALL ON TABLE "public"."game_sharings" TO "anon";
@@ -1017,3 +1092,129 @@ GRANT ALL ON FUNCTION "public"."record_newsletter_signup"("p_email" "text", "p_l
 GRANT ALL ON TABLE "public"."newsletter_signups" TO "anon";
 GRANT ALL ON TABLE "public"."newsletter_signups" TO "authenticated";
 GRANT ALL ON TABLE "public"."newsletter_signups" TO "service_role";
+
+
+-- ===========================================================================
+-- PLATFORM PLANS + CONFIG (BYOK entitlement catalogue)
+--
+-- platform_plans is the catalogue of subscribable plans. Each has a unique
+-- `handle` (routing key + the value stored in accounts.subscribed_plan) plus the
+-- entitlement columns that are COPIED onto an account when a plan is applied
+-- (applyPlanToAccount) — so a single account's caps can be raised without adding
+-- a new plan. platform_plan_translations holds localized titles (base row = en,
+-- like game_translations). platform_config is a small server-side key/value store.
+-- Catalogue rows are world-readable (SELECT true) with no user write policies
+-- (seed/service-role only); platform_config has no policies (service-role only).
+-- ===========================================================================
+
+CREATE TABLE IF NOT EXISTS "public"."platform_plans" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "handle" "text" NOT NULL,
+    "title" "text" NOT NULL,
+    "sort_order" integer DEFAULT 0 NOT NULL,
+    "price_eur_month" numeric DEFAULT 0 NOT NULL,
+    "is_active" boolean DEFAULT true NOT NULL,
+    "max_kids" integer NOT NULL,
+    "max_custom_personas" integer NOT NULL,
+    "max_snapshots_per_kid" integer NOT NULL,
+    "memory_tier" "text" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "platform_plans_memory_tier_check" CHECK (("memory_tier" = ANY (ARRAY['basic'::"text", 'advanced'::"text", 'full'::"text"])))
+);
+
+ALTER TABLE "public"."platform_plans" OWNER TO "postgres";
+
+ALTER TABLE ONLY "public"."platform_plans"
+    ADD CONSTRAINT "platform_plans_pkey" PRIMARY KEY ("id");
+ALTER TABLE ONLY "public"."platform_plans"
+    ADD CONSTRAINT "platform_plans_handle_key" UNIQUE ("handle");
+
+CREATE TABLE IF NOT EXISTS "public"."platform_plan_translations" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "plan_id" "uuid" NOT NULL,
+    "locale" "text" NOT NULL,
+    "title" "text" NOT NULL,
+    "tagline" "text" DEFAULT ''::"text" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+ALTER TABLE "public"."platform_plan_translations" OWNER TO "postgres";
+
+ALTER TABLE ONLY "public"."platform_plan_translations"
+    ADD CONSTRAINT "platform_plan_translations_pkey" PRIMARY KEY ("id");
+ALTER TABLE ONLY "public"."platform_plan_translations"
+    ADD CONSTRAINT "platform_plan_translations_plan_locale_key" UNIQUE ("plan_id", "locale");
+ALTER TABLE ONLY "public"."platform_plan_translations"
+    ADD CONSTRAINT "platform_plan_translations_plan_id_fkey" FOREIGN KEY ("plan_id") REFERENCES "public"."platform_plans"("id") ON DELETE CASCADE;
+
+CREATE TABLE IF NOT EXISTS "public"."platform_config" (
+    "key" "text" NOT NULL,
+    "value" "jsonb" DEFAULT '{}'::"jsonb" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+ALTER TABLE "public"."platform_config" OWNER TO "postgres";
+
+ALTER TABLE ONLY "public"."platform_config"
+    ADD CONSTRAINT "platform_config_pkey" PRIMARY KEY ("key");
+
+-- accounts.subscribed_plan references a catalogue plan handle (added here since
+-- platform_plans is created after the accounts table).
+ALTER TABLE ONLY "public"."accounts"
+    ADD CONSTRAINT "accounts_subscribed_plan_fkey" FOREIGN KEY ("subscribed_plan") REFERENCES "public"."platform_plans"("handle") ON UPDATE CASCADE;
+
+COMMENT ON COLUMN "public"."accounts"."subscribed_plan" IS 'Handle of the plan the account subscribed to (FK → platform_plans.handle). The plan''s entitlement columns (max_kids, …, memory_tier) are COPIED onto the account by applyPlanToAccount so per-account caps can be overridden without a new plan; enforcement always reads the account columns.';
+
+CREATE INDEX "platform_plans_active_sort_idx" ON "public"."platform_plans" USING "btree" ("is_active", "sort_order");
+CREATE INDEX "platform_plan_translations_plan_idx" ON "public"."platform_plan_translations" USING "btree" ("plan_id");
+
+CREATE OR REPLACE TRIGGER "platform_plans_updated_at" BEFORE UPDATE ON "public"."platform_plans" FOR EACH ROW EXECUTE FUNCTION "public"."handle_updated_at"();
+CREATE OR REPLACE TRIGGER "platform_plan_translations_updated_at" BEFORE UPDATE ON "public"."platform_plan_translations" FOR EACH ROW EXECUTE FUNCTION "public"."handle_updated_at"();
+CREATE OR REPLACE TRIGGER "platform_config_updated_at" BEFORE UPDATE ON "public"."platform_config" FOR EACH ROW EXECUTE FUNCTION "public"."handle_updated_at"();
+
+ALTER TABLE "public"."platform_plans" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "public"."platform_plan_translations" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "public"."platform_config" ENABLE ROW LEVEL SECURITY;
+
+-- Catalogue is world-readable; no user write policies (seed/service-role only).
+CREATE POLICY "platform_plans_select" ON "public"."platform_plans" FOR SELECT USING (true);
+CREATE POLICY "platform_plan_translations_select" ON "public"."platform_plan_translations" FOR SELECT USING (true);
+-- platform_config: no policies (default-deny); only the service role reads/writes.
+
+GRANT ALL ON TABLE "public"."platform_plans" TO "anon";
+GRANT ALL ON TABLE "public"."platform_plans" TO "authenticated";
+GRANT ALL ON TABLE "public"."platform_plans" TO "service_role";
+GRANT ALL ON TABLE "public"."platform_plan_translations" TO "anon";
+GRANT ALL ON TABLE "public"."platform_plan_translations" TO "authenticated";
+GRANT ALL ON TABLE "public"."platform_plan_translations" TO "service_role";
+GRANT ALL ON TABLE "public"."platform_config" TO "anon";
+GRANT ALL ON TABLE "public"."platform_config" TO "authenticated";
+GRANT ALL ON TABLE "public"."platform_config" TO "service_role";
+
+-- Seed: the BYOK plan catalogue (en title on the row; de in translations).
+INSERT INTO "public"."platform_plans"
+  ("handle", "title", "sort_order", "price_eur_month", "max_kids", "max_custom_personas", "max_snapshots_per_kid", "memory_tier")
+VALUES
+  ('free', 'Free', 0, 0, 1, 1, 25, 'basic'),
+  ('hatchling', 'Hatchling', 1, 5, 2, 4, 150, 'advanced'),
+  ('strider', 'Strider', 2, 9, 4, 8, 500, 'advanced'),
+  ('apex-dodi', 'Apex dodi', 3, 15, 8, 16, 2000, 'full')
+ON CONFLICT ("handle") DO NOTHING;
+
+INSERT INTO "public"."platform_plan_translations" ("plan_id", "locale", "title")
+SELECT "p"."id", 'de', "t"."title"
+FROM (VALUES
+  ('free', 'Free'),
+  ('hatchling', 'Küken'),
+  ('strider', 'Wanderer'),
+  ('apex-dodi', 'Spitzendodi')
+) AS "t"("handle", "title")
+JOIN "public"."platform_plans" "p" ON "p"."handle" = "t"."handle"
+ON CONFLICT ("plan_id", "locale") DO NOTHING;
+
+INSERT INTO "public"."platform_config" ("key", "value")
+VALUES ('default_plan_handle', '"free"'::"jsonb")
+ON CONFLICT ("key") DO NOTHING;

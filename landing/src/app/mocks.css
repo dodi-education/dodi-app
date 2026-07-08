@@ -319,3 +319,120 @@
   .fact-card img { width: 96px; }
   .newsletter-form input { min-width: 0; }
 }
+
+/* ════════════════════════════════════════════════════════════════
+   Pricing page
+   ════════════════════════════════════════════════════════════════ */
+
+/* Soft tinted band so the white comparison card reads clearly against it. */
+.band-soft { background: linear-gradient(180deg, #EFF6FD 0%, #F8FBFE 100%); }
+
+/* ── Plan cards ───────────────────────────────────────────────── */
+.pricing-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 20px; align-items: stretch;
+}
+.price-card {
+  position: relative; display: flex; flex-direction: column;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--r-lg); padding: 28px 24px;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.2s ease, box-shadow 0.2s, border-color 0.2s;
+}
+.price-card:hover { transform: translateY(-4px); box-shadow: var(--shadow); border-color: var(--brand-soft-2); }
+.price-card.featured {
+  border: 2px solid var(--brand);
+  box-shadow: 0 22px 50px color-mix(in oklab, var(--brand) 22%, transparent);
+}
+.pc-badge {
+  position: absolute; top: -13px; left: 50%; transform: translateX(-50%);
+  background: var(--brand); color: #fff;
+  font-family: var(--font-body); font-weight: 700; font-size: 0.74rem;
+  letter-spacing: 0.05em; text-transform: uppercase;
+  padding: 6px 14px; border-radius: 99px; white-space: nowrap;
+  box-shadow: 0 6px 16px color-mix(in oklab, var(--brand) 34%, transparent);
+}
+.pc-name { font-family: var(--font-display); font-weight: 800; color: var(--ink); font-size: 1.32rem; }
+.pc-tagline { color: var(--muted); font-size: 0.95rem; line-height: 1.5; margin-top: 5px; min-height: 2.9em; }
+.pc-price { display: flex; align-items: baseline; gap: 5px; margin-top: 16px; }
+.pc-price .amount { font-family: var(--font-display); font-weight: 800; color: var(--ink); font-size: 2.5rem; letter-spacing: -0.02em; line-height: 1; }
+.pc-price .period { color: var(--muted); font-weight: 600; font-size: 1rem; }
+.pc-price-note { color: var(--faint); font-size: 0.85rem; font-weight: 600; margin-top: 6px; }
+.pc-cta { margin-top: 20px; width: 100%; }
+.pc-features { list-style: none; margin-top: 22px; padding-top: 20px; border-top: 1px solid var(--line); display: grid; gap: 12px; }
+.pc-feat { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; font-size: 0.96rem; }
+.pc-feat .k { color: var(--muted); }
+.pc-feat .v { color: var(--ink); font-weight: 700; font-family: var(--font-display); text-align: right; }
+
+.pricing-note {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  max-width: 660px; margin: 30px auto 0; text-align: center;
+  color: var(--muted); font-size: 0.98rem; line-height: 1.55;
+}
+.pricing-note svg { width: 18px; height: 18px; color: var(--mint); flex-shrink: 0; }
+
+/* ── Comparison table ─────────────────────────────────────────── */
+.compare-wrap {
+  overflow-x: auto; border: 1px solid var(--line); border-radius: var(--r-lg);
+  background: var(--surface); box-shadow: var(--shadow-sm);
+  -webkit-overflow-scrolling: touch;
+}
+.compare-table { width: 100%; border-collapse: collapse; min-width: 680px; }
+.compare-table th, .compare-table td {
+  padding: 15px 18px; text-align: center;
+  border-bottom: 1px solid var(--line); vertical-align: middle;
+}
+.compare-table thead th { border-bottom: 2px solid var(--line-strong); }
+.compare-table tbody tr:last-child td { border-bottom: 0; }
+.compare-table .ct-feature { text-align: left; font-weight: 600; color: var(--ink-2); }
+.compare-table thead .ct-name { display: block; font-family: var(--font-display); font-weight: 800; color: var(--ink); font-size: 1.05rem; }
+.compare-table thead .ct-price { display: block; color: var(--muted); font-weight: 600; font-size: 0.86rem; margin-top: 2px; }
+.compare-table td { font-family: var(--font-display); font-weight: 700; color: var(--ink); }
+.compare-table td.ct-feature { font-family: var(--font-body); font-weight: 600; }
+.ct-featured { background: var(--brand-soft); }
+.compare-table thead .ct-featured .ct-price { color: var(--brand-700); }
+.ct-group td {
+  background: var(--sky-mid); text-align: left;
+  font-family: var(--font-body); font-weight: 700; color: var(--muted);
+  font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase;
+}
+.ct-check { display: inline-grid; place-items: center; color: var(--mint); }
+.ct-check svg { width: 20px; height: 20px; }
+
+/* ── Self-host band (on the deep band) ────────────────────────── */
+.self-host { max-width: 660px; margin: 0 auto; text-align: center; }
+.self-host .os-mark {
+  width: 60px; height: 60px; border-radius: 16px; margin: 0 auto 20px;
+  background: rgba(255,255,255,0.08); display: grid; place-items: center; color: #fff;
+}
+.self-host .os-mark svg { width: 30px; height: 30px; }
+.self-host h2 { margin-top: 14px; }
+.self-host .lead { margin: 16px auto 28px; }
+
+/* ── FAQ (native <details>) ───────────────────────────────────── */
+.faq-list { max-width: 780px; margin: 0 auto; display: grid; gap: 12px; }
+.faq-item {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--r); box-shadow: var(--shadow-sm); overflow: hidden;
+}
+.faq-q {
+  cursor: pointer; list-style: none;
+  padding: 20px 24px; display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  font-family: var(--font-display); font-weight: 700; color: var(--ink); font-size: 1.08rem;
+}
+.faq-q::-webkit-details-marker { display: none; }
+.faq-q:hover { color: var(--brand); }
+.faq-icon { flex-shrink: 0; color: var(--brand); transition: transform 0.2s ease; }
+.faq-icon svg { width: 20px; height: 20px; display: block; }
+.faq-item[open] .faq-icon { transform: rotate(45deg); }
+.faq-a { padding: 0 24px 22px; color: var(--muted); font-size: 1.02rem; line-height: 1.62; }
+@media (prefers-reduced-motion: reduce) { .faq-icon { transition: none; } }
+
+/* ── Responsive ───────────────────────────────────────────────── */
+@media (max-width: 980px) {
+  .pricing-grid { grid-template-columns: repeat(2, 1fr); gap: 18px; }
+  .pc-tagline { min-height: 0; }
+}
+@media (max-width: 560px) {
+  .pricing-grid { grid-template-columns: 1fr; }
+}

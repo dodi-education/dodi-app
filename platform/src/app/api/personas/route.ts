@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 
 import { requireAuth } from "@/lib/resolve-auth";
+import { getAccount } from "@/services/accounts";
 import { createPersona, listPersonas } from "@/services/personas";
 
 // Account personas are E2EE: `name` and `soul` arrive as opaque `enc:v1:`
@@ -40,6 +41,18 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json(
       { error: "Validation failed", issues: result.error.issues },
       { status: 400 },
+    );
+  }
+
+  // Entitlement gate: cap custom personas at the account's copied max_custom_personas
+  // (listPersonas also returns the global default, which has a null account_id).
+  const account = await getAccount(supabase, accountId);
+  const personas = await listPersonas(supabase, accountId);
+  const customCount = personas.filter((p) => p.account_id === accountId).length;
+  if (account && customCount >= account.max_custom_personas) {
+    return NextResponse.json(
+      { error: "persona_limit_reached", limit: account.max_custom_personas },
+      { status: 409 },
     );
   }
 

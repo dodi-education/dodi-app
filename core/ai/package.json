@@ -21,8 +21,10 @@
     "./thinking-providers/factory": "./src/thinking-providers/factory.ts",
     "./thinking-providers/anthropic": "./src/thinking-providers/anthropic.ts",
     "./thinking-providers/gemini": "./src/thinking-providers/gemini.ts",
+    "./thinking-providers/xai": "./src/thinking-providers/xai.ts",
     "./image-providers/factory": "./src/image-providers/factory.ts",
     "./image-providers/gemini": "./src/image-providers/gemini.ts",
+    "./image-providers/xai": "./src/image-providers/xai.ts",
     "./image-providers/coloring-prompt": "./src/image-providers/coloring-prompt.ts"
   },
   "main": "./src/index.ts",
@@ -37,7 +39,8 @@
     "@dodi/games": "workspace:*",
     "@dodi/intl": "workspace:*",
     "@dodi/types": "workspace:*",
-    "@google/generative-ai": "^0.24.1"
+    "@google/generative-ai": "^0.24.1",
+    "openai": "^6.45.0"
   },
   "devDependencies": {
     "typescript": "^5",

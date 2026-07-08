@@ -1,14 +1,14 @@
 /**
  * Client-side voice-session assembly (E2EE). Replaces the server session routes:
  * fetches the vault-decrypted kid/persona/memory/notes/game + the vault-held
- * provider key, builds the Gemini Live system instruction with the browser-safe
- * `dodi-context` builders, and returns a ready `GeminiLiveConfig`. The server
- * never sees child data or the key.
+ * provider key, builds the voice system instruction with the browser-safe
+ * `dodi-context` builders, and returns a ready `VoiceClientConfig` (provider +
+ * model + voice + tools). The server never sees child data or the key.
  *
  * model_config (provider/model selection) is plaintext, fetched from /api/ai/config.
  */
 import { dodi } from "@/lib/api";
-import type { GeminiLiveConfig } from "@/lib/ai/gemini-live-client";
+import type { VoiceClientConfig } from "@/lib/ai/voice-client";
 import {
   buildGameVoiceContext,
   buildHomeVoiceContext,
@@ -22,7 +22,7 @@ import type { AccountModelConfig } from "@dodi/types/ai";
 import type { Game, Persona } from "@dodi/types/database";
 import type { GameMetadata } from "@dodi/types/games";
 
-export interface VoiceSessionConfig extends GeminiLiveConfig {
+export interface VoiceSessionConfig extends VoiceClientConfig {
   isBirthday?: boolean;
   language?: string;
 }
@@ -99,6 +99,7 @@ export async function buildHomeVoiceConfig(
   });
 
   return {
+    provider: config.voiceProvider,
     apiKey,
     model: config.voiceModel,
     voiceName: config.voiceName,
@@ -143,6 +144,7 @@ export async function buildGameVoiceConfig(
   });
 
   return {
+    provider: config.voiceProvider,
     apiKey,
     model: config.voiceModel,
     voiceName: config.voiceName,

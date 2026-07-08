@@ -38,7 +38,7 @@ const UpdateAccountSchema = z.object({
   notificationPreferences: NotificationPreferencesSchema.optional(),
 });
 
-/** User-authed: the caller's account (subscription tier, preferences, etc.). */
+/** User-authed: the caller's account (subscribed plan, entitlements, preferences). */
 export async function GET(request: Request): Promise<Response> {
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;

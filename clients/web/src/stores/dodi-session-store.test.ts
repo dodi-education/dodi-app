@@ -49,21 +49,24 @@ vi.mock("@/stores/kid-store", () => ({
 
 vi.mock("@/lib/ai/client-memory-update", () => ({ runClientMemoryUpdate }));
 
-vi.mock("@/lib/ai/gemini-live-client", () => ({
-  GeminiLiveClient: class {
-    constructor(_cfg: unknown, handler: (e: unknown) => void) {
-      liveHandler.current = handler;
-    }
-    connect() {}
-    disconnect() {}
-    sendGreeting() {}
-    sendAudio() {}
-    sendContext(...args: unknown[]) {
-      sendContextSpy(...args);
-    }
-    sendToolResponse(...args: unknown[]) {
-      sendToolResponseSpy(...args);
-    }
+// The store resolves the voice client through the provider-neutral factory, so
+// intercept that (not the concrete Gemini/xAI clients) and capture the handler.
+vi.mock("@/lib/ai/create-voice-client", () => ({
+  createVoiceClient: (_cfg: unknown, handler: (e: unknown) => void) => {
+    liveHandler.current = handler;
+    return {
+      connect() {},
+      disconnect() {},
+      sendGreeting() {},
+      sendAudio() {},
+      sendText() {},
+      sendContext(...args: unknown[]) {
+        sendContextSpy(...args);
+      },
+      sendToolResponse(...args: unknown[]) {
+        sendToolResponseSpy(...args);
+      },
+    };
   },
 }));
 
@@ -93,6 +96,7 @@ vi.mock("@/lib/ai/audio-recorder", () => ({
 
 vi.mock("@/lib/ai/voice-session", () => ({
   buildHomeVoiceConfig: async () => ({
+    provider: "gemini",
     apiKey: "k",
     model: "m",
     voiceName: "Puck",
@@ -100,6 +104,7 @@ vi.mock("@/lib/ai/voice-session", () => ({
     isBirthday: false,
   }),
   buildGameVoiceConfig: async () => ({
+    provider: "gemini",
     apiKey: "k",
     model: "m",
     voiceName: "Puck",
@@ -601,7 +606,10 @@ describe("dodi session store — generate_drawing deferral", () => {
       model: "gemini-3.5-flash",
       apiKey: "vault-key",
     });
-    analyzeSpy.mockResolvedValue("You drew a lovely heart!");
+    analyzeSpy.mockResolvedValue({
+      analysis: "You drew a lovely heart!",
+      usage: { inputTokens: 0, outputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0 },
+    });
     await connectGame(PID);
 
     fire({ type: "toolCall", id: "call-r", name: "read_game_state", args: { question: "What did I draw?" } });
@@ -696,9 +704,9 @@ describe("dodi session store — AI activity (thinking) tracking", () => {
       model: "gemini-3.5-flash",
       apiKey: "vault-key",
     });
-    let resolveAnalysis!: (v: string) => void;
+    let resolveAnalysis!: (v: { analysis: string; usage: unknown }) => void;
     analyzeSpy.mockReturnValueOnce(
-      new Promise<string>((r) => {
+      new Promise<{ analysis: string; usage: unknown }>((r) => {
         resolveAnalysis = r;
       }),
     );
@@ -726,7 +734,7 @@ describe("dodi session store — AI activity (thinking) tracking", () => {
     expect(selectDodiThinking(state())).toBe(true);
     expect(selectDodiActivityKind(state())).toBe("thinking");
 
-    resolveAnalysis("You drew a heart!");
+    resolveAnalysis({ analysis: "You drew a heart!", usage: {} });
     await flush();
 
     // Analysis done → thinking state cleared even without any manual toggle.

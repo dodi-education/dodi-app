@@ -390,7 +390,7 @@
     "friendsPlaceholder": "Friend system coming in Phase 4."
   },
   "systemLogs": {
-    "title": "System Log",
+    "title": "System log",
     "subtitle": "Memory updates, session events, and system activity",
     "heading": "Log entries",
     "filterKid": "All kids",
@@ -605,7 +605,8 @@
     "kids": "Kids",
     "personas": "Personas",
     "gameStudio": "Games",
-    "systemLogs": "System Log",
+    "systemLogs": "System log",
+    "usage": "Usage",
     "agentSessions": "Agent Sessions",
     "settings": "Settings",
     "home": "Home",
@@ -620,6 +621,19 @@
     "openKidView": "Open Kid View",
     "openMenu": "Open menu",
     "closeMenu": "Close menu"
+  },
+  "usage": {
+    "title": "Usage",
+    "subtitle": "This month's AI usage. Costs are billed by your own provider.",
+    "voiceMinutes": "Voice minutes",
+    "gamesMade": "Games made",
+    "perModel": "By model",
+    "createsEdits": "{creates} created · {edits} edited · {analyses} analyzed",
+    "perChild": "By child",
+    "childGames": "{count} games",
+    "childVoice": "{count} voice min",
+    "unknownChild": "A child",
+    "noUsage": "No AI usage yet this month. Usage appears here as dodi makes games and chats."
   },
   "kidProfile": {
     "whosPlaying": "Who's playing?",

@@ -5,6 +5,7 @@
  */
 
 import type { ProgressKind, SuccessCriteria } from "./success";
+import type { TokenUsage } from "./usage";
 
 export type AgentTaskType = "generate_game" | "update_game" | "read_game_state";
 
@@ -76,6 +77,10 @@ export interface AgentCodeResult {
   changeSummary: string;
   validationPassed: boolean;
   iterationCount: number;
+  /** Number of post-generation validation-fix retries used. */
+  validationRetries: number;
+  /** Accumulated token usage across every agent + validation call. */
+  usage: TokenUsage;
   /** Game ID after server-side persistence (create or update). */
   savedGameId?: string;
   /** Set when the game was generated but could not be saved (surfaced to the user). */

@@ -1,14 +1,19 @@
 /**
  * Game-state analysis ("what did the child make?") — runs fully in the browser
  * so the provider key never leaves the vault. Ported from the former server
- * `runAnalysisTask`. Supports Gemini + Anthropic vision; falls back to the
- * structured state description when no snapshot is available.
+ * `runAnalysisTask`. Supports Gemini, xAI Grok, and Anthropic vision; falls back
+ * to the structured state description when no snapshot is available.
  */
 
 import Anthropic from "@anthropic-ai/sdk";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import type OpenAI from "openai";
 
 import type { AIProviderId } from "@dodi/types/ai";
+import type { TokenUsage } from "@dodi/types/usage";
+
+import { anthropicUsage, geminiUsage, xaiUsage } from "./usage-map";
+import { createXaiClient } from "./xai";
 
 export interface AnalyzeGameStateParams {
   provider: AIProviderId;
@@ -27,7 +32,9 @@ export interface AnalyzeGameStateParams {
   language: string;
 }
 
-export async function analyzeGameState(params: AnalyzeGameStateParams): Promise<string> {
+export async function analyzeGameState(
+  params: AnalyzeGameStateParams,
+): Promise<{ analysis: string; usage: TokenUsage }> {
   const { provider, model, apiKey, gameState, question, gameMarkdown, gameCodeBundle } = params;
   const snapshotImage = params.snapshot
     ? params.snapshot.match(/^data:image\/(png|jpeg|gif|webp);base64,(.+)$/)
@@ -63,10 +70,38 @@ export async function analyzeGameState(params: AnalyzeGameStateParams): Promise<
     }
     parts.push({ text: userText.join("\n") });
     const response = await genModel.generateContent(parts);
-    return response.response.text().trim() || "I couldn't quite make it out this time.";
+    const analysis =
+      response.response.text().trim() || "I couldn't quite make it out this time.";
+    return { analysis, usage: geminiUsage(response.response.usageMetadata) };
   }
 
-  // Anthropic (and any other future SDK-compatible provider)
+  if (provider === "xai") {
+    // xAI is OpenAI-compatible; Grok vision takes the snapshot as an image_url
+    // content part (data URL passed through directly).
+    const client = createXaiClient(apiKey, true);
+    const content: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [];
+    if (snapshotImage) {
+      content.push({
+        type: "image_url",
+        image_url: { url: `data:image/${snapshotImage[1]};base64,${snapshotImage[2]}` },
+      });
+    }
+    content.push({ type: "text", text: userText.join("\n") });
+    const response = await client.chat.completions.create({
+      model,
+      max_tokens: 1024,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content },
+      ],
+    });
+    const analysis =
+      response.choices[0]?.message?.content?.trim() ||
+      "I couldn't analyze the game state.";
+    return { analysis, usage: xaiUsage(response.usage) };
+  }
+
+  // Anthropic
   const anthropic = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
   const content: Anthropic.Messages.ContentBlockParam[] = [];
   if (snapshotImage) {
@@ -87,7 +122,9 @@ export async function analyzeGameState(params: AnalyzeGameStateParams): Promise<
     messages: [{ role: "user", content }],
   });
   const textBlock = response.content.find((b) => b.type === "text");
-  return textBlock && textBlock.type === "text"
-    ? textBlock.text
-    : "I couldn't analyze the game state.";
+  const analysis =
+    textBlock && textBlock.type === "text"
+      ? textBlock.text
+      : "I couldn't analyze the game state.";
+  return { analysis, usage: anthropicUsage(response.usage) };
 }

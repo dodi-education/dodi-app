@@ -25,7 +25,7 @@ export default function GeneralSettingsPage() {
       .request("/api/account")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (d?.account?.subscription_tier) setTier(d.account.subscription_tier);
+        if (d?.account?.subscribed_plan) setTier(d.account.subscribed_plan);
       })
       .catch(() => {});
   }, []);

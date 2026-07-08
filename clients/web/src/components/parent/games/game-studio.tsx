@@ -31,8 +31,9 @@ import { useBreadcrumbStore } from "@/stores/breadcrumb-store";
 import { useVaultStore } from "@/stores/vault-store";
 import { resolveClientGame } from "@/lib/ai/resolve-client-game";
 import { calculateChildAge, getLanguageDisplayName } from "@dodi/ai/dodi-context";
-import { buildLearningContext } from "@dodi/ai/learning-context";
+import { buildLearningContext, measureLearningContext } from "@dodi/ai/learning-context";
 import { runGameAgent, AgentAbortedError, type PriorTurn } from "@dodi/ai/game-agent";
+import { reportUsage } from "@/lib/usage/report-usage";
 import { mapSuccessDefinition } from "@dodi/ai/success-mapping";
 import type { AgentStep } from "@dodi/types/agent-progress";
 import type { AgentCodeResult, AgentTaskRequest } from "@dodi/types/tasks";
@@ -452,6 +453,7 @@ export function GameStudio({ initialGame }: GameStudioProps) {
         setError(t("needProviderKey"));
         return;
       }
+
       const kid = kids.find((k) => k.id === primaryKidId);
 
       // Memory/parent-notes, birthdate and name are E2EE — assemble the agent's
@@ -478,6 +480,7 @@ export function GameStudio({ initialGame }: GameStudioProps) {
       };
 
       const result = await runGameAgent({
+        provider: gameCfg.provider,
         apiKey: gameCfg.apiKey,
         model: gameCfg.model,
         task,
@@ -489,6 +492,43 @@ export function GameStudio({ initialGame }: GameStudioProps) {
       // Sanitize client-side before it touches state/persistence (the games route
       // sanitizes again server-side as defense-in-depth).
       const safeCode = sanitizeGameBundle(result.codeBundle).code;
+
+      // Record what this generation used (fire-and-forget). The tokens were spent
+      // regardless of whether the persist below succeeds, so report it here. We
+      // measure each context component's size (never its content) so we can track
+      // how they evolve across users over time.
+      const ctxSizes = measureLearningContext(
+        kids,
+        { isFamily: game.isFamily, audienceIds: game.audienceIds },
+        primaryKidId,
+      );
+      const gp = payload as Partial<{
+        prompt: string;
+        instruction: string;
+        learningGoal: string;
+        successDefinition: string;
+        tags: string[];
+      }>;
+      reportUsage({
+        eventType: isUpdate ? "game_edit" : "game_create",
+        kidId: primaryKidId,
+        gameId: game.id ?? null,
+        provider: gameCfg.provider,
+        model: gameCfg.model,
+        usage: result.usage,
+        meta: {
+          turns: result.iterationCount,
+          validationRetries: result.validationRetries,
+          outputChars: safeCode.length,
+          memoryChars: ctxSizes.memoryChars,
+          parentNotesChars: ctxSizes.parentNotesChars,
+          learningGoalChars: (gp.learningGoal ?? "").length,
+          successDefChars: (gp.successDefinition ?? "").length,
+          promptChars: (gp.prompt ?? gp.instruction ?? "").length,
+          tagsChars: (gp.tags ?? []).join(", ").length,
+        },
+      });
+
       const summary = result.changeSummary?.trim();
       const dodiText = summary
         ? summary

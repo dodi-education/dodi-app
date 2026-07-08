@@ -9,6 +9,7 @@ import {
   IconCalendar,
   IconCamera,
   IconChartBar,
+  IconReceipt2,
   IconCheck,
   IconChevronDown,
   IconChevronRight,
@@ -108,6 +109,7 @@ export type IconName =
   | "user_plus"
   | "agent_sessions"
   | "system_logs"
+  | "usage"
   | "volume";
 
 const ICONS: Record<IconName, ComponentType<TablerIconProps>> = {
@@ -163,6 +165,7 @@ const ICONS: Record<IconName, ComponentType<TablerIconProps>> = {
   user_plus: IconUserPlus,
   agent_sessions: IconRobot,
   system_logs: IconBrain,
+  usage: IconReceipt2,
   volume: IconVolume,
 };
 

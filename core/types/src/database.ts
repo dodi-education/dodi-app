@@ -26,7 +26,14 @@ export interface Database {
           // reads these to decide whether to send transactional email.
           notification_preferences: Json;
           language: string;
-          subscription_tier: string;
+          // Handle of the subscribed plan (FK → platform_plans.handle).
+          subscribed_plan: string;
+          // Entitlements copied from the plan; enforcement reads THESE columns so a
+          // single account's caps can be raised without inventing a new plan.
+          max_kids: number;
+          max_custom_personas: number;
+          max_snapshots_per_kid: number;
+          memory_tier: "basic" | "advanced" | "full";
           created_at: string;
           updated_at: string;
         };
@@ -40,7 +47,11 @@ export interface Database {
           parent_pin_enc?: string | null;
           notification_preferences?: Json;
           language?: string;
-          subscription_tier?: string;
+          subscribed_plan?: string;
+          max_kids?: number;
+          max_custom_personas?: number;
+          max_snapshots_per_kid?: number;
+          memory_tier?: "basic" | "advanced" | "full";
           created_at?: string;
           updated_at?: string;
         };
@@ -54,7 +65,11 @@ export interface Database {
           parent_pin_enc?: string | null;
           notification_preferences?: Json;
           language?: string;
-          subscription_tier?: string;
+          subscribed_plan?: string;
+          max_kids?: number;
+          max_custom_personas?: number;
+          max_snapshots_per_kid?: number;
+          memory_tier?: "basic" | "advanced" | "full";
           created_at?: string;
           updated_at?: string;
         };
@@ -358,6 +373,99 @@ export interface Database {
         };
         Relationships: [];
       };
+      usage_events: {
+        Row: {
+          id: string;
+          account_id: string;
+          kid_id: string | null;
+          game_id: string | null;
+          event_type:
+            | "game_create"
+            | "game_edit"
+            | "game_analysis"
+            | "memory_update"
+            | "voice_minutes";
+          provider: string;
+          model: string;
+          input_tokens: number | null;
+          output_tokens: number | null;
+          cache_write_tokens: number | null;
+          cache_read_tokens: number | null;
+          voice_seconds: number | null;
+          meta_turns: number | null;
+          meta_validation_retries: number | null;
+          meta_output_chars: number | null;
+          meta_memory_chars: number | null;
+          meta_parent_notes_chars: number | null;
+          meta_learning_goal_chars: number | null;
+          meta_success_def_chars: number | null;
+          meta_prompt_chars: number | null;
+          meta_tags_chars: number | null;
+          meta_persona_chars: number | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          account_id: string;
+          kid_id?: string | null;
+          game_id?: string | null;
+          event_type:
+            | "game_create"
+            | "game_edit"
+            | "game_analysis"
+            | "memory_update"
+            | "voice_minutes";
+          provider: string;
+          model: string;
+          input_tokens?: number | null;
+          output_tokens?: number | null;
+          cache_write_tokens?: number | null;
+          cache_read_tokens?: number | null;
+          voice_seconds?: number | null;
+          meta_turns?: number | null;
+          meta_validation_retries?: number | null;
+          meta_output_chars?: number | null;
+          meta_memory_chars?: number | null;
+          meta_parent_notes_chars?: number | null;
+          meta_learning_goal_chars?: number | null;
+          meta_success_def_chars?: number | null;
+          meta_prompt_chars?: number | null;
+          meta_tags_chars?: number | null;
+          meta_persona_chars?: number | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          account_id?: string;
+          kid_id?: string | null;
+          game_id?: string | null;
+          event_type?:
+            | "game_create"
+            | "game_edit"
+            | "game_analysis"
+            | "memory_update"
+            | "voice_minutes";
+          provider?: string;
+          model?: string;
+          input_tokens?: number | null;
+          output_tokens?: number | null;
+          cache_write_tokens?: number | null;
+          cache_read_tokens?: number | null;
+          voice_seconds?: number | null;
+          meta_turns?: number | null;
+          meta_validation_retries?: number | null;
+          meta_output_chars?: number | null;
+          meta_memory_chars?: number | null;
+          meta_parent_notes_chars?: number | null;
+          meta_learning_goal_chars?: number | null;
+          meta_success_def_chars?: number | null;
+          meta_prompt_chars?: number | null;
+          meta_tags_chars?: number | null;
+          meta_persona_chars?: number | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       game_sharings: {
         Row: {
           id: string;
@@ -575,6 +683,102 @@ export interface Database {
         };
         Relationships: [];
       };
+      platform_plans: {
+        Row: {
+          id: string;
+          handle: string;
+          title: string;
+          sort_order: number;
+          price_eur_month: number;
+          is_active: boolean;
+          max_kids: number;
+          max_custom_personas: number;
+          max_snapshots_per_kid: number;
+          memory_tier: "basic" | "advanced" | "full";
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          handle: string;
+          title: string;
+          sort_order?: number;
+          price_eur_month?: number;
+          is_active?: boolean;
+          max_kids: number;
+          max_custom_personas: number;
+          max_snapshots_per_kid: number;
+          memory_tier: "basic" | "advanced" | "full";
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          handle?: string;
+          title?: string;
+          sort_order?: number;
+          price_eur_month?: number;
+          is_active?: boolean;
+          max_kids?: number;
+          max_custom_personas?: number;
+          max_snapshots_per_kid?: number;
+          memory_tier?: "basic" | "advanced" | "full";
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      platform_plan_translations: {
+        Row: {
+          id: string;
+          plan_id: string;
+          locale: string;
+          title: string;
+          tagline: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          plan_id: string;
+          locale: string;
+          title: string;
+          tagline?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          plan_id?: string;
+          locale?: string;
+          title?: string;
+          tagline?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      platform_config: {
+        Row: {
+          key: string;
+          value: Json;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          key: string;
+          value?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          key?: string;
+          value?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -610,15 +814,24 @@ export interface Database {
         }[];
       };
     };
-    Enums: {
-      subscription_tier: "free" | "premium";
-    };
+    Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
   };
 }
 
 // Convenience type aliases
 export type Account = Database["public"]["Tables"]["accounts"]["Row"];
+export type MemoryTier = "basic" | "advanced" | "full";
+export type PlatformPlan = Database["public"]["Tables"]["platform_plans"]["Row"];
+export type PlatformPlanInsert =
+  Database["public"]["Tables"]["platform_plans"]["Insert"];
+export type PlatformPlanTranslation =
+  Database["public"]["Tables"]["platform_plan_translations"]["Row"];
+export type PlatformConfig =
+  Database["public"]["Tables"]["platform_config"]["Row"];
+export type UsageEvent = Database["public"]["Tables"]["usage_events"]["Row"];
+export type UsageEventInsert =
+  Database["public"]["Tables"]["usage_events"]["Insert"];
 export type Kid = Database["public"]["Tables"]["kids"]["Row"];
 export type Persona = Database["public"]["Tables"]["personas"]["Row"];
 export type Game = Database["public"]["Tables"]["games"]["Row"];

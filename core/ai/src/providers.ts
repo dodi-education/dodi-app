@@ -69,9 +69,56 @@ export const AI_PROVIDERS: AIProviderDefinition[] = [
     ],
     voices: [],
   },
-  // Future providers:
-  // { id: "openai", name: "OpenAI", ... },
-  // { id: "xai", name: "xAI Grok", ... },
+  {
+    id: "xai",
+    name: "xAI Grok",
+    supportsVoice: true,
+    supportsLiveStreaming: true,
+    supportsThinking: true,
+    supportsImage: true,
+    supportsAgentic: true,
+    models: [
+      // Voice Agent API (OpenAI-Realtime-compatible). `grok-voice-latest` is the
+      // stable alias that always points at the newest voice model.
+      {
+        id: "grok-voice-latest",
+        name: "Grok Voice",
+        capabilities: ["voice", "live"],
+      },
+      // Text/reasoning models drive thinking + the game-coding agent (Grok
+      // supports OpenAI-style tool calling). `grok-4.3` is xAI's recommended
+      // general model; the fast variant trades some quality for latency/cost.
+      {
+        id: "grok-4.3",
+        name: "Grok 4.3",
+        capabilities: ["text", "thinking", "agentic"],
+      },
+      {
+        id: "grok-4-fast-reasoning",
+        name: "Grok 4 Fast (Reasoning)",
+        capabilities: ["text", "thinking", "agentic"],
+      },
+      // Image generation (Grok Imagine, OpenAI images-API-compatible).
+      {
+        id: "grok-imagine-image",
+        name: "Grok Imagine",
+        capabilities: ["image"],
+      },
+      {
+        id: "grok-imagine-image-pro",
+        name: "Grok Imagine Pro",
+        capabilities: ["image"],
+      },
+    ],
+    voices: [
+      // Ara is the default (first entry) — the config UI seeds voices[0].
+      { id: "ara", name: "Ara" },
+      { id: "eve", name: "Eve" },
+      { id: "rex", name: "Rex" },
+      { id: "sal", name: "Sal" },
+      { id: "leo", name: "Leo" },
+    ],
+  },
 ];
 
 export function getProviderDefinition(

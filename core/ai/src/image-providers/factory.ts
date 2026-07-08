@@ -10,6 +10,7 @@
 import type { AIProviderId } from "@dodi/types/ai";
 
 import { GeminiImageProvider } from "./gemini";
+import { XaiImageProvider } from "./xai";
 
 // ---------------------------------------------------------------------------
 // Interface
@@ -44,6 +45,8 @@ export function createClientImageProvider(
   switch (providerId) {
     case "gemini":
       return new GeminiImageProvider(apiKey, model);
+    case "xai":
+      return new XaiImageProvider(apiKey, model);
     default:
       throw new Error(
         `Provider "${providerId}" is not supported for image generation`,

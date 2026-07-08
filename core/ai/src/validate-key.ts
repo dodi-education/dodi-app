@@ -10,6 +10,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 import type { AIProviderId } from "@dodi/types/ai";
+import { createXaiClient } from "./xai";
 
 export async function validateProviderKey(
   providerId: AIProviderId,
@@ -25,6 +26,18 @@ export async function validateProviderKey(
     if (providerId === "anthropic") {
       const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
       await client.messages.create({
+        model,
+        max_tokens: 1,
+        messages: [{ role: "user", content: "ping" }],
+      });
+      return { valid: true };
+    }
+    if (providerId === "xai") {
+      // xAI is OpenAI-compatible; a 1-token completion on a text model checks
+      // auth. The caller passes a non-voice model so this doesn't hit the
+      // realtime-only voice endpoint.
+      const client = createXaiClient(apiKey, true);
+      await client.chat.completions.create({
         model,
         max_tokens: 1,
         messages: [{ role: "user", content: "ping" }],

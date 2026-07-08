@@ -43,7 +43,7 @@ export function buildMetadata(locale: Locale): Metadata {
  */
 export function buildPageMetadata(
   locale: Locale,
-  page: "app" | "companion" | "about",
+  page: "app" | "companion" | "about" | "pricing",
 ): Metadata {
   const ns = messages[locale][page];
   const title = ns.metaTitle;

@@ -11,6 +11,7 @@
     "./database": "./src/database.ts",
     "./games": "./src/games.ts",
     "./tasks": "./src/tasks.ts",
+    "./usage": "./src/usage.ts",
     "./success": "./src/success.ts",
     "./gemini-live": "./src/gemini-live.ts",
     "./logger": "./src/logger.ts"

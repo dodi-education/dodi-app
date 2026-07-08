@@ -36,6 +36,7 @@ export function buildLinks(locale: Locale) {
     home: localePath[locale],
     appPage: `${base}/app`,
     companion: `${base}/companion`,
+    pricing: `${base}/pricing`,
     about: `${base}/about`,
     appMemory: `${base}/app#memory`,
     appGames: `${base}/app#games`,
@@ -50,7 +51,7 @@ export function buildLinks(locale: Locale) {
 
 export type Links = ReturnType<typeof buildLinks>;
 
-type NavKey = "home" | "app" | "companion" | "about";
+type NavKey = "home" | "app" | "companion" | "pricing" | "about";
 
 export function SiteHeader({
   locale,
@@ -78,6 +79,9 @@ export function SiteHeader({
           </a>
           <a href={links.companion} className={active === "companion" ? "active" : undefined}>
             {t("nav.companion")}
+          </a>
+          <a href={links.pricing} className={active === "pricing" ? "active" : undefined}>
+            {t("nav.pricing")}
           </a>
           <a href={links.about} className={active === "about" ? "active" : undefined}>
             {t("nav.about")}
@@ -125,6 +129,7 @@ export function SiteFooter({ locale, links }: { locale: Locale; links: Links }) 
             <h5>{t("footer.product")}</h5>
             <a href={links.appPage}>{t("nav.app")}</a>
             <a href={links.companion}>{t("nav.companion")}</a>
+            <a href={links.pricing}>{t("nav.pricing")}</a>
             <a href={links.app}>{t("nav.openApp")}</a>
           </div>
           <div className="footer-col">

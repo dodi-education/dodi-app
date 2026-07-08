@@ -19,6 +19,9 @@ describe("buildCrumbs", () => {
     expect(buildCrumbs("/parent/system-logs", t)).toEqual([
       { label: "nav.systemLogs" },
     ]);
+    expect(buildCrumbs("/parent/usage", t)).toEqual([
+      { label: "nav.usage" },
+    ]);
   });
 
   it("links the section root and labels the leaf on the kids list/new pages", () => {

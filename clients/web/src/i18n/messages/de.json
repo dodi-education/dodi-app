@@ -606,6 +606,7 @@
     "personas": "Personas",
     "gameStudio": "Spiele",
     "systemLogs": "Systemprotokoll",
+    "usage": "Nutzung",
     "agentSessions": "Agent-Sitzungen",
     "settings": "Einstellungen",
     "home": "Home",
@@ -620,6 +621,19 @@
     "openKidView": "Kinderansicht öffnen",
     "openMenu": "Menü öffnen",
     "closeMenu": "Menü schließen"
+  },
+  "usage": {
+    "title": "Nutzung",
+    "subtitle": "Die KI-Nutzung dieses Monats. Kosten werden über deinen eigenen Anbieter abgerechnet.",
+    "voiceMinutes": "Sprach-Minuten",
+    "gamesMade": "Erstellte Spiele",
+    "perModel": "Nach Modell",
+    "createsEdits": "{creates} erstellt · {edits} bearbeitet · {analyses} analysiert",
+    "perChild": "Nach Kind",
+    "childGames": "{count} Spiele",
+    "childVoice": "{count} Sprach-Min.",
+    "unknownChild": "Ein Kind",
+    "noUsage": "Diesen Monat noch keine KI-Nutzung. Sie erscheint hier, sobald dodi Spiele macht und chattet."
   },
   "kidProfile": {
     "whosPlaying": "Wer spielt?",

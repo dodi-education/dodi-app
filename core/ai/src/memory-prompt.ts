@@ -92,3 +92,19 @@ export function parseMemoryUpdateResponse(text: string): MemoryUpdateResult {
   }
   return { memory: text.trim(), stored: [], discarded: [] };
 }
+
+/** Hard cap on the stored dossier size — anti-abuse + bounds future prompt cost. ~4000 words. */
+export const MEMORY_MAX_WORDS = 4000;
+
+/**
+ * Clamp a memory dossier to at most `maxWords` words. Enforced client-side
+ * BEFORE E2EE encryption — the server can never measure the sealed ciphertext,
+ * so this is the only place a runaway or maliciously-inflated dossier can be
+ * capped before it balloons every future generation's context.
+ */
+export function clampMemoryDossier(memory: string, maxWords = MEMORY_MAX_WORDS): string {
+  const trimmed = memory.trim();
+  if (!trimmed) return trimmed;
+  const words = trimmed.split(/\s+/);
+  return words.length <= maxWords ? memory : words.slice(0, maxWords).join(" ");
+}

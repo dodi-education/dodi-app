@@ -4,81 +4,26 @@
  * Supports function calling (tools) for structured game command execution.
  */
 
-import type { GeminiLiveToolDeclaration } from "@dodi/types/gemini-live";
-
-export type { GeminiLiveToolDeclaration } from "@dodi/types/gemini-live";
-
-export interface GeminiLiveConfig {
-  apiKey: string;
-  model: string;
-  voiceName: string;
-  systemInstruction: string;
-  tools?: GeminiLiveToolDeclaration[];
-}
-
-export type GeminiLiveEvent =
-  | { type: "setupComplete" }
-  | { type: "audio"; data: string } // base64 PCM
-  | { type: "text"; text: string }
-  | { type: "inputTranscription"; text: string } // kid's speech
-  | { type: "outputTranscription"; text: string } // Dodi's spoken words
-  | { type: "toolCall"; id: string; name: string; args: Record<string, unknown> }
-  | { type: "interrupted" }
-  | { type: "turnComplete" }
-  | { type: "error"; error: string }
-  | { type: "closed"; code: number; reason: string; fatal: boolean; message: string };
-
-/**
- * Classify a WebSocket close. `fatal` means reconnecting will not help — the
- * caller should stop retrying and surface `message` to the user.
- */
-function classifyClose(
-  code: number,
-  reason: string,
-): { fatal: boolean; message: string } {
-  const r = reason.toLowerCase();
-
-  if (r.includes("quota") || r.includes("exceeded") || r.includes("resource_exhausted")) {
-    return {
-      fatal: true,
-      message:
-        "dodi has used up the AI provider's quota for now. Please check your plan and billing details for the configured API key, then reconnect.",
-    };
-  }
-
-  if (
-    code === 1008 ||
-    r.includes("api key") ||
-    r.includes("api_key") ||
-    r.includes("permission") ||
-    r.includes("unauthenticated") ||
-    r.includes("unauthorized")
-  ) {
-    return {
-      fatal: true,
-      message:
-        "dodi couldn't authenticate with the AI provider. Please check the API key in parent settings, then reconnect.",
-    };
-  }
-
-  return {
-    fatal: false,
-    message: `Connection closed unexpectedly${code ? ` (code ${code})` : ""}.`,
-  };
-}
+import type {
+  VoiceClient,
+  VoiceClientConfig,
+  VoiceEvent,
+  VoiceGreetingMode,
+} from "./voice-client";
+import { classifyClose, greetingText } from "./voice-client";
 
 const GEMINI_WS_BASE =
   "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent";
 
-export class GeminiLiveClient {
+export class GeminiLiveClient implements VoiceClient {
   private ws: WebSocket | null = null;
-  private config: GeminiLiveConfig;
-  private onEvent: (event: GeminiLiveEvent) => void;
+  private config: VoiceClientConfig;
+  private onEvent: (event: VoiceEvent) => void;
   private setupComplete = false;
 
   constructor(
-    config: GeminiLiveConfig,
-    onEvent: (event: GeminiLiveEvent) => void,
+    config: VoiceClientConfig,
+    onEvent: (event: VoiceEvent) => void,
   ) {
     this.config = config;
     this.onEvent = onEvent;
@@ -153,6 +98,16 @@ export class GeminiLiveClient {
       },
       inputAudioTranscription: {},
       outputAudioTranscription: {},
+      // Enable sliding-window context compression so long sessions don't hit the
+      // ~15-min audio session cap and get abruptly cut off mid-conversation.
+      // No triggerTokens → Gemini uses the default near-ceiling trigger, so normal
+      // chats keep full context and only marathon sessions ever evict stale turns.
+      // The systemInstruction (persona/memory/child name) lives outside the sliding
+      // window, so this never causes persona drift; the full transcript is still
+      // captured client-side for the memory pipeline.
+      contextWindowCompression: {
+        slidingWindow: {},
+      },
     };
 
     if (this.config.tools && this.config.tools.length > 0) {
@@ -263,17 +218,10 @@ export class GeminiLiveClient {
    * Send a greeting trigger after setup is complete.
    * "long" = name + suggestions; "short" = single creative word.
    */
-  sendGreeting(mode: "long" | "short" | "birthday" = "long"): void {
+  sendGreeting(mode: VoiceGreetingMode = "long"): void {
     if (!this.setupComplete || !this.isOpen()) return;
 
-    let text: string;
-    if (mode === "birthday") {
-      text = "It's my birthday today! Wish me a big happy birthday, say my name, and offer to sing me the Happy Birthday song!";
-    } else if (mode === "long") {
-      text = "Greet me! Say hello to me by name and suggest what we could do together today.";
-    } else {
-      text = "Give me just a single quick, creative, funny greeting word — no name, no suggestions, just one fun word like 'Yooo!' or 'Hola!' or something playful!";
-    }
+    const text = greetingText(mode);
 
     const msg = {
       clientContent: {

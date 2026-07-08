@@ -10,9 +10,11 @@
  * succeeded so the caller only clears its outbox on success.
  */
 import { dodi } from "@/lib/api";
+import { reportUsage } from "@/lib/usage/report-usage";
 import { createClientThinkingProvider } from "@dodi/ai/client-thinking";
 import {
   buildMemoryUpdateInstruction,
+  clampMemoryDossier,
   parseMemoryUpdateResponse,
 } from "@dodi/ai/memory-prompt";
 import { AI_PROVIDERS } from "@dodi/ai/providers";
@@ -76,7 +78,24 @@ export async function runClientMemoryUpdate(
       sessionTranscript,
     ].join("\n");
 
-    const provider = createClientThinkingProvider(thinkingProvider, apiKey, thinkingModel);
+    const provider = createClientThinkingProvider(
+      thinkingProvider,
+      apiKey,
+      thinkingModel,
+      (usage) =>
+        reportUsage({
+          eventType: "memory_update",
+          kidId,
+          provider: thinkingProvider,
+          model: thinkingModel,
+          usage,
+          meta: {
+            memoryChars: (kid.memory ?? "").length,
+            personaChars: persona.soul.length,
+            promptChars: sessionTranscript.length,
+          },
+        }),
+    );
     let responseText: string;
     try {
       const json = await provider.generateJson(instruction, prompt);
@@ -86,7 +105,8 @@ export async function runClientMemoryUpdate(
     }
 
     const result = parseMemoryUpdateResponse(responseText);
-    const enc = encryptKidFields(session, { memory: result.memory });
+    const memory = clampMemoryDossier(result.memory);
+    const enc = encryptKidFields(session, { memory });
 
     const res = await dodi.request(`/api/kids/${kidId}`, {
       method: "PATCH",

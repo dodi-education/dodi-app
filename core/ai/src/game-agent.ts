@@ -2,31 +2,47 @@
  * Game-coding agent loop — runs fully in the browser so the provider key never
  * leaves the unlocked vault (BYOK server-blindness).
  *
- * Mirrors the former server `runCodeTask`: a multi-turn Anthropic tool-use loop
- * that writes + validates a self-contained game bundle. The caller resolves the
- * vault-decrypted key client-side and persists the result itself.
+ * Mirrors the former server `runCodeTask`: a multi-turn tool-use loop that writes
+ * + validates a self-contained game bundle. The caller resolves the vault-
+ * decrypted key client-side and persists the result itself.
  *
- * Tool use is Anthropic-specific, so generation requires an Anthropic thinking
- * model (matching prior behaviour). The provider key is passed in-memory only.
+ * The loop is provider-neutral: a `GameCodeDriver` (see game-agent-drivers.ts)
+ * runs each model turn for the configured agentic provider (Anthropic tool_use or
+ * xAI Grok OpenAI-compatible tool calling). The key is passed in-memory only.
  */
-
-import Anthropic from "@anthropic-ai/sdk";
 
 import { validateGameCode } from "@dodi/games/agent-validator";
 import type { AgentCodeResult, AgentTaskRequest, GenerateGamePayload, UpdateGamePayload } from "@dodi/types/tasks";
 import type { AgentStep } from "@dodi/types/agent-progress";
+import type { AIProviderId } from "@dodi/types/ai";
+import type { TokenUsage } from "@dodi/types/usage";
 
 import { buildAgentSystemPrompt } from "./game-agent-prompt";
 import {
-  AGENT_TOOLS,
   executeTool,
   type LastWriteResult,
   type ToolContext,
 } from "./game-agent-tools";
+import {
+  createGameDriver,
+  type GameToolCall,
+  type GameToolResult,
+  type PriorTurn,
+} from "./game-agent-drivers";
 
-const MAX_AGENT_TURNS = 15;
-const MAX_VALIDATION_RETRIES = 3;
-const MAX_TOKENS = 16384;
+export type { PriorTurn } from "./game-agent-drivers";
+
+/**
+ * Cost caps for a single game action. `MAX_TOKENS` is the per-write OUTPUT cap
+ * and `MAX_VALIDATION_RETRIES` bounds the number of writes; together they bound
+ * the worst-case cost of a generation. `MAX_TOKENS` is the value to calibrate
+ * from real `output_tokens` metrics — raise it if large bundles truncate.
+ */
+export const AGENT_LIMITS = {
+  MAX_AGENT_TURNS: 15,
+  MAX_VALIDATION_RETRIES: 1,
+  MAX_TOKENS: 8000,
+} as const;
 
 /** Thrown when the loop is cancelled via its AbortSignal (parent pressed Stop). */
 export class AgentAbortedError extends Error {
@@ -36,16 +52,12 @@ export class AgentAbortedError extends Error {
   }
 }
 
-/** A resumed display turn — restored from a persisted conversation transcript. */
-export interface PriorTurn {
-  role: "user" | "assistant";
-  text: string;
-}
-
 export interface RunGameAgentParams {
-  /** Vault-decrypted provider key (Anthropic). Never persisted or logged. */
+  /** Agentic (tool-use) provider driving generation (anthropic | xai). */
+  provider: AIProviderId;
+  /** Vault-decrypted provider key. Never persisted or logged. */
   apiKey: string;
-  /** Anthropic model id (thinking model). */
+  /** Model id (an agentic/tool-use model for the provider). */
   model: string;
   /** generate_game | update_game task with child context + payload. */
   task: AgentTaskRequest;
@@ -55,51 +67,6 @@ export interface RunGameAgentParams {
   signal?: AbortSignal;
   /** Progress callback driving the studio's step indicator. */
   onStep?: (step: AgentStep) => void;
-}
-
-/** Collapse consecutive same-role turns so the API always sees alternating roles. */
-function toSeedMessages(turns: PriorTurn[]): Anthropic.MessageParam[] {
-  const out: Anthropic.MessageParam[] = [];
-  for (const turn of turns) {
-    const text = turn.text.trim();
-    if (!text) continue;
-    const last = out[out.length - 1];
-    if (last && last.role === turn.role) {
-      last.content = `${last.content as string}\n\n${text}`;
-    } else {
-      out.push({ role: turn.role, content: text });
-    }
-  }
-  return out;
-}
-
-/**
- * Return `messages` with a rolling prompt-cache breakpoint on the last block of
- * the final turn. Each turn re-sends the whole transcript (system prompt, bridge
- * docs, the full game bundle) as input; without caching that context is re-billed
- * at full price on all ~6-15 turns — the bulk of a generation's cost. The rolling
- * breakpoint (plus the static one on `system`) lets every turn re-read the prior
- * context at ~0.1x. Honoured by Anthropic and by Venice (for Claude models);
- * confirm hits via `usage.cache_read_input_tokens`. The source array is left
- * untouched — the marker is request-only.
- */
-function messagesWithRollingCache(
-  messages: Anthropic.MessageParam[],
-): Anthropic.MessageParam[] {
-  if (messages.length === 0) return messages;
-  const out = messages.slice();
-  const last = out[out.length - 1];
-  const blocks: Anthropic.ContentBlockParam[] =
-    typeof last.content === "string"
-      ? [{ type: "text", text: last.content }]
-      : last.content.slice();
-  const i = blocks.length - 1;
-  blocks[i] = {
-    ...blocks[i],
-    cache_control: { type: "ephemeral" },
-  } as Anthropic.ContentBlockParam;
-  out[out.length - 1] = { ...last, content: blocks };
-  return out;
 }
 
 function buildCodeTaskUserMessage(task: AgentTaskRequest): string {
@@ -139,25 +106,20 @@ function buildCodeTaskUserMessage(task: AgentTaskRequest): string {
 }
 
 export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCodeResult> {
-  const { apiKey, model, task, priorTurns, signal, onStep } = params;
+  const { provider, apiKey, model, task, priorTurns, signal, onStep } = params;
   const emitStep = onStep ?? (() => {});
   const checkAborted = (): void => {
     if (signal?.aborted) throw new AgentAbortedError();
   };
 
-  const anthropic = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
-  const systemPrompt = buildAgentSystemPrompt(task.childContext);
-  // Cache the static prefix (tools render before system, so this one breakpoint
-  // covers both). The rolling per-turn breakpoint is added in the create calls.
-  const system: Anthropic.TextBlockParam[] = [
-    { type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } },
-  ];
-
+  const driver = createGameDriver(provider, {
+    apiKey,
+    model,
+    systemPrompt: buildAgentSystemPrompt(task.childContext),
+    maxTokens: AGENT_LIMITS.MAX_TOKENS,
+  });
   // Seed with any resumed conversation, then the concrete task request.
-  const messages: Anthropic.MessageParam[] = priorTurns?.length
-    ? toSeedMessages(priorTurns)
-    : [];
-  messages.push({ role: "user", content: buildCodeTaskUserMessage(task) });
+  driver.seed(priorTurns, buildCodeTaskUserMessage(task));
 
   // Update tasks preload the existing code so read_existing_game returns it.
   const toolContext: ToolContext = {};
@@ -175,69 +137,65 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
   let iterationCount = 0;
   let validationRetries = 0;
 
-  const runToolTurn = (toolUse: Anthropic.ToolUseBlock): Anthropic.ToolResultBlockParam => {
-    if (toolUse.name === "read_bridge_docs" || toolUse.name === "read_existing_game") {
+  // Accumulate token usage across every model call (main loop + fix loop) so the
+  // caller can report the true per-generation cost. Structural param type avoids
+  // depending on the exact SDK usage type name.
+  const usage: TokenUsage = {
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheWriteTokens: 0,
+    cacheReadTokens: 0,
+  };
+  const addUsage = (u: TokenUsage): void => {
+    usage.inputTokens += u.inputTokens;
+    usage.outputTokens += u.outputTokens;
+    usage.cacheWriteTokens += u.cacheWriteTokens;
+    usage.cacheReadTokens += u.cacheReadTokens;
+  };
+
+  const runToolTurn = (call: GameToolCall): GameToolResult => {
+    if (call.name === "read_bridge_docs" || call.name === "read_existing_game") {
       emitStep("reading_docs");
-    } else if (toolUse.name === "write_game_code") {
+    } else if (call.name === "write_game_code") {
       emitStep("writing_code");
-    } else if (toolUse.name === "validate_game") {
+    } else if (call.name === "validate_game") {
       emitStep("validating");
     }
-    const { result, writeResult } = executeTool(
-      toolUse.name,
-      toolUse.input as Record<string, unknown>,
-      toolContext,
-    );
+    const { result, writeResult } = executeTool(call.name, call.input, toolContext);
     if (writeResult) {
       lastWrite = writeResult;
       toolContext.existingCode = writeResult.code;
       toolContext.existingMarkdown = writeResult.markdown;
     }
-    return { type: "tool_result", tool_use_id: toolUse.id, content: result };
+    return { id: call.id, content: result };
   };
 
   // Agentic loop
-  for (let turn = 0; turn < MAX_AGENT_TURNS; turn++) {
+  for (let turn = 0; turn < AGENT_LIMITS.MAX_AGENT_TURNS; turn++) {
     checkAborted();
-    const response = await anthropic.messages.create({
-      model,
-      max_tokens: MAX_TOKENS,
-      system,
-      tools: AGENT_TOOLS,
-      messages: messagesWithRollingCache(messages),
-    });
+    const result = await driver.runTurn();
     iterationCount++;
+    addUsage(result.usage);
 
-    const toolUseBlocks = response.content.filter(
-      (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
-    );
-    const textBlocks = response.content.filter(
-      (b): b is Anthropic.TextBlock => b.type === "text",
-    );
-
-    messages.push({ role: "assistant", content: response.content });
-
-    if (toolUseBlocks.length === 0) {
+    if (result.toolCalls.length === 0) {
       if (lastWrite) {
         emitStep("finalizing");
         break;
       }
-      if (textBlocks.length > 0) {
-        messages.push({
-          role: "user",
-          content:
-            "Please use the write_game_code tool to provide the game code, " +
+      if (result.hasText) {
+        driver.addUserMessage(
+          "Please use the write_game_code tool to provide the game code, " +
             "then validate_game to verify it. Do not output code as text.",
-        });
+        );
         continue;
       }
       break;
     }
 
-    const toolResults = toolUseBlocks.map(runToolTurn);
-    messages.push({ role: "user", content: toolResults });
+    const toolResults = result.toolCalls.map(runToolTurn);
+    driver.addToolResults(toolResults);
 
-    if (response.stop_reason !== "tool_use") break;
+    if (!result.expectsToolResults) break;
   }
 
   if (!lastWrite) {
@@ -252,35 +210,24 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
 
   // Final validation with a bounded fix loop.
   const validation = validateGameCode(lastWrite.code, goalOpts());
-  if (!validation.valid && validationRetries < MAX_VALIDATION_RETRIES) {
+  if (!validation.valid && validationRetries < AGENT_LIMITS.MAX_VALIDATION_RETRIES) {
     emitStep("fixing_validation");
-    messages.push({
-      role: "user",
-      content:
-        `Final validation failed with errors:\n${validation.errors.join("\n")}\n\n` +
+    driver.addUserMessage(
+      `Final validation failed with errors:\n${validation.errors.join("\n")}\n\n` +
         `Please fix these issues and use write_game_code again, then validate_game.`,
-    });
+    );
 
-    for (let retry = 0; retry < MAX_VALIDATION_RETRIES; retry++) {
+    for (let retry = 0; retry < AGENT_LIMITS.MAX_VALIDATION_RETRIES; retry++) {
       checkAborted();
       validationRetries++;
-      const fixResponse = await anthropic.messages.create({
-        model,
-        max_tokens: MAX_TOKENS,
-        system,
-        tools: AGENT_TOOLS,
-        messages: messagesWithRollingCache(messages),
-      });
+      const fix = await driver.runTurn();
       iterationCount++;
+      addUsage(fix.usage);
 
-      const fixToolUses = fixResponse.content.filter(
-        (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
-      );
-      messages.push({ role: "assistant", content: fixResponse.content });
-      if (fixToolUses.length === 0) break;
+      if (fix.toolCalls.length === 0) break;
 
-      const fixResults = fixToolUses.map(runToolTurn);
-      messages.push({ role: "user", content: fixResults });
+      const fixResults = fix.toolCalls.map(runToolTurn);
+      driver.addToolResults(fixResults);
 
       const recheck = validateGameCode(lastWrite.code, goalOpts());
       if (recheck.valid) break;
@@ -304,5 +251,7 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
     changeSummary: lastWrite.changeSummary,
     validationPassed: finalValidation.valid,
     iterationCount,
+    validationRetries,
+    usage,
   };
 }

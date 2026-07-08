@@ -422,7 +422,10 @@ export function AIProviderConfig() {
                   setVoiceProvider(pid);
                   const def = AI_PROVIDERS.find((p) => p.id === pid);
                   if (def) {
-                    setVoiceModel(def.models[0]?.id ?? "");
+                    const voiceModel =
+                      def.models.find((m) => m.capabilities.includes("voice")) ??
+                      def.models[0];
+                    setVoiceModel(voiceModel?.id ?? "");
                     setVoiceName(def.voices[0]?.id ?? "");
                   }
                 }}
@@ -431,11 +434,16 @@ export function AIProviderConfig() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {providers.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.name}
-                    </SelectItem>
-                  ))}
+                  {providers
+                    .filter((p) => {
+                      const def = AI_PROVIDERS.find((d) => d.id === p.id);
+                      return def?.supportsVoice;
+                    })
+                    .map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
             </FieldRow>

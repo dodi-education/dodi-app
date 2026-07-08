@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildMemoryUpdateInstruction,
+  clampMemoryDossier,
+  MEMORY_MAX_WORDS,
   parseMemoryUpdateResponse,
 } from "./memory-prompt";
 
@@ -65,5 +67,22 @@ describe("parseMemoryUpdateResponse", () => {
     const res = parseMemoryUpdateResponse(JSON.stringify({ memory: "doc" }));
     expect(res.stored).toEqual([]);
     expect(res.discarded).toEqual([]);
+  });
+});
+
+describe("clampMemoryDossier", () => {
+  it("leaves a dossier under the word cap unchanged", () => {
+    const doc = "## About\n- Loves mango and dinosaurs";
+    expect(clampMemoryDossier(doc)).toBe(doc);
+  });
+
+  it("clamps a dossier over the word cap to exactly the cap", () => {
+    const doc = Array.from({ length: MEMORY_MAX_WORDS + 500 }, () => "word").join(" ");
+    const out = clampMemoryDossier(doc);
+    expect(out.split(/\s+/)).toHaveLength(MEMORY_MAX_WORDS);
+  });
+
+  it("returns empty for blank input", () => {
+    expect(clampMemoryDossier("   ")).toBe("");
   });
 });

@@ -510,10 +510,15 @@ parent-defined goal — and, in future, generate challenges like "Solve 3 math g
 
 ## TODO
 
+- Configure Voice (Provider/Style) per persona
+
 - Split drawing game
  - Current drawing game: When requested to draw something, it should create 2d drawings freely
  - New mandala game: Same interface as drawing game but when asked to draw something it should always create mandalas (current functionality)
  - Add a game_preview_image (small preview image), static for system games, otherwise created after each game creation / edit process as screenshot
+
+ - Add new provider category for joke telling
+  - if set and kid asks for a joke provider is called to fetch a joke which voice should read. (Google Voice is really bad at telling jokes, so we could ask ChatGPT who is quite good ad joking)
  
  - Add pricing
   - Add to landing page and onboarding flow
@@ -531,6 +536,8 @@ parent-defined goal — and, in future, generate challenges like "Solve 3 math g
 - Let kids draw their own avatars
 - Daily challenges UI: let Dodi generate + track challenges on top of `game_plays` (foundation is in place).
 - Allow games to connect with AI provider for in-game content generation (e.g. for texts, calculations, formulas etc.)
+
+- Investigate sessionResumption for google voice
 
 - Game library for parents
  - Allow parents to publish to games lib
@@ -560,4 +567,5 @@ Notifications:
 Security:
 - Add captchas to registration / login / pw-reset
 - Check CSRF safety
+- Check sql injection vector
 - In production DB/system errors should never be displayed to the users. Only generic errors should be displayed in prodouction.

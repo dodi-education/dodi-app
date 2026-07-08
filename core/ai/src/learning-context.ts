@@ -13,6 +13,13 @@
 /** Per-kid character cap so family-scope context doesn't balloon the prompt. */
 export const LEARNING_CONTEXT_CHARS_PER_KID = 1500;
 
+/**
+ * Total cap across ALL selected kids (~1000 words). Bounds the injected context
+ * even for large families and prevents a bloated dossier from inflating token
+ * cost — the per-kid cap alone doesn't bound the multi-kid concatenation.
+ */
+export const LEARNING_CONTEXT_MAX_TOTAL_CHARS = 6000;
+
 export interface LearningContextKid {
   id: string;
   /** Decrypted memory dossier (null/empty when none). */
@@ -31,26 +38,33 @@ function clip(text: string, max: number): string {
 }
 
 /**
- * Assemble the learning context from ALREADY-DECRYPTED kids, scoped by "who can
- * play": family → all kids; specific audienceIds → those kids; otherwise the
- * primary kid. Each kid's memory/notes are clipped to
- * LEARNING_CONTEXT_CHARS_PER_KID. Returns undefined when no selected kid has any
- * memory or notes.
+ * Select the kids whose context applies, scoped by "who can play": family → all
+ * kids; specific audienceIds → those kids; otherwise the primary kid.
+ */
+function selectKids(
+  kids: LearningContextKid[],
+  audience: LearningAudience | undefined,
+  primaryKidId: string,
+): LearningContextKid[] {
+  if (audience?.isFamily) return kids;
+  if (audience && audience.audienceIds.length > 0) {
+    const ids = new Set(audience.audienceIds);
+    return kids.filter((k) => ids.has(k.id));
+  }
+  return kids.filter((k) => k.id === primaryKidId);
+}
+
+/**
+ * Assemble the learning context from ALREADY-DECRYPTED kids. Each kid's
+ * memory/notes are clipped to LEARNING_CONTEXT_CHARS_PER_KID. Returns undefined
+ * when no selected kid has any memory or notes.
  */
 export function buildLearningContext(
   kids: LearningContextKid[],
   audience: LearningAudience | undefined,
   primaryKidId: string,
 ): string | undefined {
-  let selected: LearningContextKid[];
-  if (audience?.isFamily) {
-    selected = kids;
-  } else if (audience && audience.audienceIds.length > 0) {
-    const ids = new Set(audience.audienceIds);
-    selected = kids.filter((k) => ids.has(k.id));
-  } else {
-    selected = kids.filter((k) => k.id === primaryKidId);
-  }
+  const selected = selectKids(kids, audience, primaryKidId);
 
   const blocks: string[] = [];
   for (const k of selected) {
@@ -68,7 +82,28 @@ export function buildLearningContext(
   }
 
   if (blocks.length === 0) return undefined;
-  return blocks.length > 1
-    ? blocks.map((b, i) => `### Child ${i + 1}\n${b}`).join("\n\n")
-    : blocks[0];
+  const joined =
+    blocks.length > 1
+      ? blocks.map((b, i) => `### Child ${i + 1}\n${b}`).join("\n\n")
+      : blocks[0];
+  return clip(joined, LEARNING_CONTEXT_MAX_TOTAL_CHARS);
+}
+
+/**
+ * Chars of the memory + parent-notes actually fed to the agent, using the same
+ * audience scoping as buildLearningContext. For usage metering — lengths only,
+ * never content (provider-blind).
+ */
+export function measureLearningContext(
+  kids: LearningContextKid[],
+  audience: LearningAudience | undefined,
+  primaryKidId: string,
+): { memoryChars: number; parentNotesChars: number } {
+  let memoryChars = 0;
+  let parentNotesChars = 0;
+  for (const k of selectKids(kids, audience, primaryKidId)) {
+    memoryChars += (k.memory ?? "").trim().length;
+    parentNotesChars += (k.parent_notes ?? "").trim().length;
+  }
+  return { memoryChars, parentNotesChars };
 }

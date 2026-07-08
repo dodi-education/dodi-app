@@ -1,14 +1,16 @@
 import { create } from "zustand";
 
-import {
-  GeminiLiveClient,
-  type GeminiLiveEvent,
-  type GeminiLiveToolDeclaration,
-} from "@/lib/ai/gemini-live-client";
+import { createVoiceClient } from "@/lib/ai/create-voice-client";
+import type {
+  VoiceClient,
+  VoiceEvent,
+  VoiceToolDeclaration,
+} from "@/lib/ai/voice-client";
 import { AudioStreamer } from "@/lib/ai/audio-streamer";
 import { AudioRecorder } from "@/lib/ai/audio-recorder";
 import { buildGameVoiceConfig, buildHomeVoiceConfig } from "@/lib/ai/voice-session";
 import { runClientMemoryUpdate } from "@/lib/ai/client-memory-update";
+import { reportUsage } from "@/lib/usage/report-usage";
 import { runGameTextAssistant } from "@/lib/ai/client-game-assistant";
 import { resolveClientThinking } from "@/lib/ai/resolve-client-thinking";
 import { useKidStore } from "@/stores/kid-store";
@@ -17,6 +19,7 @@ import { getLanguageDisplayName } from "@dodi/ai/dodi-context";
 import { extractCommandMarkers } from "@dodi/games/command-markers";
 import { gameDebug, gameDebugWarn } from "@dodi/games/debug";
 import { STANDARD_TOOLS_BY_NAME } from "@dodi/games/toolbox";
+import type { AIProviderId } from "@dodi/types/ai";
 import type { GameCommand } from "@dodi/types/games";
 
 // ---------------------------------------------------------------------------
@@ -83,11 +86,12 @@ interface PendingBatch {
 }
 
 interface GameVoiceSessionConfig {
+  provider: AIProviderId;
   apiKey: string;
   model: string;
   voiceName: string;
   systemInstruction: string;
-  tools?: GeminiLiveToolDeclaration[];
+  tools?: VoiceToolDeclaration[];
   isBirthday?: boolean;
 }
 
@@ -175,7 +179,7 @@ async function withAiActivity<T>(kind: DodiActivity, fn: () => Promise<T>): Prom
 // External refs (outside Zustand to avoid serialization)
 // ---------------------------------------------------------------------------
 
-let client: GeminiLiveClient | null = null;
+let client: VoiceClient | null = null;
 let streamer: AudioStreamer | null = null;
 let recorder: AudioRecorder | null = null;
 let abortController: AbortController | null = null;
@@ -207,6 +211,46 @@ let turnBuffer = "";
 let gameAssistanceTurns = 0;
 let lastSentGameState = "";
 let stateDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+// Voice active-minute metering. Gemini Live exposes no token usage, so we meter
+// wall-clock time in the "active" state (mic on + audio playing). The kid/game
+// is captured at START so attribution survives even when `currentKidId` is
+// nulled before cleanup() (sleep / endSession do that). One `voice_minutes`
+// event per active↔inactive cycle; stop is idempotent so overlapping hooks are safe.
+let voiceActiveSince: number | null = null;
+let voiceMeterKidId: string | null = null;
+let voiceMeterGameId: string | null = null;
+const voiceMeterModel = "gemini-3.1-flash-live-preview";
+
+function voiceMeterStart(): void {
+  if (voiceActiveSince !== null || !currentKidId) return;
+  voiceActiveSince = Date.now();
+  voiceMeterKidId = currentKidId;
+  const ctx = useDodiSessionStore.getState().context;
+  voiceMeterGameId = ctx.type === "game" ? ctx.gameId : null;
+}
+
+function voiceMeterStop(keepalive = false): void {
+  if (voiceActiveSince === null) return;
+  const seconds = Math.round((Date.now() - voiceActiveSince) / 1000);
+  const kidId = voiceMeterKidId;
+  const gameId = voiceMeterGameId;
+  voiceActiveSince = null;
+  voiceMeterKidId = null;
+  voiceMeterGameId = null;
+  if (seconds < 1 || !kidId) return;
+  reportUsage(
+    {
+      eventType: "voice_minutes",
+      kidId,
+      gameId,
+      provider: "gemini",
+      model: voiceMeterModel,
+      voiceSeconds: seconds,
+    },
+    { keepalive },
+  );
+}
 let stateSequenceNumber = 0;
 let pendingGameState: string | null = null;
 
@@ -525,11 +569,13 @@ function drainPending(kidId: string, force: boolean): void {
 // We deliberately do NOT POST the raw transcript to the server — under E2EE it
 // must never see the plaintext transcript.
 function handleBeforeUnload(): void {
+  voiceMeterStop(true);
   flushRound();
   persistToLocalStorage();
 }
 
 function handlePageHide(): void {
+  voiceMeterStop(true);
   flushRound();
   persistToLocalStorage();
 }
@@ -566,6 +612,8 @@ function flushPendingState(): void {
 }
 
 function cleanup(): void {
+  // Catch-all for sleep / endSession / reconnect / error paths (idempotent).
+  voiceMeterStop();
   abortController?.abort();
   abortController = null;
 
@@ -638,6 +686,7 @@ function transitionToActive(
   if (!client || !currentKidId) return;
 
   set({ state: "active", gestureNeeded: false, error: null });
+  voiceMeterStart();
 
   if (!greetingSent) {
     greetingSent = true;
@@ -665,6 +714,7 @@ function transitionToDeaf(
   set: (partial: Partial<DodiSessionState>) => void,
   manual: boolean,
 ): void {
+  voiceMeterStop();
   recorder?.stop();
   recorder = null;
   streamer?.stop();
@@ -914,7 +964,7 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
 
       const isGameContext = newContext.type === "game";
       const handleEvent = createEventHandler(set, get, kidId, gen, isGameContext);
-      client = new GeminiLiveClient(config, handleEvent);
+      client = createVoiceClient(config, handleEvent);
       client.connect();
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return;
@@ -1009,7 +1059,7 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
 
       const isGameContext = currentContext.type === "game";
       const handleEvent = createEventHandler(set, get, kidId, gen, isGameContext);
-      client = new GeminiLiveClient(config, handleEvent);
+      client = createVoiceClient(config, handleEvent);
       client.connect();
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return;
@@ -1239,8 +1289,8 @@ function createEventHandler(
   kidId: string,
   generation: number,
   isGameContext: boolean,
-): (event: GeminiLiveEvent) => void {
-  return (event: GeminiLiveEvent): void => {
+): (event: VoiceEvent) => void {
+  return (event: VoiceEvent): void => {
     if (generation !== contextGeneration) return;
     if (currentKidId !== kidId) return;
 
@@ -1439,7 +1489,7 @@ function createEventHandler(
 
               // Show the companion's "thinking" state for the whole analysis
               // window (snapshot grab + provider call), cleared even on throw.
-              const analysis = await withAiActivity("thinking", async () => {
+              const { analysis, usage } = await withAiActivity("thinking", async () => {
                 const snapshotHandler = get().onRequestSnapshot;
                 const snapshot =
                   snapshotHandler && ctx.capabilities.includes("get_snapshot")
@@ -1462,6 +1512,14 @@ function createEventHandler(
                   childName: kid?.display_name,
                   language: getLanguageDisplayName(kid?.language ?? "en"),
                 });
+              });
+              reportUsage({
+                eventType: "game_analysis",
+                kidId,
+                gameId: ctx.gameId,
+                provider: thinking.provider,
+                model: thinking.model,
+                usage,
               });
               gameDebug("voice", `read_game_state result: "${analysis.slice(0, 200)}"`);
               client?.sendToolResponse(event.id, event.name, {

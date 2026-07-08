@@ -8,6 +8,7 @@
  */
 import { dodi } from "@/lib/api";
 import { createClientThinkingProvider } from "@dodi/ai/client-thinking";
+import { reportUsage } from "@/lib/usage/report-usage";
 import { resolveClientThinking } from "@/lib/ai/resolve-client-thinking";
 import { getActivePersona } from "@/lib/ai/voice-session";
 import { normalizeCommands } from "@dodi/games/normalize-commands";
@@ -57,6 +58,21 @@ export async function runGameTextAssistant(
     thinking.provider,
     thinking.apiKey,
     thinking.model,
+    (usage) =>
+      reportUsage({
+        eventType: "game_analysis",
+        kidId,
+        gameId,
+        provider: thinking.provider,
+        model: thinking.model,
+        usage,
+        meta: {
+          personaChars: persona.soul.length,
+          memoryChars: (kid.memory ?? "").length,
+          parentNotesChars: (kid.parent_notes ?? "").length,
+          promptChars: message.length,
+        },
+      }),
   );
   const parsed = await provider.generateJson(systemInstruction, message);
 

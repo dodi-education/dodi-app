@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 
 import { requireAuth } from "@/lib/resolve-auth";
+import { getAccount } from "@/services/accounts";
 import { createKid, listKids } from "@/services/kids";
 import { generateSocialId } from "@dodi/crypto/social-id";
 
@@ -40,6 +41,16 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json(
       { error: "Validation failed", issues: result.error.issues },
       { status: 400 },
+    );
+  }
+
+  // Entitlement gate: cap kid profiles at the account's copied max_kids.
+  const account = await getAccount(supabase, accountId);
+  const existingKids = await listKids(supabase, accountId);
+  if (account && existingKids.length >= account.max_kids) {
+    return NextResponse.json(
+      { error: "kid_limit_reached", limit: account.max_kids },
+      { status: 409 },
     );
   }
 

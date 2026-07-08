@@ -99,6 +99,9 @@ export function buildCrumbs(
     case "system-logs":
       return [{ label: t("nav.systemLogs") }];
 
+    case "usage":
+      return [{ label: t("nav.usage") }];
+
     default:
       return [];
   }

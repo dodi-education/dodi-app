@@ -43,6 +43,11 @@ export function useNavGroups(): NavGroup[] {
           label: t("systemLogs"),
           icon: "system_logs",
         },
+        {
+          href: "/parent/usage",
+          label: t("usage"),
+          icon: "usage",
+        },
       ],
     },
   ];
