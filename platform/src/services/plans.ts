@@ -107,7 +107,7 @@ export async function applyPlanToAccount(
     subscribed_plan: plan.handle,
     max_kids: plan.max_kids,
     max_custom_personas: plan.max_custom_personas,
-    max_snapshots_per_kid: plan.max_snapshots_per_kid,
+    max_storage_mb_per_kid: plan.max_storage_mb_per_kid,
     memory_tier: plan.memory_tier,
   });
 }

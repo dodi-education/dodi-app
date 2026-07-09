@@ -10,7 +10,7 @@
  */
 import { create } from "zustand";
 
-import { toBase64Url } from "@dodi/crypto";
+import { deriveVaultMasterKeyFromPhrase, toBase64Url } from "@dodi/crypto";
 import {
   type DeviceRegistration,
   type StoredDevice,
@@ -27,6 +27,11 @@ import {
   unlockVaultWithPhrase,
 } from "@dodi/vault";
 import { clearParentUnlocked, markParentUnlocked } from "@/lib/parent-lock";
+import {
+  clearSealedSecret,
+  consumeSealedSecret,
+  stashSealedSecret,
+} from "@/lib/sealed-secret";
 import { fetchVaultKeys, saveVaultKeys } from "@/lib/vault-client";
 
 export type VaultStatus =
@@ -41,9 +46,28 @@ interface VaultStoreState {
   session: VaultSession | null;
   /** Set after bootstrap; shown once on the backup-phrase screen, then cleared. */
   pendingBackupPhrase: string | null;
+  /**
+   * In-memory only (NEVER persisted): the vault built at registration, awaiting
+   * the emailed OTP. `finalizeVault` persists it once the code establishes a
+   * session; retained across a failed save so a retry needs no re-verify.
+   */
+  pendingVault: { storedKeys: StoredVaultKeys; backupPhrase: string } | null;
   error: string | null;
 
   bootstrap: (password: string) => Promise<string>;
+  /**
+   * Register (email-OTP) split of bootstrap: build the vault in memory from the
+   * password and seal it locally — NO server write, NO session. The caller drops
+   * the password immediately after this resolves.
+   */
+  createLocalVault: (password: string) => Promise<void>;
+  /**
+   * After the OTP code establishes a session: persist the sealed vault, activate
+   * the session, and reveal the recovery phrase. Retry-safe on a failed save.
+   */
+  finalizeVault: () => Promise<void>;
+  /** Drop the pending local vault + sealed blob (e.g. "use a different email"). */
+  discardLocalVault: () => Promise<void>;
   unlockOrBootstrap: (password: string) => Promise<{ created: boolean }>;
   unlockWithPassword: (password: string) => Promise<void>;
   unlockWithPhrase: (phrase: string) => Promise<void>;
@@ -102,6 +126,7 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
   status: "idle",
   session: null,
   pendingBackupPhrase: null,
+  pendingVault: null,
   error: null,
 
   bootstrap: async (password) => {
@@ -125,6 +150,60 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
       set({ status: "needs-setup", error: message });
       throw error;
     }
+  },
+
+  createLocalVault: async (password) => {
+    // Build the vault in memory and seal it for the OTP window. No server write
+    // (there's no session yet) and no status change (the user is still on the
+    // public /register page, outside VaultGate). The device key is created here
+    // and wrapped into storedKeys, so silent unlock works after finalize. The
+    // seal holds only the one-way passwordWrap + phrase, never the plaintext.
+    const device = await loadDevice();
+    const { backupPhrase, storedKeys } = createAccountVault({
+      password,
+      device: deviceRegistration(device),
+    });
+    await stashSealedSecret(JSON.stringify({ storedKeys, backupPhrase }));
+  },
+
+  finalizeVault: async () => {
+    set({ status: "working", error: null });
+    try {
+      // Prefer the in-memory copy (set below on the first attempt) so a retry
+      // after a failed save doesn't depend on the already-wiped seal.
+      let data = get().pendingVault;
+      if (!data) {
+        const raw = await consumeSealedSecret();
+        if (!raw) throw new Error("registration-seal-missing");
+        data = JSON.parse(raw) as {
+          storedKeys: StoredVaultKeys;
+          backupPhrase: string;
+        };
+        set({ pendingVault: data });
+      }
+      await saveVaultKeys(data.storedKeys);
+      // Reproduces the exact VMK createAccountVault sealed under (phrase → VMK is
+      // deterministic); cheap (BIP39 seed), and avoids repeating Argon2id.
+      const vmk = deriveVaultMasterKeyFromPhrase(data.backupPhrase);
+      await clearSealedSecret();
+      set({
+        session: new VaultSession(vmk),
+        pendingBackupPhrase: data.backupPhrase,
+        status: "unlocked",
+        pendingVault: null,
+      });
+      markParentUnlocked();
+    } catch (error) {
+      // Leave pendingVault intact so the caller can retry saveVaultKeys without
+      // re-verifying. needs-setup is accurate: authenticated, vault not yet stored.
+      set({ status: "needs-setup" });
+      throw error;
+    }
+  },
+
+  discardLocalVault: async () => {
+    set({ pendingVault: null });
+    await clearSealedSecret();
   },
 
   unlockOrBootstrap: async (password) => {

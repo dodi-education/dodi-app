@@ -11,7 +11,7 @@ import { createClient } from "@/lib/supabase/client";
 export function AccountBadge() {
   const t = useTranslations("settings");
   const [email, setEmail] = useState("");
-  const [tier, setTier] = useState("free");
+  const [tier, setTier] = useState("egg");
 
   useEffect(() => {
     const supabase = createClient();

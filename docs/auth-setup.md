@@ -54,14 +54,19 @@ Set on the platform (`platform/.env.local`, and Vercel for prod) — see
 ## 3. Hosted Supabase dashboard — required
 
 Authentication → **URL Configuration**
-- Site URL + **Redirect URLs** must include every origin the app is served from,
-  incl. the dev host: `https://192.168.1.23:3000` (and `/auth/callback`). Without
-  this, confirmation links won't return to the dev machine.
+- Set the **Site URL**. Registration and password reset use email **OTP codes**
+  entered in-page (no redirect), so no `/auth/callback` Redirect URL entry is
+  needed for them.
 
 Authentication → **Emails**
 - Turn **Confirm email** ON (matches `config.toml enable_confirmations = true`).
   This is what makes signup non-enumerable — an already-registered email gets a
   generic "check your email" instead of "User already registered".
+- **Templates** → edit **Confirm signup** and **Reset password** to render the
+  6-digit code `{{ .Token }}` (the in-page flows verify a code; a magic-link
+  template won't deliver one). **Required on the hosted project** — this is the
+  gating step for the OTP flows to work against remote Supabase. (Local dev gets
+  the same via `config.toml` `[auth.email.template.confirmation|recovery]`.)
 - **SMTP Settings** → Resend:
   `host smtp.resend.com`, `port 465`, `user resend`, `pass <RESEND_API_KEY>`,
   sender on a **Resend-verified domain** (e.g. `team@mail.dodi.app`).
@@ -121,5 +126,17 @@ without the hook — the client reads the mode from the dev platform directly; o
 - On allow, GoTrue creates the (unconfirmed) user; `handle_new_user()` creates the
   `accounts` row and records the invite redemption (it has the new user id, which
   the hook does not).
-- Supabase sends the confirmation email via Resend. The link returns to
-  `/auth/callback`; after confirm + sign-in the E2EE vault bootstraps.
+- Supabase sends the confirmation email via Resend carrying a **6-digit code**
+  (`{{ .Token }}`). The user enters it on `/register` in the same tab:
+  `verifyOtp({ type: "signup" })` establishes the session, then the E2EE vault —
+  built in memory at signup and sealed under a non-extractable AES-GCM key
+  (`clients/web/src/lib/sealed-secret.ts`) — is persisted and its recovery phrase
+  shown (`/vault-setup`). The plaintext password is used once to build the vault's
+  one-way password-wrap, then dropped — it is never stored.
+- **Password reset** works the same way: a code → `verifyOtp({ type: "recovery" })`
+  → `/update-password` (set the new password + re-wrap the vault via the recovery
+  phrase). Both flows are in-page, so there is no `/auth/callback` and no
+  cross-device link problem.
+- `/finish-setup` remains only as the "authenticated but no vault" safety net
+  (a persist that failed after confirm, or a post-reset account that predates the
+  vault); registration no longer routes through it.

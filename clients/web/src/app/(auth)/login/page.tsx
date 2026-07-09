@@ -17,6 +17,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { dodi } from "@/lib/api";
+import { clearSealedSecret } from "@/lib/sealed-secret";
 import { createClient } from "@/lib/supabase/client";
 import { useVaultStore } from "@/stores/vault-store";
 
@@ -67,6 +68,10 @@ export default function LoginPage() {
       setLoading(false);
       return;
     }
+
+    // Signing in directly (not via the OTP step) makes any vault sealed at
+    // registration moot — drop it so it never lingers as ciphertext.
+    void clearSealedSecret();
 
     // Unlock the E2EE vault with the same password (bootstraps one if this
     // account predates the vault).

@@ -537,6 +537,9 @@ parent-defined goal — and, in future, generate challenges like "Solve 3 math g
 - Daily challenges UI: let Dodi generate + track challenges on top of `game_plays` (foundation is in place).
 - Allow games to connect with AI provider for in-game content generation (e.g. for texts, calculations, formulas etc.)
 
+- Enhance usage reporting
+ - For dodiAI only display numbers pulled from providers (derive voice usage by pulling costs and divide by unit costs)
+
 - Investigate sessionResumption for google voice
 
 - Game library for parents

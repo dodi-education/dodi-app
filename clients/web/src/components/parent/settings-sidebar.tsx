@@ -6,7 +6,6 @@ import { useTranslations } from "next-intl";
 
 import { AccountBadge } from "@/components/parent/account-badge";
 import { BackLink } from "@/components/parent/back-link";
-import { KidViewButton } from "@/components/parent/kid-view-button";
 import { Icon, type IconName } from "@/components/shared/icon";
 import { cn } from "@/lib/utils";
 
@@ -86,7 +85,6 @@ export function SettingsSidebar() {
           })}
         </nav>
         <div className="mt-auto flex flex-col gap-2.5 pt-3">
-          <KidViewButton />
           <AccountBadge />
         </div>
       </aside>

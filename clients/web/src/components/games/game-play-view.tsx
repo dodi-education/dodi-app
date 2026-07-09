@@ -28,6 +28,7 @@ import {
 } from "@/lib/ai/client-generate-drawing";
 import type {
   DodiProgressState,
+  DrawingStyle,
   GameCommand,
   GameGoal,
   GameToParentMessage,
@@ -45,6 +46,7 @@ interface GamePlayViewProps {
   successCriteria: SuccessCriteria;
   progressKind: ProgressKind;
   capabilities: string[];
+  drawingStyle: DrawingStyle;
 }
 
 export function GamePlayView({
@@ -59,6 +61,7 @@ export function GamePlayView({
   successCriteria,
   progressKind,
   capabilities,
+  drawingStyle,
 }: GamePlayViewProps) {
   const t = useTranslations("games");
 
@@ -226,7 +229,7 @@ export function GamePlayView({
       setGameError(null);
       beginAiActivity("image");
       try {
-        const dataUrl = await generateDrawing(subject);
+        const dataUrl = await generateDrawing(subject, drawingStyle);
         sandboxRef.current?.sendCommand({
           type: "set_generated_image",
           payload: { dataUrl },
@@ -249,7 +252,7 @@ export function GamePlayView({
         endAiActivity("image");
       }
     },
-    [t, beginAiActivity, endAiActivity],
+    [t, beginAiActivity, endAiActivity, drawingStyle],
   );
 
   const runCommands = useCallback((commands: GameCommand[]): void => {

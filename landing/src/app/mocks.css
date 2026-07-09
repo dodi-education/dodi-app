@@ -360,7 +360,7 @@
   font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
   background: var(--mint-soft); color: var(--mint); border-radius: 99px; padding: 3px 8px;
 }
-.mc-tag--alt { background: var(--sky-mid); color: var(--ink-2); }
+.mc-tag--alt { background: var(--coral-soft); color: var(--coral-700); }
 .mc-sub { font-size: 0.9rem; color: var(--muted); line-height: 1.45; }
 
 /* Mode visibility — scoped to the pricing wrapper so it never touches <body>.
@@ -394,7 +394,8 @@
 .byok-note strong { color: var(--ink-2); font-weight: 700; }
 
 /* ── Plan cards ───────────────────────────────────────────────── */
-.plans { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; align-items: stretch; max-width: 1100px; margin: 0 auto; }
+/* Four across (free Egg card + three priced tiers), shown in both AI modes. */
+.plans { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; align-items: stretch; max-width: 1320px; margin: 0 auto; }
 .plan {
   position: relative; display: flex; flex-direction: column;
   background: var(--surface); border: 1.5px solid var(--line);
@@ -420,20 +421,26 @@
 .plan-avatar { width: 72px; height: 72px; flex-shrink: 0; margin-top: -6px; margin-right: -4px; }
 .plan-avatar img { width: 100%; height: 100%; object-fit: contain; }
 .plan h3 { font-size: 1.7rem; padding-top: 10px; }
-.plan-tagline { font-size: 0.92rem; color: var(--muted); margin-top: 3px; min-height: 2.9em; }
+/* min-height reserves space for the tallest tagline (DE is longer) so every
+   card's price/usage/button line up across the 4-up row. Reset on mobile. */
+.plan-tagline { font-size: 0.92rem; color: var(--muted); margin-top: 3px; line-height: 1.5; min-height: 6em; }
 .plan-price { margin: 14px 0 4px; display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
 .plan-price .amount { font-family: var(--font-display); font-weight: 900; font-size: 2.5rem; color: var(--ink); letter-spacing: -0.02em; }
 .plan-price .per { font-size: 0.95rem; color: var(--muted); font-weight: 600; }
 .plan-was { height: 1.5em; font-size: 0.88rem; color: var(--muted); white-space: nowrap; overflow: hidden; }
 .plan-was .strike { text-decoration: line-through; color: var(--faint); }
 .plan-was .save { color: var(--mint); font-weight: 700; }
-.plan-usage { min-height: 3em; font-size: 0.88rem; color: var(--muted); line-height: 1.5; }
+/* Same idea for the usage line — the tallest here is the free card (BYOK) and
+   the dodi-AI note; reserving height keeps every action button on one level. */
+.plan-usage { min-height: 7.5em; font-size: 0.88rem; color: var(--muted); line-height: 1.5; }
+.plan-usage .accent { color: var(--coral-700); font-weight: 700; }
 .plan .btn { width: 100%; margin: 16px 0 20px; }
 .plan-feats { list-style: none; display: grid; gap: 10px; margin-top: 6px; }
 .plan-feats li { display: flex; gap: 10px; align-items: flex-start; font-size: 0.95rem; color: var(--ink-2); line-height: 1.45; }
 .plan-feats li svg { width: 17px; height: 17px; color: var(--mint); flex-shrink: 0; margin-top: 3px; }
 .plan-feats li strong { color: var(--ink); font-weight: 700; }
 .plan--hot .plan-feats li svg { color: var(--brand); }
+.plan--free .plan-price .amount { color: #20374d; }
 .plans-note { text-align: center; font-size: 0.85rem; color: var(--muted); margin-top: 14px; }
 
 /* ── Rate card (fine print) ───────────────────────────────────── */
@@ -508,7 +515,7 @@
   font-family: var(--font-body); font-weight: 700; font-size: 0.92rem; line-height: 1;
   color: var(--ink); background: #fff;
   border: 1.5px solid var(--line-strong); border-radius: 99px;
-  padding: 9px 15px; cursor: pointer; transition: border-color 0.14s, color 0.14s;
+  padding: 11px 15px; cursor: pointer; transition: border-color 0.14s, color 0.14s;
 }
 .ucs-btn:hover { border-color: var(--brand); color: var(--brand); }
 .ucs-btn:focus-visible { outline: 2px solid var(--brand-soft-2); outline-offset: 1px; }
@@ -650,6 +657,9 @@
 @media (max-width: 1080px) {
   .plans { grid-template-columns: 1fr; gap: 26px; max-width: 460px; }
   .plan--hot { order: -1; }
+  /* Single column — no cross-card row to align, so don't reserve extra height. */
+  .plan-tagline { min-height: 2.9em; }
+  .plan-usage { min-height: 3em; }
 }
 @media (max-width: 620px) {
   .mode-picker { grid-template-columns: 1fr; }

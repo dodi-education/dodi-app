@@ -124,10 +124,10 @@ CREATE TABLE IF NOT EXISTS "public"."accounts" (
     "language" "text" DEFAULT 'en'::"text" NOT NULL,
     "parent_pin_enc" "text",
     "notification_preferences" "jsonb" DEFAULT '{"friend_approval_email": true}'::"jsonb" NOT NULL,
-    "subscribed_plan" "text" DEFAULT 'free'::"text" NOT NULL,
+    "subscribed_plan" "text" DEFAULT 'egg'::"text" NOT NULL,
     "max_kids" integer DEFAULT 1 NOT NULL,
-    "max_custom_personas" integer DEFAULT 1 NOT NULL,
-    "max_snapshots_per_kid" integer DEFAULT 25 NOT NULL,
+    "max_custom_personas" integer DEFAULT 2 NOT NULL,
+    "max_storage_mb_per_kid" integer DEFAULT 100 NOT NULL,
     "memory_tier" "text" DEFAULT 'basic'::"text" NOT NULL,
     CONSTRAINT "accounts_memory_tier_check" CHECK (("memory_tier" = ANY (ARRAY['basic'::"text", 'advanced'::"text", 'full'::"text"])))
 );
@@ -1116,7 +1116,7 @@ CREATE TABLE IF NOT EXISTS "public"."platform_plans" (
     "is_active" boolean DEFAULT true NOT NULL,
     "max_kids" integer NOT NULL,
     "max_custom_personas" integer NOT NULL,
-    "max_snapshots_per_kid" integer NOT NULL,
+    "max_storage_mb_per_kid" integer NOT NULL,
     "memory_tier" "text" NOT NULL,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
@@ -1196,18 +1196,18 @@ GRANT ALL ON TABLE "public"."platform_config" TO "service_role";
 
 -- Seed: the BYOK plan catalogue (en title on the row; de in translations).
 INSERT INTO "public"."platform_plans"
-  ("handle", "title", "sort_order", "price_eur_month", "max_kids", "max_custom_personas", "max_snapshots_per_kid", "memory_tier")
+  ("handle", "title", "sort_order", "price_eur_month", "max_kids", "max_custom_personas", "max_storage_mb_per_kid", "memory_tier")
 VALUES
-  ('free', 'Free', 0, 0, 1, 1, 25, 'basic'),
-  ('hatchling', 'Hatchling', 1, 5, 2, 4, 150, 'advanced'),
-  ('strider', 'Strider', 2, 9, 4, 8, 500, 'advanced'),
-  ('apex-dodi', 'Apex dodi', 3, 15, 8, 16, 2000, 'full')
+  ('egg', 'Egg', 0, 0, 1, 2, 100, 'basic'),
+  ('hatchling', 'Hatchling', 1, 9, 2, 4, 500, 'basic'),
+  ('strider', 'Strider', 2, 19, 3, 6, 1024, 'advanced'),
+  ('apex-dodi', 'Apex dodi', 3, 39, 9, 18, 5120, 'full')
 ON CONFLICT ("handle") DO NOTHING;
 
 INSERT INTO "public"."platform_plan_translations" ("plan_id", "locale", "title")
 SELECT "p"."id", 'de', "t"."title"
 FROM (VALUES
-  ('free', 'Free'),
+  ('egg', 'Ei'),
   ('hatchling', 'Küken'),
   ('strider', 'Wanderer'),
   ('apex-dodi', 'Spitzendodi')
@@ -1216,5 +1216,5 @@ JOIN "public"."platform_plans" "p" ON "p"."handle" = "t"."handle"
 ON CONFLICT ("plan_id", "locale") DO NOTHING;
 
 INSERT INTO "public"."platform_config" ("key", "value")
-VALUES ('default_plan_handle', '"free"'::"jsonb")
+VALUES ('default_plan_handle', '"egg"'::"jsonb")
 ON CONFLICT ("key") DO NOTHING;

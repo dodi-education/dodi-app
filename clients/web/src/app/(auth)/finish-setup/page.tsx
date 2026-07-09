@@ -17,14 +17,39 @@ import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
 import { useVaultStore } from "@/stores/vault-store";
 
+type SetupResult =
+  | { status: "ok"; created: boolean }
+  | { status: "wrong-password" }
+  | { status: "vault-failed" };
+
 /**
- * Post-email-confirmation step (the register flow lands here via
- * /auth/callback?next=/finish-setup). The user is authenticated from the
- * confirm link but has no E2EE vault yet — it can only be bootstrapped now,
- * because it derives from the password, which never left their original browser
- * (the confirm link may even be opened on another device). We re-verify the
- * password against the account so the vault password stays in sync with auth,
- * bootstrap the vault, then send them to reveal their recovery phrase.
+ * Verify the password against the account (so the vault password stays in sync
+ * with auth), then bootstrap-or-unlock the E2EE vault.
+ */
+async function runSetup(email: string, password: string): Promise<SetupResult> {
+  const supabase = createClient();
+  const { error: signInError } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
+  if (signInError) return { status: "wrong-password" };
+  try {
+    const { created } = await useVaultStore
+      .getState()
+      .unlockOrBootstrap(password);
+    return { status: "ok", created };
+  } catch {
+    return { status: "vault-failed" };
+  }
+}
+
+/**
+ * Safety net for the "authenticated but no vault" (needs-setup) state — reached
+ * via VaultGate / the kid layout when `fetchVaultKeys()` is null: a registration
+ * whose vault persist failed, a post-reset account that predates the vault, etc.
+ * Registration itself no longer lands here — the email-OTP flow bootstraps the
+ * vault in-page. We re-verify the password against the account before deriving
+ * the vault from it, so the vault password stays in sync with auth.
  */
 export default function FinishSetupPage() {
   const t = useTranslations("auth");
@@ -58,30 +83,19 @@ export default function FinishSetupPage() {
     }
     setLoading(true);
 
-    const supabase = createClient();
-    // Verify the password matches the account before deriving the vault from it,
-    // so a later login (which unlocks with the account password) will work.
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    if (signInError) {
+    const res = await runSetup(email, password);
+    if (res.status === "wrong-password") {
       setError(t("finishSetupWrongPassword"));
       setLoading(false);
       return;
     }
-
-    try {
-      const { created } = await useVaultStore
-        .getState()
-        .unlockOrBootstrap(password);
-      // created === true → vault was just bootstrapped; go reveal the phrase.
-      router.push(created ? "/vault-setup" : "/parent/dashboard");
-      router.refresh();
-    } catch {
+    if (res.status === "vault-failed") {
       setError(t("vaultSetupFailed"));
       setLoading(false);
+      return;
     }
+    router.push(res.created ? "/vault-setup" : "/parent/dashboard");
+    router.refresh();
   }
 
   if (checking) {

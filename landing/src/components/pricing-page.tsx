@@ -36,8 +36,12 @@ import type { ReactNode } from "react";
  * message catalogue.
  */
 
-/** Three tiers. `m`/`y` are the monthly / annual platform fee in €; they double
- *  as the billing toggle's data-* source, so they belong here, not in i18n. */
+/** The three priced tiers. `m`/`y` are the monthly / annual platform fee in €;
+ *  they double as the billing toggle's data-* source, so they belong here, not
+ *  in i18n. The free, BYOK-only Egg plan (t0) renders separately via
+ *  <FreePlanCard> and is kept out of this array so the dodi-AI-only usage
+ *  calculator and rate card — which index into these tiers by position — are
+ *  unaffected. */
 const PLANS = [
   { id: "t1", featured: false, m: 9, y: 90, avatar: "plan-hatchling", hasRates: false },
   { id: "t2", featured: true, m: 19, y: 190, avatar: "plan-strider", hasRates: true },
@@ -134,6 +138,7 @@ export function PricingPage({ locale }: { locale: Locale }) {
             </div>
 
             <div className="plans">
+              <FreePlanCard t={t} href={links.register} />
               {PLANS.map((p) => (
                 <PlanCard key={p.id} t={t} plan={p} href={links.register} />
               ))}
@@ -272,6 +277,39 @@ function PlanCard({
         <Feat value={t(`${id}Memory`)} label={t("featMemory")} />
         <Feat value={t(`${id}Storage`)} label={t("featStorage")} />
         {hasRates && <Feat value={t(`${id}Rates`)} label={t("featRates")} dodiOnly />}
+      </ul>
+    </article>
+  );
+}
+
+/** The free entry plan (Egg). Rendered before the priced tiers and shown in
+ *  both AI modes. It's inherently BYOK (free forever on your own keys), so its
+ *  price is a static word ("Free") and — unlike <PlanCard> — it carries no
+ *  billing-toggle data-* hooks. Its feature set mirrors the priced cards
+ *  (kids · personas · memory · storage) so the four align. */
+function FreePlanCard({ t, href }: { t: Translator; href: string }) {
+  return (
+    <article className="plan plan--free">
+      <div className="plan-head">
+        <h3>{t("t0Name")}</h3>
+        <div className="plan-avatar">
+          <img src="/site/assets/plan-egg.png" alt={t("t0Alt")} />
+        </div>
+      </div>
+      <p className="plan-tagline">{t("t0Tagline")}</p>
+      <div className="plan-price">
+        <span className="amount">{t("t0Price")}</span>
+      </div>
+      <p className="plan-was" />
+      <p className="plan-usage">{emphasize(t("t0Usage"))}</p>
+      <a className="btn btn--ghost" href={href}>
+        {t("t0Cta")}
+      </a>
+      <ul className="plan-feats">
+        <Feat value={t("t0Kids")} label={t("featKids")} />
+        <Feat value={t("t0Personas")} label={t("featPersonas")} />
+        <Feat value={t("t0Memory")} label={t("featMemory")} />
+        <Feat value={t("t0Storage")} label={t("featStorage")} />
       </ul>
     </article>
   );

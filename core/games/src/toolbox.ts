@@ -173,9 +173,10 @@ export const STANDARD_TOOLS: StandardTool[] = [
     voiceExposed: true,
     declarable: true,
     description:
-      "Create a black-and-white mandala coloring sheet of ANY subject the child asks for and " +
-      "place it on the canvas for them to color in. This is the ONLY way to draw a picture — " +
-      "call it whenever the child asks you to draw, make, or show a picture of something.",
+      "Create a black-and-white coloring sheet of ANY subject the child asks for and place it " +
+      "on the canvas for them to color in. This is the ONLY way to draw a picture — call it " +
+      "whenever the child asks you to draw, make, or show a picture of something. The game " +
+      "decides the visual style (a plain picture or a mandala).",
     parameters: {
       type: "object",
       properties: {

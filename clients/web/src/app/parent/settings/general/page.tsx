@@ -14,7 +14,7 @@ import { createClient } from "@/lib/supabase/client";
 export default function GeneralSettingsPage() {
   const t = useTranslations("settings");
   const [user, setUser] = useState<{ email: string; id: string } | null>(null);
-  const [tier, setTier] = useState("free");
+  const [tier, setTier] = useState("egg");
 
   useEffect(() => {
     const supabase = createClient();

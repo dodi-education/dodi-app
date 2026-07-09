@@ -679,7 +679,7 @@ export function GameStudio({ initialGame }: GameStudioProps) {
 
   return (
     <div
-      className="fixed inset-x-0 top-[116px] bottom-0 z-30 flex flex-col border-t border-border bg-background wide:top-[72px] wide:left-56"
+      className="fixed inset-x-0 top-[60px] bottom-0 z-30 flex flex-col border-t border-border bg-background wide:top-[72px] wide:left-56"
       data-screen-label={editing ? "Parent — Edit game" : "Parent — New game"}
     >
       {/* Mobile tab bar (vertical layout only; hidden until the draft is saved,

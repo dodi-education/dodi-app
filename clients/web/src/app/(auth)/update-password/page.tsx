@@ -22,9 +22,9 @@ import { fetchVaultKeys } from "@/lib/vault-client";
 import { useVaultStore } from "@/stores/vault-store";
 
 /**
- * Landing page for the password-reset email link (see reset-password →
- * /auth/callback?next=/update-password). The recovery link has already
- * established a Supabase session, so the user can set a new auth password here.
+ * Second step of password reset. The user arrives here from /reset-password after
+ * entering the emailed OTP code (verifyOtp type "recovery"), which has already
+ * established a Supabase session, so they can set a new auth password here.
  *
  * Because data is end-to-end encrypted and the old password is unknown, the
  * vault must be re-encrypted under the new password using the 12-word recovery

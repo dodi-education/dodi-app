@@ -33,11 +33,21 @@ export interface GameSharingState {
   kidIds: string[];
 }
 
+/**
+ * Which kind of picture `generate_drawing` produces for a game:
+ * - `picture` — a plain, kid-friendly 2D line drawing of the subject (Drawing game)
+ * - `mandala` — a symmetrical mandala / zentangle coloring sheet (Mandala game)
+ * Absent metadata defaults to `picture`.
+ */
+export type DrawingStyle = "picture" | "mandala";
+
 export type GameMetadata = Record<string, Json | undefined> & {
   version?: string;
   category?: string;
   capabilities?: string[];
   supportsVoiceCommands?: boolean;
+  /** Picture style for the client-side `generate_drawing` image prompt. */
+  drawingStyle?: DrawingStyle;
 };
 
 export interface GameAssistantResponse {

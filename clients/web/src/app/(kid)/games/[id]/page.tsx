@@ -92,6 +92,8 @@ export default function GamePlayPage() {
 
   if (!game || !kidId) return null;
 
+  const metadata = game.metadata as unknown as GameMetadata | null;
+
   return (
     <GamePlayView
       gameId={game.id}
@@ -104,7 +106,8 @@ export default function GamePlayPage() {
       successDefinition={game.success_definition}
       successCriteria={coerceSuccessCriteria(game.success_criteria)}
       progressKind={coerceProgressKind(game.progress_kind)}
-      capabilities={(game.metadata as unknown as GameMetadata | null)?.capabilities ?? []}
+      capabilities={metadata?.capabilities ?? []}
+      drawingStyle={metadata?.drawingStyle ?? "picture"}
     />
   );
 }

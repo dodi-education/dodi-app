@@ -32,7 +32,7 @@ export interface Database {
           // single account's caps can be raised without inventing a new plan.
           max_kids: number;
           max_custom_personas: number;
-          max_snapshots_per_kid: number;
+          max_storage_mb_per_kid: number;
           memory_tier: "basic" | "advanced" | "full";
           created_at: string;
           updated_at: string;
@@ -50,7 +50,7 @@ export interface Database {
           subscribed_plan?: string;
           max_kids?: number;
           max_custom_personas?: number;
-          max_snapshots_per_kid?: number;
+          max_storage_mb_per_kid?: number;
           memory_tier?: "basic" | "advanced" | "full";
           created_at?: string;
           updated_at?: string;
@@ -68,7 +68,7 @@ export interface Database {
           subscribed_plan?: string;
           max_kids?: number;
           max_custom_personas?: number;
-          max_snapshots_per_kid?: number;
+          max_storage_mb_per_kid?: number;
           memory_tier?: "basic" | "advanced" | "full";
           created_at?: string;
           updated_at?: string;
@@ -693,7 +693,7 @@ export interface Database {
           is_active: boolean;
           max_kids: number;
           max_custom_personas: number;
-          max_snapshots_per_kid: number;
+          max_storage_mb_per_kid: number;
           memory_tier: "basic" | "advanced" | "full";
           created_at: string;
           updated_at: string;
@@ -707,7 +707,7 @@ export interface Database {
           is_active?: boolean;
           max_kids: number;
           max_custom_personas: number;
-          max_snapshots_per_kid: number;
+          max_storage_mb_per_kid: number;
           memory_tier: "basic" | "advanced" | "full";
           created_at?: string;
           updated_at?: string;
@@ -721,7 +721,7 @@ export interface Database {
           is_active?: boolean;
           max_kids?: number;
           max_custom_personas?: number;
-          max_snapshots_per_kid?: number;
+          max_storage_mb_per_kid?: number;
           memory_tier?: "basic" | "advanced" | "full";
           created_at?: string;
           updated_at?: string;

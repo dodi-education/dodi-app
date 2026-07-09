@@ -237,6 +237,20 @@ otp_expiry = 3600
 # admin_email = "team@mail.dodi.app"   # must be on a Resend-verified domain
 # sender_name = "dodi"
 
+# Email-OTP: render the 6-digit code ({{ .Token }}) instead of a magic link so the
+# in-page register/reset flows can verify it. LOCAL parity only — the HOSTED
+# project's "Confirm signup" and "Reset password" templates are configured in the
+# dashboard (Authentication > Emails). content_path is resolved relative to the
+# CLI workdir (platform/, via `supabase --workdir platform`), so it includes the
+# `supabase/` prefix — same as the invite example below.
+[auth.email.template.confirmation]
+subject = "Your dodi confirmation code"
+content_path = "./supabase/templates/confirmation.html"
+
+[auth.email.template.recovery]
+subject = "Your dodi password reset code"
+content_path = "./supabase/templates/recovery.html"
+
 # Uncomment to customize email template
 # [auth.email.template.invite]
 # subject = "You have been invited"

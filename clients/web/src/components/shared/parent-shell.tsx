@@ -9,10 +9,7 @@ import { AccountBadge } from "@/components/parent/account-badge";
 import { KidViewButton } from "@/components/parent/kid-view-button";
 import { Icon } from "@/components/shared/icon";
 import { ParentTopBar } from "@/components/shared/parent-top-bar";
-import {
-  SidebarNav,
-  useCurrentNavLabel,
-} from "@/components/shared/sidebar-nav";
+import { SidebarNav } from "@/components/shared/sidebar-nav";
 import { cn } from "@/lib/utils";
 
 /**
@@ -22,7 +19,6 @@ import { cn } from "@/lib/utils";
  */
 export function ParentShell({ children }: { children: React.ReactNode }) {
   const t = useTranslations("nav");
-  const pageLabel = useCurrentNavLabel();
   const [open, setOpen] = useState(false);
 
   // Nav-link taps close the drawer via onNavigate; this covers browser
@@ -45,32 +41,6 @@ export function ParentShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen flex-col wide:flex-row">
-      {/* Mobile top bar (compact only) */}
-      <header className="sticky top-0 z-40 hidden h-14 items-center gap-3 border-b bg-sidebar px-3 compact:flex">
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          aria-label={t("openMenu")}
-          className="flex size-10 shrink-0 items-center justify-center rounded-md text-ink-2 active:bg-foreground/5"
-        >
-          <Icon name="menu" size={22} stroke={2} />
-        </button>
-        <Link
-          href="/parent/dashboard"
-          className="flex min-w-0 flex-1 items-center gap-2"
-        >
-          <Image
-            src="/images/dodi-head-active.png"
-            alt=""
-            width={26}
-            height={26}
-            className="shrink-0"
-          />
-          <span className="truncate font-bold">{pageLabel ?? "dodi"}</span>
-        </Link>
-        <KidViewButton compact />
-      </header>
-
       {/* Drawer backdrop (compact only) */}
       <div
         onClick={() => setOpen(false)}
@@ -92,20 +62,27 @@ export function ParentShell({ children }: { children: React.ReactNode }) {
           "wide:sticky wide:top-0 wide:z-auto wide:h-screen wide:w-56 wide:translate-x-0 wide:shadow-none",
         )}
       >
-        <div className="flex items-center gap-2.5 px-2.5 pb-4">
-          <Image
-            src="/images/dodi-head-active.png"
-            alt=""
-            width={30}
-            height={30}
-            className="-translate-y-[5px]"
-          />
-          <Image
-            src="/images/dodi-logo.svg"
-            alt="dodi"
-            width={52}
-            height={20}
-          />
+        <div className="flex items-center px-2.5 pb-4">
+          <Link
+            href="/parent/dashboard"
+            onClick={() => setOpen(false)}
+            aria-label={t("dashboard")}
+            className="flex items-center gap-2.5 rounded-md"
+          >
+            <Image
+              src="/images/dodi-head-active.png"
+              alt=""
+              width={30}
+              height={30}
+              className="-translate-y-[5px]"
+            />
+            <Image
+              src="/images/dodi-logo.svg"
+              alt="dodi"
+              width={52}
+              height={20}
+            />
+          </Link>
           <div className="ml-auto flex items-center gap-1">
             <Link
               href="/parent/settings/general"
@@ -129,14 +106,39 @@ export function ParentShell({ children }: { children: React.ReactNode }) {
           <SidebarNav onNavigate={() => setOpen(false)} />
         </div>
         <div className="mt-auto flex flex-col gap-2.5 pt-3">
-          <KidViewButton />
           <AccountBadge />
         </div>
       </aside>
 
       {/* Main content area */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <ParentTopBar />
+        <ParentTopBar
+          left={
+            <div className="hidden items-center gap-2 compact:flex">
+              <button
+                type="button"
+                onClick={() => setOpen(true)}
+                aria-label={t("openMenu")}
+                className="-ml-1.5 flex size-9 shrink-0 items-center justify-center rounded-md text-ink-2 active:bg-foreground/5"
+              >
+                <Icon name="menu" size={22} stroke={2} />
+              </button>
+              <Link
+                href="/parent/dashboard"
+                className="shrink-0"
+                aria-label={t("dashboard")}
+              >
+                <Image
+                  src="/images/dodi-head-active.png"
+                  alt=""
+                  width={26}
+                  height={26}
+                />
+              </Link>
+            </div>
+          }
+          right={<KidViewButton compact />}
+        />
         <main className="flex-1">
           <div className="max-w-[880px] px-4 py-5 pb-[72px] wide:px-12 wide:py-9 wide:pb-20">
             {children}
