@@ -423,6 +423,205 @@ export function LandingInteractions() {
       }
     }
 
+    // ── Pricing page: AI-mode (dodi AI ⇄ BYOK) + billing (monthly ⇄ annual) ──
+    // Both toggles are pure enhancement. The page server-renders the default
+    // (dodi AI · monthly) state on `main.pricing-main`; here we restore any
+    // saved choice, then swap prices, per-labels, the annual "was" line and
+    // `.only-*` visibility on click. Annual = 10× monthly (two months free).
+    // Locale-specific labels are read from the root's data-lbl-* attributes, so
+    // this stays language-agnostic.
+    const priceRoot = document.querySelector<HTMLElement>("main.pricing-main");
+    if (priceRoot) {
+      const BILL_KEY = "dodi_billing";
+      const MODE_KEY = "dodi_ai_mode";
+      let billing = priceRoot.dataset.billing === "annual" ? "annual" : "monthly";
+      let mode = priceRoot.dataset.mode === "byok" ? "byok" : "dodi";
+      try {
+        const savedBilling = localStorage.getItem(BILL_KEY);
+        const savedMode = localStorage.getItem(MODE_KEY);
+        if (savedBilling === "annual" || savedBilling === "monthly") billing = savedBilling;
+        if (savedMode === "byok" || savedMode === "dodi") mode = savedMode;
+      } catch {
+        // localStorage unavailable (e.g. private mode) — keep the server default.
+      }
+      const lblMonth = priceRoot.dataset.lblMonth ?? "";
+      const lblYear = priceRoot.dataset.lblYear ?? "";
+      const lblSave = priceRoot.dataset.lblSave ?? "";
+
+      const render = () => {
+        const annual = billing === "annual";
+        priceRoot.dataset.mode = mode;
+        priceRoot.dataset.billing = billing;
+        priceRoot.querySelectorAll<HTMLElement>("[data-amount]").forEach((el) => {
+          el.textContent = "€" + (annual ? el.dataset.y : el.dataset.m);
+        });
+        priceRoot.querySelectorAll<HTMLElement>("[data-per]").forEach((el) => {
+          el.textContent = annual ? lblYear : lblMonth;
+        });
+        priceRoot.querySelectorAll<HTMLElement>("[data-was]").forEach((el) => {
+          const m = el.dataset.m;
+          el.textContent = "";
+          if (!m || !annual) return;
+          const strike = document.createElement("span");
+          strike.className = "strike";
+          strike.textContent = `€${Number(m) * 12} ${lblYear}`;
+          const save = document.createElement("span");
+          save.className = "save";
+          save.textContent = lblSave;
+          el.append(strike, document.createTextNode(" "), save);
+        });
+        priceRoot.querySelectorAll<HTMLElement>("[data-billing]").forEach((btn) => {
+          btn.setAttribute("aria-pressed", btn.dataset.billing === billing ? "true" : "false");
+        });
+        priceRoot.querySelectorAll<HTMLElement>("[data-mode-btn]").forEach((btn) => {
+          btn.setAttribute("aria-pressed", btn.dataset.modeBtn === mode ? "true" : "false");
+        });
+      };
+
+      const onBilling = (e: Event) => {
+        const next = (e.currentTarget as HTMLElement).dataset.billing;
+        if (!next) return;
+        billing = next;
+        try {
+          localStorage.setItem(BILL_KEY, billing);
+        } catch {
+          // persistence is best-effort; the toggle still works this session.
+        }
+        render();
+      };
+      const onMode = (e: Event) => {
+        const next = (e.currentTarget as HTMLElement).dataset.modeBtn;
+        if (!next) return;
+        mode = next;
+        try {
+          localStorage.setItem(MODE_KEY, mode);
+        } catch {
+          // persistence is best-effort; the toggle still works this session.
+        }
+        render();
+      };
+
+      const billBtns = priceRoot.querySelectorAll<HTMLElement>("[data-billing]");
+      const modeBtns = priceRoot.querySelectorAll<HTMLElement>("[data-mode-btn]");
+      billBtns.forEach((b) => b.addEventListener("click", onBilling));
+      modeBtns.forEach((b) => b.addEventListener("click", onMode));
+      render();
+      cleanups.push(() => {
+        billBtns.forEach((b) => b.removeEventListener("click", onBilling));
+        modeBtns.forEach((b) => b.removeEventListener("click", onMode));
+      });
+    }
+
+    // ── Pricing page: usage calculator ──
+    // € balance × model × plan → estimated game creations / edits (text models)
+    // or voice minutes. Model and plan are styled dropdowns (same pattern as the
+    // header language selector); the balance is a number input. Pure enhancement:
+    // the markup ships a sensible default (Voice · Strider · €10) that reads fine
+    // with JS off. Rates live on the option buttons (data-*); only the game token
+    // assumptions live here, and they're deliberately round — the UI is labelled
+    // an estimate. Numbers round to nearest to pair with the "≈" the result renders.
+    const calc = document.querySelector<HTMLElement>("[data-calc]");
+    if (calc) {
+      const CREATE_IN = 6000;
+      const CREATE_OUT = 12000; // a typical game creation
+      const EDIT_IN = 8000;
+      const EDIT_OUT = 4000; // a typical game edit (re-reads more, writes less)
+      const lblCreations = calc.dataset.lblCreations ?? "";
+      const lblEdits = calc.dataset.lblEdits ?? "";
+      const lblMinutes = calc.dataset.lblMinutes ?? "";
+      const balEl = calc.querySelector<HTMLInputElement>("[data-calc-balance]");
+      const result = calc.querySelector<HTMLElement>(".uc-result");
+      const primary = calc.querySelector<HTMLElement>("[data-calc-primary]");
+      const primaryLbl = calc.querySelector<HTMLElement>("[data-calc-primary-label]");
+      const secondary = calc.querySelector<HTMLElement>("[data-calc-secondary]");
+      const secondaryLbl = calc.querySelector<HTMLElement>("[data-calc-secondary-label]");
+      const selects = Array.from(calc.querySelectorAll<HTMLElement>("[data-uc-select]"));
+
+      const nums = (s: string | undefined) => (s ?? "").split(",").map(Number);
+      const fmt = (n: number) => (isFinite(n) && n > 0 ? String(Math.round(n)) : "0");
+      const chosen = (attr: string) =>
+        calc.querySelector<HTMLElement>(`[${attr}][aria-selected="true"]`) ??
+        calc.querySelector<HTMLElement>(`[${attr}]`);
+
+      const compute = () => {
+        if (!result || !primary || !primaryLbl || !balEl) return;
+        const model = chosen("data-calc-model");
+        const plan = Number(chosen("data-calc-plan")?.dataset.calcPlan) || 0;
+        let bal = Number(balEl.value);
+        if (!isFinite(bal) || bal < 0) bal = 0;
+        if (model?.dataset.kind === "voice") {
+          const rate = nums(model.dataset.rate)[plan];
+          result.dataset.calcKind = "voice";
+          primary.textContent = fmt(rate > 0 ? bal / rate : 0);
+          primaryLbl.textContent = lblMinutes;
+        } else {
+          const inRate = nums(model?.dataset.in)[plan];
+          const outRate = nums(model?.dataset.out)[plan];
+          const costCreate = (CREATE_IN / 1e6) * inRate + (CREATE_OUT / 1e6) * outRate;
+          const costEdit = (EDIT_IN / 1e6) * inRate + (EDIT_OUT / 1e6) * outRate;
+          result.dataset.calcKind = "text";
+          primary.textContent = fmt(costCreate > 0 ? bal / costCreate : 0);
+          primaryLbl.textContent = lblCreations;
+          if (secondary && secondaryLbl) {
+            secondary.textContent = fmt(costEdit > 0 ? bal / costEdit : 0);
+            secondaryLbl.textContent = lblEdits;
+          }
+        }
+      };
+
+      const closeAll = (except?: HTMLElement) =>
+        selects.forEach((s) => {
+          if (s === except) return;
+          s.classList.remove("open");
+          s.querySelector<HTMLElement>(".ucs-btn")?.setAttribute("aria-expanded", "false");
+        });
+
+      const teardown: Array<() => void> = [];
+      selects.forEach((sel) => {
+        const btn = sel.querySelector<HTMLElement>(".ucs-btn");
+        const valueEl = sel.querySelector<HTMLElement>("[data-uc-value]");
+        const opts = Array.from(sel.querySelectorAll<HTMLElement>('[role="option"]'));
+        if (!btn) return;
+        const onBtn = (e: Event) => {
+          e.stopPropagation();
+          const willOpen = !sel.classList.contains("open");
+          closeAll(sel);
+          sel.classList.toggle("open", willOpen);
+          btn.setAttribute("aria-expanded", willOpen ? "true" : "false");
+        };
+        btn.addEventListener("click", onBtn);
+        teardown.push(() => btn.removeEventListener("click", onBtn));
+        opts.forEach((opt) => {
+          const onOpt = () => {
+            opts.forEach((o) => o.setAttribute("aria-selected", o === opt ? "true" : "false"));
+            if (valueEl) valueEl.textContent = opt.dataset.ucText ?? opt.textContent?.trim() ?? "";
+            sel.classList.remove("open");
+            btn.setAttribute("aria-expanded", "false");
+            compute();
+          };
+          opt.addEventListener("click", onOpt);
+          teardown.push(() => opt.removeEventListener("click", onOpt));
+        });
+      });
+
+      const onDocClick = (e: Event) => {
+        if (!calc.contains(e.target as Node)) closeAll();
+      };
+      const onKey = (e: KeyboardEvent) => {
+        if (e.key === "Escape") closeAll();
+      };
+      document.addEventListener("click", onDocClick);
+      document.addEventListener("keydown", onKey);
+      balEl?.addEventListener("input", compute);
+      compute();
+      cleanups.push(() => {
+        teardown.forEach((fn) => fn());
+        document.removeEventListener("click", onDocClick);
+        document.removeEventListener("keydown", onKey);
+        balEl?.removeEventListener("input", compute);
+      });
+    }
+
     return () => cleanups.forEach((fn) => fn());
   }, []);
 

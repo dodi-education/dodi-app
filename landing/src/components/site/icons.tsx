@@ -351,6 +351,43 @@ export function TrendingUp({ sw = 1.9 }: IconProps) {
   );
 }
 
+/** List / rows icon — the Compare-plans section eyebrow. */
+export function List({ sw = 1.9 }: IconProps) {
+  return (
+    <Stroke sw={sw}>
+      <line x1="8" y1="6" x2="21" y2="6" />
+      <line x1="8" y1="12" x2="21" y2="12" />
+      <line x1="8" y1="18" x2="21" y2="18" />
+      <line x1="3" y1="6" x2="3.01" y2="6" />
+      <line x1="3" y1="12" x2="3.01" y2="12" />
+      <line x1="3" y1="18" x2="3.01" y2="18" />
+    </Stroke>
+  );
+}
+
+/** Question-mark-in-circle — the FAQ section eyebrow. */
+export function HelpCircle({ sw = 1.9 }: IconProps) {
+  return (
+    <Stroke sw={sw}>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+      <line x1="12" y1="17" x2="12.01" y2="17" />
+    </Stroke>
+  );
+}
+
+/** Stacked-rack server — the self-host section eyebrow. */
+export function Server({ sw = 1.9 }: IconProps) {
+  return (
+    <Stroke sw={sw}>
+      <rect x="2" y="2" width="20" height="8" rx="2" />
+      <rect x="2" y="14" width="20" height="8" rx="2" />
+      <line x1="6" y1="6" x2="6.01" y2="6" />
+      <line x1="6" y1="18" x2="6.01" y2="18" />
+    </Stroke>
+  );
+}
+
 export function Github({ style }: { style?: CSSProperties }) {
   return (
     <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style={style}>

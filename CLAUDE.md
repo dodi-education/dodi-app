@@ -48,6 +48,7 @@ Structured relational schemas remain correct for **operational data** — accoun
 - When I report a bug, don't start by trying to fix it. Instead, start by writing a test that reproduces the bug. Then, have subagents try to fix the bug and prove it with a passing test.
 - NEVER GUESS a possible bugfix. If the solution is not clear, evaluate adding further debug / logging code to narrow down the problem.
 - When presented with debug/console logs, determine if the presented logs are sufficient and if not, suggest add logs that could help narrow down the problem.
+- Always ask before starting to debug with Chromium
 
 ### TypeScript
 - **Strict mode** enabled (`"strict": true` in tsconfig)

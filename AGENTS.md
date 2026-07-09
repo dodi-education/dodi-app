@@ -1,0 +1,1 @@
+Read and respect CLAUDE.md rules
