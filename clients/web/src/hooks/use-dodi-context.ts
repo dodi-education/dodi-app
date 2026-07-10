@@ -30,14 +30,18 @@ export function useDodiContext({
   const dodiState = useDodiSessionStore((s) => s.state);
   const fatalError = useDodiSessionStore((s) => s.fatalError);
 
-  // Stable reference for context object to avoid re-triggering on every render
+  // Stable reference for context object to avoid re-triggering on every render.
+  // Snapshot sessions key on the snapshot id — two snapshots of the same game
+  // are distinct sessions (different restored state).
+  const gameKey = (c: DodiContext): string | null =>
+    c.type === "game" ? (c.snapshotId ?? c.gameId) : null;
   const contextRef = useRef(context);
   const contextKey =
-    context.type === "game" ? `game:${context.gameId}` : context.type;
+    context.type === "game" ? `game:${gameKey(context)}` : context.type;
 
   // Update ref when context key changes
   if (
-    (context.type === "game" && contextRef.current.type === "game" && context.gameId !== contextRef.current.gameId) ||
+    (context.type === "game" && contextRef.current.type === "game" && gameKey(context) !== gameKey(contextRef.current)) ||
     context.type !== contextRef.current.type
   ) {
     contextRef.current = context;

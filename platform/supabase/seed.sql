@@ -64,7 +64,7 @@ INSERT INTO public.personas (id, account_id, name, soul, created_at, updated_at,
 - When uncertain, err on the side of remembering — parents can always edit the memory', '2026-02-28 19:47:15.941959+00', '2026-03-11 11:31:51.890625+00', 't');
 
 -- System games (is_system = true)
-INSERT INTO public.games (id, account_id, kid_id, source_game_id, system_key, is_system, title, description, target_age_min, target_age_max, estimated_duration_minutes, tags, code_bundle, metadata, created_by, created_at, updated_at, markdown) VALUES ('560b130f-80a6-4353-a750-deac44224c53', NULL, NULL, NULL, 'drawing-basic', 't', 'Drawing', 'A simple drawing game with colors, brush sizes, and fun Dodi drawing commands.', '3', '12', '15', '{drawing,art,creativity,avatar}', '
+INSERT INTO public.games (id, account_id, kid_id, source_game_id, system_key, is_system, title, description, target_age_min, target_age_max, estimated_duration_minutes, tags, code_bundle, metadata, created_by, created_at, updated_at, markdown) VALUES ('560b130f-80a6-4353-a750-deac44224c53', NULL, NULL, NULL, 'drawing-basic', 't', 'Drawing', 'A simple drawing game with colors, brush sizes, and fun Dodi drawing commands.', '3', '12', '15', '{drawing,ai-image}', '
 <!doctype html>
 <html lang="en">
 <head>
@@ -174,7 +174,7 @@ INSERT INTO public.games (id, account_id, kid_id, source_game_id, system_key, is
     (function () {
       var palette = [''#111111'', ''#e53935'', ''#fb8c00'', ''#fdd835'', ''#43a047'', ''#1e88e5'', ''#8e24aa'', ''#ff5ca8''];
       var brushOptions = [4, 8, 12, 18, 24];
-      var capabilities = [''set_drawing_color'', ''set_brush_size'', ''clear_canvas'', ''undo'', ''get_snapshot'', ''set_generated_image''];
+      var capabilities = [''set_drawing_color'', ''set_brush_size'', ''clear_canvas'', ''undo'', ''get_snapshot'', ''set_generated_image'', ''save_state''];
 
       var canvas = document.getElementById(''board'');
       var ctx = canvas.getContext(''2d'');
@@ -381,6 +381,50 @@ INSERT INTO public.games (id, account_id, kid_id, source_game_id, system_key, is
         }
       }
 
+      // Full save/restore (snapshots): buildSaveState serializes everything —
+      // including the canvas pixels — so dodi:init can restore it exactly.
+      var pendingRestorePng = null;
+
+      function buildSaveState() {
+        var png = null;
+        try { png = canvas.toDataURL(''image/png''); } catch (_e) { png = null; }
+        return {
+          currentColor: state.color,
+          brushSize: state.brushSize,
+          strokeCount: state.strokeCount,
+          actions: state.actions,
+          canvasPng: png,
+        };
+      }
+
+      function applyPendingRestore() {
+        // The canvas may still be 0-sized while the flex layout settles; the
+        // ResizeObserver retries once it has a real box.
+        if (!pendingRestorePng) return;
+        if (canvas.clientWidth < 2 || canvas.clientHeight < 2) return;
+        var url = pendingRestorePng;
+        pendingRestorePng = null;
+        var img = new Image();
+        img.onload = function () {
+          clearCanvas(false);
+          ctx.drawImage(img, 0, 0, canvas.clientWidth, canvas.clientHeight);
+        };
+        img.src = url;
+      }
+
+      function restoreSaveState(saved) {
+        if (!saved || typeof saved !== ''object'') return;
+        if (palette.includes(saved.currentColor)) state.color = saved.currentColor;
+        if (brushOptions.includes(Number(saved.brushSize))) state.brushSize = Number(saved.brushSize);
+        if (typeof saved.strokeCount === ''number'') state.strokeCount = saved.strokeCount;
+        if (Array.isArray(saved.actions)) state.actions = saved.actions.slice(-MAX_ACTIONS);
+        if (typeof saved.canvasPng === ''string'' && saved.canvasPng.indexOf(''data:image'') === 0) {
+          pendingRestorePng = saved.canvasPng;
+          applyPendingRestore();
+        }
+        updateToolbar();
+      }
+
       function getPoint(event) {
         var rect = canvas.getBoundingClientRect();
         return {
@@ -546,6 +590,9 @@ INSERT INTO public.games (id, account_id, kid_id, source_game_id, system_key, is
 
         if (message.type === ''dodi:init'' && typeof message.token === ''string'') {
           bridgeToken = message.token;
+          if (message.payload && message.payload.savedState) {
+            restoreSaveState(message.payload.savedState);
+          }
           postToParent(''game:ready'', { capabilities: capabilities, state: getState() });
           return;
         }
@@ -554,6 +601,11 @@ INSERT INTO public.games (id, account_id, kid_id, source_game_id, system_key, is
 
         if (message.type === ''dodi:get_state'') {
           postToParent(''game:state'', getState());
+          return;
+        }
+
+        if (message.type === ''dodi:get_save_state'') {
+          postToParent(''game:save_state'', { state: buildSaveState() });
           return;
         }
 
@@ -590,7 +642,7 @@ INSERT INTO public.games (id, account_id, kid_id, source_game_id, system_key, is
       // inside the iframe; a ResizeObserver does, and also catches every later
       // size change.
       if (typeof ResizeObserver !== ''undefined'') {
-        var resizeObserver = new ResizeObserver(function () { resizeCanvas(); });
+        var resizeObserver = new ResizeObserver(function () { resizeCanvas(); applyPendingRestore(); });
         resizeObserver.observe(canvas);
       }
 
@@ -610,7 +662,7 @@ INSERT INTO public.games (id, account_id, kid_id, source_game_id, system_key, is
   </script>
 </body>
 </html>
-', '{"version": "2.1.0", "category": "drawing", "drawingStyle": "picture", "capabilities": ["generate_drawing", "set_drawing_color", "set_brush_size", "clear_canvas", "undo", "get_snapshot"], "supportsVoiceCommands": true}', 'system', '2026-03-06 16:44:18.288505+00', '2026-03-21 14:11:01.921611+00', '# Drawing
+', '{"version": "2.2.0", "category": "drawing", "drawingStyle": "picture", "capabilities": ["generate_drawing", "set_drawing_color", "set_brush_size", "clear_canvas", "undo", "get_snapshot", "save_state"], "supportsVoiceCommands": true}', 'system', '2026-03-06 16:44:18.288505+00', '2026-03-21 14:11:01.921611+00', '# Drawing
 
 ## Game Overview
 A freeform drawing canvas where kids create art using colors and brushes. There are no win/lose conditions — this is a creative sandbox. Dodi can also generate a printable-style **coloring page** (a simple black-and-white 2D picture) of anything the child asks for, which the child then colors in.
@@ -689,9 +741,9 @@ SELECT
   'Mandala',
   'A calming coloring game where dodi draws mandalas for you to color in.',
   target_age_min, target_age_max, estimated_duration_minutes,
-  '{mandala,art,creativity,coloring,calm}',
+  '{drawing,ai-image}',
   replace(code_bundle, '<title>Drawing</title>', '<title>Mandala</title>'),
-  '{"version": "2.1.0", "category": "mandala", "drawingStyle": "mandala", "capabilities": ["generate_drawing", "set_drawing_color", "set_brush_size", "clear_canvas", "undo", "get_snapshot"], "supportsVoiceCommands": true}'::jsonb,
+  '{"version": "2.2.0", "category": "mandala", "drawingStyle": "mandala", "capabilities": ["generate_drawing", "set_drawing_color", "set_brush_size", "clear_canvas", "undo", "get_snapshot", "save_state"], "supportsVoiceCommands": true}'::jsonb,
   'system', created_at, updated_at,
   '# Mandala
 
@@ -773,6 +825,10 @@ INSERT INTO public.game_translations (id, game_id, locale, title, description, c
 INSERT INTO public.game_translations (id, game_id, locale, title, description, created_at, updated_at) VALUES ('f3d2cd5e-3c1c-41f5-b481-0ec373c53c7a', '560b130f-80a6-4353-a750-deac44224c53', 'en', 'Drawing', 'A simple drawing game with colors, brush sizes, and fun Dodi drawing commands.', '2026-03-12 11:44:49.512873+00', '2026-03-12 11:44:49.512873+00');
 INSERT INTO public.game_translations (id, game_id, locale, title, description, created_at, updated_at) VALUES ('4318046f-88f0-4b3e-b044-1acd3f0a4fd0', '00079709-ce39-4669-98e8-a3181640b4fb', 'de', 'Mandala', 'Ein entspannendes Ausmalspiel, bei dem Dodi Mandalas zum Ausmalen für dich zeichnet.', '2026-03-12 11:44:49.512873+00', '2026-03-12 11:44:49.512873+00');
 INSERT INTO public.game_translations (id, game_id, locale, title, description, created_at, updated_at) VALUES ('4810262a-14f9-4373-9ab9-e8405df2f1ee', '00079709-ce39-4669-98e8-a3181640b4fb', 'en', 'Mandala', 'A calming coloring game where Dodi draws mandalas for you to color in.', '2026-03-12 11:44:49.512873+00', '2026-03-12 11:44:49.512873+00');
+
+-- Kid-library preview images for the system games (served from clients/web/public).
+UPDATE public.games SET preview_image = '/images/game-previews/drawing.svg' WHERE system_key = 'drawing-basic';
+UPDATE public.games SET preview_image = '/images/game-previews/mandala.svg' WHERE system_key = 'mandala-basic';
 
 -- Dev invite code (for local testing of REGISTRATION_MODE=invite). Reusable while active.
 INSERT INTO public.invite_codes (code, is_active, note) VALUES ('DODI-BETA', true, 'Seeded dev invite code')

@@ -97,8 +97,16 @@ describe("buildGameVoiceConfig — E2EE key sourcing", () => {
     vi.restoreAllMocks();
   });
 
+  const GAME_CTX = {
+    gameId: GAME.id,
+    markdown: "",
+    codeBundle: "",
+    gameState: {},
+    capabilities: [],
+  };
+
   it("sources the provider key from the vault, not a server session route", async () => {
-    const config = await buildGameVoiceConfig(KID.id, GAME.id, {});
+    const config = await buildGameVoiceConfig(KID.id, GAME_CTX);
 
     expect(config.apiKey).toBe(GEMINI_KEY);
     expect(config.model).toBe(MODEL_CONFIG.voiceModel);
@@ -112,7 +120,7 @@ describe("buildGameVoiceConfig — E2EE key sourcing", () => {
   it("throws a clear client error (not a server 500) when the vault has no key", async () => {
     getKey.mockReturnValueOnce(null);
 
-    await expect(buildGameVoiceConfig(KID.id, GAME.id, {})).rejects.toThrow(
+    await expect(buildGameVoiceConfig(KID.id, GAME_CTX)).rejects.toThrow(
       "No API key configured for gemini",
     );
   });

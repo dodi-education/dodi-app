@@ -9,6 +9,14 @@ import type {
 export type GameStateSummary = Record<string, Json | undefined>;
 
 /**
+ * A COMPLETE, self-contained serialization of a game — everything needed to
+ * restore play exactly (including visual surfaces, e.g. a canvas as a data
+ * URL). Distinct from {@link GameStateSummary}, which is the lightweight
+ * AI-facing state pushed to the voice model.
+ */
+export type GameSaveState = Record<string, Json | undefined>;
+
+/**
  * The learning goal + success target handed to a game at init. Lets the game
  * display the goal and size itself (e.g. generate exactly enough tasks).
  */
@@ -65,6 +73,8 @@ export interface ParentInitMessage extends ParentToGameEnvelopeBase {
     gameId: string;
     /** Present for goal-oriented games; absent for open play. */
     goal?: GameGoal;
+    /** Present when resuming a snapshot — the game restores it before game:ready. */
+    savedState?: GameSaveState;
   };
 }
 
@@ -77,6 +87,11 @@ export interface ParentCommandMessage extends ParentToGameEnvelopeBase {
 
 export interface ParentGetStateMessage extends ParentToGameEnvelopeBase {
   type: "dodi:get_state";
+}
+
+/** Host → game: request the full restorable serialization (snapshot save). */
+export interface ParentGetSaveStateMessage extends ParentToGameEnvelopeBase {
+  type: "dodi:get_save_state";
 }
 
 /** Host → game: the child has met the success goal — play the celebration UI. */
@@ -92,6 +107,7 @@ export type ParentToGameMessage =
   | ParentInitMessage
   | ParentCommandMessage
   | ParentGetStateMessage
+  | ParentGetSaveStateMessage
   | ParentSuccessMessage;
 
 export interface GameToParentEnvelopeBase {
@@ -121,6 +137,14 @@ export interface GameResultMessage extends GameToParentEnvelopeBase {
 export interface GameStateMessage extends GameToParentEnvelopeBase {
   type: "game:state";
   payload: GameStateSummary;
+}
+
+/** Game → host: the full restorable serialization, in reply to dodi:get_save_state. */
+export interface GameSaveStateMessage extends GameToParentEnvelopeBase {
+  type: "game:save_state";
+  payload: {
+    state: GameSaveState;
+  };
 }
 
 /**
@@ -159,8 +183,44 @@ export type GameToParentMessage =
   | GameReadyMessage
   | GameResultMessage
   | GameStateMessage
+  | GameSaveStateMessage
   | GameProgressMessage
   | GameEventMessage
   | GameErrorMessage;
+
+/**
+ * Snapshot gallery blob: the lightweight, per-snapshot listing info decrypted
+ * to render the collection without touching the heavy payload. Stored E2EE
+ * (own: enc:v1: under the account VMK; received: SealedEnvelope to the kid's
+ * friend KEM key).
+ */
+export interface SnapshotInfoV1 {
+  v: 1;
+  title: string;
+  gameTitle: string;
+  /** Downscaled thumbnail data URL, or null when the game has no visual surface. */
+  thumbnail: string | null;
+  createdAt: string;
+}
+
+/**
+ * Snapshot payload blob: fully self-contained — carries the game code and
+ * metadata alongside the save state so the snapshot outlives game edits and
+ * deletion, and plays on a friend's device that never had the game.
+ */
+export interface SnapshotPayloadV1 {
+  v: 1;
+  title: string;
+  createdAt: string;
+  /** Soft reference to the source game; null once the game is gone / for shares. */
+  gameId: string | null;
+  gameTitle: string;
+  gameDescription: string;
+  gameMarkdown: string;
+  codeBundle: string;
+  capabilities: string[];
+  drawingStyle: DrawingStyle;
+  savedState: GameSaveState;
+}
 
 export type { DodiProgressState };

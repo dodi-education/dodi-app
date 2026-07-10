@@ -19,6 +19,7 @@ import type { MetricsSummary } from "@dodi/games/success";
 import type {
   GameCommand,
   GameGoal,
+  GameSaveState,
   GameToParentMessage,
   ParentToGameMessage,
 } from "@dodi/types/games";
@@ -32,6 +33,8 @@ export interface GameProgressUpdate {
 export interface GameSandboxHandle {
   sendCommand: (command: GameCommand) => void;
   requestState: () => void;
+  /** Ask the game for its full restorable serialization (game:save_state reply). */
+  requestSaveState: () => void;
   /** Tell the game the success goal was met so it can celebrate. */
   notifySuccess: (payload?: { summary?: string; metrics?: MetricsSummary }) => void;
 }
@@ -42,6 +45,8 @@ interface GameSandboxProps {
   className?: string;
   /** Learning goal + success criteria delivered to the game on init. */
   goal?: GameGoal;
+  /** Saved state to restore on init (snapshot play). */
+  savedState?: GameSaveState;
   onMessage?: (message: GameToParentMessage) => void;
   onStateChange?: (state: Record<string, unknown>) => void;
   /** Called with state from command results (game:result). Use for immediate (non-debounced) state delivery. */
@@ -107,7 +112,7 @@ function buildSandboxSrcDoc(codeBundle: string): string {
 
 export const GameSandbox = forwardRef<GameSandboxHandle, GameSandboxProps>(
   function GameSandbox(
-    { gameId, codeBundle, className, goal, onMessage, onStateChange, onCommandResult, onProgress }: GameSandboxProps,
+    { gameId, codeBundle, className, goal, savedState, onMessage, onStateChange, onCommandResult, onProgress }: GameSandboxProps,
     ref,
   ) {
     const iframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -116,9 +121,11 @@ export const GameSandbox = forwardRef<GameSandboxHandle, GameSandboxProps>(
     const gameReadyRef = useRef(false);
     const initRetryRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const pendingCommandsRef = useRef<GameCommand[]>([]);
-    // Read goal from a ref inside init so changing goal identity never re-inits the game.
+    // Read goal/savedState from refs inside init so identity changes never re-init the game.
     const goalRef = useRef<GameGoal | undefined>(goal);
     goalRef.current = goal;
+    const savedStateRef = useRef<GameSaveState | undefined>(savedState);
+    savedStateRef.current = savedState;
 
     const postEnvelope = useCallback(
       (message: ParentToGameMessage) => {
@@ -148,7 +155,7 @@ export const GameSandbox = forwardRef<GameSandboxHandle, GameSandboxProps>(
       const initPayload: ParentToGameMessage = {
         type: "dodi:init",
         token: bridgeToken,
-        payload: { gameId, goal: goalRef.current },
+        payload: { gameId, goal: goalRef.current, savedState: savedStateRef.current },
       };
 
       gameDebug("sandbox", `Sending dodi:init to game ${gameId} (with retry)`);
@@ -189,6 +196,13 @@ export const GameSandbox = forwardRef<GameSandboxHandle, GameSandboxProps>(
           gameDebug("sandbox", "requestState called");
           postEnvelope({
             type: "dodi:get_state",
+            token: bridgeToken,
+          });
+        },
+        requestSaveState() {
+          gameDebug("sandbox", "requestSaveState called");
+          postEnvelope({
+            type: "dodi:get_save_state",
             token: bridgeToken,
           });
         },

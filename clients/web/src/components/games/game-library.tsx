@@ -8,7 +8,13 @@ import { useTranslations } from "next-intl";
 import { Icon } from "@/components/shared/icon";
 import { KidButton } from "@/components/kid/kid-button";
 import { GameCard } from "@/components/games/game-card";
+import { tagStyle } from "@/components/parent/games/tag-style";
+import { useTagLabel } from "@/lib/games/tag-label";
+import { GAME_TAG_IDS } from "@dodi/games/tags";
 import type { Game } from "@dodi/types/database";
+
+/** A game as delivered to the kid library — carries the per-kid favorite flag. */
+type LibraryGame = Game & { is_favorite: boolean };
 
 interface GameLibraryProps {
   kidId: string;
@@ -16,11 +22,12 @@ interface GameLibraryProps {
 
 export function GameLibrary({ kidId }: GameLibraryProps) {
   const t = useTranslations("games");
+  const tagLabel = useTagLabel();
   const searchParams = useSearchParams();
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [games, setGames] = useState<Game[]>([]);
+  const [games, setGames] = useState<LibraryGame[]>([]);
   const [search, setSearch] = useState(searchParams.get("search") ?? "");
   const [tagFilter, setTagFilter] = useState<string>(searchParams.get("tag") ?? "all");
 
@@ -35,7 +42,7 @@ export function GameLibrary({ kidId }: GameLibraryProps) {
         throw new Error(data.error || "Failed to fetch games");
       }
 
-      const data: Game[] = await response.json();
+      const data: LibraryGame[] = await response.json();
       setGames(data);
     } catch (fetchError) {
       const message = fetchError instanceof Error ? fetchError.message : "Failed to fetch games";
@@ -49,13 +56,36 @@ export function GameLibrary({ kidId }: GameLibraryProps) {
     void fetchGames();
   }, [fetchGames]);
 
-  const tagOptions = useMemo(() => {
-    const values = new Set<string>();
-    for (const game of games) {
-      for (const tag of game.tags) values.add(tag);
-    }
-    return Array.from(values).sort((a, b) => a.localeCompare(b));
-  }, [games]);
+  // Toggle a favorite with an optimistic flip; revert if the request fails.
+  const toggleFavorite = useCallback(
+    async (gameId: string, next: boolean) => {
+      setGames((prev) =>
+        prev.map((game) =>
+          game.id === gameId ? { ...game, is_favorite: next } : game,
+        ),
+      );
+      try {
+        const response = await dodi.request(
+          `/api/games/${gameId}/favorite?kidId=${kidId}`,
+          { method: next ? "PUT" : "DELETE" },
+        );
+        if (!response.ok) throw new Error("Failed to update favorite");
+      } catch {
+        setGames((prev) =>
+          prev.map((game) =>
+            game.id === gameId ? { ...game, is_favorite: !next } : game,
+          ),
+        );
+      }
+    },
+    [kidId],
+  );
+
+  // Only catalog tags that are actually in use become filter pills.
+  const tagOptions = useMemo(
+    () => GAME_TAG_IDS.filter((tag) => games.some((game) => game.tags.includes(tag))),
+    [games],
+  );
 
   const filteredGames = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
@@ -74,8 +104,8 @@ export function GameLibrary({ kidId }: GameLibraryProps) {
     });
   }, [games, search, tagFilter]);
 
-  const systemGames = filteredGames.filter((game) => game.is_system);
-  const customGames = filteredGames.filter((game) => !game.is_system);
+  const favoriteGames = filteredGames.filter((game) => game.is_favorite);
+  const otherGames = filteredGames.filter((game) => !game.is_favorite);
 
   return (
     <div className="w-full max-w-5xl">
@@ -107,19 +137,33 @@ export function GameLibrary({ kidId }: GameLibraryProps) {
           active={tagFilter === "all"}
           onClick={() => setTagFilter("all")}
         >
-          {t("allTags")}
+          {t("allGamesFilter")}
         </KidButton>
-        {tagOptions.map((tag) => (
-          <KidButton
-            key={tag}
-            variant="chip"
-            size="sm"
-            active={tagFilter === tag}
-            onClick={() => setTagFilter(tag)}
-          >
-            {tag}
-          </KidButton>
-        ))}
+        {tagOptions.map((tag) => {
+          const ts = tagStyle(tag);
+          const label = tagLabel(tag);
+          const active = tagFilter === tag;
+          return (
+            <KidButton
+              key={tag}
+              variant="chip"
+              size="sm"
+              active={active}
+              aria-pressed={active}
+              onClick={() => setTagFilter(tag)}
+              aria-label={label}
+              title={label}
+              className="px-2"
+              style={
+                active
+                  ? { background: ts.fg, color: "#fff" }
+                  : { background: ts.bg, color: ts.fg }
+              }
+            >
+              <Icon name={ts.icon} size={20} stroke={2} className="size-5" />
+            </KidButton>
+          );
+        })}
       </div>
 
       {loading && (
@@ -134,41 +178,49 @@ export function GameLibrary({ kidId }: GameLibraryProps) {
         </div>
       )}
 
-      {!loading && !error && (
-        <>
-          <section>
-            <h2 className="mb-3 mt-5 text-[13px] font-extrabold tracking-[0.07em] text-faint uppercase">
-              {t("customGames")}
-            </h2>
-            {customGames.length === 0 ? (
-              <div className="rounded-[20px] bg-white/70 p-5 text-sm font-semibold text-muted-foreground">
-                {t("noCustomGames")}
-              </div>
-            ) : (
-              <div className="grid gap-3.5 sm:grid-cols-[repeat(auto-fill,minmax(310px,1fr))]">
-                {customGames.map((game) => (
-                  <GameCard key={game.id} game={game} />
-                ))}
-              </div>
-            )}
-          </section>
+      {!loading && !error && filteredGames.length === 0 && (
+        <div className="rounded-[20px] bg-white/70 p-5 text-sm font-semibold text-muted-foreground">
+          {t("noGames")}
+        </div>
+      )}
 
-          <section>
-            <h2 className="mb-3 mt-6 text-[13px] font-extrabold tracking-[0.07em] text-faint uppercase">
-              {t("systemGames")}
-            </h2>
-            {systemGames.length === 0 ? (
-              <div className="rounded-[20px] bg-white/70 p-5 text-sm font-semibold text-muted-foreground">
-                {t("noSystemGames")}
-              </div>
-            ) : (
+      {!loading && !error && filteredGames.length > 0 && (
+        <>
+          {favoriteGames.length > 0 && (
+            <section>
+              <h2 className="mb-3 mt-5 text-[13px] font-extrabold tracking-[0.07em] text-faint uppercase">
+                {t("favoriteGames")}
+              </h2>
               <div className="grid gap-3.5 sm:grid-cols-[repeat(auto-fill,minmax(310px,1fr))]">
-                {systemGames.map((game) => (
-                  <GameCard key={game.id} game={game} />
+                {favoriteGames.map((game) => (
+                  <GameCard
+                    key={game.id}
+                    game={game}
+                    isFavorite
+                    onToggleFavorite={toggleFavorite}
+                  />
                 ))}
               </div>
-            )}
-          </section>
+            </section>
+          )}
+
+          {otherGames.length > 0 && (
+            <section>
+              <h2 className="mb-3 mt-6 text-[13px] font-extrabold tracking-[0.07em] text-faint uppercase">
+                {t("allGames")}
+              </h2>
+              <div className="grid gap-3.5 sm:grid-cols-[repeat(auto-fill,minmax(310px,1fr))]">
+                {otherGames.map((game) => (
+                  <GameCard
+                    key={game.id}
+                    game={game}
+                    isFavorite={false}
+                    onToggleFavorite={toggleFavorite}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
         </>
       )}
     </div>

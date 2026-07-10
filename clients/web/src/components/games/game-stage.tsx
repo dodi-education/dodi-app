@@ -9,13 +9,15 @@ import {
 } from "@/components/games/game-sandbox";
 import { STAGE, stageSizeStyle } from "@/lib/games/stage";
 import { cn } from "@/lib/utils";
-import type { GameGoal, GameToParentMessage } from "@dodi/types/games";
+import type { GameGoal, GameSaveState, GameToParentMessage } from "@dodi/types/games";
 
 interface GameStageProps {
   gameId: string;
   codeBundle: string;
   /** Learning goal + success criteria delivered to the game on init. */
   goal?: GameGoal;
+  /** Saved state to restore on init (snapshot play). */
+  savedState?: GameSaveState;
   /** Forwarded to the underlying sandbox so callers can send commands / snapshots. */
   sandboxRef?: Ref<GameSandboxHandle>;
   onMessage?: (message: GameToParentMessage) => void;
@@ -52,6 +54,7 @@ export function GameStage({
   gameId,
   codeBundle,
   goal,
+  savedState,
   sandboxRef,
   onMessage,
   onStateChange,
@@ -80,6 +83,7 @@ export function GameStage({
         gameId={gameId}
         codeBundle={codeBundle}
         goal={goal}
+        savedState={savedState}
         className="h-full w-full border-0 bg-white"
         onMessage={onMessage}
         onStateChange={onStateChange}

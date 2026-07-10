@@ -6,22 +6,24 @@
  * thinking provider directly from the browser. The server never sees the child's
  * data, the persona soul, or the provider key.
  */
-import { dodi } from "@/lib/api";
 import { createClientThinkingProvider } from "@dodi/ai/client-thinking";
 import { reportUsage } from "@/lib/usage/report-usage";
 import { resolveClientThinking } from "@/lib/ai/resolve-client-thinking";
-import { getActivePersona } from "@/lib/ai/voice-session";
+import {
+  getActivePersona,
+  loadFriendNames,
+  resolveGameInfo,
+  type GameSessionContextInput,
+} from "@/lib/ai/voice-session";
 import { normalizeCommands } from "@dodi/games/normalize-commands";
 import { buildGameTextContext } from "@dodi/ai/dodi-context";
 import { useKidStore } from "@/stores/kid-store";
-import type { Game } from "@dodi/types/database";
-import type { GameAssistantResponse, GameMetadata } from "@dodi/types/games";
+import type { GameAssistantResponse } from "@dodi/types/games";
 
 export async function runGameTextAssistant(
   kidId: string,
-  gameId: string,
+  ctx: GameSessionContextInput & { snapshotId?: string },
   message: string,
-  gameState: Record<string, unknown>,
 ): Promise<GameAssistantResponse> {
   const kid = await useKidStore.getState().loadOne(kidId);
   if (!kid) throw new Error("Kid not found");
@@ -32,12 +34,12 @@ export async function runGameTextAssistant(
 
   const persona = await getActivePersona(kid.active_persona_id);
 
-  // Locale-translated game (title/description) — matches the old server route.
-  const gameRes = await dodi.request(`/api/games/${gameId}?locale=${kid.language}`);
-  if (!gameRes.ok) throw new Error("Game not found");
-  const game = (await gameRes.json()) as Game;
-  const capabilities =
-    (game.metadata as unknown as GameMetadata | null)?.capabilities ?? [];
+  // Locale-translated game (title/description) — or the inline info for
+  // snapshot play, where the game row may be deleted or another family's.
+  const info = await resolveGameInfo(ctx, kid.language);
+  const friendNames = info.capabilities.includes("save_state")
+    ? await loadFriendNames(kid)
+    : [];
 
   const { systemInstruction } = buildGameTextContext({
     personaSoul: persona.soul,
@@ -46,12 +48,13 @@ export async function runGameTextAssistant(
     childLanguage: kid.language,
     memory: kid.memory,
     parentNotes: kid.parent_notes,
-    gameTitle: game.title,
-    gameDescription: game.description,
-    gameMarkdown: game.markdown,
-    gameCodeBundle: game.code_bundle,
-    gameState,
-    capabilities,
+    gameTitle: info.title,
+    gameDescription: info.description,
+    gameMarkdown: info.markdown,
+    gameCodeBundle: info.codeBundle,
+    gameState: ctx.gameState,
+    capabilities: info.capabilities,
+    friendNames,
   });
 
   const provider = createClientThinkingProvider(
@@ -62,7 +65,8 @@ export async function runGameTextAssistant(
       reportUsage({
         eventType: "game_analysis",
         kidId,
-        gameId,
+        // usage rows FK games — snapshot sessions attribute to no game.
+        gameId: ctx.snapshotId ? null : ctx.gameId,
         provider: thinking.provider,
         model: thinking.model,
         usage,

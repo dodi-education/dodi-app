@@ -70,6 +70,32 @@ describe("buildGameToolDeclarations", () => {
     expect(names).not.toContain("bogus_command");
     expect(names.sort()).toEqual([...META_TOOL_NAMES].sort());
   });
+
+  it("save_state capability registers the snapshot voice tools", () => {
+    const names = buildGameToolDeclarations(["save_state"]).map((t) => t.name);
+    expect(names).toContain("save_snapshot");
+    expect(names).toContain("share_snapshot");
+    expect(names).not.toContain("save_state"); // internal → not a voice tool itself
+  });
+
+  it("snapshot voice tools are absent without save_state", () => {
+    const names = buildGameToolDeclarations(["submit_answer", "get_snapshot"]).map((t) => t.name);
+    expect(names).not.toContain("save_snapshot");
+    expect(names).not.toContain("share_snapshot");
+  });
+});
+
+describe("snapshot tool registry entries", () => {
+  it("save_state is declarable but never a voice tool; snapshot tools are the inverse", () => {
+    expect(DECLARABLE_CAPABILITY_NAMES).toContain("save_state");
+    expect(DECLARABLE_CAPABILITY_NAMES).not.toContain("save_snapshot");
+    expect(DECLARABLE_CAPABILITY_NAMES).not.toContain("share_snapshot");
+    expect(STANDARD_TOOLS_BY_NAME["save_state"].voiceExposed).toBe(false);
+    expect(STANDARD_TOOLS_BY_NAME["save_snapshot"].kind).toBe("client");
+    expect(STANDARD_TOOLS_BY_NAME["share_snapshot"].kind).toBe("client");
+    expect(STANDARD_TOOLS_BY_NAME["save_snapshot"].requiresCapability).toBe("save_state");
+    expect(STANDARD_TOOLS_BY_NAME["share_snapshot"].requiresCapability).toBe("save_state");
+  });
 });
 
 describe("unknownCapabilities", () => {

@@ -189,6 +189,10 @@ CREATE TABLE IF NOT EXISTS "public"."games" (
     -- messages) under the account VMK. Lets the parent resume editing where they
     -- left off; the server stores it as an opaque blob and cannot decrypt it.
     "agent_transcript_enc" "text",
+    -- Optional 100x100 preview shown in the kid game library. System games point at
+    -- a static SVG under /images/game-previews; custom-game screenshots (deferred)
+    -- can later fill this same column. NULL ⇒ the UI falls back to a generic icon.
+    "preview_image" "text",
     CONSTRAINT "games_age_range_check" CHECK (("target_age_min" <= "target_age_max")),
     CONSTRAINT "games_created_by_check" CHECK (("created_by" = ANY (ARRAY['system'::"text", 'parent'::"text", 'kid'::"text"]))),
     CONSTRAINT "games_duration_check" CHECK ((("estimated_duration_minutes" >= 1) AND ("estimated_duration_minutes" <= 180))),
@@ -211,6 +215,22 @@ CREATE TABLE IF NOT EXISTS "public"."game_sharings" (
 
 
 ALTER TABLE "public"."game_sharings" OWNER TO "postgres";
+
+
+-- Per-kid favorite games. A kid marks a game with the heart in the library; the
+-- account owns the row (RLS on account_id), kid_id scopes it to the profile.
+CREATE TABLE IF NOT EXISTS "public"."game_favorites" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "account_id" "uuid" NOT NULL,
+    "kid_id" "uuid" NOT NULL,
+    "game_id" "uuid" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "game_favorites_pkey" PRIMARY KEY ("id"),
+    CONSTRAINT "game_favorites_kid_game_uniq" UNIQUE ("kid_id", "game_id")
+);
+
+
+ALTER TABLE "public"."game_favorites" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."game_plays" (
@@ -400,6 +420,9 @@ CREATE INDEX "game_sharings_game_idx" ON "public"."game_sharings" USING "btree" 
 CREATE INDEX "game_sharings_account_kid_idx" ON "public"."game_sharings" USING "btree" ("account_id", "kid_id");
 
 
+CREATE INDEX "game_favorites_kid_idx" ON "public"."game_favorites" USING "btree" ("kid_id");
+
+
 CREATE INDEX "personas_account_id_idx" ON "public"."personas" USING "btree" ("account_id");
 
 
@@ -480,6 +503,18 @@ ALTER TABLE ONLY "public"."game_sharings"
     ADD CONSTRAINT "game_sharings_kid_id_fkey" FOREIGN KEY ("kid_id") REFERENCES "public"."kids"("id") ON DELETE CASCADE;
 
 
+ALTER TABLE ONLY "public"."game_favorites"
+    ADD CONSTRAINT "game_favorites_game_id_fkey" FOREIGN KEY ("game_id") REFERENCES "public"."games"("id") ON DELETE CASCADE;
+
+
+ALTER TABLE ONLY "public"."game_favorites"
+    ADD CONSTRAINT "game_favorites_account_id_fkey" FOREIGN KEY ("account_id") REFERENCES "public"."accounts"("id") ON DELETE CASCADE;
+
+
+ALTER TABLE ONLY "public"."game_favorites"
+    ADD CONSTRAINT "game_favorites_kid_id_fkey" FOREIGN KEY ("kid_id") REFERENCES "public"."kids"("id") ON DELETE CASCADE;
+
+
 ALTER TABLE ONLY "public"."game_translations"
     ADD CONSTRAINT "game_translations_game_id_fkey" FOREIGN KEY ("game_id") REFERENCES "public"."games"("id") ON DELETE CASCADE;
 
@@ -544,6 +579,15 @@ CREATE POLICY "Users can delete own game sharings" ON "public"."game_sharings" F
 CREATE POLICY "Users can view own game sharings" ON "public"."game_sharings" FOR SELECT USING (("auth"."uid"() = "account_id"));
 
 
+CREATE POLICY "Users can create own game favorites" ON "public"."game_favorites" FOR INSERT WITH CHECK (("auth"."uid"() = "account_id"));
+
+
+CREATE POLICY "Users can delete own game favorites" ON "public"."game_favorites" FOR DELETE USING (("auth"."uid"() = "account_id"));
+
+
+CREATE POLICY "Users can view own game favorites" ON "public"."game_favorites" FOR SELECT USING (("auth"."uid"() = "account_id"));
+
+
 CREATE POLICY "Users can create own custom games" ON "public"."games" FOR INSERT WITH CHECK ((("auth"."uid"() = "account_id") AND ("is_system" = false)));
 
 
@@ -602,6 +646,9 @@ ALTER TABLE "public"."usage_events" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."game_sharings" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."game_favorites" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."game_translations" ENABLE ROW LEVEL SECURITY;
@@ -679,6 +726,11 @@ GRANT ALL ON TABLE "public"."usage_events" TO "service_role";
 GRANT ALL ON TABLE "public"."game_sharings" TO "anon";
 GRANT ALL ON TABLE "public"."game_sharings" TO "authenticated";
 GRANT ALL ON TABLE "public"."game_sharings" TO "service_role";
+
+
+GRANT ALL ON TABLE "public"."game_favorites" TO "anon";
+GRANT ALL ON TABLE "public"."game_favorites" TO "authenticated";
+GRANT ALL ON TABLE "public"."game_favorites" TO "service_role";
 
 
 GRANT ALL ON TABLE "public"."game_translations" TO "anon";
@@ -1218,3 +1270,79 @@ ON CONFLICT ("plan_id", "locale") DO NOTHING;
 INSERT INTO "public"."platform_config" ("key", "value")
 VALUES ('default_plan_handle', '"egg"'::"jsonb")
 ON CONFLICT ("key") DO NOTHING;
+
+
+-- ===========================================================================
+-- GAME SNAPSHOTS (E2EE)
+--
+-- Self-contained saved game moments ("snapshots"): each row carries TWO opaque
+-- sealed blobs — info_enc (light: title, game title, thumbnail; decrypted to
+-- render the collection) and payload_enc (heavy: full game code + metadata +
+-- restorable save state, so a snapshot outlives game edits/deletion and plays
+-- on a friend's device that never had the game). Own snapshots are sealed
+-- enc:v1: under the account VMK; received snapshots are SealedEnvelope JSON
+-- sealed to the recipient kid's friend KEM key and signed by the sender kid
+-- (friend-card pattern). The server can never read either blob — it only
+-- stores them and gates delivery. See @dodi/protocol snapshot helpers.
+-- ===========================================================================
+
+CREATE TABLE IF NOT EXISTS "public"."game_snapshots" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "account_id" "uuid" NOT NULL,
+    "kid_id" "uuid" NOT NULL,
+    "game_id" "uuid",
+    "origin" "text" DEFAULT 'own'::"text" NOT NULL,
+    "sender_kid_id" "uuid",
+    "friendship_id" "uuid",
+    "info_enc" "text" NOT NULL,
+    "payload_enc" "text" NOT NULL,
+    "payload_bytes" integer DEFAULT 0 NOT NULL,
+    "viewed_at" timestamp with time zone,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "game_snapshots_origin_check" CHECK (("origin" = ANY (ARRAY['own'::"text", 'received'::"text"]))),
+    CONSTRAINT "game_snapshots_received_sender_check" CHECK ((("origin" = 'own'::"text") OR ("sender_kid_id" IS NOT NULL))),
+    CONSTRAINT "game_snapshots_payload_bytes_check" CHECK (("payload_bytes" >= 0))
+);
+
+ALTER TABLE "public"."game_snapshots" OWNER TO "postgres";
+
+ALTER TABLE ONLY "public"."game_snapshots"
+    ADD CONSTRAINT "game_snapshots_pkey" PRIMARY KEY ("id");
+
+ALTER TABLE ONLY "public"."game_snapshots"
+    ADD CONSTRAINT "game_snapshots_account_id_fkey" FOREIGN KEY ("account_id") REFERENCES "public"."accounts"("id") ON DELETE CASCADE;
+ALTER TABLE ONLY "public"."game_snapshots"
+    ADD CONSTRAINT "game_snapshots_kid_id_fkey" FOREIGN KEY ("kid_id") REFERENCES "public"."kids"("id") ON DELETE CASCADE;
+-- Soft reference: snapshots are self-contained and survive game deletion.
+ALTER TABLE ONLY "public"."game_snapshots"
+    ADD CONSTRAINT "game_snapshots_game_id_fkey" FOREIGN KEY ("game_id") REFERENCES "public"."games"("id") ON DELETE SET NULL;
+ALTER TABLE ONLY "public"."game_snapshots"
+    ADD CONSTRAINT "game_snapshots_sender_kid_id_fkey" FOREIGN KEY ("sender_kid_id") REFERENCES "public"."kids"("id") ON DELETE SET NULL;
+ALTER TABLE ONLY "public"."game_snapshots"
+    ADD CONSTRAINT "game_snapshots_friendship_id_fkey" FOREIGN KEY ("friendship_id") REFERENCES "public"."friendships"("id") ON DELETE SET NULL;
+
+CREATE INDEX "game_snapshots_kid_created_idx" ON "public"."game_snapshots" USING "btree" ("kid_id", "created_at" DESC);
+CREATE INDEX "game_snapshots_account_created_idx" ON "public"."game_snapshots" USING "btree" ("account_id", "created_at" DESC);
+
+CREATE OR REPLACE TRIGGER "game_snapshots_updated_at" BEFORE UPDATE ON "public"."game_snapshots" FOR EACH ROW EXECUTE FUNCTION "public"."handle_updated_at"();
+
+ALTER TABLE "public"."game_snapshots" ENABLE ROW LEVEL SECURITY;
+
+-- Owners manage their own rows (UPDATE exists for viewed_at marking). Received
+-- rows (origin='received') are inserted ONLY by the service-role snapshots
+-- service after validating an accepted friendship between the sender and the
+-- recipient kid — there is intentionally no user INSERT policy for them.
+CREATE POLICY "Users can view own game snapshots" ON "public"."game_snapshots" FOR SELECT USING (("auth"."uid"() = "account_id"));
+CREATE POLICY "Users can create own game snapshots" ON "public"."game_snapshots" FOR INSERT WITH CHECK ((("auth"."uid"() = "account_id") AND ("origin" = 'own'::"text")));
+CREATE POLICY "Users can update own game snapshots" ON "public"."game_snapshots" FOR UPDATE USING (("auth"."uid"() = "account_id"));
+CREATE POLICY "Users can delete own game snapshots" ON "public"."game_snapshots" FOR DELETE USING (("auth"."uid"() = "account_id"));
+
+GRANT ALL ON TABLE "public"."game_snapshots" TO "anon";
+GRANT ALL ON TABLE "public"."game_snapshots" TO "authenticated";
+GRANT ALL ON TABLE "public"."game_snapshots" TO "service_role";
+
+COMMENT ON COLUMN "public"."game_snapshots"."info_enc" IS 'Opaque light gallery blob (title, game title, thumbnail). origin=own: enc:v1: JSON under the account VMK; origin=received: SealedEnvelope JSON to the kid''s friend KEM key, signed by the sender kid. Server cannot decrypt.';
+COMMENT ON COLUMN "public"."game_snapshots"."payload_enc" IS 'Opaque heavy blob (game code + metadata + restorable save state), sealed like info_enc. Self-contained: outlives game edits/deletion. Server cannot decrypt.';
+COMMENT ON COLUMN "public"."game_snapshots"."payload_bytes" IS 'Approximate plaintext payload size in bytes — recorded for future per-kid storage quota enforcement.';
+COMMENT ON COLUMN "public"."game_snapshots"."game_id" IS 'Soft reference to the source game; NULL for received snapshots and after game deletion.';

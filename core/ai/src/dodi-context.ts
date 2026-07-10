@@ -52,6 +52,11 @@ export interface GameContextInput extends DodiContextInput {
   gameState?: Record<string, unknown>;
   /** Standardized command names this game implements (drives first-class tools). */
   capabilities?: string[];
+  /**
+   * Decrypted display names of the child's ACCEPTED friends — enables the
+   * share_snapshot flow ("share this with Lea"). Empty/absent = sharing hidden.
+   */
+  friendNames?: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -216,11 +221,46 @@ function buildGameSharedInstruction(input: GameContextInput): string {
   return lines.join("\n");
 }
 
+/**
+ * Kid-facing snapshot guidance, shared by the voice and text builders. Only
+ * emitted when the game declares `save_state` (otherwise the tools don't exist).
+ */
+function buildSnapshotSection(input: GameContextInput): string[] {
+  const capabilities = input.capabilities ?? [];
+  if (!capabilities.includes("save_state")) return [];
+  const friendNames = input.friendNames ?? [];
+
+  const lines = [
+    "## Saving & Sharing Snapshots",
+    "This game supports snapshots — a saved moment the child can reopen later from their Snapshots collection, with everything exactly as it was.",
+    "- When the child asks to save or keep the game ('save this', 'keep my picture', 'make a snapshot'), call `save_snapshot`. Ask for — or cheerfully invent — a short fun title and pass it as `title`. The app captures and stores everything.",
+    "- Saving takes a moment; the tool result tells you what to say when it's done.",
+  ];
+  if (friendNames.length > 0) {
+    lines.push(
+      `- The child's friends: ${friendNames.join(", ")}. ONLY these friends can receive a snapshot.`,
+      "- When the child asks to send or share this with someone ('share this with Lea', 'send it to Lea'), FIRST repeat the friend's name back and get a clear yes (e.g. 'Should I send it to Lea?'). Only after the child confirms, call `share_snapshot` with `friend_name`.",
+      "- If the name doesn't clearly match one friend from the list, ask the child which friend they mean — NEVER guess or pick for them.",
+      "- Sharing also saves a copy in the child's own collection.",
+    );
+  } else {
+    lines.push(
+      "- The child has no connected friends yet, so snapshots can be saved but not shared. If they ask to share one, gently explain that a parent can help them add friends first.",
+    );
+  }
+  lines.push("");
+  return lines;
+}
+
 export function buildGameVoiceContext(
   input: GameContextInput,
 ): DodiVoiceContext {
   const shared = buildGameSharedInstruction(input);
-  const tools = buildGameToolDeclarations(input.capabilities ?? []);
+  // Without friends there is no one to share with — drop the tool entirely so
+  // the model can't call it (the guidance explains why instead).
+  const tools = buildGameToolDeclarations(input.capabilities ?? []).filter(
+    (t) => t.name !== "share_snapshot" || (input.friendNames ?? []).length > 0,
+  );
   const toolListLines = tools.map((t) => `- \`${t.name}\` — ${t.description}`);
 
   const systemInstruction = [
@@ -251,6 +291,7 @@ export function buildGameVoiceContext(
     "- The tool will return an analysis — use it directly in your spoken response to the child",
     "- Speak the answer naturally and concisely in the child's language",
     "",
+    ...buildSnapshotSection(input),
     "Speech rules:",
     "- Speak naturally to the child in their configured language",
     "- Keep spoken responses short and friendly",
@@ -268,6 +309,30 @@ export function buildGameVoiceContext(
 // Mode 3: In-game text chat
 // ---------------------------------------------------------------------------
 
+/**
+ * Text-chat doc for the host-handled snapshot commands. They are not part of
+ * the game's own vocabulary (`standardCommandsDoc` covers only declarable
+ * commands), but the JSON `commands` array accepts them — the APP intercepts
+ * them before the sandbox.
+ */
+function buildSnapshotCommandsDoc(input: GameContextInput): string[] {
+  const capabilities = input.capabilities ?? [];
+  if (!capabilities.includes("save_state")) return [];
+  const friendNames = input.friendNames ?? [];
+
+  const lines = [
+    "",
+    "### Host commands (handled by the APP, not the game)",
+    "`save_snapshot` `{ title }` — save the current game moment to the child's snapshot collection. `title` (string, optional): a short fun name for it.",
+  ];
+  if (friendNames.length > 0) {
+    lines.push(
+      "`share_snapshot` `{ friend_name, title }` — save AND send the moment to one of the child's friends. `friend_name` (string, required) must be one of the friends listed in the snapshot section; confirm the name with the child before emitting.",
+    );
+  }
+  return lines;
+}
+
 export function buildGameTextContext(
   input: GameContextInput,
 ): { systemInstruction: string } {
@@ -277,7 +342,9 @@ export function buildGameTextContext(
     shared,
     "",
     standardCommandsDoc(input.capabilities ?? []),
+    ...buildSnapshotCommandsDoc(input),
     "",
+    ...buildSnapshotSection(input),
     "## Response Contract",
     "Reply with JSON only:",
     '{"reply":"short kid-friendly text","commands":[{"type":"...","payload":{}}]}',

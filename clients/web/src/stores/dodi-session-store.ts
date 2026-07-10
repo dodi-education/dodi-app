@@ -34,6 +34,14 @@ export type DodiContext =
   | {
       type: "game";
       gameId: string;
+      /**
+       * Present when playing a SNAPSHOT: identifies the session (reconnect key)
+       * and marks that no play records / game-scoped usage rows may reference
+       * `gameId` (the row may be another family's or deleted).
+       */
+      snapshotId?: string;
+      /** Game info for snapshot play, where fetching /api/games/{gameId} may 404. */
+      inline?: { title: string; description: string };
       markdown: string;
       codeBundle: string;
       gameState: Record<string, unknown>;
@@ -124,10 +132,15 @@ export interface DodiSessionState {
   aiActivity: Record<DodiActivity, number>;
   beginAiActivity: (kind: DodiActivity) => void;
   endAiActivity: (kind: DodiActivity) => void;
-  // Release a held-open generate_drawing tool call once the client-side image is
-  // on the canvas (or failed). Dodi stays silent while the call is pending, then
-  // announces the finished picture. See the generate_drawing tool-call branch.
-  resolveDrawingGeneration: (result: { ok: boolean; error?: string }) => void;
+  // Release a held-open client tool call (generate_drawing, save_snapshot,
+  // share_snapshot) once the app-side work finished (or failed). Dodi stays
+  // silent while the call is pending, then speaks one completion line driven by
+  // `message`/`error`. See the client-kind tool-call branch.
+  resolveClientCommand: (result: {
+    ok: boolean;
+    message?: string;
+    error?: string;
+  }) => void;
 
   // Count of kid turns ("asking Dodi") while a game is open — feeds the
   // hintsUsed metric for success evaluation. Reset per play by the play view.
@@ -227,7 +240,9 @@ function voiceMeterStart(): void {
   voiceActiveSince = Date.now();
   voiceMeterKidId = currentKidId;
   const ctx = useDodiSessionStore.getState().context;
-  voiceMeterGameId = ctx.type === "game" ? ctx.gameId : null;
+  // Snapshot play: gameId may reference a deleted or foreign game — usage rows
+  // FK games, so attribute snapshot sessions to no game.
+  voiceMeterGameId = ctx.type === "game" && !ctx.snapshotId ? ctx.gameId : null;
 }
 
 function voiceMeterStop(keepalive = false): void {
@@ -254,16 +269,17 @@ function voiceMeterStop(keepalive = false): void {
 let stateSequenceNumber = 0;
 let pendingGameState: string | null = null;
 
-// Deferred generate_drawing: hold the tool response until the client-side image
-// lands so the voice model stays silent (a pending function call yields no audio)
-// instead of looping filler while the picture generates. Resolved by
-// resolveDrawingGeneration() from the play view; timed out as a safety net so a
-// dropped/failed generation can never freeze the turn open forever.
-let pendingDrawingCall: { id: string; name: string } | null = null;
-let drawingTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
-// After a drawing resolves, briefly suppress interrupting [GAME STATE UPDATE]
-// pushes so the set_generated_image state result doesn't cut off Dodi's spoken
-// completion line (the tool response already conveyed the finished picture).
+// Deferred client tool call (generate_drawing, save_snapshot, share_snapshot):
+// hold the tool response until the app-side work lands so the voice model stays
+// silent (a pending function call yields no audio) instead of looping filler.
+// Resolved by resolveClientCommand() from the play view; timed out as a safety
+// net so dropped/failed work can never freeze the turn open forever. At most
+// one call is pending at a time — a newer call supersedes the old one.
+let pendingClientCall: { id: string; name: string } | null = null;
+let clientCallTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
+// After a client call resolves, briefly suppress interrupting [GAME STATE
+// UPDATE] pushes so a trailing state result (e.g. set_generated_image) doesn't
+// cut off Dodi's spoken completion line.
 let suppressStateSendUntilTs = 0;
 
 // Turn tracking (debugging)
@@ -286,13 +302,19 @@ const MIN_MEMORY_BATCH_ENTRIES = 3;
 const MAX_PENDING_ENTRIES = 2000;
 const MAX_MESSAGES = 40;
 const STATE_DEBOUNCE_MS = 500;
-// How long to hold a generate_drawing tool call open before giving up (so a
-// dropped/hung generation can't freeze the voice turn) — comfortably longer than
-// image generation, which the Live API tolerates (verified silent holds ≥12s).
-const DRAWING_TIMEOUT_MS = 30000;
-// Quiet window after a drawing lands, during which game-state updates refresh
-// local context but skip the interrupting context push (see updateGameState).
-const DRAWING_COMPLETION_QUIET_MS = 2500;
+// How long to hold each client tool call open before giving up (so dropped/
+// hung app-side work can't freeze the voice turn). Image generation is the slow
+// one — the Live API tolerates silent holds ≥12s (verified); snapshot save/share
+// are one state capture + one or two POSTs.
+const CLIENT_CALL_TIMEOUT_MS: Record<string, number> = {
+  generate_drawing: 30000,
+  save_snapshot: 15000,
+  share_snapshot: 20000,
+};
+const CLIENT_CALL_TIMEOUT_FALLBACK_MS = 15000;
+// Quiet window after a client call resolves, during which game-state updates
+// refresh local context but skip the interrupting context push (see updateGameState).
+const CLIENT_CALL_COMPLETION_QUIET_MS = 2500;
 const INACTIVITY_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
 // ---------------------------------------------------------------------------
@@ -591,10 +613,10 @@ function clearStateDebounce(): void {
   }
 }
 
-function clearDrawingTimeout(): void {
-  if (drawingTimeoutTimer) {
-    clearTimeout(drawingTimeoutTimer);
-    drawingTimeoutTimer = null;
+function clearClientCallTimeout(): void {
+  if (clientCallTimeoutTimer) {
+    clearTimeout(clientCallTimeoutTimer);
+    clientCallTimeoutTimer = null;
   }
 }
 
@@ -628,8 +650,8 @@ function cleanup(): void {
   client = null;
 
   clearStateDebounce();
-  clearDrawingTimeout();
-  pendingDrawingCall = null;
+  clearClientCallTimeout();
+  pendingClientCall = null;
   suppressStateSendUntilTs = 0;
   clearInactivityTimer();
   stopInteractionListeners();
@@ -790,8 +812,12 @@ function contextRequiresReconnect(a: DodiContext, b: DodiContext): boolean {
   ) {
     return false;
   }
-  // same game: no reconnect
-  if (a.type === "game" && b.type === "game" && a.gameId === b.gameId) {
+  // same game (or same snapshot session): no reconnect
+  if (
+    a.type === "game" &&
+    b.type === "game" &&
+    (a.snapshotId ?? a.gameId) === (b.snapshotId ?? b.gameId)
+  ) {
     return false;
   }
   // same type and both non-game
@@ -856,37 +882,39 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
     }));
   },
 
-  resolveDrawingGeneration: (result) => {
-    // Called by the play view when the client-side drawing has landed on the
-    // canvas (or failed). Answers the held-open generate_drawing tool call so
-    // Dodi finally speaks — announcing the finished picture on success, or that
-    // it didn't work on failure. No-ops for marker-triggered drawings that never
-    // opened a tool call, and for a call already resolved by the safety timeout.
-    if (!pendingDrawingCall) return;
-    clearDrawingTimeout();
-    const call = pendingDrawingCall;
-    pendingDrawingCall = null;
-    // [TEMP DEBUG drawing-repeat] Drawing landed: answering the held call now.
+  resolveClientCommand: (result) => {
+    // Called by the play view when the app-side work behind a client tool call
+    // (drawing generated, snapshot saved/shared) has landed or failed. Answers
+    // the held-open call so Dodi finally speaks one completion line. No-ops for
+    // marker-triggered commands that never opened a tool call, and for a call
+    // already resolved by the safety timeout.
+    if (!pendingClientCall) return;
+    clearClientCallTimeout();
+    const call = pendingClientCall;
+    pendingClientCall = null;
     gameDebug(
       "voice",
-      `resolveDrawingGeneration ok=${result.ok} → sending deferred response; playback backlog=${streamer?.backlogSeconds().toFixed(1)}s`,
+      `resolveClientCommand ${call.name} ok=${result.ok} → sending deferred response; playback backlog=${streamer?.backlogSeconds().toFixed(1)}s`,
     );
-    // Give the completion line a clean runway: the imminent set_generated_image
-    // state result would otherwise push an interrupting [GAME STATE UPDATE].
-    suppressStateSendUntilTs = Date.now() + DRAWING_COMPLETION_QUIET_MS;
+    // Give the completion line a clean runway: a trailing state result (e.g.
+    // set_generated_image) would otherwise push an interrupting [GAME STATE UPDATE].
+    suppressStateSendUntilTs = Date.now() + CLIENT_CALL_COMPLETION_QUIET_MS;
     if (result.ok) {
       client?.sendToolResponse(call.id, call.name, {
         ok: true,
         status: "done",
         message:
-          "The coloring sheet is now on the canvas. In ONE short, cheerful sentence, tell the child it's ready to color in — do not repeat yourself.",
+          result.message ??
+          (call.name === "generate_drawing"
+            ? "The coloring sheet is now on the canvas. In ONE short, cheerful sentence, tell the child it's ready to color in — do not repeat yourself."
+            : "Done. In ONE short, cheerful sentence, tell the child it worked — do not repeat yourself."),
       });
     } else {
       client?.sendToolResponse(call.id, call.name, {
         ok: false,
         error:
           result.error ??
-          "The picture could not be created. In one short sentence, gently tell the child it didn't work this time.",
+          "It could not be completed. In one short sentence, gently tell the child it didn't work this time.",
       });
     }
   },
@@ -942,11 +970,7 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
       if (newContext.type === "game") {
         // Build the voice session client-side from the vault (E2EE): the server
         // can no longer decrypt the provider key. Mirrors connect().
-        config = await buildGameVoiceConfig(
-          kidId,
-          newContext.gameId,
-          newContext.gameState,
-        );
+        config = await buildGameVoiceConfig(kidId, newContext);
         if (gen !== contextGeneration || controller.signal.aborted) return;
       } else {
         // Home/browse context — build client-side from the vault (E2EE).
@@ -1040,11 +1064,7 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
       let config: GameVoiceSessionConfig;
 
       if (currentContext.type === "game") {
-        config = await buildGameVoiceConfig(
-          kidId,
-          currentContext.gameId,
-          currentContext.gameState,
-        );
+        config = await buildGameVoiceConfig(kidId, currentContext);
         if (gen !== contextGeneration || controller.signal.aborted) return;
       } else {
         config = await buildHomeVoiceConfig(kidId);
@@ -1188,8 +1208,8 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
       chatSubmitting: true,
     });
 
-    const resolvedGameId = gameId ?? (state.context.type === "game" ? state.context.gameId : null);
-    if (!resolvedGameId) {
+    const gameContext = state.context.type === "game" ? state.context : null;
+    if (!gameContext) {
       set({ chatSubmitting: false });
       return;
     }
@@ -1198,12 +1218,7 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
       // Runs fully in the browser: the child's data + persona soul are E2EE and
       // the thinking key lives only in the unlocked vault, so the server can
       // neither assemble the prompt nor run this. Mirrors the voice companion.
-      const data = await runGameTextAssistant(
-        currentKidId,
-        resolvedGameId,
-        trimmed,
-        state.context.type === "game" ? state.context.gameState : {},
-      );
+      const data = await runGameTextAssistant(currentKidId, gameContext, trimmed);
 
       gameDebug("text", "Assistant response:", {
         reply: data.reply?.slice(0, 100),
@@ -1322,12 +1337,12 @@ function createEventHandler(
         if (turnAudioChunks === 1) {
           gameDebug("voice", "First audio chunk this turn");
         }
-        // [TEMP DEBUG drawing-repeat] Is the model producing NEW audio while the
-        // drawing tool call is held open? If so, deferral isn't keeping it silent.
-        if (pendingDrawingCall) {
+        // [TEMP DEBUG drawing-repeat] Is the model producing NEW audio while a
+        // client tool call is held open? If so, deferral isn't keeping it silent.
+        if (pendingClientCall) {
           gameDebug(
             "voice",
-            `⚠ NEW audio chunk #${turnAudioChunks} while drawing PENDING (backlog=${streamer?.backlogSeconds().toFixed(1)}s)`,
+            `⚠ NEW audio chunk #${turnAudioChunks} while ${pendingClientCall.name} PENDING (backlog=${streamer?.backlogSeconds().toFixed(1)}s)`,
           );
         }
         if (tapStartedAtMs !== null) {
@@ -1419,33 +1434,33 @@ function createEventHandler(
           }
 
           if (STANDARD_TOOLS_BY_NAME[event.name].kind === "client") {
-            // Client-intercepted (generate_drawing): image generation runs in the
-            // app and takes a few seconds. HOLD the tool response open until the
-            // picture is on the canvas — while a function call is pending the
-            // native-audio model produces no audio, so Dodi stays silent during
-            // generation instead of looping filler until the drawing lands. The
-            // play view calls resolveDrawingGeneration() when it resolves/fails.
-            clearDrawingTimeout();
-            pendingDrawingCall = { id: event.id, name: event.name };
+            // Client-intercepted (generate_drawing, save_snapshot,
+            // share_snapshot): the app-side work takes a few seconds. HOLD the
+            // tool response open until it lands — while a function call is
+            // pending the native-audio model produces no audio, so Dodi stays
+            // silent instead of looping filler. The play view calls
+            // resolveClientCommand() when it resolves/fails.
+            clearClientCallTimeout();
+            pendingClientCall = { id: event.id, name: event.name };
             gameDebug(
               "voice",
               `${event.name} → DEFERRING response; playback backlog=${streamer?.backlogSeconds().toFixed(1)}s`,
             );
-            // Flush the playback backlog so the generation window is actually
+            // Flush the playback backlog so the pending window is actually
             // silent; the deferred response then drives one clean completion line.
             streamer?.stop();
             set({ dodiSpeaking: false });
-            drawingTimeoutTimer = setTimeout(() => {
-              if (!pendingDrawingCall) return;
-              gameDebugWarn("voice", `${pendingDrawingCall.name} timed out — sending fallback response`);
-              client?.sendToolResponse(pendingDrawingCall.id, pendingDrawingCall.name, {
+            clientCallTimeoutTimer = setTimeout(() => {
+              if (!pendingClientCall) return;
+              gameDebugWarn("voice", `${pendingClientCall.name} timed out — sending fallback response`);
+              client?.sendToolResponse(pendingClientCall.id, pendingClientCall.name, {
                 ok: false,
                 error:
-                  "Image generation timed out. In one short sentence, gently tell the child it didn't work this time.",
+                  "It took too long and timed out. In one short sentence, gently tell the child it didn't work this time.",
               });
-              pendingDrawingCall = null;
-              drawingTimeoutTimer = null;
-            }, DRAWING_TIMEOUT_MS);
+              pendingClientCall = null;
+              clientCallTimeoutTimer = null;
+            }, CLIENT_CALL_TIMEOUT_MS[event.name] ?? CLIENT_CALL_TIMEOUT_FALLBACK_MS);
           } else {
             // Plain bridge command → respond immediately.
             client?.sendToolResponse(event.id, event.name, {
@@ -1516,7 +1531,8 @@ function createEventHandler(
               reportUsage({
                 eventType: "game_analysis",
                 kidId,
-                gameId: ctx.gameId,
+                // usage rows FK games — snapshot sessions attribute to no game.
+                gameId: ctx.snapshotId ? null : ctx.gameId,
                 provider: thinking.provider,
                 model: thinking.model,
                 usage,

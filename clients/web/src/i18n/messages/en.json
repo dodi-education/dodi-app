@@ -337,12 +337,13 @@
     "backToPlay": "Back to play",
     "searchPlaceholder": "Search games...",
     "filterSubject": "Filter by subject",
-    "allTags": "All tags",
+    "allGamesFilter": "All games",
     "loading": "Loading games...",
-    "systemGames": "System games",
-    "customGames": "Your custom games",
-    "noSystemGames": "No system games found.",
-    "noCustomGames": "No custom games yet.",
+    "favoriteGames": "Favorites",
+    "allGames": "Games",
+    "noGames": "No games found.",
+    "addFavorite": "Add to favorites",
+    "removeFavorite": "Remove from favorites",
     "systemLabel": "System",
     "customLabel": "Custom",
     "playAction": "Play",
@@ -375,7 +376,28 @@
     "voiceCreatingImage": "I'm drawing your picture…",
     "voiceThinking": "Hmm, let me think…",
     "noImageModel": "Ask a grown-up to set up an image model in Settings so dodi can draw.",
-    "drawingFailed": "dodi could not draw that right now. Try again."
+    "drawingFailed": "dodi could not draw that right now. Try again.",
+    "snapshotSaveFailed": "The snapshot could not be saved.",
+    "snapshotShareFailed": "The snapshot could not be shared."
+  },
+  "tags": {
+    "alphabet": "Alphabet",
+    "numbers": "Numbers",
+    "math": "Math",
+    "writing": "Writing",
+    "grammar": "Grammar",
+    "reading": "Reading",
+    "drawing": "Drawing",
+    "music": "Music",
+    "coding": "Coding",
+    "reasoning": "Reasoning",
+    "discernment": "Discernment",
+    "philosophy": "Philosophy",
+    "physics": "Physics",
+    "chemistry": "Chemistry",
+    "biology": "Biology",
+    "ai": "AI",
+    "ai-image": "AI Images"
   },
   "kid": {
     "greeting": "Hi there!",
@@ -631,7 +653,8 @@
     "navGroupAccount": "Account",
     "openKidView": "Open Kid View",
     "openMenu": "Open menu",
-    "closeMenu": "Close menu"
+    "closeMenu": "Close menu",
+    "snapshots": "Snapshots"
   },
   "usage": {
     "title": "Usage",
@@ -661,5 +684,24 @@
       "entities": "Entities",
       "humans": "Characters"
     }
+  },
+  "snapshots": {
+    "title": "Snapshots",
+    "subtitle": "Saved game moments of yours and from friends.",
+    "kidRequired": "Pick a kid profile first to see snapshots.",
+    "loading": "Loading snapshots…",
+    "empty": "No snapshots yet. While playing, tell dodi \"Save this!\" to keep a moment.",
+    "loadFailed": "Snapshots could not be loaded.",
+    "locked": "Unlock the vault to see snapshots.",
+    "fromFriend": "From {name}",
+    "fromFriendUnknown": "From a friend",
+    "newBadge": "New",
+    "deleteAction": "Delete snapshot",
+    "deleteConfirm": "Delete this snapshot? This cannot be undone.",
+    "openAction": "Open",
+    "notFound": "This snapshot doesn't exist anymore.",
+    "openFailed": "This snapshot could not be opened.",
+    "sectionMine": "My snapshots",
+    "sectionFriends": "From friends"
   }
 }

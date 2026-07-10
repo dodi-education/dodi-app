@@ -45,6 +45,7 @@ const ParentInitMessageSchema = z.object({
   payload: z.object({
     gameId: z.string().uuid(),
     goal: GameGoalSchema.optional(),
+    savedState: z.record(z.string(), JsonValueSchema).optional(),
   }),
 });
 
@@ -67,6 +68,11 @@ const ParentCommandMessageSchema = z.object({
 
 const ParentGetStateMessageSchema = z.object({
   type: z.literal("dodi:get_state"),
+  token: BridgeTokenSchema,
+});
+
+const ParentGetSaveStateMessageSchema = z.object({
+  type: z.literal("dodi:get_save_state"),
   token: BridgeTokenSchema,
 });
 
@@ -96,6 +102,14 @@ const GameStateMessageSchema = z.object({
   type: z.literal("game:state"),
   token: BridgeTokenSchema,
   payload: z.record(z.string(), JsonValueSchema),
+});
+
+const GameSaveStateMessageSchema = z.object({
+  type: z.literal("game:save_state"),
+  token: BridgeTokenSchema,
+  payload: z.object({
+    state: z.record(z.string(), JsonValueSchema),
+  }),
 });
 
 const GameProgressMessageSchema = z.object({
@@ -130,6 +144,7 @@ export const ParentToGameMessageSchema = z.discriminatedUnion("type", [
   ParentInitMessageSchema,
   ParentCommandMessageSchema,
   ParentGetStateMessageSchema,
+  ParentGetSaveStateMessageSchema,
   ParentSuccessMessageSchema,
 ]);
 
@@ -137,6 +152,7 @@ export const GameToParentMessageSchema = z.discriminatedUnion("type", [
   GameReadyMessageSchema,
   GameResultMessageSchema,
   GameStateMessageSchema,
+  GameSaveStateMessageSchema,
   GameProgressMessageSchema,
   GameEventMessageSchema,
   GameErrorMessageSchema,

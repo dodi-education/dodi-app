@@ -80,6 +80,7 @@ export default function KidLayout({
   const kidNavItems: Array<{ href: string; label: string; icon: IconName }> = [
     { href: "/home", label: t("home"), icon: "home" },
     { href: "/games", label: t("games"), icon: "games" },
+    { href: "/snapshots", label: t("snapshots"), icon: "camera" },
     { href: "/friends", label: t("friends"), icon: "friends" },
   ];
 

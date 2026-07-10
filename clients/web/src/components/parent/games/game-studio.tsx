@@ -23,6 +23,8 @@ import {
 import { STAGE } from "@/lib/games/stage";
 import { GAME_TAGS } from "@dodi/games/tags";
 import { sanitizeGameBundle } from "@dodi/games/sanitizer";
+import { tagStyle } from "@/components/parent/games/tag-style";
+import { useTagLabel } from "@/lib/games/tag-label";
 import { cn } from "@/lib/utils";
 import { useKids } from "@/hooks/use-kids";
 import { useMediaQuery } from "@/hooks/use-media-query";
@@ -1196,8 +1198,8 @@ function SettingsForm({
   error: string | null;
   t: ReturnType<typeof useTranslations>;
 }) {
-  // Predefined catalog plus any extra tags the agent already added to the game.
-  const tagOptions = [...GAME_TAGS, ...game.tags.filter((tag) => !GAME_TAGS.includes(tag as never))];
+  // Only the game-studio catalog is offered; non-catalog tags are stripped on save.
+  const tagLabel = useTagLabel();
   return (
     <div className="mx-auto flex max-w-[560px] flex-col gap-4 p-5 md:p-8">
       <Field label={t("gameName")} required>
@@ -1293,29 +1295,30 @@ function SettingsForm({
 
       <Field label={t("tags")} hint={t("tagsHint")}>
         <div className="flex flex-wrap gap-2">
-          {tagOptions.map((tag) => {
-            const selected = game.tags.includes(tag);
+          {GAME_TAGS.map((tag) => {
+            const selected = game.tags.includes(tag.id);
             return (
               <button
-                key={tag}
+                key={tag.id}
                 type="button"
                 aria-pressed={selected}
                 onClick={() =>
                   setField(
                     "tags",
                     selected
-                      ? game.tags.filter((x) => x !== tag)
-                      : [...game.tags, tag],
+                      ? game.tags.filter((x) => x !== tag.id)
+                      : [...game.tags, tag.id],
                   )
                 }
                 className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-semibold capitalize transition-colors",
+                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-semibold transition-colors",
                   selected
                     ? "border-primary bg-primary-soft text-primary"
                     : "border-border-strong bg-card text-ink-2 hover:border-faint",
                 )}
               >
-                {tag}
+                <Icon name={tagStyle(tag.id).icon} size={15} />
+                {tagLabel(tag.id)}
                 {selected && <Icon name="check" size={13} strokeWidth={3} />}
               </button>
             );

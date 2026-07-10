@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 
 import { Icon } from "@/components/shared/icon";
 import { tagStyle } from "@/components/parent/games/tag-style";
+import { useTagLabel } from "@/lib/games/tag-label";
 
 export interface GameListItem {
   id: string;
@@ -17,10 +18,6 @@ export interface GameListItem {
   isFamily: boolean;
   /** Decrypted names of the specific kids this game is shared with. */
   kidNames: string[];
-}
-
-function capitalize(value: string): string {
-  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 type EditedKey = "editedToday" | "editedDaysAgo" | "editedWeeksAgo";
@@ -38,6 +35,7 @@ function editedKey(iso: string): { key: EditedKey; values?: Record<string, numbe
  */
 export function GameStudioList({ items }: { items: GameListItem[] }) {
   const t = useTranslations("gameStudio");
+  const tagLabel = useTagLabel();
 
   return (
     <>
@@ -65,7 +63,7 @@ export function GameStudioList({ items }: { items: GameListItem[] }) {
                     className="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold"
                     style={{ background: s.bg, color: s.fg }}
                   >
-                    {capitalize(primaryTag)}
+                    {tagLabel(primaryTag)}
                   </span>
                 )}
                 {g.isActive ? (

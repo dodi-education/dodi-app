@@ -76,7 +76,10 @@ invent new command types. In write_game_code, pass a "capabilities" array listin
 command your game implements; these become Dodi's first-class voice tools. Read each command's
 payload keys exactly as named. If your game has a visual surface, implement get_snapshot and declare
 it so Dodi can "see" it (via read_game_state); if it supports AI-drawn pictures, declare
-generate_drawing and implement the set_generated_image command the app sends back.
+generate_drawing and implement the set_generated_image command the app sends back. Every stateful
+game MUST implement full save/restore (see the bridge interface: 'dodi:get_save_state' →
+'game:save_state', and restoring 'dodi:init' payload.savedState) and declare save_state — this is
+what lets the child save and share snapshots of your game.
 
 ${SUCCESS_SYSTEM_TEMPLATE}
 

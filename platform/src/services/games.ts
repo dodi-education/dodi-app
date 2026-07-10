@@ -10,9 +10,31 @@ import type {
 } from "@dodi/types/database";
 import type { GameMetadata, GameSharingState } from "@dodi/types/games";
 import type { ProgressKind, SuccessCriteria } from "@dodi/types/success";
+import { GAME_TAG_IDS } from "@dodi/games/tags";
 import { sanitizeGameBundle } from "../game-sanitizer";
 
 type Client = SupabaseClient<Database>;
+
+const CATALOG_TAGS = new Set<string>(GAME_TAG_IDS);
+
+/**
+ * Keep only tags in the game-studio catalog ({@link GAME_TAGS}); drop stray or
+ * legacy tags (normalized to lowercase, de-duplicated). This is the write-side
+ * guarantee that games never store non-catalog tags.
+ */
+export function filterToCatalogTags(tags: string[] | undefined | null): string[] {
+  if (!tags) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of tags) {
+    const tag = raw.trim().toLowerCase();
+    if (CATALOG_TAGS.has(tag) && !seen.has(tag)) {
+      seen.add(tag);
+      out.push(tag);
+    }
+  }
+  return out;
+}
 
 export interface ListGamesOptions {
   kidId?: string;
@@ -242,7 +264,7 @@ export async function createCustomGame(
     target_age_min: input.targetAgeMin ?? 4,
     target_age_max: input.targetAgeMax ?? 12,
     estimated_duration_minutes: input.estimatedDurationMinutes ?? 10,
-    tags: input.tags ?? [],
+    tags: filterToCatalogTags(input.tags),
     code_bundle: sanitizedBundle,
     markdown: input.markdown ?? "",
     metadata: (input.metadata ?? {}) as GameInsert["metadata"],
@@ -281,6 +303,9 @@ export async function updateCustomGame(
   const nextUpdates: GameUpdate = { ...updates };
   if (nextUpdates.code_bundle) {
     nextUpdates.code_bundle = sanitizeGameBundle(nextUpdates.code_bundle).code;
+  }
+  if (nextUpdates.tags) {
+    nextUpdates.tags = filterToCatalogTags(nextUpdates.tags);
   }
 
   const { data, error } = await supabase
@@ -415,4 +440,44 @@ export async function isGameVisibleToKid(
   return (data ?? []).some(
     (row) => row.kid_id === null || row.kid_id === kidId,
   );
+}
+
+/** Game ids the given kid has favorited (RLS scopes to the current account). */
+export async function getFavoriteGameIds(
+  supabase: Client,
+  kidId: string,
+): Promise<Set<string>> {
+  const { data, error } = await supabase
+    .from("game_favorites")
+    .select("game_id")
+    .eq("kid_id", kidId);
+  if (error) throw error;
+  return new Set((data ?? []).map((row) => row.game_id));
+}
+
+/** Mark a game as a kid's favorite. Idempotent — a duplicate favorite is a no-op. */
+export async function addFavorite(
+  supabase: Client,
+  input: { accountId: string; kidId: string; gameId: string },
+): Promise<void> {
+  const { error } = await supabase.from("game_favorites").insert({
+    account_id: input.accountId,
+    kid_id: input.kidId,
+    game_id: input.gameId,
+  });
+  // 23505 = unique_violation → already favorited; treat as success.
+  if (error && error.code !== "23505") throw error;
+}
+
+/** Remove a kid's favorite. Idempotent. */
+export async function removeFavorite(
+  supabase: Client,
+  input: { kidId: string; gameId: string },
+): Promise<void> {
+  const { error } = await supabase
+    .from("game_favorites")
+    .delete()
+    .eq("kid_id", input.kidId)
+    .eq("game_id", input.gameId);
+  if (error) throw error;
 }

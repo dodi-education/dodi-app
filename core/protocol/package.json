@@ -8,6 +8,7 @@
     ".": "./src/index.ts",
     "./envelope": "./src/envelope.ts",
     "./friend-card": "./src/friend-card.ts",
+    "./snapshot": "./src/snapshot.ts",
     "./schemas": "./src/schemas.ts",
     "./client": "./src/client.ts"
   },

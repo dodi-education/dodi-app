@@ -268,6 +268,8 @@ export interface Database {
           created_by: "system" | "parent" | "kid";
           /** enc:v1: sealed JSON of the studio conversation (user + dodi messages); server-blind. */
           agent_transcript_enc: string | null;
+          /** Optional 100x100 kid-library preview (system SVG path, or NULL ⇒ icon). */
+          preview_image: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -294,6 +296,7 @@ export interface Database {
           is_active?: boolean;
           created_by?: "system" | "parent" | "kid";
           agent_transcript_enc?: string | null;
+          preview_image?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -320,6 +323,7 @@ export interface Database {
           is_active?: boolean;
           created_by?: "system" | "parent" | "kid";
           agent_transcript_enc?: string | null;
+          preview_image?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -368,6 +372,54 @@ export interface Database {
           succeeded_at?: string | null;
           final_progress?: number;
           metrics?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      game_snapshots: {
+        Row: {
+          id: string;
+          account_id: string;
+          kid_id: string;
+          game_id: string | null;
+          origin: "own" | "received";
+          sender_kid_id: string | null;
+          friendship_id: string | null;
+          info_enc: string;
+          payload_enc: string;
+          payload_bytes: number;
+          viewed_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          account_id: string;
+          kid_id: string;
+          game_id?: string | null;
+          origin?: "own" | "received";
+          sender_kid_id?: string | null;
+          friendship_id?: string | null;
+          info_enc: string;
+          payload_enc: string;
+          payload_bytes?: number;
+          viewed_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          account_id?: string;
+          kid_id?: string;
+          game_id?: string | null;
+          origin?: "own" | "received";
+          sender_kid_id?: string | null;
+          friendship_id?: string | null;
+          info_enc?: string;
+          payload_enc?: string;
+          payload_bytes?: number;
+          viewed_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -486,6 +538,30 @@ export interface Database {
           game_id?: string;
           account_id?: string;
           kid_id?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      game_favorites: {
+        Row: {
+          id: string;
+          account_id: string;
+          kid_id: string;
+          game_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          account_id: string;
+          kid_id: string;
+          game_id: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          account_id?: string;
+          kid_id?: string;
+          game_id?: string;
           created_at?: string;
         };
         Relationships: [];
@@ -840,6 +916,14 @@ export type GamePlayInsert =
   Database["public"]["Tables"]["game_plays"]["Insert"];
 export type GamePlayUpdate =
   Database["public"]["Tables"]["game_plays"]["Update"];
+export type GameSnapshot =
+  Database["public"]["Tables"]["game_snapshots"]["Row"];
+export type GameSnapshotInsert =
+  Database["public"]["Tables"]["game_snapshots"]["Insert"];
+export type GameSnapshotUpdate =
+  Database["public"]["Tables"]["game_snapshots"]["Update"];
+/** own = saved by the kid; received = sealed to them by a friend (share). */
+export type SnapshotOrigin = "own" | "received";
 export type SystemLog = Database["public"]["Tables"]["system_logs"]["Row"];
 export type SystemLogInsert =
   Database["public"]["Tables"]["system_logs"]["Insert"];
@@ -907,5 +991,9 @@ export type GameSharingInsert =
   Database["public"]["Tables"]["game_sharings"]["Insert"];
 export type GameSharingUpdate =
   Database["public"]["Tables"]["game_sharings"]["Update"];
+export type GameFavorite =
+  Database["public"]["Tables"]["game_favorites"]["Row"];
+export type GameFavoriteInsert =
+  Database["public"]["Tables"]["game_favorites"]["Insert"];
 export type GameTranslation =
   Database["public"]["Tables"]["game_translations"]["Row"];

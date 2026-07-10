@@ -9,6 +9,7 @@
  */
 import { dodi } from "@/lib/api";
 import type { VoiceClientConfig } from "@/lib/ai/voice-client";
+import { decodeView, ensureFriendKeys, fetchFriends } from "@/lib/friends";
 import {
   buildGameVoiceContext,
   buildHomeVoiceContext,
@@ -19,12 +20,50 @@ import { useKidStore } from "@/stores/kid-store";
 import { useProvidersStore } from "@/stores/providers-store";
 import { useVaultStore } from "@/stores/vault-store";
 import type { AccountModelConfig } from "@dodi/types/ai";
-import type { Game, Persona } from "@dodi/types/database";
+import type { Game, Kid, Persona } from "@dodi/types/database";
 import type { GameMetadata } from "@dodi/types/games";
 
 export interface VoiceSessionConfig extends VoiceClientConfig {
   isBirthday?: boolean;
   language?: string;
+}
+
+/**
+ * The game context needed to build an in-game session prompt. Normally the
+ * game row is (re-)fetched for the canonical title/description/markdown/code;
+ * with `inline` set (snapshot play — the game row may be deleted or another
+ * family's) the fetch is skipped and these fields are used as-is.
+ */
+export interface GameSessionContextInput {
+  gameId: string;
+  markdown: string;
+  codeBundle: string;
+  gameState: Record<string, unknown>;
+  capabilities: string[];
+  inline?: { title: string; description: string };
+}
+
+/**
+ * Decrypted names of the kid's ACCEPTED friends, for the share_snapshot flow.
+ * Best-effort: any failure (locked vault, no keys, network) returns [] — the
+ * session must still connect, sharing is just hidden.
+ */
+export async function loadFriendNames(kid: Kid): Promise<string[]> {
+  try {
+    const session = useVaultStore.getState().session;
+    if (!session) return [];
+    const keys = await ensureFriendKeys(kid, session);
+    const views = await fetchFriends(kid.id);
+    return views
+      .filter((v) => v.status === "accepted")
+      .map((v) => {
+        const decoded = decodeView(v, keys, session);
+        return decoded.name ?? decoded.nickname;
+      })
+      .filter((name): name is string => !!name);
+  } catch {
+    return [];
+  }
 }
 
 interface CatalogEntry {
@@ -110,10 +149,46 @@ export async function buildHomeVoiceConfig(
   };
 }
 
+/** Title/description/markdown/code/capabilities for the session prompt. */
+export interface ResolvedGameInfo {
+  title: string;
+  description: string;
+  markdown: string;
+  codeBundle: string;
+  capabilities: string[];
+}
+
+/** Resolve the game info: from the row normally, from the context for snapshot play. */
+export async function resolveGameInfo(
+  ctx: GameSessionContextInput,
+  locale?: string,
+): Promise<ResolvedGameInfo> {
+  if (ctx.inline) {
+    return {
+      title: ctx.inline.title,
+      description: ctx.inline.description,
+      markdown: ctx.markdown,
+      codeBundle: ctx.codeBundle,
+      capabilities: ctx.capabilities,
+    };
+  }
+  const query = locale ? `?locale=${locale}` : "";
+  const gameRes = await dodi.request(`/api/games/${ctx.gameId}${query}`);
+  if (!gameRes.ok) throw new Error("Game not found");
+  const game = (await gameRes.json()) as Game;
+  return {
+    title: game.title,
+    description: game.description,
+    markdown: game.markdown ?? "",
+    codeBundle: game.code_bundle,
+    capabilities:
+      (game.metadata as unknown as GameMetadata | null)?.capabilities ?? [],
+  };
+}
+
 export async function buildGameVoiceConfig(
   kidId: string,
-  gameId: string,
-  gameState: Record<string, unknown>,
+  ctx: GameSessionContextInput,
 ): Promise<VoiceSessionConfig> {
   const kid = await useKidStore.getState().loadOne(kidId);
   if (!kid) throw new Error("Kid not found");
@@ -121,12 +196,10 @@ export async function buildGameVoiceConfig(
   const config = await getModelConfig();
   const apiKey = await getVoiceKey(config);
   const persona = await getActivePersona(kid.active_persona_id);
-
-  const gameRes = await dodi.request(`/api/games/${gameId}`);
-  if (!gameRes.ok) throw new Error("Game not found");
-  const game = (await gameRes.json()) as Game;
-  const capabilities =
-    (game.metadata as unknown as GameMetadata | null)?.capabilities ?? [];
+  const info = await resolveGameInfo(ctx);
+  const friendNames = info.capabilities.includes("save_state")
+    ? await loadFriendNames(kid)
+    : [];
 
   const { systemInstruction, tools } = buildGameVoiceContext({
     personaSoul: persona.soul,
@@ -135,12 +208,13 @@ export async function buildGameVoiceConfig(
     childLanguage: kid.language,
     memory: kid.memory,
     parentNotes: kid.parent_notes,
-    gameTitle: game.title,
-    gameDescription: game.description,
-    gameMarkdown: game.markdown,
-    gameCodeBundle: game.code_bundle,
-    gameState,
-    capabilities,
+    gameTitle: info.title,
+    gameDescription: info.description,
+    gameMarkdown: info.markdown,
+    gameCodeBundle: info.codeBundle,
+    gameState: ctx.gameState,
+    capabilities: info.capabilities,
+    friendNames,
   });
 
   return {

@@ -337,12 +337,13 @@
     "backToPlay": "Zurück zum Spiel",
     "searchPlaceholder": "Spiele suchen...",
     "filterSubject": "Nach Fach filtern",
-    "allTags": "Alle Tags",
+    "allGamesFilter": "Alle Spiele",
     "loading": "Spiele werden geladen...",
-    "systemGames": "Systemspiele",
-    "customGames": "Deine eigenen Spiele",
-    "noSystemGames": "Keine Systemspiele gefunden.",
-    "noCustomGames": "Noch keine eigenen Spiele.",
+    "favoriteGames": "Lieblingsspiele",
+    "allGames": "Spiele",
+    "noGames": "Keine Spiele gefunden.",
+    "addFavorite": "Zu Favoriten hinzufügen",
+    "removeFavorite": "Aus Favoriten entfernen",
     "systemLabel": "System",
     "customLabel": "Eigenes",
     "playAction": "Spielen",
@@ -375,7 +376,28 @@
     "voiceCreatingImage": "Ich zeichne dein Bild…",
     "voiceThinking": "Hmm, lass mich mal überlegen…",
     "noImageModel": "Bitte einen Erwachsenen, in den Einstellungen ein Bildmodell einzurichten, damit dodi malen kann.",
-    "drawingFailed": "dodi konnte das gerade nicht malen. Versuch es nochmal."
+    "drawingFailed": "dodi konnte das gerade nicht malen. Versuch es nochmal.",
+    "snapshotSaveFailed": "Der Knipser konnte nicht gespeichert werden.",
+    "snapshotShareFailed": "Der Knipser konnte nicht geteilt werden."
+  },
+  "tags": {
+    "alphabet": "Alphabet",
+    "numbers": "Zahlen",
+    "math": "Mathe",
+    "writing": "Schreiben",
+    "grammar": "Grammatik",
+    "reading": "Lesen",
+    "drawing": "Zeichnen",
+    "music": "Musik",
+    "coding": "Programmieren",
+    "reasoning": "Logik",
+    "discernment": "Urteilsvermögen",
+    "philosophy": "Philosophie",
+    "physics": "Physik",
+    "chemistry": "Chemie",
+    "biology": "Biologie",
+    "ai": "KI",
+    "ai-image": "KI Bilder"
   },
   "kid": {
     "greeting": "Hallo!",
@@ -631,7 +653,8 @@
     "navGroupAccount": "Konto",
     "openKidView": "Kinderansicht öffnen",
     "openMenu": "Menü öffnen",
-    "closeMenu": "Menü schließen"
+    "closeMenu": "Menü schließen",
+    "snapshots": "Knipser"
   },
   "usage": {
     "title": "Nutzung",
@@ -661,5 +684,24 @@
       "entities": "Wesen",
       "humans": "Figuren"
     }
+  },
+  "snapshots": {
+    "title": "Knipser",
+    "subtitle": "Gespeicherte Spielmomente von dir und deinen Freunden.",
+    "kidRequired": "Wähle zuerst ein Kinderprofil, um Knipser zu sehen.",
+    "loading": "Knipser werden geladen…",
+    "empty": "Noch keine Knipser. Sag dodi beim Spielen einfach „Speichere das!“, um einen Moment zu behalten.",
+    "loadFailed": "Knipser konnten nicht geladen werden.",
+    "locked": "Entsperre den Tresor, um Knipser zu sehen.",
+    "fromFriend": "Von {name}",
+    "fromFriendUnknown": "Von einem Freund",
+    "newBadge": "Neu",
+    "deleteAction": "Knipser löschen",
+    "deleteConfirm": "Diesen Knipser löschen? Das kann nicht rückgängig gemacht werden.",
+    "openAction": "Öffnen",
+    "notFound": "Diesen Knipser gibt es nicht mehr.",
+    "openFailed": "Dieser Knipser konnte nicht geöffnet werden.",
+    "sectionMine": "Meine Knipser",
+    "sectionFriends": "Von Freunden"
   }
 }

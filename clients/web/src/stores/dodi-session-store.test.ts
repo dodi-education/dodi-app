@@ -519,7 +519,7 @@ describe("dodi session store — generate_drawing deferral", () => {
     expect(streamerStopSpy).toHaveBeenCalledTimes(1);
 
     // Play view reports the picture is on the canvas → the held call is answered.
-    useDodiSessionStore.getState().resolveDrawingGeneration({ ok: true });
+    useDodiSessionStore.getState().resolveClientCommand({ ok: true });
 
     expect(sendToolResponseSpy).toHaveBeenCalledTimes(1);
     const [id, name, response] = sendToolResponseSpy.mock.calls[0] as [
@@ -575,7 +575,7 @@ describe("dodi session store — generate_drawing deferral", () => {
 
     useDodiSessionStore
       .getState()
-      .resolveDrawingGeneration({ ok: false, error: "No image model configured" });
+      .resolveClientCommand({ ok: false, error: "No image model configured" });
 
     expect(sendToolResponseSpy).toHaveBeenCalledTimes(1);
     const response = sendToolResponseSpy.mock.calls[0][2] as Record<string, unknown>;
@@ -595,8 +595,41 @@ describe("dodi session store — generate_drawing deferral", () => {
     expect(sendToolResponseSpy.mock.calls[0][2]).toMatchObject({ ok: false });
 
     // A late resolve after the timeout is a no-op (the call is already answered).
-    useDodiSessionStore.getState().resolveDrawingGeneration({ ok: true });
+    useDodiSessionStore.getState().resolveClientCommand({ ok: true });
     expect(sendToolResponseSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("defers save_snapshot like generate_drawing and speaks the play view's message", async () => {
+    const runCommands = vi.fn();
+    useDodiSessionStore.getState().setOnRunCommands(runCommands);
+    await connectGame(PID);
+
+    fire({
+      type: "toolCall",
+      id: "call-s",
+      name: "save_snapshot",
+      args: { title: "My castle" },
+    });
+
+    // Forwarded to the play view interceptor, response held open.
+    expect(runCommands).toHaveBeenCalledWith([
+      { type: "save_snapshot", payload: { title: "My castle" } },
+    ]);
+    expect(sendToolResponseSpy).not.toHaveBeenCalled();
+
+    useDodiSessionStore
+      .getState()
+      .resolveClientCommand({ ok: true, message: "Saved as My castle." });
+
+    expect(sendToolResponseSpy).toHaveBeenCalledTimes(1);
+    const [id, name, response] = sendToolResponseSpy.mock.calls[0] as [
+      string,
+      string,
+      Record<string, unknown>,
+    ];
+    expect(id).toBe("call-s");
+    expect(name).toBe("save_snapshot");
+    expect(response).toMatchObject({ ok: true, message: "Saved as My castle." });
   });
 
   it("read_game_state analyzes in-browser with the vault key (no server call) and returns it", async () => {

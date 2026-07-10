@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildGameVoiceContext } from "./dodi-context";
+import { buildGameTextContext, buildGameVoiceContext } from "./dodi-context";
 
 const base = {
   personaSoul: "SOUL",
@@ -55,5 +55,63 @@ describe("buildGameVoiceContext tool registration", () => {
     });
     expect(systemInstruction).toContain("generate_drawing");
     expect(systemInstruction).not.toContain("execute_game_command");
+  });
+});
+
+describe("snapshot tools & guidance", () => {
+  it("save_state capability + friends → both snapshot tools, friend names listed", () => {
+    const ctx = buildGameVoiceContext({
+      ...base,
+      capabilities: ["save_state"],
+      friendNames: ["Lea", "Tom"],
+    });
+    const names = ctx.tools.map((t) => t.name);
+    expect(names).toContain("save_snapshot");
+    expect(names).toContain("share_snapshot");
+    expect(ctx.systemInstruction).toContain("## Saving & Sharing Snapshots");
+    expect(ctx.systemInstruction).toContain("Lea, Tom");
+  });
+
+  it("no friends → share_snapshot is dropped, save_snapshot stays", () => {
+    const ctx = buildGameVoiceContext({
+      ...base,
+      capabilities: ["save_state"],
+      friendNames: [],
+    });
+    const names = ctx.tools.map((t) => t.name);
+    expect(names).toContain("save_snapshot");
+    expect(names).not.toContain("share_snapshot");
+    expect(ctx.systemInstruction).toContain("no connected friends");
+  });
+
+  it("no save_state capability → no snapshot tools or guidance", () => {
+    const ctx = buildGameVoiceContext({
+      ...base,
+      capabilities: ["submit_answer"],
+      friendNames: ["Lea"],
+    });
+    const names = ctx.tools.map((t) => t.name);
+    expect(names).not.toContain("save_snapshot");
+    expect(names).not.toContain("share_snapshot");
+    expect(ctx.systemInstruction).not.toContain("## Saving & Sharing Snapshots");
+  });
+
+  it("text context documents the host commands when save_state is declared", () => {
+    const { systemInstruction } = buildGameTextContext({
+      ...base,
+      capabilities: ["save_state"],
+      friendNames: ["Lea"],
+    });
+    expect(systemInstruction).toContain("save_snapshot");
+    expect(systemInstruction).toContain("share_snapshot");
+    expect(systemInstruction).toContain("## Saving & Sharing Snapshots");
+
+    const noFriends = buildGameTextContext({
+      ...base,
+      capabilities: ["save_state"],
+      friendNames: [],
+    }).systemInstruction;
+    expect(noFriends).toContain("save_snapshot");
+    expect(noFriends).not.toContain("`share_snapshot`");
   });
 });

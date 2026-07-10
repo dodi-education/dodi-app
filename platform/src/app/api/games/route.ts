@@ -9,6 +9,7 @@ const log = createLogger("game-create");
 import {
   createCustomGame,
   getAccountSharingByGame,
+  getFavoriteGameIds,
   listAccountGames,
   listGames,
   replaceGameSharings,
@@ -113,9 +114,16 @@ export async function GET(request: Request): Promise<NextResponse> {
       locale,
     );
 
-    const translatedGames = games.map((game) =>
-      applyTranslation(game, translations.get(game.id)),
-    );
+    // Kid view carries a per-kid favorite flag so the library can split the grid
+    // into favorites vs the rest. Non-kid scopes have no favorites.
+    const favoriteIds = kidId
+      ? await getFavoriteGameIds(supabase, kidId)
+      : new Set<string>();
+
+    const translatedGames = games.map((game) => ({
+      ...applyTranslation(game, translations.get(game.id)),
+      is_favorite: favoriteIds.has(game.id),
+    }));
 
     return NextResponse.json(translatedGames);
   } catch (error) {

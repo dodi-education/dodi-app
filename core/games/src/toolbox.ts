@@ -36,6 +36,12 @@ export interface StandardTool {
   meta?: boolean;
   /** A game may list this in `metadata.capabilities` (drives tool registration + docs). */
   declarable: boolean;
+  /**
+   * Registered when the game declares THIS capability instead of the tool's own
+   * name (host-handled tools that depend on a game-implemented command, e.g.
+   * save_snapshot rides on save_state).
+   */
+  requiresCapability?: string;
   /** Gemini tool description (voice). */
   description: string;
   /** Gemini/JSON-schema parameters object. */
@@ -244,8 +250,62 @@ export const STANDARD_TOOLS: StandardTool[] = [
     parameters: { type: "object", properties: {} },
     implementationNote: "Reset to the initial state and send updated game:state.",
   },
+  {
+    name: "save_snapshot",
+    kind: "client",
+    voiceExposed: true,
+    declarable: false,
+    requiresCapability: "save_state",
+    description:
+      "Save the current game moment as a snapshot in the child's collection, so they can come " +
+      "back to it later exactly as it is now. Call whenever the child asks to save, keep, or " +
+      "snapshot the game ('save this', 'keep my picture'). Ask for or invent a short fun title.",
+    parameters: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: 'A short title for the snapshot, e.g. "My rainbow castle".' },
+      },
+    },
+    implementationNote:
+      "Host tool — do not implement. Registered automatically when the game declares 'save_state'.",
+  },
+  {
+    name: "share_snapshot",
+    kind: "client",
+    voiceExposed: true,
+    declarable: false,
+    requiresCapability: "save_state",
+    description:
+      "Save the current game moment AND send it to one of the child's friends, so it appears in " +
+      "that friend's snapshot collection. ALWAYS repeat the friend's name back and get a clear " +
+      "yes from the child BEFORE calling. Only friends from the child's friend list can receive it.",
+    parameters: {
+      type: "object",
+      properties: {
+        friend_name: { type: "string", description: 'The friend\'s name as the child said it, e.g. "Lea".' },
+        title: { type: "string", description: "Optional short title for the snapshot." },
+      },
+      required: ["friend_name"],
+    },
+    implementationNote:
+      "Host tool — do not implement. Registered automatically when the game declares 'save_state'.",
+  },
 
   // ── Internal bridge commands (app↔game only — NOT voice tools) ──
+  {
+    name: "save_state",
+    kind: "internal",
+    voiceExposed: false,
+    declarable: true,
+    description: "App→game: full save/restore of the game via dodi:get_save_state / dodi:init.",
+    parameters: { type: "object", properties: {} },
+    implementationNote:
+      "On receiving 'dodi:get_save_state', post game:save_state { state } where state is a " +
+      "COMPLETE self-contained serialization sufficient to restore the game exactly (include " +
+      "visual surfaces, e.g. the canvas as a data URL). On 'dodi:init' with payload.savedState, " +
+      "restore that exact state BEFORE sending game:ready. Declare 'save_state' so the child " +
+      "can save and share snapshots of your game.",
+  },
   {
     name: "get_snapshot",
     kind: "internal",
@@ -302,7 +362,7 @@ export function toDeclaration(tool: StandardTool): GeminiLiveToolDeclaration {
 export function buildGameToolDeclarations(capabilities: string[]): GeminiLiveToolDeclaration[] {
   const caps = new Set(capabilities);
   const gameTools = STANDARD_TOOLS.filter(
-    (t) => t.voiceExposed && !t.meta && caps.has(t.name),
+    (t) => t.voiceExposed && !t.meta && caps.has(t.requiresCapability ?? t.name),
   );
   const metaTools = STANDARD_TOOLS.filter((t) => t.meta && t.voiceExposed);
   return [...gameTools, ...metaTools].map(toDeclaration);

@@ -15,6 +15,7 @@ import {
   coerceSuccessCriteria,
 } from "@dodi/games/game-spec";
 import { SUCCESS_SYSTEM_TEMPLATE, type ProgressKind, type SuccessCriteria } from "@dodi/games/success";
+import { GAME_TAG_IDS } from "@dodi/games/tags";
 import { DECLARABLE_CAPABILITY_NAMES, standardCommandsDoc } from "@dodi/games/toolbox";
 
 // ---------------------------------------------------------------------------
@@ -58,10 +59,12 @@ export const AGENT_TOOLS: Anthropic.Tool[] = [
         },
         tags: {
           type: "array",
-          items: { type: "string" },
+          items: { type: "string", enum: [...GAME_TAG_IDS] },
           description:
-            "Tags for discoverability. Prefer the predefined catalog: counting, math, " +
-            "language, creativity, science, stories. Add extra descriptive tags only if helpful.",
+            "Subject tags for discoverability, from this catalog only: " +
+            GAME_TAG_IDS.join(", ") +
+            '. Pick the ones that fit the game. Additionally add "ai" if the game ' +
+            'generates AI text and "ai-image" if it generates AI images.',
         },
         progressKind: {
           type: "string",

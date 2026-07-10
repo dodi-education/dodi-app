@@ -26,12 +26,29 @@ import {
   generateDrawing,
   NoImageModelError,
 } from "@/lib/ai/client-generate-drawing";
+import { downscaleDataUrl } from "@/lib/games/thumbnail";
+import {
+  createOwnSnapshot,
+  resolveFriendForShare,
+  shareSnapshotWithFriend,
+} from "@/lib/snapshots";
+import { useKidStore } from "@/stores/kid-store";
+import { useVaultStore } from "@/stores/vault-store";
+import {
+  estimateSnapshotPayloadBytes,
+  sealOwnSnapshotInfo,
+  sealOwnSnapshotPayload,
+  sealSnapshotForFriend,
+} from "@dodi/protocol";
 import type {
   DodiProgressState,
   DrawingStyle,
   GameCommand,
   GameGoal,
+  GameSaveState,
   GameToParentMessage,
+  SnapshotInfoV1,
+  SnapshotPayloadV1,
 } from "@dodi/types/games";
 
 interface GamePlayViewProps {
@@ -47,6 +64,14 @@ interface GamePlayViewProps {
   progressKind: ProgressKind;
   capabilities: string[];
   drawingStyle: DrawingStyle;
+  /**
+   * Present when resuming a SNAPSHOT: the saved state to restore, plus the
+   * original game's soft reference. Snapshot sessions record no game_plays
+   * (the game row may be deleted or another family's).
+   */
+  snapshot?: { id: string; savedState: GameSaveState; gameId: string | null };
+  /** Game title/description for snapshot play (the `title` prop then carries the snapshot title). */
+  inlineContext?: { title: string; description: string };
 }
 
 export function GamePlayView({
@@ -62,18 +87,31 @@ export function GamePlayView({
   progressKind,
   capabilities,
   drawingStyle,
+  snapshot,
+  inlineContext,
 }: GamePlayViewProps) {
   const t = useTranslations("games");
+  const tSnapshots = useTranslations("snapshots");
 
-  // Declare Dodi context for this game
+  // Declare Dodi context for this game (or snapshot session)
   useDodiContext({
-    context: { type: "game", gameId, markdown, codeBundle, gameState: {}, capabilities },
+    context: {
+      type: "game",
+      gameId,
+      snapshotId: snapshot?.id,
+      inline: inlineContext,
+      markdown,
+      codeBundle,
+      gameState: {},
+      capabilities,
+    },
     displayMode: "full",
     kidId,
   });
 
   const sandboxRef = useRef<GameSandboxHandle | null>(null);
   const snapshotResolverRef = useRef<((data: string | null) => void) | null>(null);
+  const saveStateResolverRef = useRef<((state: GameSaveState | null) => void) | null>(null);
   const [gameError, setGameError] = useState<string | null>(null);
 
   const updateGameState = useDodiSessionStore((s) => s.updateGameState);
@@ -168,12 +206,15 @@ export function GamePlayView({
     ingestDodiState(state);
   }, [updateGameState, ingestDodiState]);
 
-  // Start a game_plays record on mount; finalize it on unmount.
+  // Start a game_plays record on mount; finalize it on unmount. Snapshot
+  // sessions record no play — `gameId` may reference a deleted or foreign game.
+  const isSnapshotSession = !!snapshot;
   useEffect(() => {
     resetGameAssistance();
     succeededRef.current = false;
     latestMetricsRef.current = {};
     latestProgressRef.current = 0;
+    if (isSnapshotSession) return;
 
     let cancelled = false;
     void (async () => {
@@ -200,9 +241,10 @@ export function GamePlayView({
         true,
       );
     };
-  }, [gameId, kidId, resetGameAssistance, patchPlay]);
+  }, [gameId, kidId, isSnapshotSession, resetGameAssistance, patchPlay]);
 
   const logEvent = useCallback(async (event: string, message: string) => {
+    if (isSnapshotSession) return;
     try {
       await dodi.request(`/api/games/${gameId}/events`, {
         method: "POST",
@@ -216,7 +258,7 @@ export function GamePlayView({
     } catch {
       // Event logging should never block gameplay.
     }
-  }, [gameId, kidId]);
+  }, [gameId, kidId, isSnapshotSession]);
 
   // `generate_drawing` is a client-only meta-command: image generation needs the
   // vault key and can't run inside the sandbox (CSP: connect-src 'none'). We
@@ -237,7 +279,7 @@ export function GamePlayView({
         // Picture is on the canvas → release the held-open voice tool call so
         // Dodi announces it (she stayed silent while it generated). No-op if the
         // drawing wasn't triggered by a voice tool call.
-        useDodiSessionStore.getState().resolveDrawingGeneration({ ok: true });
+        useDodiSessionStore.getState().resolveClientCommand({ ok: true });
       } catch (error) {
         gameDebugWarn("playview", "generate_drawing failed:", error);
         const message =
@@ -247,7 +289,7 @@ export function GamePlayView({
         setGameError(message);
         useDodiSessionStore
           .getState()
-          .resolveDrawingGeneration({ ok: false, error: message });
+          .resolveClientCommand({ ok: false, error: message });
       } finally {
         endAiActivity("image");
       }
@@ -255,31 +297,8 @@ export function GamePlayView({
     [t, beginAiActivity, endAiActivity, drawingStyle],
   );
 
-  const runCommands = useCallback((commands: GameCommand[]): void => {
-    gameDebug("playview", `runCommands called with ${commands.length} commands`);
-
-    if (commands.length === 0) {
-      gameDebug("playview", "No commands to run");
-      return;
-    }
-
-    if (!sandboxRef.current) {
-      gameDebugWarn("playview", "Sandbox ref is null — cannot send commands");
-      setGameError(t("sandboxNotReady"));
-      return;
-    }
-
-    for (const command of commands) {
-      if (command.type === "generate_drawing") {
-        void handleGenerateDrawing(command);
-        continue;
-      }
-      gameDebug("playview", `Sending command to sandbox:`, command);
-      sandboxRef.current.sendCommand(command);
-    }
-  }, [t, handleGenerateDrawing]);
-
-  // Request a canvas snapshot from the sandbox (used by read_game_state)
+  // Request a canvas snapshot from the sandbox (used by read_game_state and
+  // as the gallery thumbnail when saving a snapshot)
   const requestSnapshot = useCallback((): Promise<string | null> => {
     return new Promise<string | null>((resolve) => {
       if (!sandboxRef.current) {
@@ -304,6 +323,238 @@ export function GamePlayView({
     });
   }, []);
 
+  // Request the game's full restorable serialization (dodi:get_save_state →
+  // game:save_state), resolved in handleSandboxMessage. Null on timeout.
+  const requestSaveState = useCallback((): Promise<GameSaveState | null> => {
+    return new Promise<GameSaveState | null>((resolve) => {
+      if (!sandboxRef.current) {
+        resolve(null);
+        return;
+      }
+      sandboxRef.current.requestSaveState();
+      const timer = setTimeout(() => {
+        if (saveStateResolverRef.current === wrapped) {
+          saveStateResolverRef.current = null;
+          resolve(null);
+        }
+      }, 5000);
+      const wrapped = (state: GameSaveState | null) => {
+        clearTimeout(timer);
+        resolve(state);
+      };
+      saveStateResolverRef.current = wrapped;
+    });
+  }, []);
+
+  // Capture the full save state + a downscaled thumbnail and build the two
+  // snapshot blobs' plaintext. Null when the game didn't answer.
+  const captureSnapshotContent = useCallback(
+    async (
+      snapshotTitle: string,
+    ): Promise<{ info: SnapshotInfoV1; payload: SnapshotPayloadV1 } | null> => {
+      const savedState = await requestSaveState();
+      if (!savedState) return null;
+      const raw = capabilities.includes("get_snapshot")
+        ? await requestSnapshot()
+        : null;
+      const thumbnail = raw ? await downscaleDataUrl(raw) : null;
+      const createdAt = new Date().toISOString();
+      const gameTitle = inlineContext?.title ?? title;
+      const info: SnapshotInfoV1 = {
+        v: 1,
+        title: snapshotTitle,
+        gameTitle,
+        thumbnail,
+        createdAt,
+      };
+      const payload: SnapshotPayloadV1 = {
+        v: 1,
+        title: snapshotTitle,
+        createdAt,
+        gameId: snapshot ? snapshot.gameId : gameId,
+        gameTitle,
+        gameDescription: inlineContext?.description ?? description,
+        gameMarkdown: markdown,
+        codeBundle,
+        capabilities,
+        drawingStyle,
+        savedState,
+      };
+      return { info, payload };
+    },
+    [
+      requestSaveState,
+      requestSnapshot,
+      capabilities,
+      inlineContext,
+      title,
+      description,
+      markdown,
+      codeBundle,
+      drawingStyle,
+      snapshot,
+      gameId,
+    ],
+  );
+
+  // `save_snapshot` / `share_snapshot` are host meta-commands: sealing needs the
+  // vault + friend keys, which never enter the sandbox. The voice tool response
+  // is held open (resolveClientCommand) so dodi announces the outcome once.
+  const handleSaveSnapshot = useCallback(
+    async (command: GameCommand): Promise<void> => {
+      const store = useDodiSessionStore.getState();
+      setGameError(null);
+      beginAiActivity("thinking");
+      try {
+        const session = useVaultStore.getState().session;
+        if (!session) throw new Error("vault_locked");
+        const requestedTitle =
+          typeof command.payload?.title === "string" ? command.payload.title.trim() : "";
+        const snapshotTitle =
+          requestedTitle ||
+          `${inlineContext?.title ?? title} · ${new Date().toLocaleDateString()}`;
+
+        const content = await captureSnapshotContent(snapshotTitle);
+        if (!content) throw new Error("no_save_state");
+
+        await createOwnSnapshot({
+          kidId,
+          gameId: content.payload.gameId,
+          infoEnc: sealOwnSnapshotInfo(session, content.info),
+          payloadEnc: sealOwnSnapshotPayload(session, content.payload),
+          payloadBytes: estimateSnapshotPayloadBytes(content.payload),
+        });
+        store.resolveClientCommand({
+          ok: true,
+          message: `The snapshot "${snapshotTitle}" is saved. In ONE short, cheerful sentence, tell the child it's saved in their snapshot collection — do not repeat yourself.`,
+        });
+      } catch (error) {
+        gameDebugWarn("playview", "save_snapshot failed:", error);
+        setGameError(t("snapshotSaveFailed"));
+        store.resolveClientCommand({
+          ok: false,
+          error:
+            "Saving the snapshot didn't work this time. In one short sentence, gently tell the child.",
+        });
+      } finally {
+        endAiActivity("thinking");
+      }
+    },
+    [kidId, title, inlineContext, captureSnapshotContent, beginAiActivity, endAiActivity, t],
+  );
+
+  const handleShareSnapshot = useCallback(
+    async (command: GameCommand): Promise<void> => {
+      const store = useDodiSessionStore.getState();
+      setGameError(null);
+      beginAiActivity("thinking");
+      try {
+        const session = useVaultStore.getState().session;
+        if (!session) throw new Error("vault_locked");
+        const kid = await useKidStore.getState().loadOne(kidId);
+        if (!kid) throw new Error("kid_not_found");
+
+        const friendName =
+          typeof command.payload?.friend_name === "string"
+            ? command.payload.friend_name
+            : "";
+        const resolution = await resolveFriendForShare(kid, session, friendName);
+        if (resolution.kind !== "ok") {
+          const candidates = resolution.candidates.join(", ") || "none";
+          store.resolveClientCommand({
+            ok: false,
+            error:
+              resolution.kind === "ambiguous"
+                ? `More than one friend matches "${friendName}" (${candidates}). In one short sentence, ask the child which friend they mean.`
+                : `No friend named "${friendName}" was found. The child's friends are: ${candidates}. In one short sentence, ask the child which friend they mean.`,
+          });
+          return;
+        }
+
+        const requestedTitle =
+          typeof command.payload?.title === "string" ? command.payload.title.trim() : "";
+        const snapshotTitle =
+          requestedTitle ||
+          `${inlineContext?.title ?? title} · ${new Date().toLocaleDateString()}`;
+
+        const content = await captureSnapshotContent(snapshotTitle);
+        if (!content) throw new Error("no_save_state");
+
+        // Share implies save: the kid keeps their own copy…
+        await createOwnSnapshot({
+          kidId,
+          gameId: content.payload.gameId,
+          infoEnc: sealOwnSnapshotInfo(session, content.info),
+          payloadEnc: sealOwnSnapshotPayload(session, content.payload),
+          payloadBytes: estimateSnapshotPayloadBytes(content.payload),
+        });
+        // …and the friend gets a self-contained copy sealed to their keys (their
+        // client never had the game row, so the payload carries no gameId).
+        const sharedPayload: SnapshotPayloadV1 = { ...content.payload, gameId: null };
+        const { infoEnvelope, payloadEnvelope } = sealSnapshotForFriend(
+          resolution.kemPublicKey,
+          content.info,
+          sharedPayload,
+          resolution.myKeys.sign,
+        );
+        await shareSnapshotWithFriend({
+          senderKidId: kidId,
+          friendshipId: resolution.friendshipId,
+          infoEnc: infoEnvelope,
+          payloadEnc: payloadEnvelope,
+          payloadBytes: estimateSnapshotPayloadBytes(sharedPayload),
+        });
+        store.resolveClientCommand({
+          ok: true,
+          message: `The snapshot "${snapshotTitle}" was sent to ${resolution.displayName} and saved in the child's own collection. In ONE short, cheerful sentence, tell the child — do not repeat yourself.`,
+        });
+      } catch (error) {
+        gameDebugWarn("playview", "share_snapshot failed:", error);
+        setGameError(t("snapshotShareFailed"));
+        store.resolveClientCommand({
+          ok: false,
+          error:
+            "Sharing the snapshot didn't work this time. In one short sentence, gently tell the child.",
+        });
+      } finally {
+        endAiActivity("thinking");
+      }
+    },
+    [kidId, title, inlineContext, captureSnapshotContent, beginAiActivity, endAiActivity, t],
+  );
+
+  const runCommands = useCallback((commands: GameCommand[]): void => {
+    gameDebug("playview", `runCommands called with ${commands.length} commands`);
+
+    if (commands.length === 0) {
+      gameDebug("playview", "No commands to run");
+      return;
+    }
+
+    if (!sandboxRef.current) {
+      gameDebugWarn("playview", "Sandbox ref is null — cannot send commands");
+      setGameError(t("sandboxNotReady"));
+      return;
+    }
+
+    for (const command of commands) {
+      if (command.type === "generate_drawing") {
+        void handleGenerateDrawing(command);
+        continue;
+      }
+      if (command.type === "save_snapshot") {
+        void handleSaveSnapshot(command);
+        continue;
+      }
+      if (command.type === "share_snapshot") {
+        void handleShareSnapshot(command);
+        continue;
+      }
+      gameDebug("playview", `Sending command to sandbox:`, command);
+      sandboxRef.current.sendCommand(command);
+    }
+  }, [t, handleGenerateDrawing, handleSaveSnapshot, handleShareSnapshot]);
+
   // Register command + snapshot handlers with the Dodi session store
   useEffect(() => {
     setOnRunCommands(runCommands);
@@ -325,11 +576,21 @@ export function GamePlayView({
 
     // Handle snapshot events from get_snapshot command
     if (message.type === "game:event" && message.payload.event === "snapshot") {
-      const snapshot = (message.payload as Record<string, unknown>).snapshot as string | null;
-      gameDebug("playview", `Received snapshot (${snapshot ? snapshot.length : 0} chars)`);
+      const snapshotData = (message.payload as Record<string, unknown>).snapshot as string | null;
+      gameDebug("playview", `Received snapshot (${snapshotData ? snapshotData.length : 0} chars)`);
       if (snapshotResolverRef.current) {
-        snapshotResolverRef.current(snapshot ?? null);
+        snapshotResolverRef.current(snapshotData ?? null);
         snapshotResolverRef.current = null;
+      }
+      return;
+    }
+
+    // Full restorable serialization, in reply to dodi:get_save_state
+    if (message.type === "game:save_state") {
+      gameDebug("playview", "Received game:save_state");
+      if (saveStateResolverRef.current) {
+        saveStateResolverRef.current(message.payload.state as GameSaveState);
+        saveStateResolverRef.current = null;
       }
       return;
     }
@@ -356,8 +617,8 @@ export function GamePlayView({
 
   return (
     <GameViewShell
-      backHref="/games"
-      backLabel={t("title")}
+      backHref={snapshot ? "/snapshots" : "/games"}
+      backLabel={snapshot ? tSnapshots("title") : t("title")}
       title={title}
       description={description}
     >
@@ -372,6 +633,7 @@ export function GamePlayView({
         gameId={gameId}
         codeBundle={codeBundle}
         goal={goal}
+        savedState={snapshot?.savedState}
         align="start"
         reserved={STAGE.reservedKid}
         onStateChange={handleStateChange}

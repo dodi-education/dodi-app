@@ -1,9 +1,13 @@
 import type { ComponentType } from "react";
 import {
+  IconAbc,
+  IconAi,
   IconAlertCircle,
   IconArrowLeft,
+  IconAtom,
   IconBan,
   IconBell,
+  IconBook,
   IconBrain,
   IconCake,
   IconCalendar,
@@ -21,30 +25,42 @@ import {
   IconDeviceGamepad2,
   IconEye,
   IconEyeOff,
+  IconEyeQuestion,
+  IconFlask,
+  IconHeart,
+  IconHeartFilled,
   IconHome,
+  IconImageGeneration,
   IconLanguage,
   IconLoader2,
   IconLock,
   IconLogout,
   IconMasksTheater,
+  IconMathSymbols,
   IconMenu2,
   IconMicrophone,
   IconMicrophoneOff,
+  IconMusic,
+  IconNumber123,
   IconPalette,
   IconPencil,
+  IconPhotoAi,
   IconPlayerPlayFilled,
   IconPlus,
   IconQrcode,
   IconRefresh,
   IconRobot,
   IconSearch,
+  IconSeedling,
   IconSend,
   IconSettings,
   IconShare2,
   IconShieldLock,
+  IconSortDescendingShapes,
   IconSparkles,
   IconSquare,
   IconSwitchVertical,
+  IconTextGrammar,
   IconTrash,
   IconUser,
   IconUserPlus,
@@ -54,6 +70,7 @@ import {
   type IconProps as TablerIconProps,
 } from "@tabler/icons-react";
 
+import { IconPhilosophy } from "@/components/shared/philosophy-icon";
 import { cn } from "@/lib/utils";
 
 export type IconName =
@@ -83,6 +100,8 @@ export type IconName =
   | "friends"
   | "games"
   | "globe"
+  | "heart"
+  | "heart_filled"
   | "hide"
   | "home"
   | "loading"
@@ -110,7 +129,24 @@ export type IconName =
   | "agent_sessions"
   | "system_logs"
   | "usage"
-  | "volume";
+  | "volume"
+  // Game-tag icons — Tabler slugs (see @dodi/games/tags); "philosophy" is custom.
+  | "abc"
+  | "123"
+  | "math-symbols"
+  | "pencil"
+  | "text-grammar"
+  | "book"
+  | "image-generation"
+  | "music"
+  | "sort-descending-shapes"
+  | "eye-question"
+  | "philosophy"
+  | "atom"
+  | "flask"
+  | "seedling"
+  | "ai"
+  | "photo-ai";
 
 const ICONS: Record<IconName, ComponentType<TablerIconProps>> = {
   add: IconPlus,
@@ -139,6 +175,8 @@ const ICONS: Record<IconName, ComponentType<TablerIconProps>> = {
   friends: IconUsers,
   games: IconDeviceGamepad2,
   globe: IconLanguage,
+  heart: IconHeart,
+  heart_filled: IconHeartFilled,
   hide: IconEyeOff,
   home: IconHome,
   loading: IconLoader2,
@@ -167,6 +205,23 @@ const ICONS: Record<IconName, ComponentType<TablerIconProps>> = {
   system_logs: IconBrain,
   usage: IconReceipt2,
   volume: IconVolume,
+  // Game-tag icons (see @dodi/games/tags).
+  abc: IconAbc,
+  "123": IconNumber123,
+  "math-symbols": IconMathSymbols,
+  pencil: IconPencil,
+  "text-grammar": IconTextGrammar,
+  book: IconBook,
+  "image-generation": IconImageGeneration,
+  music: IconMusic,
+  "sort-descending-shapes": IconSortDescendingShapes,
+  "eye-question": IconEyeQuestion,
+  philosophy: IconPhilosophy,
+  atom: IconAtom,
+  flask: IconFlask,
+  seedling: IconSeedling,
+  ai: IconAi,
+  "photo-ai": IconPhotoAi,
 };
 
 export interface IconProps extends Omit<TablerIconProps, "size" | "stroke" | "aria-hidden"> {
