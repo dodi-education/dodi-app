@@ -71,7 +71,9 @@ export function GameStage({
     <div
       style={stageSizeStyle(reserved)}
       className={cn(
-        "overflow-hidden",
+        // Portrait-mobile fills the column width (the page may scroll a little);
+        // everywhere else the height budget caps the width so no scrolling occurs.
+        "w-[var(--stage-w)] overflow-hidden max-lg:portrait:w-full",
         align === "start" ? "mr-auto" : "mx-auto",
         framed
           ? "rounded-[18px] border border-border bg-white shadow-[0_8px_28px_rgba(34,56,78,0.10)]"

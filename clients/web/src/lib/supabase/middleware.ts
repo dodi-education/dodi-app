@@ -3,6 +3,52 @@ import { type NextRequest, NextResponse } from "next/server";
 
 import { canonicalRedirectHost } from "@/lib/canonical-host";
 
+const KID_ROUTE_PREFIXES = ["/home", "/games", "/snapshots", "/friends"];
+
+/** Kid-app routes (and their subroutes) that need an active kid resolved. */
+function isKidRoute(pathname: string): boolean {
+  return KID_ROUTE_PREFIXES.some(
+    (r) => pathname === r || pathname.startsWith(`${r}/`),
+  );
+}
+
+/**
+ * Resolve the account's first (oldest) kid and the cookies that make it active:
+ * `dodi-active-kid`, its plaintext `language` as `dodi-kid-locale`, and
+ * `dodi-view=kid` so the server renders the kid's UI locale. Returns null when
+ * the account has no kids. `avatar_pin` is E2EE, so the server can only pick the
+ * kid — PIN gating stays client-side (see the kid layout).
+ */
+async function firstKidCookies(
+  supabase: ReturnType<typeof createServerClient>,
+): Promise<Array<{ name: string; value: string }> | null> {
+  const { data } = await supabase
+    .from("kids")
+    .select("id, language")
+    .order("created_at", { ascending: true })
+    .limit(1);
+  const kid = data?.[0] as { id: string; language: string | null } | undefined;
+  if (!kid) return null;
+  return [
+    { name: "dodi-active-kid", value: kid.id },
+    { name: "dodi-kid-locale", value: kid.language ?? "en" },
+    { name: "dodi-view", value: "kid" },
+  ];
+}
+
+/** Copy any refreshed auth cookies onto a redirect, then set the kid cookies. */
+function primeRedirect(
+  redirect: NextResponse,
+  source: NextResponse,
+  kidCookies: Array<{ name: string; value: string }>,
+): NextResponse {
+  source.cookies.getAll().forEach((cookie) => redirect.cookies.set(cookie));
+  for (const c of kidCookies) {
+    redirect.cookies.set(c.name, c.value, { path: "/", maxAge: 86400 });
+  }
+  return redirect;
+}
+
 export async function updateSession(
   request: NextRequest,
 ): Promise<NextResponse> {
@@ -76,12 +122,36 @@ export async function updateSession(
   }
 
   // The marketing site is a separate deployment; this app has no landing page,
-  // so the root always routes into the app: signed-in kids to /home, everyone
-  // else (including direct/localhost access) to /login.
+  // so the root always routes into the app: signed-in users to /home, everyone
+  // else (including direct/localhost access) to /login. For a signed-in user we
+  // also prime the active kid + locale so /home renders the right kid in the
+  // right language instead of "No kid selected".
   if (pathname === "/") {
     const url = request.nextUrl.clone();
     url.pathname = user ? "/home" : "/login";
-    return NextResponse.redirect(url);
+    const redirect = NextResponse.redirect(url);
+    const kidCookies =
+      user && !request.cookies.get("dodi-active-kid")?.value
+        ? await firstKidCookies(supabase)
+        : null;
+    return primeRedirect(redirect, supabaseResponse, kidCookies ?? []);
+  }
+
+  // Cold entry to a kid route with no active kid yet: resolve the first kid +
+  // locale server-side and prime the cookies via a one-time same-URL redirect,
+  // so the first render already shows the right kid in the right language — the
+  // same result as the parent→kid switch, now also from "/" and direct links.
+  // Once the cookie is set this is skipped, so there is no redirect loop.
+  if (
+    user &&
+    isKidRoute(pathname) &&
+    !request.cookies.get("dodi-active-kid")?.value
+  ) {
+    const kidCookies = await firstKidCookies(supabase);
+    if (kidCookies) {
+      const redirect = NextResponse.redirect(request.nextUrl.clone());
+      return primeRedirect(redirect, supabaseResponse, kidCookies);
+    }
   }
 
   if (

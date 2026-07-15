@@ -9,9 +9,12 @@ import { Icon, type IconName } from "@/components/shared/icon";
 import { DodiCompact } from "@/components/dodi/dodi-compact";
 import { cn } from "@/lib/utils";
 import { clearParentUnlocked } from "@/lib/parent-lock";
+import { KidAvatar } from "@/components/kid/kid-avatar";
 import { KidSwitcher } from "@/components/kid/kid-switcher";
+import { useActiveKid } from "@/hooks/use-active-kid";
 import { useDodiSessionStore } from "@/stores/dodi-session-store";
 import { useVaultStore } from "@/stores/vault-store";
+import type { Kid } from "@dodi/types/database";
 
 export default function KidLayout({
   children,
@@ -30,6 +33,11 @@ export default function KidLayout({
   const gestureNeeded = useDodiSessionStore((s) => s.gestureNeeded);
   const activate = useDodiSessionStore((s) => s.activate);
   const vaultStatus = useVaultStore((s) => s.status);
+
+  // Reactive active kid. `needsPin` is true while the active profile is
+  // PIN-locked and not yet unlocked this page-load; the KidSwitcher opens its
+  // puzzle and we withhold the page (and thus dodi) until it's solved.
+  const { kids, activeKid, needsPin } = useActiveKid();
 
   // Ensure the vault is unlocked in kid view (kids enter after the parent has
   // unlocked; silently re-unlocks via the device key on a fresh load).
@@ -129,7 +137,15 @@ export default function KidLayout({
       <header className="flex items-center justify-between px-4 py-3 md:px-6 md:py-4">
         <div className="flex items-center gap-3">
           <KidSwitcher />
-          {displayMode === "compact" && <DodiCompact />}
+          {/* Full-mode game views hide the Dodi side panel below lg, so the
+              compact header avatar takes over as dodi's presence there. */}
+          {displayMode === "compact" ? (
+            <DodiCompact />
+          ) : isFullMode ? (
+            <div className="lg:hidden">
+              <DodiCompact />
+            </div>
+          ) : null}
         </div>
         <a
           href="/parent/dashboard"
@@ -144,8 +160,18 @@ export default function KidLayout({
 
       {/* Main content — full-mode game views (play/edit/create) own their own
           layout via GameViewShell: a full-width title bar above the Dodi panel
-          and the game content. */}
-      {isFullMode ? (
+          and the game content. Kids must be loaded and the active profile
+          unlocked before we mount the page, so dodi never initializes for a
+          locked profile or before we know which kid is active. */}
+      {kids === null ? (
+        <main className="flex flex-1 flex-col items-center px-4 pb-24">
+          <KidLoadingStage />
+        </main>
+      ) : needsPin ? (
+        <main className="flex flex-1 flex-col items-center px-4 pb-24">
+          <KidGateHint kid={activeKid} />
+        </main>
+      ) : isFullMode ? (
         <main className="flex flex-1 flex-col px-4 pb-24">
           <div className="mx-auto w-full max-w-6xl">{children}</div>
         </main>
@@ -177,6 +203,35 @@ export default function KidLayout({
           );
         })}
       </nav>
+    </div>
+  );
+}
+
+/** Placeholder while the E2EE kid list loads (before we know the active kid). */
+function KidLoadingStage() {
+  return (
+    <div className="my-auto flex flex-col items-center gap-6">
+      <div className="h-40 w-40 animate-pulse rounded-full bg-dodi-100" />
+      <div className="h-6 w-32 animate-pulse rounded-lg bg-dodi-100" />
+    </div>
+  );
+}
+
+/** Shown behind the auto-opened switcher puzzle while a locked profile is gated. */
+function KidGateHint({ kid }: { kid: Kid | null }) {
+  const t = useTranslations("kidProfile");
+  if (!kid) return null;
+  return (
+    <div className="my-auto flex flex-col items-center gap-4 text-center">
+      <div className="relative opacity-70">
+        <KidAvatar kid={kid} size={96} />
+        <span className="absolute -bottom-1 -right-1 flex size-9 items-center justify-center rounded-full bg-white text-faint shadow">
+          <Icon name="lock" size={20} />
+        </span>
+      </div>
+      <p className="max-w-[16rem] text-sm font-bold text-muted-foreground">
+        {t("solveToStart")}
+      </p>
     </div>
   );
 }

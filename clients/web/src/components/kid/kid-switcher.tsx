@@ -8,8 +8,9 @@ import { useTranslations } from "next-intl";
 import { AvatarPinPuzzle } from "@/components/kid/avatar-pin-puzzle";
 import { KidAvatar } from "@/components/kid/kid-avatar";
 import { Icon } from "@/components/shared/icon";
-import { useKids } from "@/hooks/use-kids";
+import { useActiveKid } from "@/hooks/use-active-kid";
 import { dodi } from "@/lib/api";
+import { computeNeedsPin } from "@/lib/active-kid";
 import { refreshFriendCards } from "@/lib/friends";
 import {
   AVATAR_GROUPS,
@@ -20,21 +21,13 @@ import {
   type AvatarConfig,
 } from "@/lib/avatars";
 import { cn } from "@/lib/utils";
+import { useActiveKidStore } from "@/stores/active-kid-store";
 import { useDodiSessionStore } from "@/stores/dodi-session-store";
 import { useKidStore } from "@/stores/kid-store";
 import { useVaultStore } from "@/stores/vault-store";
 import { encryptKidFields } from "@dodi/vault";
 
 import type { Json, Kid } from "@dodi/types/database";
-
-function getCookie(name: string): string | undefined {
-  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
-  return match ? decodeURIComponent(match[1]) : undefined;
-}
-
-function setCookie(name: string, value: string) {
-  document.cookie = `${name}=${value}; path=/; max-age=86400`;
-}
 
 /** The target kid's decrypted PIN sequence, or null when the puzzle is off. */
 function parsePin(kid: Kid): string[] | null {
@@ -53,9 +46,15 @@ export function KidSwitcher() {
   const t = useTranslations("kidProfile");
   const tn = useTranslations("nav");
   const router = useRouter();
-  const { kids: kidList } = useKids();
+
+  // Active kid is resolved reactively via the shared store (the same source the
+  // layout and home page read), so a switch here updates the whole view.
+  const { kids: kidList, activeKid, activeKidId, needsPin } = useActiveKid();
   const kids = kidList ?? [];
-  const [activeKidId, setActiveKidId] = useState<string | null>(null);
+  const unlockedKidIds = useActiveKidStore((s) => s.unlockedKidIds);
+  const setActive = useActiveKidStore((s) => s.setActive);
+  const markUnlocked = useActiveKidStore((s) => s.markUnlocked);
+
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
@@ -86,30 +85,18 @@ export function KidSwitcher() {
 
   useEffect(() => () => flushCardRefresh(), [flushCardRefresh]);
 
-  useEffect(() => {
-    let cancelled = false;
-    async function resolveActive() {
-      const currentId = getCookie("dodi-active-kid") ?? null;
-      if (cancelled) return;
-      if (currentId) {
-        setActiveKidId(currentId);
-      } else if (kidList && kidList.length > 0) {
-        setCookie("dodi-active-kid", kidList[0].id);
-        setCookie("dodi-kid-locale", kidList[0].language ?? "en");
-        setActiveKidId(kidList[0].id);
-      }
-    }
-    void resolveActive();
-    return () => {
-      cancelled = true;
-    };
-  }, [kidList]);
-
-  const closePopover = useCallback(() => {
+  const forceClose = useCallback(() => {
     setOpen(false);
     setPending(null);
     flushCardRefresh();
   }, [flushCardRefresh]);
+
+  const closePopover = useCallback(() => {
+    // While a locked profile is gated the popover can't be dismissed — the kid
+    // must solve the puzzle (or switch to another profile) to continue.
+    if (needsPin) return;
+    forceClose();
+  }, [needsPin, forceClose]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -121,24 +108,33 @@ export function KidSwitcher() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [closePopover]);
 
-  const activeKid = kids.find((p) => p.id === activeKidId);
-  const pendingKid = pending
-    ? kids.find((p) => p.id === pending)
+  // A gated profile forces the popover open (and keeps it open) so the kid can
+  // solve the puzzle; otherwise it's the user's toggle.
+  const popoverOpen = open || needsPin;
+
+  // When gated, always show a puzzle (never the look editor for a locked
+  // profile): fall back to the active kid's puzzle if nothing else is pending.
+  const shownPendingId = pending ?? (needsPin ? activeKidId : null);
+  const shownPendingKid = shownPendingId
+    ? (kids.find((p) => p.id === shownPendingId) ?? null)
     : null;
+  // Can back out of a puzzle only when it's for a *different* profile than the
+  // gated active one (i.e. an optional switch, not the entry gate).
+  const canCancelPuzzle = !!pending && pending !== activeKidId;
 
   function handleSwitch(kid: Kid) {
     // End Dodi session for the outgoing kid (fires the memory update).
     useDodiSessionStore.getState().endSession();
-    setCookie("dodi-active-kid", kid.id);
-    setCookie("dodi-kid-locale", kid.language ?? "en");
-    setActiveKidId(kid.id);
-    closePopover();
+    // Store persists cookies (active kid + locale) and marks the kid unlocked.
+    setActive(kid);
+    forceClose();
     router.refresh();
   }
 
   function onPickKid(kid: Kid) {
-    if (kid.id === activeKidId) return;
-    if (parsePin(kid)) {
+    // Re-tapping the already-active, unlocked kid is a no-op.
+    if (kid.id === activeKidId && !needsPin) return;
+    if (computeNeedsPin(kid, unlockedKidIds)) {
       setPending(kid.id);
     } else {
       handleSwitch(kid);
@@ -180,7 +176,7 @@ export function KidSwitcher() {
   return (
     <div className="relative" ref={ref}>
       <button
-        onClick={() => (open ? closePopover() : setOpen(true))}
+        onClick={() => (popoverOpen ? closePopover() : setOpen(true))}
         className="flex items-center gap-2.5 rounded-full bg-white/70 py-1.5 pl-1.5 pr-4 text-[15px] font-extrabold text-ink transition hover:bg-white"
         aria-label={tn("switchKid")}
       >
@@ -197,11 +193,14 @@ export function KidSwitcher() {
         <Icon
           name="chevron_down"
           size={16}
-          className={cn("text-faint transition-transform", open && "rotate-180")}
+          className={cn(
+            "text-faint transition-transform",
+            popoverOpen && "rotate-180",
+          )}
         />
       </button>
 
-      {open && (
+      {popoverOpen && (
         <div
           role="dialog"
           aria-label={t("whosPlaying")}
@@ -211,19 +210,22 @@ export function KidSwitcher() {
             <div className="text-[12.5px] font-extrabold uppercase tracking-[0.06em] text-faint">
               {t("whosPlaying")}
             </div>
-            <button
-              onClick={closePopover}
-              aria-label={t("close")}
-              className="flex size-7 items-center justify-center rounded-full bg-muted text-muted-foreground transition-colors hover:bg-border hover:text-ink"
-            >
-              <Icon name="close" size={15} stroke={2.3} />
-            </button>
+            {/* No close affordance while a locked profile is gated. */}
+            {!needsPin && (
+              <button
+                onClick={closePopover}
+                aria-label={t("close")}
+                className="flex size-7 items-center justify-center rounded-full bg-muted text-muted-foreground transition-colors hover:bg-border hover:text-ink"
+              >
+                <Icon name="close" size={15} stroke={2.3} />
+              </button>
+            )}
           </div>
 
           <div className="flex flex-col gap-1">
             {kids.map((p) => {
               const isActive = p.id === activeKidId;
-              const isPending = p.id === pending;
+              const isPending = p.id === shownPendingId;
               return (
                 <button
                   key={p.id}
@@ -257,18 +259,20 @@ export function KidSwitcher() {
 
           <div className="my-3 h-px bg-border" />
 
-          {pending && pendingKid ? (
+          {shownPendingKid ? (
             <div>
               <div className="mb-1 flex items-center justify-between">
                 <div className="text-[12.5px] font-extrabold uppercase tracking-[0.06em] text-faint">
-                  {t("secret", { name: pendingKid.display_name })}
+                  {t("secret", { name: shownPendingKid.display_name })}
                 </div>
-                <button
-                  onClick={() => setPending(null)}
-                  className="rounded-[9px] px-2 py-1 text-[13px] font-bold text-muted-foreground transition-colors hover:bg-muted hover:text-ink"
-                >
-                  {t("cancel")}
-                </button>
+                {canCancelPuzzle && (
+                  <button
+                    onClick={() => setPending(null)}
+                    className="rounded-[9px] px-2 py-1 text-[13px] font-bold text-muted-foreground transition-colors hover:bg-muted hover:text-ink"
+                  >
+                    {t("cancel")}
+                  </button>
+                )}
               </div>
               <div className="mb-4 text-[13px] font-semibold text-muted-foreground">
                 {t("secretHint")}
@@ -276,12 +280,22 @@ export function KidSwitcher() {
               <AvatarPinPuzzle
                 mode="solve"
                 onSolve={(seq) => {
-                  const pin = parsePin(pendingKid);
+                  const pin = parsePin(shownPendingKid);
                   const ok =
                     !!pin &&
                     pin.length === seq.length &&
                     pin.every((a, i) => a === seq[i]);
-                  if (ok) setTimeout(() => handleSwitch(pendingKid), 250);
+                  if (ok) {
+                    setTimeout(() => {
+                      if (shownPendingKid.id === activeKidId) {
+                        // Entry unlock of the active profile — no switch.
+                        markUnlocked(shownPendingKid.id);
+                        forceClose();
+                      } else {
+                        handleSwitch(shownPendingKid);
+                      }
+                    }, 250);
+                  }
                   return ok;
                 }}
               />

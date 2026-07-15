@@ -674,6 +674,7 @@
     "close": "Schließen",
     "secret": "{name}s Geheimnis",
     "secretHint": "Tippe die 3 geheimen Figuren der Reihe nach an",
+    "solveToStart": "Löse oben dein Geheimnis, um zu starten",
     "cancel": "Abbrechen",
     "look": "{name}s Aussehen",
     "lookHint": "Wähle eine Farbe & eine Figur",

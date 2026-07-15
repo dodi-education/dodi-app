@@ -3,30 +3,16 @@
 import { useEffect, useState } from "react";
 
 import { DodiFullHome } from "@/components/dodi/dodi-full-home";
-import { getCookie } from "@/lib/cookies";
+import { useActiveKid } from "@/hooks/use-active-kid";
 import { useProvidersStore } from "@/stores/providers-store";
 import { useVaultStore } from "@/stores/vault-store";
 
 export default function KidHomePage() {
-  const [kidId, setKidId] = useState<string | null>(null);
-  const [ready, setReady] = useState(false);
+  // Reactive active kid: resolves the first-available profile on a cold entry
+  // and updates on switch, so this no longer races the switcher's cookie write.
+  const { kids, activeKidId, needsPin } = useActiveKid();
   const [hasProvider, setHasProvider] = useState(false);
   const session = useVaultStore((s) => s.session);
-
-  useEffect(() => {
-    let cancelled = false;
-    // Read the active-kid cookie after mount, deferred off the synchronous
-    // effect tick (avoids the cascading-render lint and SSR/hydration skew from
-    // touching `document` during render).
-    void Promise.resolve().then(() => {
-      if (cancelled) return;
-      setKidId(getCookie("dodi-active-kid") ?? null);
-      setReady(true);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     // Providers are E2EE — only readable once the vault session exists (the kid
@@ -48,10 +34,11 @@ export default function KidHomePage() {
     };
   }, [session]);
 
-  // Avoid flashing the "no kid" card before the cookie is read.
-  if (!ready) return null;
+  // While kids load, or when the active profile is PIN-locked (the layout shows
+  // the switcher puzzle), render nothing so dodi doesn't initialize early.
+  if (kids === null || needsPin) return null;
 
-  if (!kidId) {
+  if (!activeKidId) {
     return (
       <div className="my-auto w-full max-w-xs rounded-[20px] bg-white p-5 text-center shadow-[0_2px_10px_rgba(34,56,78,0.05)]">
         <p className="text-sm font-bold text-muted-foreground">
@@ -61,5 +48,5 @@ export default function KidHomePage() {
     );
   }
 
-  return <DodiFullHome kidId={kidId} hasProvider={hasProvider} />;
+  return <DodiFullHome kidId={activeKidId} hasProvider={hasProvider} />;
 }

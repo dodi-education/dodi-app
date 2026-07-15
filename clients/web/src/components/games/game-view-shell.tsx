@@ -28,6 +28,10 @@ interface GameViewShellProps {
  * Mirrors the design's `k-create-bar` sitting above `k-create-cols`: a
  * full-width title bar (back button + title + description) on top, with the
  * persistent Dodi voice panel and the game content side-by-side below it.
+ *
+ * Below `lg` the shell collapses to a compact single-column layout: the title
+ * sits inline next to the back button (no description), and the Dodi panel is
+ * hidden — dodi stays reachable as the compact header avatar (see KidLayout).
  */
 export function GameViewShell({
   backHref,
@@ -39,8 +43,8 @@ export function GameViewShell({
 }: GameViewShellProps) {
   return (
     <div className="flex w-full flex-col gap-4 pb-4">
-      <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[300px_1fr] lg:items-center">
-        <div className="flex">
+      <div className="flex min-w-0 items-center gap-3 lg:grid lg:grid-cols-[300px_1fr] lg:gap-4">
+        <div className="flex shrink-0">
           <KidButton asChild variant="back" size="sm">
             <Link href={backHref}>
               <Icon name="arrow_left" size={15} stroke={2.2} />
@@ -48,13 +52,13 @@ export function GameViewShell({
             </Link>
           </KidButton>
         </div>
-        <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 flex-1 items-center justify-between gap-3 lg:flex-wrap">
           <div className="min-w-0">
-            <h1 className="truncate text-[21px] font-extrabold text-ink">
+            <h1 className="truncate text-[17px] font-extrabold text-ink lg:text-[21px]">
               {title}
             </h1>
             {description ? (
-              <p className="truncate text-sm font-semibold text-muted-foreground">
+              <p className="hidden truncate text-sm font-semibold text-muted-foreground lg:block">
                 {description}
               </p>
             ) : null}
@@ -64,7 +68,9 @@ export function GameViewShell({
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[300px_1fr]">
-        <DodiFullGame />
+        <div className="hidden lg:block">
+          <DodiFullGame />
+        </div>
         <div className="min-w-0">{children}</div>
       </div>
     </div>

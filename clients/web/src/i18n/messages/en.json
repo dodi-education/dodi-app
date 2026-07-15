@@ -674,6 +674,7 @@
     "close": "Close",
     "secret": "{name}'s secret",
     "secretHint": "Tap the 3 secret characters in order",
+    "solveToStart": "Solve your secret up top to start playing",
     "cancel": "Cancel",
     "look": "{name}'s look",
     "lookHint": "Pick a color & a character",
