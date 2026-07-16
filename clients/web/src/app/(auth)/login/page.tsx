@@ -76,10 +76,14 @@ export default function LoginPage() {
     // Unlock the E2EE vault with the same password (bootstraps one if this
     // account predates the vault).
     try {
-      const { created } = await useVaultStore.getState().unlockOrBootstrap(password);
+      const unlockPromise = useVaultStore.getState().unlockOrBootstrap(password);
       // Adopt the account's saved UI language onto this device before we render
-      // the parent app (so a returning parent on a new device sees their language).
-      await seedLocaleFromAccount();
+      // the parent app (so a returning parent on a new device sees their
+      // language). Needs only the auth session, so it loads concurrently with
+      // the vault unlock instead of adding its round trip after it.
+      const localePromise = seedLocaleFromAccount();
+      const { created } = await unlockPromise;
+      await localePromise;
       router.push(created ? "/vault-setup" : "/parent/dashboard");
       router.refresh();
     } catch {

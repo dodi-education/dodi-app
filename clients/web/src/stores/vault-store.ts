@@ -10,6 +10,9 @@
  */
 import { create } from "zustand";
 
+// Side effect: in the browser, route Argon2id through a Web Worker so key
+// derivation during unlock/wrap never blocks the UI thread.
+import "@/lib/argon2-worker";
 import { deriveVaultMasterKeyFromPhrase, toBase64Url } from "@dodi/crypto";
 import {
   type DeviceRegistration,
@@ -35,11 +38,7 @@ import {
 import { fetchVaultKeys, saveVaultKeys } from "@/lib/vault-client";
 
 export type VaultStatus =
-  | "idle"
-  | "working"
-  | "unlocked"
-  | "locked"
-  | "needs-setup";
+  "idle" | "working" | "unlocked" | "locked" | "needs-setup";
 
 interface VaultStoreState {
   status: VaultStatus;
@@ -122,110 +121,21 @@ async function ensureDeviceRegistered(
   await saveVaultKeys(addDeviceToVault(keys, vmk, deviceRegistration(device)));
 }
 
-export const useVaultStore = create<VaultStoreState>((set, get) => ({
-  status: "idle",
-  session: null,
-  pendingBackupPhrase: null,
-  pendingVault: null,
-  error: null,
-
-  bootstrap: async (password) => {
-    set({ status: "working", error: null });
+export const useVaultStore = create<VaultStoreState>((set, get) => {
+  /**
+   * Shared password-unlock tail (login + unlock prompt): unwrap the VMK and
+   * activate the session. Device registration only matters for the NEXT
+   * visit's silent unlock, so it runs in the background instead of gating the
+   * login on its extra round trip — if it fails, the next load just asks for
+   * the password again.
+   */
+  const unlockWithKeys = async (
+    keys: StoredVaultKeys,
+    password: string,
+  ): Promise<void> => {
     try {
-      const device = await loadDevice();
-      const { backupPhrase, vmk, storedKeys } = createAccountVault({
-        password,
-        device: deviceRegistration(device),
-      });
-      await saveVaultKeys(storedKeys);
-      set({
-        session: new VaultSession(vmk),
-        pendingBackupPhrase: backupPhrase,
-        status: "unlocked",
-      });
-      markParentUnlocked();
-      return backupPhrase;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Vault setup failed";
-      set({ status: "needs-setup", error: message });
-      throw error;
-    }
-  },
-
-  createLocalVault: async (password) => {
-    // Build the vault in memory and seal it for the OTP window. No server write
-    // (there's no session yet) and no status change (the user is still on the
-    // public /register page, outside VaultGate). The device key is created here
-    // and wrapped into storedKeys, so silent unlock works after finalize. The
-    // seal holds only the one-way passwordWrap + phrase, never the plaintext.
-    const device = await loadDevice();
-    const { backupPhrase, storedKeys } = createAccountVault({
-      password,
-      device: deviceRegistration(device),
-    });
-    await stashSealedSecret(JSON.stringify({ storedKeys, backupPhrase }));
-  },
-
-  finalizeVault: async () => {
-    set({ status: "working", error: null });
-    try {
-      // Prefer the in-memory copy (set below on the first attempt) so a retry
-      // after a failed save doesn't depend on the already-wiped seal.
-      let data = get().pendingVault;
-      if (!data) {
-        const raw = await consumeSealedSecret();
-        if (!raw) throw new Error("registration-seal-missing");
-        data = JSON.parse(raw) as {
-          storedKeys: StoredVaultKeys;
-          backupPhrase: string;
-        };
-        set({ pendingVault: data });
-      }
-      await saveVaultKeys(data.storedKeys);
-      // Reproduces the exact VMK createAccountVault sealed under (phrase → VMK is
-      // deterministic); cheap (BIP39 seed), and avoids repeating Argon2id.
-      const vmk = deriveVaultMasterKeyFromPhrase(data.backupPhrase);
-      await clearSealedSecret();
-      set({
-        session: new VaultSession(vmk),
-        pendingBackupPhrase: data.backupPhrase,
-        status: "unlocked",
-        pendingVault: null,
-      });
-      markParentUnlocked();
-    } catch (error) {
-      // Leave pendingVault intact so the caller can retry saveVaultKeys without
-      // re-verifying. needs-setup is accurate: authenticated, vault not yet stored.
-      set({ status: "needs-setup" });
-      throw error;
-    }
-  },
-
-  discardLocalVault: async () => {
-    set({ pendingVault: null });
-    await clearSealedSecret();
-  },
-
-  unlockOrBootstrap: async (password) => {
-    const keys = await fetchVaultKeys();
-    if (!keys) {
-      await get().bootstrap(password);
-      return { created: true };
-    }
-    await get().unlockWithPassword(password);
-    return { created: false };
-  },
-
-  unlockWithPassword: async (password) => {
-    set({ status: "working", error: null });
-    try {
-      const keys = await fetchVaultKeys();
-      if (!keys) {
-        set({ status: "needs-setup" });
-        throw new Error("No vault to unlock");
-      }
-      const vmk = unlockVaultWithPassword(keys, password);
-      await ensureDeviceRegistered(keys, vmk);
+      const vmk = await unlockVaultWithPassword(keys, password);
+      void ensureDeviceRegistered(keys, vmk).catch(() => {});
       set({ session: new VaultSession(vmk), status: "unlocked" });
       // Strong-auth (password/phrase) ⇒ open the parent area for this session.
       markParentUnlocked();
@@ -234,111 +144,233 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
       set({ status: "locked", error: message });
       throw error;
     }
-  },
+  };
 
-  unlockWithPhrase: async (phrase) => {
-    set({ status: "working", error: null });
-    try {
-      const keys = await fetchVaultKeys();
-      if (!keys) {
-        set({ status: "needs-setup" });
-        throw new Error("No vault to unlock");
+  return {
+    status: "idle",
+    session: null,
+    pendingBackupPhrase: null,
+    pendingVault: null,
+    error: null,
+
+    bootstrap: async (password) => {
+      set({ status: "working", error: null });
+      try {
+        const device = await loadDevice();
+        const { backupPhrase, vmk, storedKeys } = await createAccountVault({
+          password,
+          device: deviceRegistration(device),
+        });
+        await saveVaultKeys(storedKeys);
+        set({
+          session: new VaultSession(vmk),
+          pendingBackupPhrase: backupPhrase,
+          status: "unlocked",
+        });
+        markParentUnlocked();
+        return backupPhrase;
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Vault setup failed";
+        set({ status: "needs-setup", error: message });
+        throw error;
       }
-      const vmk = unlockVaultWithPhrase(keys, phrase);
-      await ensureDeviceRegistered(keys, vmk);
-      set({ session: new VaultSession(vmk), status: "unlocked" });
-      // Strong-auth (password/phrase) ⇒ open the parent area for this session.
-      markParentUnlocked();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Recovery failed";
-      set({ status: "locked", error: message });
-      throw error;
-    }
-  },
+    },
 
-  unlockSilently: async () => {
-    if (get().status === "unlocked") return true;
-    set({ status: "working", error: null });
-    try {
+    createLocalVault: async (password) => {
+      // Build the vault in memory and seal it for the OTP window. No server write
+      // (there's no session yet) and no status change (the user is still on the
+      // public /register page, outside VaultGate). The device key is created here
+      // and wrapped into storedKeys, so silent unlock works after finalize. The
+      // seal holds only the one-way passwordWrap + phrase, never the plaintext.
       const device = await loadDevice();
-      const keys = await fetchVaultKeys();
-      if (!keys) {
-        set({ status: "needs-setup" });
-        return false;
-      }
-      if (!keys.deviceWraps.some((d) => d.deviceId === device.deviceId)) {
-        set({ status: "locked" });
-        return false;
-      }
-      const vmk = unlockVaultWithDevice(keys, device.deviceId, device.kem.secretKey);
-      set({ session: new VaultSession(vmk), status: "unlocked" });
-      return true;
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Silent unlock failed";
-      set({ status: "locked", error: message });
-      return false;
-    }
-  },
+      const { backupPhrase, storedKeys } = await createAccountVault({
+        password,
+        device: deviceRegistration(device),
+      });
+      await stashSealedSecret(JSON.stringify({ storedKeys, backupPhrase }));
+    },
 
-  resetPasswordWithPhrase: async (phrase, newPassword, onVerified) => {
-    set({ status: "working", error: null });
-    try {
+    finalizeVault: async () => {
+      set({ status: "working", error: null });
+      try {
+        // Prefer the in-memory copy (set below on the first attempt) so a retry
+        // after a failed save doesn't depend on the already-wiped seal.
+        let data = get().pendingVault;
+        if (!data) {
+          const raw = await consumeSealedSecret();
+          if (!raw) throw new Error("registration-seal-missing");
+          data = JSON.parse(raw) as {
+            storedKeys: StoredVaultKeys;
+            backupPhrase: string;
+          };
+          set({ pendingVault: data });
+        }
+        await saveVaultKeys(data.storedKeys);
+        // Reproduces the exact VMK createAccountVault sealed under (phrase → VMK is
+        // deterministic); cheap (BIP39 seed), and avoids repeating Argon2id.
+        const vmk = deriveVaultMasterKeyFromPhrase(data.backupPhrase);
+        await clearSealedSecret();
+        set({
+          session: new VaultSession(vmk),
+          pendingBackupPhrase: data.backupPhrase,
+          status: "unlocked",
+          pendingVault: null,
+        });
+        markParentUnlocked();
+      } catch (error) {
+        // Leave pendingVault intact so the caller can retry saveVaultKeys without
+        // re-verifying. needs-setup is accurate: authenticated, vault not yet stored.
+        set({ status: "needs-setup" });
+        throw error;
+      }
+    },
+
+    discardLocalVault: async () => {
+      set({ pendingVault: null });
+      await clearSealedSecret();
+    },
+
+    unlockOrBootstrap: async (password) => {
       const keys = await fetchVaultKeys();
       if (!keys) {
-        // Account predates the vault — nothing to re-wrap. Update the auth
-        // password; the vault bootstraps on next authenticated entry.
+        await get().bootstrap(password);
+        return { created: true };
+      }
+      // Reuse the keys we just fetched — no second round trip.
+      set({ status: "working", error: null });
+      await unlockWithKeys(keys, password);
+      return { created: false };
+    },
+
+    unlockWithPassword: async (password) => {
+      set({ status: "working", error: null });
+      try {
+        const keys = await fetchVaultKeys();
+        if (!keys) {
+          set({ status: "needs-setup" });
+          throw new Error("No vault to unlock");
+        }
+        await unlockWithKeys(keys, password);
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Unlock failed";
+        set({ status: "locked", error: message });
+        throw error;
+      }
+    },
+
+    unlockWithPhrase: async (phrase) => {
+      set({ status: "working", error: null });
+      try {
+        const keys = await fetchVaultKeys();
+        if (!keys) {
+          set({ status: "needs-setup" });
+          throw new Error("No vault to unlock");
+        }
+        const vmk = unlockVaultWithPhrase(keys, phrase);
+        // Background for the same reason as the password path: registration
+        // only serves the next visit's silent unlock.
+        void ensureDeviceRegistered(keys, vmk).catch(() => {});
+        set({ session: new VaultSession(vmk), status: "unlocked" });
+        // Strong-auth (password/phrase) ⇒ open the parent area for this session.
+        markParentUnlocked();
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Recovery failed";
+        set({ status: "locked", error: message });
+        throw error;
+      }
+    },
+
+    unlockSilently: async () => {
+      if (get().status === "unlocked") return true;
+      set({ status: "working", error: null });
+      try {
+        const device = await loadDevice();
+        const keys = await fetchVaultKeys();
+        if (!keys) {
+          set({ status: "needs-setup" });
+          return false;
+        }
+        if (!keys.deviceWraps.some((d) => d.deviceId === device.deviceId)) {
+          set({ status: "locked" });
+          return false;
+        }
+        const vmk = unlockVaultWithDevice(
+          keys,
+          device.deviceId,
+          device.kem.secretKey,
+        );
+        set({ session: new VaultSession(vmk), status: "unlocked" });
+        return true;
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Silent unlock failed";
+        set({ status: "locked", error: message });
+        return false;
+      }
+    },
+
+    resetPasswordWithPhrase: async (phrase, newPassword, onVerified) => {
+      set({ status: "working", error: null });
+      try {
+        const keys = await fetchVaultKeys();
+        if (!keys) {
+          // Account predates the vault — nothing to re-wrap. Update the auth
+          // password; the vault bootstraps on next authenticated entry.
+          await onVerified();
+          set({ status: "needs-setup" });
+          return;
+        }
+        // Verify the phrase (throws on a wrong-but-valid phrase) BEFORE touching
+        // the auth password, so the two never diverge on a typo.
+        const vmk = unlockVaultWithPhrase(keys, phrase);
         await onVerified();
-        set({ status: "needs-setup" });
-        return;
+        const updated = await setVaultPassword(keys, vmk, newPassword);
+        await saveVaultKeys(updated);
+        await ensureDeviceRegistered(updated, vmk);
+        set({ session: new VaultSession(vmk), status: "unlocked" });
+        markParentUnlocked();
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Password reset failed";
+        set({ status: "locked", error: message });
+        throw error;
       }
-      // Verify the phrase (throws on a wrong-but-valid phrase) BEFORE touching
-      // the auth password, so the two never diverge on a typo.
-      const vmk = unlockVaultWithPhrase(keys, phrase);
-      await onVerified();
-      const updated = setVaultPassword(keys, vmk, newPassword);
-      await saveVaultKeys(updated);
-      await ensureDeviceRegistered(updated, vmk);
-      set({ session: new VaultSession(vmk), status: "unlocked" });
-      markParentUnlocked();
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Password reset failed";
-      set({ status: "locked", error: message });
-      throw error;
-    }
-  },
+    },
 
-  changePassword: async (newPassword) => {
-    const session = get().session;
-    if (!session) throw new Error("Vault is locked");
-    const keys = await fetchVaultKeys();
-    if (!keys) throw new Error("No vault to update");
-    await saveVaultKeys({
-      ...keys,
-      passwordWrap: session.rewrapPassword(newPassword),
-    });
-  },
+    changePassword: async (newPassword) => {
+      const session = get().session;
+      if (!session) throw new Error("Vault is locked");
+      const keys = await fetchVaultKeys();
+      if (!keys) throw new Error("No vault to update");
+      await saveVaultKeys({
+        ...keys,
+        passwordWrap: await session.rewrapPassword(newPassword),
+      });
+    },
 
-  addDevice: async (device) => {
-    const session = get().session;
-    if (!session) throw new Error("Vault is locked");
-    const keys = await fetchVaultKeys();
-    if (!keys) throw new Error("No vault to update");
-    await saveVaultKeys(session.addDevice(keys, device));
-  },
+    addDevice: async (device) => {
+      const session = get().session;
+      if (!session) throw new Error("Vault is locked");
+      const keys = await fetchVaultKeys();
+      if (!keys) throw new Error("No vault to update");
+      await saveVaultKeys(session.addDevice(keys, device));
+    },
 
-  removeDevice: async (deviceId) => {
-    const keys = await fetchVaultKeys();
-    if (!keys) throw new Error("No vault to update");
-    await saveVaultKeys(removeDeviceFromVault(keys, deviceId));
-  },
+    removeDevice: async (deviceId) => {
+      const keys = await fetchVaultKeys();
+      if (!keys) throw new Error("No vault to update");
+      await saveVaultKeys(removeDeviceFromVault(keys, deviceId));
+    },
 
-  acknowledgeBackupPhrase: () => set({ pendingBackupPhrase: null }),
+    acknowledgeBackupPhrase: () => set({ pendingBackupPhrase: null }),
 
-  lock: () => {
-    get().session?.lock();
-    set({ session: null, status: "locked" });
-    clearParentUnlocked();
-  },
-}));
+    lock: () => {
+      get().session?.lock();
+      set({ session: null, status: "locked" });
+      clearParentUnlocked();
+    },
+  };
+});

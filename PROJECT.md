@@ -510,6 +510,10 @@ parent-defined goal — and, in future, generate challenges like "Solve 3 math g
 
 ## TODO
 
+- Enhance learning & transcript system
+ - Every memory should be stored in a separate memory table entry and on a daily basis a summary is created from all memories and stored as markdown. Current local storage logic should can still be used for buffering (until persisted to DB)
+ - Add 3 transcript logging tiers: basic, advanced, full (Basic: Only persist memory summary (remove parsed memory entries), Advanced: Keep parsed memory entries, parents can view memory entries as list items and the relevant transcript snippet that lead to the creation of the memory, Full: Store full transcript, independent of memories)
+
 - Configure Voice (Provider/Style) per persona
 
  - Add new provider category for joke telling
@@ -520,15 +524,8 @@ parent-defined goal — and, in future, generate challenges like "Solve 3 math g
   - Track token usage
   - Add "Usage & cost" item under "Activity" in parent view where we want to display token usage over time and cost including summary per month etc. 
 
-- Optimize read_game_state -> Add new config category "Game generation"
-  - Trim payload: Stop sending the full game HTML/markdown to the vision model for read_game_state; the image + a short state summary is enough. Fewer input tokens
-
-- Optimize number of api calls
 - Onboarding wizard (Password, Seed phrase, PIN (skipable))
 
-- Game snapshots: Allow taking a snapshot which persists a screenshot, together with the logical game state as metadata. The idea is that kids can share snapshots to share their pictures and also saved games (e.g. to show a parent a special achievement). Games can load the snapshot which reproduces the game state.
-
-- Let kids draw their own avatars
 - Daily challenges UI: let Dodi generate + track challenges on top of `game_plays` (foundation is in place).
 - Allow games to connect with AI provider for in-game content generation (e.g. for texts, calculations, formulas etc.)
 

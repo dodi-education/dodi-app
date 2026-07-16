@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 
 import {
   type Argon2Params,
@@ -54,9 +54,9 @@ describe("device keystore", () => {
     expect(await ks.load()).toBeNull();
   });
 
-  it("a keystore device can silently unlock its account vault", () => {
+  it("a keystore device can silently unlock its account vault", async () => {
     const device = createDevice();
-    const vault = vaultForDevice(device);
+    const vault = await vaultForDevice(device);
     const unlocked = unlockVaultWithDevice(
       vault.storedKeys,
       device.deviceId,
@@ -67,8 +67,12 @@ describe("device keystore", () => {
 });
 
 describe("VaultSession", () => {
-  const vault = vaultForDevice(createDevice());
-  const session = new VaultSession(vault.vmk);
+  let vault: Awaited<ReturnType<typeof vaultForDevice>>;
+  let session: VaultSession;
+  beforeAll(async () => {
+    vault = await vaultForDevice(createDevice());
+    session = new VaultSession(vault.vmk);
+  });
 
   it("round-trips a field", () => {
     const enc = session.encryptField("Emma loves dinosaurs 🦕");
@@ -98,10 +102,12 @@ describe("VaultSession", () => {
     expect(s.decryptField("plain")).toBe("plain");
   });
 
-  it("rewrapPassword yields a wrap the new password can unlock (device-session reset)", () => {
+  it("rewrapPassword yields a wrap the new password can unlock (device-session reset)", async () => {
     const s = new VaultSession(vault.vmk.slice());
-    const wrap = s.rewrapPassword("brand-new-pw", TEST_ARGON2);
-    expect(constantTimeEqual(unwrapKeyWithPassword("brand-new-pw", wrap), vault.vmk)).toBe(true);
+    const wrap = await s.rewrapPassword("brand-new-pw", TEST_ARGON2);
+    expect(
+      constantTimeEqual(await unwrapKeyWithPassword("brand-new-pw", wrap), vault.vmk),
+    ).toBe(true);
   });
 
   it("rewrapPassword throws on a locked session", () => {

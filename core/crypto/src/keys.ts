@@ -111,13 +111,13 @@ export interface PasswordWrappedKey {
   ciphertext: string;
 }
 
-export function wrapKeyWithPassword(
+export async function wrapKeyWithPassword(
   password: string,
   key: Uint8Array,
   params: Argon2Params = DEFAULT_ARGON2_PARAMS,
-): PasswordWrappedKey {
+): Promise<PasswordWrappedKey> {
   const salt = randomBytes(16);
-  const kek = deriveKeyFromPassword(password, salt, params);
+  const kek = await deriveKeyFromPassword(password, salt, params);
   const sealed = seal(kek, key);
   return {
     v: 1,
@@ -130,11 +130,11 @@ export function wrapKeyWithPassword(
   };
 }
 
-export function unwrapKeyWithPassword(
+export async function unwrapKeyWithPassword(
   password: string,
   wrapped: PasswordWrappedKey,
-): Uint8Array {
-  const kek = deriveKeyFromPassword(
+): Promise<Uint8Array> {
+  const kek = await deriveKeyFromPassword(
     password,
     fromBase64Url(wrapped.salt),
     wrapped.params,
@@ -146,12 +146,12 @@ export function unwrapKeyWithPassword(
 }
 
 /** Password change: unwrap with the old password, re-wrap the same key under the new one. */
-export function rewrapKeyWithNewPassword(
+export async function rewrapKeyWithNewPassword(
   oldPassword: string,
   wrapped: PasswordWrappedKey,
   newPassword: string,
   params: Argon2Params = wrapped.params,
-): PasswordWrappedKey {
-  const key = unwrapKeyWithPassword(oldPassword, wrapped);
+): Promise<PasswordWrappedKey> {
+  const key = await unwrapKeyWithPassword(oldPassword, wrapped);
   return wrapKeyWithPassword(newPassword, key, params);
 }

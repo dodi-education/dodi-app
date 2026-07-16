@@ -69,7 +69,12 @@ vi.mock("@dodi/vault", () => ({
 vi.mock("@dodi/crypto", () => ({
   toBase64Url: vi.fn(() => "b64url"),
   deriveVaultMasterKeyFromPhrase: vi.fn(() => new Uint8Array([7, 7, 7])),
+  // Imported by @/lib/argon2-worker (a vault-store side effect); registration
+  // itself is skipped in the node environment (no `window`).
+  setArgon2idExecutor: vi.fn(),
 }));
+
+import { unlockVaultWithPassword } from "@dodi/vault";
 
 import { useVaultStore } from "./vault-store";
 
@@ -145,5 +150,62 @@ describe("vault-store register split", () => {
     await useVaultStore.getState().discardLocalVault();
     expect(sealedRef.current).toBeNull();
     expect(useVaultStore.getState().pendingVault).toBeNull();
+  });
+});
+
+describe("vault-store password unlock (login fast path)", () => {
+  // The wrapped-keys blob (deviceWraps empty so registration kicks in).
+  const keysFixture = () => ({
+    deviceWraps: [],
+    passwordWrap: { scheme: "password", salt: "s" },
+    vmkCheck: "enc:v1:x",
+  });
+
+  beforeEach(() => {
+    vi.mocked(unlockVaultWithPassword).mockReset();
+    vi.mocked(unlockVaultWithPassword).mockResolvedValue(new Uint8Array([1, 2, 3]));
+  });
+
+  it("unlockOrBootstrap fetches the vault keys exactly once", async () => {
+    const keys = keysFixture();
+    fetchVaultKeysMock.mockResolvedValue(keys);
+
+    const { created } = await useVaultStore.getState().unlockOrBootstrap("pw");
+
+    expect(created).toBe(false);
+    expect(useVaultStore.getState().status).toBe("unlocked");
+    expect(fetchVaultKeysMock).toHaveBeenCalledTimes(1);
+    expect(unlockVaultWithPassword).toHaveBeenCalledWith(keys, "pw");
+  });
+
+  it("unlock does not wait for the device-registration write", async () => {
+    fetchVaultKeysMock.mockResolvedValue(keysFixture());
+    // Registration write never settles — login must still complete.
+    saveVaultKeysMock.mockReturnValue(new Promise(() => {}));
+
+    await useVaultStore.getState().unlockOrBootstrap("pw");
+
+    expect(useVaultStore.getState().status).toBe("unlocked");
+  });
+
+  it("a failed device-registration write leaves the session unlocked", async () => {
+    fetchVaultKeysMock.mockResolvedValue(keysFixture());
+    saveVaultKeysMock.mockRejectedValue(new Error("offline"));
+
+    await useVaultStore.getState().unlockOrBootstrap("pw");
+    // Let the backgrounded registration settle (and its rejection be handled).
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(useVaultStore.getState().status).toBe("unlocked");
+  });
+
+  it("a wrong password locks with an error and rethrows", async () => {
+    fetchVaultKeysMock.mockResolvedValue(keysFixture());
+    vi.mocked(unlockVaultWithPassword).mockRejectedValue(new Error("bad key"));
+
+    await expect(useVaultStore.getState().unlockOrBootstrap("nope")).rejects.toThrow();
+
+    expect(useVaultStore.getState().status).toBe("locked");
+    expect(useVaultStore.getState().error).toBe("bad key");
   });
 });

@@ -62,7 +62,10 @@ export class VaultSession {
    * without the old one or the recovery phrase. The raw VMK never leaves the
    * session — only the resulting wrap does.
    */
-  rewrapPassword(newPassword: string, params?: Argon2Params): PasswordWrappedKey {
+  rewrapPassword(
+    newPassword: string,
+    params?: Argon2Params,
+  ): Promise<PasswordWrappedKey> {
     if (!this.#vmk) throw new Error("Vault is locked");
     return wrapKeyWithPassword(newPassword, this.#vmk, params);
   }

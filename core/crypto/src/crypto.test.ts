@@ -9,11 +9,13 @@ import {
 } from "./encoding";
 import {
   type Argon2Params,
+  deriveKeyFromPassword,
   generateKemKeyPair,
   generateSignKeyPair,
   generateSymmetricKey,
   open,
   seal,
+  setArgon2idExecutor,
   sign,
   verify,
 } from "./primitives";
@@ -236,30 +238,82 @@ describe("VMK wrapping (convenience unlock paths)", () => {
     expect(() => unwrapKeyWithDevice(attacker.secretKey, wrapped)).toThrow();
   });
 
-  it("wraps with a password and unwraps; wrong password fails", () => {
+  it("wraps with a password and unwraps; wrong password fails", async () => {
     const vmk = deriveVaultMasterKeyFromPhrase(generateBackupPhrase());
-    const wrapped = wrapKeyWithPassword("correct horse", vmk, TEST_ARGON2);
-    expect(constantTimeEqual(unwrapKeyWithPassword("correct horse", wrapped), vmk)).toBe(true);
-    expect(() => unwrapKeyWithPassword("wrong horse", wrapped)).toThrow();
+    const wrapped = await wrapKeyWithPassword("correct horse", vmk, TEST_ARGON2);
+    expect(
+      constantTimeEqual(await unwrapKeyWithPassword("correct horse", wrapped), vmk),
+    ).toBe(true);
+    await expect(unwrapKeyWithPassword("wrong horse", wrapped)).rejects.toThrow();
   });
 
-  it("password change re-wraps the SAME vmk (fixes the lockout)", () => {
+  it("password change re-wraps the SAME vmk (fixes the lockout)", async () => {
     const vmk = deriveVaultMasterKeyFromPhrase(generateBackupPhrase());
-    const wrapped = wrapKeyWithPassword("old-pw", vmk, TEST_ARGON2);
-    const rewrapped = rewrapKeyWithNewPassword("old-pw", wrapped, "new-pw", TEST_ARGON2);
-    expect(constantTimeEqual(unwrapKeyWithPassword("new-pw", rewrapped), vmk)).toBe(true);
-    expect(() => unwrapKeyWithPassword("old-pw", rewrapped)).toThrow();
+    const wrapped = await wrapKeyWithPassword("old-pw", vmk, TEST_ARGON2);
+    const rewrapped = await rewrapKeyWithNewPassword("old-pw", wrapped, "new-pw", TEST_ARGON2);
+    expect(constantTimeEqual(await unwrapKeyWithPassword("new-pw", rewrapped), vmk)).toBe(true);
+    await expect(unwrapKeyWithPassword("old-pw", rewrapped)).rejects.toThrow();
   });
 
-  it("phrase, password, and device all recover one identical vmk", () => {
+  it("phrase, password, and device all recover one identical vmk", async () => {
     const phrase = generateBackupPhrase();
     const vmk = deriveVaultMasterKeyFromPhrase(phrase);
     const device = generateKemKeyPair();
     const viaPhrase = deriveVaultMasterKeyFromPhrase(phrase);
-    const viaPassword = unwrapKeyWithPassword("pw", wrapKeyWithPassword("pw", vmk, TEST_ARGON2));
+    const viaPassword = await unwrapKeyWithPassword(
+      "pw",
+      await wrapKeyWithPassword("pw", vmk, TEST_ARGON2),
+    );
     const viaDevice = unwrapKeyWithDevice(device.secretKey, wrapKeyForDevice(device.publicKey, vmk));
     expect(constantTimeEqual(viaPhrase, vmk)).toBe(true);
     expect(constantTimeEqual(viaPassword, vmk)).toBe(true);
     expect(constantTimeEqual(viaDevice, vmk)).toBe(true);
+  });
+});
+
+describe("Argon2id implementation compatibility", () => {
+  // The KDF moved from @noble/hashes (pure JS) to hash-wasm (WASM). Both
+  // implement standard Argon2id, so every wrap sealed under the old
+  // implementation MUST unwrap under the new one. Guard that with a direct
+  // cross-implementation comparison, including multi-lane params and
+  // non-ASCII passwords.
+  it("matches the @noble/hashes reference output", async () => {
+    const { argon2id: nobleArgon2id } = await import("@noble/hashes/argon2");
+    const salt = utf8ToBytes("fixed-salt-16byt");
+    const cases: Array<{ password: string; params: Argon2Params }> = [
+      { password: "correct horse", params: { t: 2, m: 8192, p: 1, dkLen: 32 } },
+      { password: "pärent-pässwörd 🦕", params: { t: 3, m: 16384, p: 4, dkLen: 32 } },
+      { password: " ", params: { t: 2, m: 8192, p: 2, dkLen: 32 } },
+    ];
+    for (const { password, params } of cases) {
+      const viaWasm = await deriveKeyFromPassword(password, salt, params);
+      const viaNoble = nobleArgon2id(utf8ToBytes(password), salt, params);
+      expect(toBase64Url(viaWasm)).toBe(toBase64Url(viaNoble));
+    }
+  });
+
+  it("rejects an empty password (hash-wasm difference vs noble; unreachable for real accounts)", async () => {
+    // noble derived a key for "" — hash-wasm refuses. No account can have an
+    // empty-password wrap (registration enforces a minimum length), so failing
+    // loud is preferable to differing silently.
+    const salt = utf8ToBytes("fixed-salt-16byt");
+    await expect(
+      deriveKeyFromPassword("", salt, { t: 2, m: 8192, p: 1, dkLen: 32 }),
+    ).rejects.toThrow();
+  });
+
+  it("setArgon2idExecutor overrides and restores the execution strategy", async () => {
+    const salt = utf8ToBytes("fixed-salt-16byt");
+    const params: Argon2Params = { t: 2, m: 8192, p: 1, dkLen: 32 };
+    const reference = await deriveKeyFromPassword("pw", salt, params);
+    try {
+      setArgon2idExecutor(async () => new Uint8Array(32).fill(7));
+      const overridden = await deriveKeyFromPassword("pw", salt, params);
+      expect(toBase64Url(overridden)).toBe(toBase64Url(new Uint8Array(32).fill(7)));
+    } finally {
+      setArgon2idExecutor(null);
+    }
+    const restored = await deriveKeyFromPassword("pw", salt, params);
+    expect(toBase64Url(restored)).toBe(toBase64Url(reference));
   });
 });

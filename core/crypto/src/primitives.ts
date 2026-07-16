@@ -13,7 +13,6 @@
  * so the rest of the app is insulated from library API churn.
  */
 import { xchacha20poly1305 } from "@noble/ciphers/chacha";
-import { argon2id } from "@noble/hashes/argon2";
 import { hkdf } from "@noble/hashes/hkdf";
 import { sha256 } from "@noble/hashes/sha2";
 import { randomBytes } from "@noble/hashes/utils";
@@ -87,18 +86,49 @@ export const DEFAULT_ARGON2_PARAMS: Argon2Params = {
   dkLen: SYM_KEY_LENGTH,
 };
 
+/**
+ * Executes Argon2id over already-encoded password bytes. Swappable so hosts can
+ * move the (CPU/memory-heavy) derivation off the main thread — e.g. the web
+ * client routes it through a Web Worker — without this package knowing about
+ * bundler-specific worker plumbing.
+ */
+export type Argon2idExecutor = (
+  passwordBytes: Uint8Array,
+  salt: Uint8Array,
+  params: Argon2Params,
+) => Promise<Uint8Array>;
+
+/**
+ * Default executor: hash-wasm's WASM Argon2id (~5-10x faster than pure JS),
+ * imported lazily so bundles only carry it where derivation actually runs.
+ */
+const wasmArgon2id: Argon2idExecutor = async (passwordBytes, salt, params) => {
+  const { argon2id } = await import("hash-wasm");
+  return argon2id({
+    password: passwordBytes,
+    salt,
+    iterations: params.t,
+    memorySize: params.m,
+    parallelism: params.p,
+    hashLength: params.dkLen,
+    outputType: "binary",
+  });
+};
+
+let argon2idExecutor: Argon2idExecutor = wasmArgon2id;
+
+/** Override how Argon2id runs (pass `null` to restore the in-thread default). */
+export function setArgon2idExecutor(executor: Argon2idExecutor | null): void {
+  argon2idExecutor = executor ?? wasmArgon2id;
+}
+
 /** Derive a 32-byte key from a (low-entropy) password via Argon2id. */
 export function deriveKeyFromPassword(
   password: string,
   salt: Uint8Array,
   params: Argon2Params = DEFAULT_ARGON2_PARAMS,
-): Uint8Array {
-  return argon2id(utf8ToBytes(password), salt, {
-    t: params.t,
-    m: params.m,
-    p: params.p,
-    dkLen: params.dkLen,
-  });
+): Promise<Uint8Array> {
+  return argon2idExecutor(utf8ToBytes(password), salt, params);
 }
 
 /** Derive a sub-key from a high-entropy secret (e.g. a KEM shared secret). */

@@ -43,15 +43,15 @@ export interface CreatedVault {
  * Bootstrap a brand-new account vault: generate the backup phrase, derive the
  * VMK, and wrap it for the password + this device.
  */
-export function createAccountVault(params: {
+export async function createAccountVault(params: {
   password: string;
   device: DeviceRegistration;
   argon2Params?: Argon2Params;
-}): CreatedVault {
+}): Promise<CreatedVault> {
   const backupPhrase = generateBackupPhrase();
   const vmk = deriveVaultMasterKeyFromPhrase(backupPhrase);
   const storedKeys: StoredVaultKeys = {
-    passwordWrap: wrapKeyWithPassword(params.password, vmk, params.argon2Params),
+    passwordWrap: await wrapKeyWithPassword(params.password, vmk, params.argon2Params),
     deviceWraps: [
       {
         deviceId: params.device.deviceId,
@@ -68,10 +68,10 @@ export function createAccountVault(params: {
 }
 
 /** Unlock with the account password (new device, or explicit re-auth). */
-export function unlockVaultWithPassword(
+export async function unlockVaultWithPassword(
   storedKeys: StoredVaultKeys,
   password: string,
-): Uint8Array {
+): Promise<Uint8Array> {
   if (!storedKeys.passwordWrap) {
     throw new Error("No password is set for this vault");
   }
@@ -142,18 +142,18 @@ export function removeDeviceFromVault(
 }
 
 /** Change password while logged in: re-wrap the same VMK under the new password. */
-export function changeVaultPassword(
+export async function changeVaultPassword(
   storedKeys: StoredVaultKeys,
   oldPassword: string,
   newPassword: string,
   argon2Params?: Argon2Params,
-): StoredVaultKeys {
+): Promise<StoredVaultKeys> {
   if (!storedKeys.passwordWrap) {
     throw new Error("No password is set for this vault");
   }
   return {
     ...storedKeys,
-    passwordWrap: rewrapKeyWithNewPassword(
+    passwordWrap: await rewrapKeyWithNewPassword(
       oldPassword,
       storedKeys.passwordWrap,
       newPassword,
@@ -169,15 +169,15 @@ export function changeVaultPassword(
  * so no old password is required. Only the password wrap rotates; device wraps
  * and the VMK itself are untouched.
  */
-export function setVaultPassword(
+export async function setVaultPassword(
   storedKeys: StoredVaultKeys,
   vmk: Uint8Array,
   newPassword: string,
   argon2Params?: Argon2Params,
-): StoredVaultKeys {
+): Promise<StoredVaultKeys> {
   return {
     ...storedKeys,
-    passwordWrap: wrapKeyWithPassword(newPassword, vmk, argon2Params),
+    passwordWrap: await wrapKeyWithPassword(newPassword, vmk, argon2Params),
   };
 }
 
@@ -187,12 +187,12 @@ export function setVaultPassword(
  * BEFORE re-wrapping, so a wrong-but-valid BIP-39 phrase is rejected rather than
  * silently sealing the new password around a foreign VMK.
  */
-export function resetVaultPasswordWithPhrase(
+export async function resetVaultPasswordWithPhrase(
   storedKeys: StoredVaultKeys,
   phrase: string,
   newPassword: string,
   argon2Params?: Argon2Params,
-): StoredVaultKeys {
+): Promise<StoredVaultKeys> {
   const vmk = unlockVaultWithPhrase(storedKeys, phrase);
   return setVaultPassword(storedKeys, vmk, newPassword, argon2Params);
 }
