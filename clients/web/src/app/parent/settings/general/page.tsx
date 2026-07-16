@@ -8,27 +8,24 @@ import { FieldRow } from "@/components/parent/rows";
 import { Section } from "@/components/parent/section";
 import { LanguageSwitcher } from "@/components/shared/language-switcher";
 import { Badge } from "@/components/ui/badge";
-import { dodi } from "@/lib/api";
+import { useAccountStore } from "@/stores/account-store";
 import { createClient } from "@/lib/supabase/client";
 
 export default function GeneralSettingsPage() {
   const t = useTranslations("settings");
   const [user, setUser] = useState<{ email: string; id: string } | null>(null);
-  const [tier, setTier] = useState("egg");
+  const tier = useAccountStore((s) => s.account?.subscribed_plan ?? "egg");
+  const loadAccount = useAccountStore((s) => s.load);
 
   useEffect(() => {
+    void loadAccount();
+    // Email/id from the local auth session — display only, no network hop.
     const supabase = createClient();
-    supabase.auth.getUser().then(({ data }) => {
-      if (data.user) setUser({ email: data.user.email ?? "", id: data.user.id });
+    supabase.auth.getSession().then(({ data }) => {
+      const u = data.session?.user;
+      if (u) setUser({ email: u.email ?? "", id: u.id });
     });
-    dodi
-      .request("/api/account")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (d?.account?.subscribed_plan) setTier(d.account.subscribed_plan);
-      })
-      .catch(() => {});
-  }, []);
+  }, [loadAccount]);
 
   return (
     <div>

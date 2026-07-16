@@ -62,7 +62,7 @@ describe("buildCrumbs", () => {
 
   it("handles personas (name + new)", () => {
     expect(
-      buildCrumbs("/parent/personas/xyz", t, { personaName: "Explorer" }),
+      buildCrumbs("/parent/personas/xyz", t, { leafOverride: "Explorer" }),
     ).toEqual([
       { label: "nav.personas", href: "/parent/personas" },
       { label: "Explorer" },

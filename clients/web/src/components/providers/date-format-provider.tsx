@@ -13,7 +13,7 @@ import { useLocale } from "next-intl";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 import { readStoredDatePref } from "@/lib/date-prefs";
-import { useDatePrefStore } from "@/stores/date-pref-store";
+import { useAccountStore } from "@/stores/account-store";
 import { useKidStore } from "@/stores/kid-store";
 import { useVaultStore } from "@/stores/vault-store";
 import {
@@ -58,8 +58,10 @@ export function DateFormatProvider({ children }: { children: React.ReactNode }) 
   const locale = useLocale();
   const pathname = usePathname();
   const session = useVaultStore((s) => s.session);
-  const accountStored = useDatePrefStore((s) => s.accountStored);
-  const load = useDatePrefStore((s) => s.load);
+  const accountStored = useAccountStore(
+    (s) => (s.account?.date_preferences ?? null) as StoredDatePreferences | null,
+  );
+  const load = useAccountStore((s) => s.load);
   const kids = useKidStore((s) => s.list);
 
   const context: FormatContext = pathname?.startsWith("/parent")

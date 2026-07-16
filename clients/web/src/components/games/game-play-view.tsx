@@ -29,9 +29,13 @@ import {
 import { downscaleDataUrl } from "@/lib/games/thumbnail";
 import {
   createOwnSnapshot,
+  decodeSnapshotPayload,
+  fetchAutosaveSnapshot,
   resolveFriendForShare,
   shareSnapshotWithFriend,
+  upsertAutosaveSnapshot,
 } from "@/lib/snapshots";
+import { SnapshotFlash } from "@/components/snapshots/snapshot-flash";
 import { useKidStore } from "@/stores/kid-store";
 import { useVaultStore } from "@/stores/vault-store";
 import {
@@ -50,6 +54,11 @@ import type {
   SnapshotInfoV1,
   SnapshotPayloadV1,
 } from "@dodi/types/games";
+
+/** Quiet period after the last game interaction before the autosave uploads. */
+const AUTOSAVE_DEBOUNCE_MS = 1500;
+/** E2EE-internal marker title — autosave slots never appear in the collection. */
+const AUTOSAVE_TITLE = "Autosave";
 
 interface GamePlayViewProps {
   gameId: string;
@@ -110,9 +119,16 @@ export function GamePlayView({
   });
 
   const sandboxRef = useRef<GameSandboxHandle | null>(null);
+  const stageCardRef = useRef<HTMLDivElement | null>(null);
   const snapshotResolverRef = useRef<((data: string | null) => void) | null>(null);
   const saveStateResolverRef = useRef<((state: GameSaveState | null) => void) | null>(null);
   const [gameError, setGameError] = useState<string | null>(null);
+  const [flash, setFlash] = useState<{ image: string; startRect: DOMRect } | null>(
+    null,
+  );
+  // Kept current via effect below so the state-change handlers can schedule
+  // autosaves without depending on the late-defined debounce callback.
+  const scheduleAutosaveRef = useRef<() => void>(() => {});
 
   const updateGameState = useDodiSessionStore((s) => s.updateGameState);
   const setOnRunCommands = useDodiSessionStore((s) => s.setOnRunCommands);
@@ -197,6 +213,8 @@ export function GamePlayView({
     (state: Record<string, unknown>) => {
       updateGameState(state);
       ingestDodiState(state);
+      // Games push state after each interaction (e.g. a finished stroke).
+      scheduleAutosaveRef.current();
     },
     [updateGameState, ingestDodiState],
   );
@@ -204,6 +222,7 @@ export function GamePlayView({
   const handleCommandResult = useCallback((state: Record<string, unknown>) => {
     updateGameState(state, true);
     ingestDodiState(state);
+    scheduleAutosaveRef.current();
   }, [updateGameState, ingestDodiState]);
 
   // Start a game_plays record on mount; finalize it on unmount. Snapshot
@@ -346,12 +365,159 @@ export function GamePlayView({
     });
   }, []);
 
+  // ── Autosave: one hidden resume slot per kid + game ─────────────────────
+  // Each game interaction (state push from the sandbox) schedules a debounced
+  // upload of the full serialization into the slot; on open the slot is
+  // restored so the kid continues where they left off. Snapshot sessions
+  // restore their own savedState and never autosave.
+  const vaultSession = useVaultStore((s) => s.session);
+  const vaultStatus = useVaultStore((s) => s.status);
+  const [autosave, setAutosave] = useState<{
+    checked: boolean;
+    savedState?: GameSaveState;
+  }>(() => ({ checked: isSnapshotSession }));
+  const autosaveCheckedRef = useRef(isSnapshotSession);
+  const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autosaveBusyRef = useRef(false);
+  const autosaveDirtyRef = useRef(false);
+  /** Serialized last-uploaded state — skips no-op uploads (incl. right after restore). */
+  const lastAutosavedRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (autosaveCheckedRef.current) return;
+    if (!vaultSession) {
+      // The kid layout unlocks the vault silently; if it settles locked
+      // anyway, start fresh rather than withholding the game. Deferred off
+      // the synchronous effect tick (set-state-in-effect lint).
+      if (vaultStatus === "locked" || vaultStatus === "needs-setup") {
+        autosaveCheckedRef.current = true;
+        void Promise.resolve().then(() => setAutosave({ checked: true }));
+      }
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      let savedState: GameSaveState | undefined;
+      try {
+        const detail = await fetchAutosaveSnapshot(kidId, gameId);
+        if (detail) {
+          const { payload } = decodeSnapshotPayload(detail, vaultSession, null);
+          savedState = payload.savedState;
+          lastAutosavedRef.current = JSON.stringify(payload.savedState);
+        }
+      } catch (error) {
+        // Unreadable slot → play fresh; the next autosave overwrites it.
+        gameDebugWarn("playview", "autosave restore failed:", error);
+      }
+      if (cancelled) return;
+      autosaveCheckedRef.current = true;
+      setAutosave({ checked: true, savedState });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [kidId, gameId, vaultSession, vaultStatus]);
+
+  const runAutosave = useCallback(async (): Promise<void> => {
+    if (autosaveBusyRef.current) {
+      autosaveDirtyRef.current = true;
+      return;
+    }
+    if (saveStateResolverRef.current) {
+      // The save-state channel is serving a manual snapshot — try again
+      // after another debounce period.
+      scheduleAutosaveRef.current();
+      return;
+    }
+    autosaveBusyRef.current = true;
+    try {
+      const session = useVaultStore.getState().session;
+      if (!session) return;
+      const savedState = await requestSaveState();
+      if (!savedState) return;
+      const serialized = JSON.stringify(savedState);
+      if (serialized === lastAutosavedRef.current) return;
+      const createdAt = new Date().toISOString();
+      const info: SnapshotInfoV1 = {
+        v: 1,
+        title: AUTOSAVE_TITLE,
+        gameTitle: title,
+        thumbnail: null,
+        createdAt,
+      };
+      const payload: SnapshotPayloadV1 = {
+        v: 1,
+        title: AUTOSAVE_TITLE,
+        createdAt,
+        gameId,
+        gameTitle: title,
+        gameDescription: description,
+        gameMarkdown: markdown,
+        codeBundle,
+        capabilities,
+        drawingStyle,
+        savedState,
+      };
+      await upsertAutosaveSnapshot({
+        kidId,
+        gameId,
+        infoEnc: sealOwnSnapshotInfo(session, info),
+        payloadEnc: sealOwnSnapshotPayload(session, payload),
+        payloadBytes: estimateSnapshotPayloadBytes(payload),
+      });
+      lastAutosavedRef.current = serialized;
+    } catch (error) {
+      // Autosave must never disturb gameplay — the next interaction retries.
+      gameDebugWarn("playview", "autosave failed:", error);
+    } finally {
+      autosaveBusyRef.current = false;
+      if (autosaveDirtyRef.current) {
+        autosaveDirtyRef.current = false;
+        scheduleAutosaveRef.current();
+      }
+    }
+  }, [
+    kidId,
+    gameId,
+    title,
+    description,
+    markdown,
+    codeBundle,
+    capabilities,
+    drawingStyle,
+    requestSaveState,
+  ]);
+
+  const scheduleAutosave = useCallback((): void => {
+    if (isSnapshotSession) return;
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    autosaveTimerRef.current = setTimeout(() => {
+      autosaveTimerRef.current = null;
+      void runAutosave();
+    }, AUTOSAVE_DEBOUNCE_MS);
+  }, [isSnapshotSession, runAutosave]);
+
+  useEffect(() => {
+    scheduleAutosaveRef.current = scheduleAutosave;
+  }, [scheduleAutosave]);
+
+  useEffect(() => {
+    return () => {
+      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    };
+  }, []);
+
   // Capture the full save state + a downscaled thumbnail and build the two
-  // snapshot blobs' plaintext. Null when the game didn't answer.
+  // snapshot blobs' plaintext (plus the raw full-size capture for the flash
+  // animation). Null when the game didn't answer.
   const captureSnapshotContent = useCallback(
     async (
       snapshotTitle: string,
-    ): Promise<{ info: SnapshotInfoV1; payload: SnapshotPayloadV1 } | null> => {
+    ): Promise<{
+      info: SnapshotInfoV1;
+      payload: SnapshotPayloadV1;
+      rawSnapshot: string | null;
+    } | null> => {
       const savedState = await requestSaveState();
       if (!savedState) return null;
       const raw = capabilities.includes("get_snapshot")
@@ -380,7 +546,7 @@ export function GamePlayView({
         drawingStyle,
         savedState,
       };
-      return { info, payload };
+      return { info, payload, rawSnapshot: raw };
     },
     [
       requestSaveState,
@@ -395,6 +561,18 @@ export function GamePlayView({
       snapshot,
       gameId,
     ],
+  );
+
+  // iOS-screenshot-style feedback: the captured image shrinks from the game
+  // stage into a small card above the Snapshots nav item (see SnapshotFlash).
+  const triggerSnapshotFlash = useCallback(
+    (content: { info: SnapshotInfoV1; rawSnapshot: string | null }): void => {
+      const image = content.rawSnapshot ?? content.info.thumbnail;
+      const stage = stageCardRef.current;
+      if (!image || !stage) return;
+      setFlash({ image, startRect: stage.getBoundingClientRect() });
+    },
+    [],
   );
 
   // `save_snapshot` / `share_snapshot` are host meta-commands: sealing needs the
@@ -416,6 +594,7 @@ export function GamePlayView({
 
         const content = await captureSnapshotContent(snapshotTitle);
         if (!content) throw new Error("no_save_state");
+        triggerSnapshotFlash(content);
 
         await createOwnSnapshot({
           kidId,
@@ -440,7 +619,7 @@ export function GamePlayView({
         endAiActivity("thinking");
       }
     },
-    [kidId, title, inlineContext, captureSnapshotContent, beginAiActivity, endAiActivity, t],
+    [kidId, title, inlineContext, captureSnapshotContent, triggerSnapshotFlash, beginAiActivity, endAiActivity, t],
   );
 
   const handleShareSnapshot = useCallback(
@@ -479,6 +658,7 @@ export function GamePlayView({
 
         const content = await captureSnapshotContent(snapshotTitle);
         if (!content) throw new Error("no_save_state");
+        triggerSnapshotFlash(content);
 
         // Share implies save: the kid keeps their own copy…
         await createOwnSnapshot({
@@ -488,21 +668,21 @@ export function GamePlayView({
           payloadEnc: sealOwnSnapshotPayload(session, content.payload),
           payloadBytes: estimateSnapshotPayloadBytes(content.payload),
         });
-        // …and the friend gets a self-contained copy sealed to their keys (their
-        // client never had the game row, so the payload carries no gameId).
-        const sharedPayload: SnapshotPayloadV1 = { ...content.payload, gameId: null };
+        // …and the friend gets a self-contained copy sealed to their keys. The
+        // payload and row keep the sender's gameId as a soft reference.
         const { infoEnvelope, payloadEnvelope } = sealSnapshotForFriend(
           resolution.kemPublicKey,
           content.info,
-          sharedPayload,
+          content.payload,
           resolution.myKeys.sign,
         );
         await shareSnapshotWithFriend({
           senderKidId: kidId,
           friendshipId: resolution.friendshipId,
+          gameId: content.payload.gameId,
           infoEnc: infoEnvelope,
           payloadEnc: payloadEnvelope,
-          payloadBytes: estimateSnapshotPayloadBytes(sharedPayload),
+          payloadBytes: estimateSnapshotPayloadBytes(content.payload),
         });
         store.resolveClientCommand({
           ok: true,
@@ -520,7 +700,7 @@ export function GamePlayView({
         endAiActivity("thinking");
       }
     },
-    [kidId, title, inlineContext, captureSnapshotContent, beginAiActivity, endAiActivity, t],
+    [kidId, title, inlineContext, captureSnapshotContent, triggerSnapshotFlash, beginAiActivity, endAiActivity, t],
   );
 
   const runCommands = useCallback((commands: GameCommand[]): void => {
@@ -628,19 +808,32 @@ export function GamePlayView({
         </div>
       )}
 
-      <GameStage
-        sandboxRef={sandboxRef}
-        gameId={gameId}
-        codeBundle={codeBundle}
-        goal={goal}
-        savedState={snapshot?.savedState}
-        align="start"
-        reserved={STAGE.reservedKid}
-        onStateChange={handleStateChange}
-        onCommandResult={handleCommandResult}
-        onProgress={handleProgress}
-        onMessage={handleSandboxMessage}
-      />
+      {/* The stage mounts only after the autosave slot was checked, so the
+          sandbox init already carries the restored state. */}
+      {autosave.checked && (
+        <GameStage
+          sandboxRef={sandboxRef}
+          stageRef={stageCardRef}
+          gameId={gameId}
+          codeBundle={codeBundle}
+          goal={goal}
+          savedState={snapshot?.savedState ?? autosave.savedState}
+          align="start"
+          reserved={STAGE.reservedKid}
+          onStateChange={handleStateChange}
+          onCommandResult={handleCommandResult}
+          onProgress={handleProgress}
+          onMessage={handleSandboxMessage}
+        />
+      )}
+
+      {flash && (
+        <SnapshotFlash
+          image={flash.image}
+          startRect={flash.startRect}
+          onDone={() => setFlash(null)}
+        />
+      )}
     </GameViewShell>
   );
 }

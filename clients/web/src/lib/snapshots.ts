@@ -104,6 +104,8 @@ export function createOwnSnapshot(
 export interface ShareSnapshotInput {
   senderKidId: string;
   friendshipId: string;
+  /** The sender's source game (soft reference on the received row). */
+  gameId: string | null;
   infoEnc: string;
   payloadEnc: string;
   payloadBytes: number;
@@ -116,6 +118,39 @@ export function shareSnapshotWithFriend(
     method: "POST",
     body: JSON.stringify(input),
   });
+}
+
+export interface UpsertAutosaveInput {
+  kidId: string;
+  gameId: string;
+  infoEnc: string;
+  payloadEnc: string;
+  payloadBytes: number;
+}
+
+/** Overwrite (or create) the kid's single autosave slot for a game. */
+export function upsertAutosaveSnapshot(
+  input: UpsertAutosaveInput,
+): Promise<{ id: string }> {
+  return jsonRequest("/api/snapshots/autosave", {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+}
+
+/** The kid's autosave slot for a game, or null when none exists yet. */
+export async function fetchAutosaveSnapshot(
+  kidId: string,
+  gameId: string,
+): Promise<SnapshotDetailView | null> {
+  try {
+    return await jsonRequest<SnapshotDetailView>(
+      `/api/snapshots/autosave?kidId=${encodeURIComponent(kidId)}&gameId=${encodeURIComponent(gameId)}`,
+    );
+  } catch (error) {
+    if (error instanceof SnapshotsError && error.status === 404) return null;
+    throw error;
+  }
 }
 
 export function deleteSnapshot(id: string): Promise<{ ok: boolean }> {

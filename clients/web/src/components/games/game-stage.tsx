@@ -20,6 +20,8 @@ interface GameStageProps {
   savedState?: GameSaveState;
   /** Forwarded to the underlying sandbox so callers can send commands / snapshots. */
   sandboxRef?: Ref<GameSandboxHandle>;
+  /** The stage card element — lets callers measure the visible game surface. */
+  stageRef?: Ref<HTMLDivElement>;
   onMessage?: (message: GameToParentMessage) => void;
   onStateChange?: (state: Record<string, unknown>) => void;
   onCommandResult?: (state: Record<string, unknown>) => void;
@@ -56,6 +58,7 @@ export function GameStage({
   goal,
   savedState,
   sandboxRef,
+  stageRef,
   onMessage,
   onStateChange,
   onCommandResult,
@@ -69,6 +72,7 @@ export function GameStage({
 
   const card = (
     <div
+      ref={stageRef}
       style={stageSizeStyle(reserved)}
       className={cn(
         // Portrait-mobile fills the column width (the page may scroll a little);

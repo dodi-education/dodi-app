@@ -212,7 +212,7 @@ export interface SnapshotPayloadV1 {
   v: 1;
   title: string;
   createdAt: string;
-  /** Soft reference to the source game; null once the game is gone / for shares. */
+  /** Soft reference to the source game (the sender's for shares); null once the game is gone. */
   gameId: string | null;
   gameTitle: string;
   gameDescription: string;

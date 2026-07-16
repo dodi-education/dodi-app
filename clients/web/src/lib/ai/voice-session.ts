@@ -124,7 +124,7 @@ export async function buildHomeVoiceConfig(
 
   const config = await getModelConfig();
   const apiKey = await getVoiceKey(config);
-  const persona = await getActivePersona(kid.active_persona_id);
+  const persona = await getActivePersona(kid.active_persona?.id ?? null);
   const gameCatalog = await getGameCatalog();
 
   const { systemInstruction, tools } = buildHomeVoiceContext({
@@ -195,7 +195,7 @@ export async function buildGameVoiceConfig(
 
   const config = await getModelConfig();
   const apiKey = await getVoiceKey(config);
-  const persona = await getActivePersona(kid.active_persona_id);
+  const persona = await getActivePersona(kid.active_persona?.id ?? null);
   const info = await resolveGameInfo(ctx);
   const friendNames = info.capabilities.includes("save_state")
     ? await loadFriendNames(kid)

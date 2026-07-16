@@ -133,6 +133,7 @@ INSERT INTO public.games (id, account_id, kid_id, source_game_id, system_key, is
       display: block;
       border-radius: 999px;
       background: #123;
+      border: 1px solid #cbd7eb;
     }
     .icon-btn {
       width: 36px;
@@ -172,7 +173,7 @@ INSERT INTO public.games (id, account_id, kid_id, source_game_id, system_key, is
 
   <script>
     (function () {
-      var palette = [''#111111'', ''#e53935'', ''#fb8c00'', ''#fdd835'', ''#43a047'', ''#1e88e5'', ''#8e24aa'', ''#ff5ca8''];
+      var palette = [''#111111'', ''#ffffff'', ''#757575'', ''#894b17'', ''#e53935'', ''#fb8c00'', ''#fdd835'', ''#43a047'', ''#1e88e5'', ''#8e24aa'', ''#ff5ca8''];
       var brushOptions = [4, 8, 12, 18, 24];
       var capabilities = [''set_drawing_color'', ''set_brush_size'', ''clear_canvas'', ''undo'', ''get_snapshot'', ''set_generated_image'', ''save_state''];
 
@@ -677,7 +678,7 @@ A freeform drawing canvas where kids create art using colors and brushes. There 
 
 ### set_drawing_color
 Change the active brush color.
-- `payload.color` (string, required): A hex color from the palette: `#111111`, `#e53935`, `#fb8c00`, `#fdd835`, `#43a047`, `#1e88e5`, `#8e24aa`, `#ff5ca8`
+- `payload.color` (string, required): A hex color from the palette: `#111111`, `#ffffff`, `#757575`, `#894b17`, `#e53935`, `#fb8c00`, `#fdd835`, `#43a047`, `#1e88e5`, `#8e24aa`, `#ff5ca8`
 - Example: `{"type":"set_drawing_color","payload":{"color":"#e53935"}}`
 
 ### set_brush_size
@@ -764,7 +765,7 @@ A calm coloring canvas where kids color in beautiful mandalas. There are no win/
 
 ### set_drawing_color
 Change the active brush color.
-- `payload.color` (string, required): A hex color from the palette: `#111111`, `#e53935`, `#fb8c00`, `#fdd835`, `#43a047`, `#1e88e5`, `#8e24aa`, `#ff5ca8`
+- `payload.color` (string, required): A hex color from the palette: `#111111`, `#ffffff`, `#757575`, `#894b17`, `#e53935`, `#fb8c00`, `#fdd835`, `#43a047`, `#1e88e5`, `#8e24aa`, `#ff5ca8`
 - Example: `{"type":"set_drawing_color","payload":{"color":"#e53935"}}`
 
 ### set_brush_size

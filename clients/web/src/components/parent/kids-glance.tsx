@@ -7,7 +7,6 @@ import { DotSep, Row, RowMain, RowMeta, RowTitle } from "@/components/parent/row
 import { KidRowActions } from "@/components/parent/kid-row-actions";
 import { Section } from "@/components/parent/section";
 import { Badge } from "@/components/ui/badge";
-import { usePersonas } from "@/hooks/use-personas";
 import { useKids } from "@/hooks/use-kids";
 import { ageFromBirthdate } from "@dodi/intl";
 
@@ -27,7 +26,6 @@ export function KidsGlance() {
   const t = useTranslations("dashboard");
   const tc = useTranslations("common");
   const { kids } = useKids();
-  const { nameById: personaNames } = usePersonas();
 
   if (kids && kids.length === 0) return null;
 
@@ -41,9 +39,8 @@ export function KidsGlance() {
         kids.map((kid, i) => {
           const color = avatarColor(i);
           const age = ageFromBirthdate(kid.birthdate);
-          const personaName = kid.active_persona_id
-            ? personaNames.get(kid.active_persona_id)
-            : null;
+          // Embedded in the kid row (decrypted in decryptKid) — no personas fetch.
+          const personaName = kid.active_persona?.name ?? null;
           return (
             <Row key={kid.id} clickable>
               <Link

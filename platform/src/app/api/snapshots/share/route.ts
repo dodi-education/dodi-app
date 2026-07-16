@@ -8,6 +8,8 @@ import { shareSnapshot } from "@/services/snapshots";
 const ShareSchema = z.object({
   senderKidId: z.string().uuid(),
   friendshipId: z.string().uuid(),
+  // The sender's source game (soft reference on the received row).
+  gameId: z.string().uuid().nullable(),
   // SealedEnvelope JSON strings, sealed client-side to the RECIPIENT kid's
   // friend KEM key and signed by the sender kid (opaque to the server).
   infoEnc: z.string().min(1).max(300_000),
@@ -38,6 +40,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       senderAccountId: auth.accountId,
       senderKidId: result.data.senderKidId,
       friendshipId: result.data.friendshipId,
+      gameId: result.data.gameId,
       infoEnc: result.data.infoEnc,
       payloadEnc: result.data.payloadEnc,
       payloadBytes: result.data.payloadBytes,

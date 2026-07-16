@@ -45,7 +45,7 @@ vi.mock("@dodi/ai/client-thinking", () => ({
 
 import { runClientMemoryUpdate } from "@/lib/ai/client-memory-update";
 
-const KID = { id: "pid", memory: null, active_persona_id: null };
+const KID = { id: "pid", memory: null, active_persona: null };
 
 const FULL_CONFIG = {
   voiceProvider: "gemini",

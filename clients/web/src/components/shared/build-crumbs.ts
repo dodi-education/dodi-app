@@ -15,8 +15,8 @@ export interface Crumb {
 
 export interface BuildCrumbsOptions {
   kidName?: string | null;
-  personaName?: string | null;
-  /** Live label for the final crumb when the URL can't express it (game title). */
+  /** Live label for the final crumb when the URL can't express it (game
+   *  title, persona name) — pages publish it via the breadcrumb store. */
   leafOverride?: string | null;
 }
 
@@ -64,7 +64,7 @@ export function buildCrumbs(
       ];
       const id = seg[1];
       if (id === "new") crumbs.push({ label: t("breadcrumbs.newPersona") });
-      else if (id) crumbs.push({ label: opts.personaName || "…" });
+      else if (id) crumbs.push({ label: opts.leafOverride || "…" });
       return crumbs;
     }
 

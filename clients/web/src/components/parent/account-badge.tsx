@@ -4,29 +4,27 @@ import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 
 import { SignOutButton } from "@/components/parent/sign-out-button";
-import { dodi } from "@/lib/api";
+import { useAccountStore } from "@/stores/account-store";
 import { createClient } from "@/lib/supabase/client";
 
-/** Client-side account badge: email from the browser session, tier from the API. */
+/**
+ * Client-side account badge: email from the local auth session (no network),
+ * tier from the shared account store (one /api/account fetch app-wide).
+ */
 export function AccountBadge() {
   const t = useTranslations("settings");
   const [email, setEmail] = useState("");
-  const [tier, setTier] = useState("egg");
+  const tier = useAccountStore((s) => s.account?.subscribed_plan ?? "egg");
+  const loadAccount = useAccountStore((s) => s.load);
 
   useEffect(() => {
+    void loadAccount();
     const supabase = createClient();
     supabase.auth
-      .getUser()
-      .then(({ data }) => setEmail(data.user?.email ?? ""))
+      .getSession()
+      .then(({ data }) => setEmail(data.session?.user.email ?? ""))
       .catch(() => {});
-    dodi
-      .request("/api/account")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (d?.account?.subscribed_plan) setTier(d.account.subscribed_plan);
-      })
-      .catch(() => {});
-  }, []);
+  }, [loadAccount]);
 
   const initial = (email[0] ?? "?").toUpperCase();
 

@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 
 import { decryptPersona } from "@dodi/vault";
+import { useKidStore } from "@/stores/kid-store";
 import { useVaultStore } from "@/stores/vault-store";
 import type { Persona } from "@dodi/types/database";
 
@@ -38,11 +39,29 @@ export function PersonaSelector({ kidId, value, onChange }: PersonaSelectorProps
     const newValue = personaId || null;
     onChange(newValue);
 
-    await dodi.request(`/api/kids/${kidId}`, {
+    const res = await dodi.request(`/api/kids/${kidId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ active_persona_id: newValue }),
     });
+
+    // Kid rows embed the active persona — mirror the change into the cache
+    // (names here are already decrypted, matching the cached kid shape).
+    if (res.ok) {
+      const picked = newValue
+        ? (personas.find((p) => p.id === newValue) ?? null)
+        : null;
+      useKidStore.getState().patchLocal(kidId, {
+        active_persona: picked
+          ? {
+              id: picked.id,
+              name: picked.name,
+              account_id: picked.account_id,
+              is_system_default: picked.is_system_default,
+            }
+          : null,
+      });
+    }
   }
 
   if (loading) return null;

@@ -55,7 +55,7 @@ export async function POST(
     await logMemoryEvent(supabase, {
       kid_id: kid.id,
       account_id: accountId,
-      persona_id: kid.active_persona_id,
+      persona_id: kid.active_persona?.id ?? null,
       event,
       message: `[${game.title}] ${message}`,
     });

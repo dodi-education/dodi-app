@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { PinInput } from "@/components/ui/pin-input";
 import { markParentUnlocked } from "@/lib/parent-lock";
 import { createClient } from "@/lib/supabase/client";
-import { useParentPinStore } from "@/stores/parent-pin-store";
+import { useAccountStore } from "@/stores/account-store";
 import { useVaultStore } from "@/stores/vault-store";
 
 /**
@@ -22,7 +22,7 @@ import { useVaultStore } from "@/stores/vault-store";
  */
 export function ParentPinPrompt() {
   const t = useTranslations("parentPin");
-  const pinEnc = useParentPinStore((s) => s.pinEnc);
+  const pinEnc = useAccountStore((s) => s.account?.parent_pin_enc ?? null);
 
   const [value, setValue] = useState("");
   const [error, setError] = useState(false);
@@ -48,12 +48,15 @@ export function ParentPinPrompt() {
     setPwBusy(true);
     try {
       const supabase = createClient();
+      // Email from the local session (no network) — signInWithPassword is the
+      // actual server-side verification.
       const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user?.email) throw new Error("no-email");
+        data: { session: authSession },
+      } = await supabase.auth.getSession();
+      const email = authSession?.user.email;
+      if (!email) throw new Error("no-email");
       const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: user.email,
+        email,
         password,
       });
       if (signInError) {

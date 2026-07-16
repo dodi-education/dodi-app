@@ -15,7 +15,7 @@ import { SaveRow } from "@/components/parent/save-row";
 import { Section } from "@/components/parent/section";
 import { Button } from "@/components/ui/button";
 import { dodi } from "@/lib/api";
-import { useDatePrefStore } from "@/stores/date-pref-store";
+import { useAccountStore } from "@/stores/account-store";
 import { useVaultStore } from "@/stores/vault-store";
 import {
   defaultPref,
@@ -23,15 +23,18 @@ import {
   type StoredDatePreferences,
   type TimeStyleId,
 } from "@dodi/intl";
+import type { Account } from "@dodi/types/database";
 
 export function DateTimeSettings() {
   const t = useTranslations("settings");
   const tc = useTranslations("common");
   const locale = useLocale();
   const session = useVaultStore((s) => s.session);
-  const accountStored = useDatePrefStore((s) => s.accountStored);
-  const loaded = useDatePrefStore((s) => s.loaded);
-  const load = useDatePrefStore((s) => s.load);
+  const accountStored = useAccountStore(
+    (s) => (s.account?.date_preferences ?? null) as StoredDatePreferences | null,
+  );
+  const loaded = useAccountStore((s) => s.loaded);
+  const load = useAccountStore((s) => s.load);
 
   const base = defaultPref(locale, "account");
   const [dateStyle, setDateStyle] = useState<DateStyleId>(base.dateStyle);
@@ -92,7 +95,9 @@ export function DateTimeSettings() {
         } | null;
         throw new Error(data?.error || t("dateSaveFailed"));
       }
-      useDatePrefStore.getState().setAccountStored(datePreferences);
+      useAccountStore.getState().patchLocal({
+        date_preferences: datePreferences as Account["date_preferences"],
+      });
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     } catch (e) {

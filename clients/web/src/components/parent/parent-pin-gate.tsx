@@ -3,7 +3,7 @@
 import { useEffect, useSyncExternalStore } from "react";
 
 import { isParentUnlocked, subscribeParentLock } from "@/lib/parent-lock";
-import { useParentPinStore } from "@/stores/parent-pin-store";
+import { useAccountStore } from "@/stores/account-store";
 import { useVaultStore } from "@/stores/vault-store";
 
 import { ParentPinPrompt } from "./parent-pin-prompt";
@@ -28,10 +28,10 @@ export function ParentPinGate({ children }: { children: React.ReactNode }) {
     () => false,
   );
   const session = useVaultStore((s) => s.session);
-  const pinEnc = useParentPinStore((s) => s.pinEnc);
-  const loaded = useParentPinStore((s) => s.loaded);
-  const loadFailed = useParentPinStore((s) => s.loadFailed);
-  const load = useParentPinStore((s) => s.load);
+  const pinEnc = useAccountStore((s) => s.account?.parent_pin_enc ?? null);
+  const loaded = useAccountStore((s) => s.loaded);
+  const loadFailed = useAccountStore((s) => s.loadFailed);
+  const load = useAccountStore((s) => s.load);
 
   useEffect(() => {
     void load();

@@ -8,7 +8,6 @@ import { useEffect, useRef, useState } from "react";
 import { activeKidId, buildCrumbs } from "@/components/shared/build-crumbs";
 import { Icon } from "@/components/shared/icon";
 import { useKids } from "@/hooks/use-kids";
-import { usePersonas } from "@/hooks/use-personas";
 import { useBreadcrumbStore } from "@/stores/breadcrumb-store";
 import { cn } from "@/lib/utils";
 import type { Kid } from "@dodi/types/database";
@@ -17,21 +16,17 @@ export function Breadcrumbs() {
   const pathname = usePathname();
   const t = useTranslations();
   const { kids } = useKids();
-  const { nameById } = usePersonas();
   const leaf = useBreadcrumbStore((s) => s.leaf);
 
   const kidId = activeKidId(pathname);
   const kidName = kidId
     ? (kids?.find((k) => k.id === kidId)?.display_name ?? null)
     : null;
-  const personaMatch = pathname.match(/\/parent\/personas\/([^/]+)/);
-  const personaId =
-    personaMatch && personaMatch[1] !== "new" ? personaMatch[1] : null;
-  const personaName = personaId ? (nameById.get(personaId) ?? null) : null;
 
+  // The persona crumb arrives via the leaf override: the detail page already
+  // fetches + decrypts its persona, so no /api/personas fetch happens here.
   const crumbs = buildCrumbs(pathname, t, {
     kidName,
-    personaName,
     leafOverride: leaf,
   });
   if (crumbs.length === 0) return null;

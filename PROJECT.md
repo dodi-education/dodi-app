@@ -512,11 +512,6 @@ parent-defined goal — and, in future, generate challenges like "Solve 3 math g
 
 - Configure Voice (Provider/Style) per persona
 
-- Split drawing game
- - Current drawing game: When requested to draw something, it should create 2d drawings freely
- - New mandala game: Same interface as drawing game but when asked to draw something it should always create mandalas (current functionality)
- - Add a game_preview_image (small preview image), static for system games, otherwise created after each game creation / edit process as screenshot
-
  - Add new provider category for joke telling
   - if set and kid asks for a joke provider is called to fetch a joke which voice should read. (Google Voice is really bad at telling jokes, so we could ask ChatGPT who is quite good ad joking)
  

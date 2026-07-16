@@ -34,7 +34,7 @@ import {
   type TimeStyleId,
 } from "@dodi/intl";
 import { refreshFriendCards } from "@/lib/friends";
-import { useDatePrefStore } from "@/stores/date-pref-store";
+import { useAccountStore } from "@/stores/account-store";
 import { useKidStore } from "@/stores/kid-store";
 import { useVaultStore } from "@/stores/vault-store";
 
@@ -73,9 +73,11 @@ export default function EditKidPage() {
   const locale = useLocale();
   const params = useParams<{ id: string }>();
   const router = useRouter();
-  const accountStored = useDatePrefStore((s) => s.accountStored);
+  const accountStored = useAccountStore(
+    (s) => (s.account?.date_preferences ?? null) as StoredDatePreferences | null,
+  );
   const vaultSession = useVaultStore((s) => s.session);
-  const loadAccountPref = useDatePrefStore((s) => s.load);
+  const loadAccountPref = useAccountStore((s) => s.load);
   const [kid, setKid] = useState<Kid | null>(null);
   const [displayName, setDisplayName] = useState("");
   const [invalidName, setInvalidName] = useState(false);
@@ -131,7 +133,7 @@ export default function EditKidPage() {
         setSocialId(data.social_id);
         setBirthdate(data.birthdate ?? "");
         setLanguage(data.language ?? "en");
-        setActivePersonaId(data.active_persona_id);
+        setActivePersonaId(data.active_persona?.id ?? null);
         setCanInitiate(data.can_add_friends ?? false);
         setCanBeAdded(data.can_be_added_as_friend ?? false);
         setIncomingApproval(

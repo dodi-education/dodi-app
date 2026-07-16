@@ -7,6 +7,7 @@ import { useState, useRef, useEffect } from "react";
 import { Icon } from "@/components/shared/icon";
 import { locales, type Locale } from "@/i18n/config";
 import { dodi } from "@/lib/api";
+import { useAccountStore } from "@/stores/account-store";
 
 const localeLabels: Record<Locale, string> = {
   en: "EN",
@@ -29,6 +30,10 @@ function persistLocale(locale: Locale) {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ language: locale }),
+    })
+    .then((res) => {
+      // Mirror into the shared account cache (no-op when signed out).
+      if (res.ok) useAccountStore.getState().patchLocal({ language: locale });
     })
     .catch(() => {});
 }

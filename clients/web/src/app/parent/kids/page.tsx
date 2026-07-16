@@ -17,7 +17,6 @@ import { Icon } from "@/components/shared/icon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useDateFormat } from "@/components/providers/date-format-provider";
-import { usePersonas } from "@/hooks/use-personas";
 import { useKids } from "@/hooks/use-kids";
 import { ageFromBirthdate } from "@dodi/intl";
 
@@ -38,7 +37,6 @@ export default function KidsPage() {
   const tc = useTranslations("common");
   const { formatDateOnly } = useDateFormat();
   const { kids, loading, error } = useKids();
-  const { nameById: personaNames } = usePersonas();
 
   return (
     <div>
@@ -98,10 +96,7 @@ export default function KidsPage() {
                     <RowMeta>
                       {kid.social_id}
                       <DotSep />
-                      {kid.active_persona_id
-                        ? (personaNames.get(kid.active_persona_id) ??
-                          t("default"))
-                        : t("default")}
+                      {kid.active_persona?.name ?? t("default")}
                       <DotSep />
                       {kid.birthdate
                         ? t("born", {

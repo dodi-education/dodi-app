@@ -158,7 +158,7 @@ function kid(overrides: Partial<Kid>): Kid {
     birthdate: null,
     avatar_config: null,
     avatar_pin: null,
-    active_persona_id: null,
+    active_persona: null,
     memory: null,
     parent_notes: null,
     language: "en",

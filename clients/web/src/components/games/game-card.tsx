@@ -42,7 +42,7 @@ export function GameCard({ game, isFavorite, onToggleFavorite }: GameCardProps) 
             width={100}
             height={100}
             unoptimized
-            className="size-[100px] shrink-0 rounded-[16px] object-cover"
+            className="size-[100px] shrink-0 rounded-[16px]"
           />
         ) : (
           <div

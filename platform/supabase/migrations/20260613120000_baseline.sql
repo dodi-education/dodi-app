@@ -1300,8 +1300,8 @@ CREATE TABLE IF NOT EXISTS "public"."game_snapshots" (
     "viewed_at" timestamp with time zone,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    CONSTRAINT "game_snapshots_origin_check" CHECK (("origin" = ANY (ARRAY['own'::"text", 'received'::"text"]))),
-    CONSTRAINT "game_snapshots_received_sender_check" CHECK ((("origin" = 'own'::"text") OR ("sender_kid_id" IS NOT NULL))),
+    CONSTRAINT "game_snapshots_origin_check" CHECK (("origin" = ANY (ARRAY['own'::"text", 'received'::"text", 'autosave'::"text"]))),
+    CONSTRAINT "game_snapshots_received_sender_check" CHECK ((("origin" <> 'received'::"text") OR ("sender_kid_id" IS NOT NULL))),
     CONSTRAINT "game_snapshots_payload_bytes_check" CHECK (("payload_bytes" >= 0))
 );
 
@@ -1324,6 +1324,8 @@ ALTER TABLE ONLY "public"."game_snapshots"
 
 CREATE INDEX "game_snapshots_kid_created_idx" ON "public"."game_snapshots" USING "btree" ("kid_id", "created_at" DESC);
 CREATE INDEX "game_snapshots_account_created_idx" ON "public"."game_snapshots" USING "btree" ("account_id", "created_at" DESC);
+-- One autosave slot per kid and game; the service overwrites it in place.
+CREATE UNIQUE INDEX "game_snapshots_autosave_unique_idx" ON "public"."game_snapshots" USING "btree" ("kid_id", "game_id") WHERE ("origin" = 'autosave'::"text");
 
 CREATE OR REPLACE TRIGGER "game_snapshots_updated_at" BEFORE UPDATE ON "public"."game_snapshots" FOR EACH ROW EXECUTE FUNCTION "public"."handle_updated_at"();
 
@@ -1334,7 +1336,7 @@ ALTER TABLE "public"."game_snapshots" ENABLE ROW LEVEL SECURITY;
 -- service after validating an accepted friendship between the sender and the
 -- recipient kid — there is intentionally no user INSERT policy for them.
 CREATE POLICY "Users can view own game snapshots" ON "public"."game_snapshots" FOR SELECT USING (("auth"."uid"() = "account_id"));
-CREATE POLICY "Users can create own game snapshots" ON "public"."game_snapshots" FOR INSERT WITH CHECK ((("auth"."uid"() = "account_id") AND ("origin" = 'own'::"text")));
+CREATE POLICY "Users can create own game snapshots" ON "public"."game_snapshots" FOR INSERT WITH CHECK ((("auth"."uid"() = "account_id") AND ("origin" = ANY (ARRAY['own'::"text", 'autosave'::"text"]))));
 CREATE POLICY "Users can update own game snapshots" ON "public"."game_snapshots" FOR UPDATE USING (("auth"."uid"() = "account_id"));
 CREATE POLICY "Users can delete own game snapshots" ON "public"."game_snapshots" FOR DELETE USING (("auth"."uid"() = "account_id"));
 
@@ -1345,4 +1347,5 @@ GRANT ALL ON TABLE "public"."game_snapshots" TO "service_role";
 COMMENT ON COLUMN "public"."game_snapshots"."info_enc" IS 'Opaque light gallery blob (title, game title, thumbnail). origin=own: enc:v1: JSON under the account VMK; origin=received: SealedEnvelope JSON to the kid''s friend KEM key, signed by the sender kid. Server cannot decrypt.';
 COMMENT ON COLUMN "public"."game_snapshots"."payload_enc" IS 'Opaque heavy blob (game code + metadata + restorable save state), sealed like info_enc. Self-contained: outlives game edits/deletion. Server cannot decrypt.';
 COMMENT ON COLUMN "public"."game_snapshots"."payload_bytes" IS 'Approximate plaintext payload size in bytes — recorded for future per-kid storage quota enforcement.';
-COMMENT ON COLUMN "public"."game_snapshots"."game_id" IS 'Soft reference to the source game; NULL for received snapshots and after game deletion.';
+COMMENT ON COLUMN "public"."game_snapshots"."game_id" IS 'Soft reference to the source game (the sender''s game for received snapshots); NULL only after game deletion.';
+COMMENT ON COLUMN "public"."game_snapshots"."origin" IS 'own = manually saved by this kid; received = delivered by a friend; autosave = the kid''s single resume slot per game (hidden from the collection, overwritten in place).';

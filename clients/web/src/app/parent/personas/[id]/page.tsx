@@ -20,6 +20,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { decryptPersona, encryptPersonaFields } from "@dodi/vault";
+import { useBreadcrumbStore } from "@/stores/breadcrumb-store";
+import { useKidStore } from "@/stores/kid-store";
 import { useVaultStore } from "@/stores/vault-store";
 
 import type { Persona } from "@dodi/types/database";
@@ -69,6 +71,14 @@ export default function PersonaDetailPage() {
     return () => { cancelled = true; };
   }, [params.id, t]);
 
+  // Publish the (decrypted, live-edited) name as the breadcrumb leaf — the
+  // breadcrumb bar no longer fetches /api/personas for it.
+  const setLeaf = useBreadcrumbStore((s) => s.setLeaf);
+  useEffect(() => {
+    if (persona) setLeaf(name.trim() || null);
+    return () => setLeaf(null);
+  }, [persona, name, setLeaf]);
+
   async function handleUpdate(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
@@ -105,6 +115,9 @@ export default function PersonaDetailPage() {
       return;
     }
 
+    // Kid rows embed the active persona (name included) — refresh them so
+    // glance/list labels pick up the rename.
+    useKidStore.getState().invalidate();
     router.push("/parent/personas");
     router.refresh();
   }
@@ -156,6 +169,8 @@ export default function PersonaDetailPage() {
       return;
     }
 
+    // Deleting nulls active_persona on referencing kids (FK SET NULL).
+    useKidStore.getState().invalidate();
     router.push("/parent/personas");
     router.refresh();
   }

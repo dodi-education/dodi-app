@@ -383,7 +383,7 @@ export interface Database {
           account_id: string;
           kid_id: string;
           game_id: string | null;
-          origin: "own" | "received";
+          origin: "own" | "received" | "autosave";
           sender_kid_id: string | null;
           friendship_id: string | null;
           info_enc: string;
@@ -398,7 +398,7 @@ export interface Database {
           account_id: string;
           kid_id: string;
           game_id?: string | null;
-          origin?: "own" | "received";
+          origin?: "own" | "received" | "autosave";
           sender_kid_id?: string | null;
           friendship_id?: string | null;
           info_enc: string;
@@ -413,7 +413,7 @@ export interface Database {
           account_id?: string;
           kid_id?: string;
           game_id?: string | null;
-          origin?: "own" | "received";
+          origin?: "own" | "received" | "autosave";
           sender_kid_id?: string | null;
           friendship_id?: string | null;
           info_enc?: string;
@@ -908,7 +908,27 @@ export type PlatformConfig =
 export type UsageEvent = Database["public"]["Tables"]["usage_events"]["Row"];
 export type UsageEventInsert =
   Database["public"]["Tables"]["usage_events"]["Insert"];
-export type Kid = Database["public"]["Tables"]["kids"]["Row"];
+/**
+ * Slim persona projection embedded in kid read shapes ("data travels with the
+ * row that owns it"): the API joins it server-side via the active_persona_id
+ * FK so clients never fetch /api/personas just to label a kid. Excludes the
+ * heavy `soul` doc — AI flows load the full persona at session start. `name`
+ * is E2EE ciphertext for account personas (decrypted in decryptKid).
+ */
+export interface KidActivePersona {
+  id: string;
+  name: string;
+  account_id: string | null;
+  is_system_default: boolean;
+}
+/**
+ * Kid API read shape: the raw active_persona_id FK is replaced by the embedded
+ * `active_persona` object. Write shapes (Insert/Update) still take the id.
+ */
+export type Kid = Omit<
+  Database["public"]["Tables"]["kids"]["Row"],
+  "active_persona_id"
+> & { active_persona: KidActivePersona | null };
 export type Persona = Database["public"]["Tables"]["personas"]["Row"];
 export type Game = Database["public"]["Tables"]["games"]["Row"];
 export type GamePlay = Database["public"]["Tables"]["game_plays"]["Row"];
@@ -923,7 +943,7 @@ export type GameSnapshotInsert =
 export type GameSnapshotUpdate =
   Database["public"]["Tables"]["game_snapshots"]["Update"];
 /** own = saved by the kid; received = sealed to them by a friend (share). */
-export type SnapshotOrigin = "own" | "received";
+export type SnapshotOrigin = "own" | "received" | "autosave";
 export type SystemLog = Database["public"]["Tables"]["system_logs"]["Row"];
 export type SystemLogInsert =
   Database["public"]["Tables"]["system_logs"]["Insert"];

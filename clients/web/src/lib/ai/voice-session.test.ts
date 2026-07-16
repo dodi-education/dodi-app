@@ -21,7 +21,7 @@ const KID = {
   language: "en",
   memory: null,
   parent_notes: null,
-  active_persona_id: null,
+  active_persona: null,
 };
 
 vi.mock("@/stores/kid-store", () => ({

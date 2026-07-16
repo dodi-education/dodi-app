@@ -12,14 +12,26 @@ import { FieldRow } from "@/components/parent/rows";
 import { Section } from "@/components/parent/section";
 import { Switch } from "@/components/ui/switch";
 import { dodi } from "@/lib/api";
-import { useNotificationPrefsStore } from "@/stores/notification-prefs-store";
+import {
+  useAccountStore,
+  type NotificationPreferences,
+} from "@/stores/account-store";
+import type { Account } from "@dodi/types/database";
 
 export default function NotificationsSettingsPage() {
   const t = useTranslations("settings");
-  const prefs = useNotificationPrefsStore((s) => s.prefs);
-  const loaded = useNotificationPrefsStore((s) => s.loaded);
-  const load = useNotificationPrefsStore((s) => s.load);
-  const setPrefs = useNotificationPrefsStore((s) => s.setPrefs);
+  const prefs = useAccountStore(
+    (s) =>
+      (s.account?.notification_preferences ?? null) as
+        | NotificationPreferences
+        | null,
+  );
+  const loaded = useAccountStore((s) => s.loaded);
+  const load = useAccountStore((s) => s.load);
+  const setPrefs = (next: NotificationPreferences) =>
+    useAccountStore.getState().patchLocal({
+      notification_preferences: next as Account["notification_preferences"],
+    });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

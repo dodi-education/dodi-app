@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { dodi } from "@/lib/api";
 import { markParentUnlocked } from "@/lib/parent-lock";
-import { useParentPinStore } from "@/stores/parent-pin-store";
+import { useAccountStore } from "@/stores/account-store";
 import { useVaultStore } from "@/stores/vault-store";
 
 const PIN_LENGTH = 4;
@@ -23,10 +23,11 @@ const PIN_LENGTH = 4;
  */
 export function ParentPinSettings() {
   const t = useTranslations("parentPin");
-  const pinEnc = useParentPinStore((s) => s.pinEnc);
-  const loaded = useParentPinStore((s) => s.loaded);
-  const setPinEnc = useParentPinStore((s) => s.setPinEnc);
-  const load = useParentPinStore((s) => s.load);
+  const pinEnc = useAccountStore((s) => s.account?.parent_pin_enc ?? null);
+  const loaded = useAccountStore((s) => s.loaded);
+  const load = useAccountStore((s) => s.load);
+  const setPinEnc = (parent_pin_enc: string | null) =>
+    useAccountStore.getState().patchLocal({ parent_pin_enc });
   const hasPin = pinEnc !== null;
 
   const [pin, setPin] = useState("");

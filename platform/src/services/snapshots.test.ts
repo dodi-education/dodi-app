@@ -11,10 +11,12 @@ import type {
 import {
   createOwnSnapshot,
   deleteSnapshot,
+  getAutosaveSnapshot,
   getSnapshot,
   listSnapshots,
   markSnapshotViewed,
   shareSnapshot,
+  upsertAutosaveSnapshot,
 } from "./snapshots";
 
 // ---------------------------------------------------------------------------
@@ -27,6 +29,8 @@ interface Store {
   kids: Kid[];
   friendships: Friendship[];
   game_snapshots: GameSnapshot[];
+  /** One-shot errors consumed by subsequent inserts (FIFO), e.g. FK failures. */
+  insertErrors?: Array<{ code: string; message: string }>;
 }
 
 type TableName = keyof Store;
@@ -36,6 +40,7 @@ class FakeBuilder {
   private payload: Record<string, unknown> | null = null;
   private wantsRows = false;
   private eqs: Array<[string, unknown]> = [];
+  private neqs: Array<[string, unknown]> = [];
   private ins: Array<[string, unknown[]]> = [];
   private cached: { data: unknown; error: { message: string } | null } | null =
     null;
@@ -67,6 +72,10 @@ class FakeBuilder {
     this.eqs.push([col, val]);
     return this;
   }
+  neq(col: string, val: unknown) {
+    this.neqs.push([col, val]);
+    return this;
+  }
   in(col: string, arr: unknown[]) {
     this.ins.push([col, arr]);
     return this;
@@ -77,6 +86,7 @@ class FakeBuilder {
 
   private matches(row: Record<string, unknown>): boolean {
     for (const [c, v] of this.eqs) if (row[c] !== v) return false;
+    for (const [c, v] of this.neqs) if (row[c] === v) return false;
     for (const [c, arr] of this.ins) if (!arr.includes(row[c])) return false;
     return true;
   }
@@ -88,6 +98,11 @@ class FakeBuilder {
   private run() {
     if (this.cached) return this.cached;
     if (this.mode === "insert") {
+      const injected = this.store.insertErrors?.shift();
+      if (injected) {
+        this.cached = { data: null, error: injected };
+        return this.cached;
+      }
       const row = {
         id: `id-${this.table}-${this.rows().length + 1}`,
         game_id: null,
@@ -156,7 +171,7 @@ function kid(overrides: Partial<Kid>): Kid {
     birthdate: null,
     avatar_config: null,
     avatar_pin: null,
-    active_persona_id: null,
+    active_persona: null,
     memory: null,
     parent_notes: null,
     language: "en",
@@ -244,6 +259,7 @@ describe("shareSnapshot", () => {
       senderAccountId: "acc-a",
       senderKidId: "kid-a",
       friendshipId: "f-1",
+      gameId: "game-1",
       ...SEALED,
     });
     expect(result.recipientKidId).toBe("kid-b");
@@ -254,7 +270,8 @@ describe("shareSnapshot", () => {
     expect(row.origin).toBe("received");
     expect(row.sender_kid_id).toBe("kid-a");
     expect(row.friendship_id).toBe("f-1");
-    expect(row.game_id).toBeNull();
+    // Soft reference to the SENDER's game — no longer nulled on delivery.
+    expect(row.game_id).toBe("game-1");
   });
 
   it("works from the addressee side too", async () => {
@@ -263,6 +280,7 @@ describe("shareSnapshot", () => {
       senderAccountId: "acc-b",
       senderKidId: "kid-b",
       friendshipId: "f-1",
+      gameId: null,
       ...SEALED,
     });
     expect(result.recipientKidId).toBe("kid-a");
@@ -278,6 +296,7 @@ describe("shareSnapshot", () => {
         senderAccountId: "acc-a",
         senderKidId: "kid-a",
         friendshipId: "f-1",
+        gameId: "game-1",
         ...SEALED,
       }),
     ).rejects.toThrow("friendship_not_accepted");
@@ -291,6 +310,7 @@ describe("shareSnapshot", () => {
         senderAccountId: "acc-a",
         senderKidId: "kid-intruder",
         friendshipId: "f-1",
+        gameId: "game-1",
         ...SEALED,
       }),
     ).rejects.toThrow("not_participant");
@@ -303,6 +323,7 @@ describe("shareSnapshot", () => {
         senderAccountId: "acc-b", // kid-a belongs to acc-a
         senderKidId: "kid-a",
         friendshipId: "f-1",
+        gameId: "game-1",
         ...SEALED,
       }),
     ).rejects.toThrow("not_participant");
@@ -315,9 +336,130 @@ describe("shareSnapshot", () => {
         senderAccountId: "acc-a",
         senderKidId: "kid-a",
         friendshipId: "f-missing",
+        gameId: "game-1",
         ...SEALED,
       }),
     ).rejects.toThrow("friendship_not_found");
+  });
+
+  it("degrades to a NULL game reference when the sender's game is gone", async () => {
+    const store = setup({
+      insertErrors: [
+        {
+          code: "23503",
+          message:
+            'insert or update on table "game_snapshots" violates foreign key constraint "game_snapshots_game_id_fkey"',
+        },
+      ],
+    });
+    const result = await shareSnapshot(fakeClient(store), {
+      senderAccountId: "acc-a",
+      senderKidId: "kid-a",
+      friendshipId: "f-1",
+      gameId: "game-deleted",
+      ...SEALED,
+    });
+    expect(result.recipientKidId).toBe("kid-b");
+    expect(store.game_snapshots).toHaveLength(1);
+    expect(store.game_snapshots[0].game_id).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Autosave slot — one hidden row per (kid, game), overwritten in place
+// ---------------------------------------------------------------------------
+
+describe("upsertAutosaveSnapshot / getAutosaveSnapshot", () => {
+  it("creates the slot on first save and overwrites it in place afterwards", async () => {
+    const store = setup();
+    const first = await upsertAutosaveSnapshot(fakeClient(store), {
+      accountId: "acc-a",
+      kidId: "kid-a",
+      gameId: "game-1",
+      ...SEALED,
+    });
+    expect(store.game_snapshots).toHaveLength(1);
+    expect(store.game_snapshots[0].origin).toBe("autosave");
+    expect(store.game_snapshots[0].game_id).toBe("game-1");
+
+    const second = await upsertAutosaveSnapshot(fakeClient(store), {
+      accountId: "acc-a",
+      kidId: "kid-a",
+      gameId: "game-1",
+      infoEnc: "enc:v1:info-2",
+      payloadEnc: "enc:v1:payload-2",
+      payloadBytes: 999,
+    });
+    expect(second.id).toBe(first.id);
+    expect(store.game_snapshots).toHaveLength(1);
+    expect(store.game_snapshots[0].payload_enc).toBe("enc:v1:payload-2");
+    expect(store.game_snapshots[0].payload_bytes).toBe(999);
+  });
+
+  it("keeps separate slots per game", async () => {
+    const store = setup();
+    await upsertAutosaveSnapshot(fakeClient(store), {
+      accountId: "acc-a",
+      kidId: "kid-a",
+      gameId: "game-1",
+      ...SEALED,
+    });
+    await upsertAutosaveSnapshot(fakeClient(store), {
+      accountId: "acc-a",
+      kidId: "kid-a",
+      gameId: "game-2",
+      ...SEALED,
+    });
+    expect(store.game_snapshots).toHaveLength(2);
+  });
+
+  it("rejects a kid the caller does not own", async () => {
+    const store = setup();
+    await expect(
+      upsertAutosaveSnapshot(fakeClient(store), {
+        accountId: "acc-a",
+        kidId: "kid-b",
+        gameId: "game-1",
+        ...SEALED,
+      }),
+    ).rejects.toThrow("kid_not_found");
+  });
+
+  it("getAutosaveSnapshot returns the slot with payload, or null", async () => {
+    const store = setup({
+      game_snapshots: [
+        snapshotRow({
+          id: "s-auto",
+          origin: "autosave",
+          game_id: "game-1",
+        }),
+      ],
+    });
+    const found = await getAutosaveSnapshot(fakeClient(store), {
+      accountId: "acc-a",
+      kidId: "kid-a",
+      gameId: "game-1",
+    });
+    expect(found?.id).toBe("s-auto");
+    expect(found?.payloadEnc).toBe("enc:v1:payload");
+
+    const none = await getAutosaveSnapshot(fakeClient(store), {
+      accountId: "acc-a",
+      kidId: "kid-a",
+      gameId: "game-other",
+    });
+    expect(none).toBeNull();
+  });
+
+  it("rejects reading a slot for a kid of another account", async () => {
+    const store = setup();
+    await expect(
+      getAutosaveSnapshot(fakeClient(store), {
+        accountId: "acc-a",
+        kidId: "kid-b",
+        gameId: "game-1",
+      }),
+    ).rejects.toThrow("kid_not_found");
   });
 });
 
@@ -355,7 +497,7 @@ describe("createOwnSnapshot", () => {
 });
 
 describe("listSnapshots / getSnapshot", () => {
-  it("lists only the kid's rows and joins the sender's signing key", async () => {
+  it("lists only the kid's rows (never autosaves) and joins the sender's signing key", async () => {
     const store = setup({
       game_snapshots: [
         snapshotRow({ id: "s-own", kid_id: "kid-a", account_id: "acc-a" }),
@@ -366,6 +508,14 @@ describe("listSnapshots / getSnapshot", () => {
           origin: "received",
           sender_kid_id: "kid-b",
           friendship_id: "f-1",
+        }),
+        // The hidden resume slot must not surface in the collection.
+        snapshotRow({
+          id: "s-autosave",
+          kid_id: "kid-a",
+          account_id: "acc-a",
+          origin: "autosave",
+          game_id: "game-1",
         }),
         snapshotRow({ id: "s-other", kid_id: "kid-b", account_id: "acc-b" }),
       ],

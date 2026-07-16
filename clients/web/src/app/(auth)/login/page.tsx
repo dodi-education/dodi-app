@@ -16,9 +16,9 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { dodi } from "@/lib/api";
 import { clearSealedSecret } from "@/lib/sealed-secret";
 import { createClient } from "@/lib/supabase/client";
+import { useAccountStore } from "@/stores/account-store";
 import { useVaultStore } from "@/stores/vault-store";
 
 /**
@@ -30,13 +30,13 @@ import { useVaultStore } from "@/stores/vault-store";
  */
 async function seedLocaleFromAccount(): Promise<void> {
   try {
-    const res = await dodi.request("/api/account");
-    if (!res.ok) return;
-    const { account } = (await res.json()) as {
-      account: { language?: string } | null;
-    };
-    if (account?.language) {
-      document.cookie = `NEXT_LOCALE=${account.language}; path=/; max-age=31536000`;
+    // Force-load the shared account store: primes the cache for the parent
+    // area (PIN gate, date prefs, plan badge ride the same fetch) and never
+    // serves a previous user's account after a re-login.
+    await useAccountStore.getState().load(true);
+    const language = useAccountStore.getState().account?.language;
+    if (language) {
+      document.cookie = `NEXT_LOCALE=${language}; path=/; max-age=31536000`;
     }
   } catch {
     // best-effort; ignore

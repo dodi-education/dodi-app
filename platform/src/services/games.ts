@@ -332,6 +332,16 @@ export async function deleteCustomGame(
     throw new Error("Cannot delete system game");
   }
 
+  // Autosave slots die with their game (manual snapshots are self-contained
+  // and survive via the FK's ON DELETE SET NULL; an autosave without its game
+  // could never be restored).
+  const { error: autosaveError } = await supabase
+    .from("game_snapshots")
+    .delete()
+    .eq("game_id", gameId)
+    .eq("origin", "autosave");
+  if (autosaveError) throw autosaveError;
+
   const { error } = await supabase
     .from("games")
     .delete()

@@ -32,7 +32,7 @@ export async function runGameTextAssistant(
   const thinking = await resolveClientThinking();
   if (!thinking) throw new Error("No AI provider key configured");
 
-  const persona = await getActivePersona(kid.active_persona_id);
+  const persona = await getActivePersona(kid.active_persona?.id ?? null);
 
   // Locale-translated game (title/description) — or the inline info for
   // snapshot play, where the game row may be deleted or another family's.

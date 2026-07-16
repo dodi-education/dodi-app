@@ -137,7 +137,7 @@ A freeform drawing canvas where kids create art using colors and brushes. There 
 
 ### set_color
 Change the active brush color.
-- \`payload.color\` (string, required): A hex color from the palette: \`#111111\`, \`#e53935\`, \`#fb8c00\`, \`#fdd835\`, \`#43a047\`, \`#1e88e5\`, \`#8e24aa\`, \`#ff5ca8\`
+- \`payload.color\` (string, required): A hex color from the palette: \`#111111\`, \`#ffffff\`, \`#757575\`, \`#894b17\`, \`#e53935\`, \`#fb8c00\`, \`#fdd835\`, \`#43a047\`, \`#1e88e5\`, \`#8e24aa\`, \`#ff5ca8\`
 
 ### generate_drawing
 Create a black-and-white mandala **coloring sheet** of whatever the child asks for and place it on the canvas as a fresh base to color in. This is how Dodi draws ANY subject — animals, objects, characters, or scenes.

@@ -14,8 +14,9 @@
  *   P2 — once it does, it encrypts the new dossier here rather than the server
  *   writing plaintext.
  */
-import type { Json, Kid } from "@dodi/types/database";
+import type { Json, Kid, KidActivePersona } from "@dodi/types/database";
 
+import { isEncryptablePersona } from "./persona-crypto";
 import type { VaultSession } from "./session";
 
 /** Decrypt the personal fields of a fetched kid row for display/editing. */
@@ -28,7 +29,21 @@ export function decryptKid(session: VaultSession, row: Kid): Kid {
     memory: session.decryptField(row.memory),
     avatar_config: decryptAvatarConfig(session, row.avatar_config),
     avatar_pin: session.decryptField(row.avatar_pin),
+    active_persona: decryptActivePersona(session, row.active_persona),
   };
+}
+
+/**
+ * The embedded active persona carries its `name` as ciphertext for account
+ * personas; the system default is plaintext and passes through (same rule as
+ * decryptPersona).
+ */
+function decryptActivePersona(
+  session: VaultSession,
+  persona: KidActivePersona | null,
+): KidActivePersona | null {
+  if (!persona || !isEncryptablePersona(persona)) return persona;
+  return { ...persona, name: session.decryptField(persona.name) ?? persona.name };
 }
 
 /**

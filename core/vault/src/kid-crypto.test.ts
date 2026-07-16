@@ -19,7 +19,7 @@ function baseKid(overrides: Partial<Kid>): Kid {
     birthdate: "2018-04-05",
     avatar_config: null,
     avatar_pin: null,
-    active_persona_id: null,
+    active_persona: null,
     memory: null,
     parent_notes: null,
     language: "en",
@@ -101,6 +101,35 @@ describe("kid field crypto", () => {
 
     const row = baseKid({ avatar_config: enc.avatar_config });
     expect(decryptKid(session, row).avatar_config).toEqual(look);
+  });
+
+  it("decrypts the embedded active persona's name; system default passes through", () => {
+    const sealedName = session.encryptField("Explorer dodi");
+    const account = decryptKid(
+      session,
+      baseKid({
+        active_persona: {
+          id: "pe1",
+          name: sealedName,
+          account_id: "a1",
+          is_system_default: false,
+        },
+      }),
+    );
+    expect(account.active_persona?.name).toBe("Explorer dodi");
+
+    const system = decryptKid(
+      session,
+      baseKid({
+        active_persona: {
+          id: "pe2",
+          name: "dodi",
+          account_id: null,
+          is_system_default: true,
+        },
+      }),
+    );
+    expect(system.active_persona?.name).toBe("dodi");
   });
 
   it("seals avatar_pin and round-trips the sequence; null clears it", () => {

@@ -68,7 +68,7 @@ export async function runClientMemoryUpdate(
     const apiKey = useProvidersStore.getState().getKey(thinkingProvider);
     if (!apiKey) return false;
 
-    const persona = await getActivePersona(kid.active_persona_id);
+    const persona = await getActivePersona(kid.active_persona?.id ?? null);
     const instruction = buildMemoryUpdateInstruction(persona.soul);
     const prompt = [
       "## Current Memory Document",

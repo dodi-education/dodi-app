@@ -80,6 +80,25 @@ Structured relational schemas remain correct for **operational data** — accoun
 - Group imports: React/Next → external libs → internal modules → types → styles
 - Prefer named exports over default exports (except for Next.js pages/layouts)
 
+### API Design — "data travels with the row that owns it"
+When adding entities or API endpoints: if a much **bigger** entity (e.g. kid)
+references a much **smaller** one (e.g. persona), embed a slim projection of
+the small entity in the big entity's read shape — joined server-side via the
+FK (PostgREST embed) — instead of returning the raw id and making clients
+fetch the referenced table to join client-side (N fetches, one per consumer).
+- Embed only what display needs (id + label fields); **exclude heavy fields**
+  (e.g. persona `soul` docs) — flows that need them fetch the full entity on
+  demand.
+- Write shapes still take the plain FK id (`active_persona_id`); only read
+  shapes carry the embedded object (`active_persona`).
+- E2EE is unaffected: embeds carry the same ciphertext the referenced table
+  stores; decryption stays client-side (e.g. `decryptKid`).
+- Cache coherence: mutating the small entity must invalidate/patch the big
+  entity's client cache (e.g. persona rename → `kidStore.invalidate()`).
+- Client caches are single-flight Zustand stores (`kid-store`, `account-store`)
+  — never fetch-on-mount hooks with per-component state; new shared data joins
+  an existing store or follows that pattern.
+
 ---
 
 ## Supabase Patterns

@@ -135,14 +135,16 @@ export default function KidLayout({
     <div className="flex min-h-screen flex-col font-kid">
       {/* Kid header */}
       <header className="flex items-center justify-between px-4 py-3 md:px-6 md:py-4">
-        <div className="flex items-center gap-3">
-          <KidSwitcher />
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="shrink-0">
+            <KidSwitcher />
+          </div>
           {/* Full-mode game views hide the Dodi side panel below lg, so the
               compact header avatar takes over as dodi's presence there. */}
           {displayMode === "compact" ? (
             <DodiCompact />
           ) : isFullMode ? (
-            <div className="lg:hidden">
+            <div className="min-w-0 lg:hidden">
               <DodiCompact />
             </div>
           ) : null}
@@ -150,7 +152,7 @@ export default function KidLayout({
         <a
           href="/parent/dashboard"
           onClick={handleSwitchToParent}
-          className="flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-sm font-bold text-faint transition-colors hover:text-muted-foreground"
+          className="flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-2 text-sm font-bold text-faint transition-colors hover:text-muted-foreground"
           aria-label="Switch to parent view"
         >
           <Icon name="lock" size={15} />
@@ -189,6 +191,7 @@ export default function KidLayout({
             <Link
               key={item.href}
               href={item.href}
+              data-kid-nav={item.href}
               onClick={(e) => handleNavReselect(e, item.href)}
               className={cn(
                 "flex min-w-[88px] flex-col items-center gap-1 rounded-2xl px-5 py-2 text-[13.5px] font-extrabold transition-colors sm:min-w-[110px]",
