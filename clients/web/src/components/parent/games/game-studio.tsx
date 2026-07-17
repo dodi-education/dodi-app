@@ -29,6 +29,7 @@ import { cn } from "@/lib/utils";
 import { useKids } from "@/hooks/use-kids";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { useNavigationGuard } from "@/hooks/use-navigation-guard";
+import { useWakeLock } from "@/hooks/use-wake-lock";
 import { useBreadcrumbStore } from "@/stores/breadcrumb-store";
 import { useVaultStore } from "@/stores/vault-store";
 import { resolveClientGame } from "@/lib/ai/resolve-client-game";
@@ -180,6 +181,9 @@ export function GameStudio({ initialGame }: GameStudioProps) {
   const [messages, setMessages] = useState<ChatMessage[]>(() => restoreTranscript(initialGame));
   const [draft, setDraft] = useState("");
   const [thinking, setThinking] = useState(false);
+  // Keep the screen awake while the agent runs — on mobile, screen dim → lock
+  // kills the in-flight provider fetch and the whole build with it.
+  useWakeLock(thinking);
   const [step, setStep] = useState<AgentStep | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Mandatory settings fields left empty on save — drives the red field markers.

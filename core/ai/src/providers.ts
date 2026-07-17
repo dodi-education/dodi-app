@@ -55,16 +55,19 @@ export const AI_PROVIDERS: AIProviderDefinition[] = [
         id: "claude-opus-4-8",
         name: "Claude Opus 4.8",
         capabilities: ["text", "thinking", "agentic"],
+        maxOutputTokens: 128_000,
       },
       {
         id: "claude-sonnet-4-6",
         name: "Claude Sonnet 4.6",
         capabilities: ["text", "thinking", "agentic"],
+        maxOutputTokens: 64_000,
       },
       {
         id: "claude-haiku-4-5-20251001",
         name: "Claude Haiku 4.5",
         capabilities: ["text", "thinking", "agentic"],
+        maxOutputTokens: 64_000,
       },
     ],
     voices: [],
@@ -125,6 +128,18 @@ export function getProviderDefinition(
   id: AIProviderId,
 ): AIProviderDefinition | undefined {
   return AI_PROVIDERS.find((p) => p.id === id);
+}
+
+/** Output cap applied to models without a registered `maxOutputTokens` (e.g.
+ *  the Grok models, whose live limits are unverified). Conservative on purpose:
+ *  requesting more than a model's true maximum is a 400 on Anthropic-style
+ *  APIs, while 64k is comfortably above any real game bundle. */
+export const FALLBACK_MODEL_OUTPUT_CAP = 64_000;
+
+/** Hard output-token cap for a model, for clamping agent `max_tokens`. */
+export function getModelOutputCap(provider: AIProviderId, modelId: string): number {
+  const model = getProviderDefinition(provider)?.models.find((m) => m.id === modelId);
+  return model?.maxOutputTokens ?? FALLBACK_MODEL_OUTPUT_CAP;
 }
 
 export function getAvailableProviders(): AIProviderDefinition[] {

@@ -159,13 +159,18 @@ class AnthropicGameDriver implements GameCodeDriver {
   }
 
   async runTurn(): Promise<GameTurn> {
-    const response = await this.#client.messages.create({
+    // Stream the turn and collect the final message. With the output cap far
+    // above ~16k tokens, a non-streaming request would sit silent for minutes
+    // and blow the SDK's HTTP timeout budget; a streaming connection keeps
+    // bytes flowing for the whole write.
+    const stream = this.#client.messages.stream({
       model: this.#model,
       max_tokens: this.#maxTokens,
       system: this.#system,
       tools: AGENT_TOOLS,
       messages: messagesWithRollingCache(this.#messages),
     });
+    const response = await stream.finalMessage();
 
     const toolUseBlocks = response.content.filter(
       (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",

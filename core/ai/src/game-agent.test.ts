@@ -34,11 +34,48 @@ describe("AGENT_LIMITS", () => {
   it("bounds output tokens and retries to the priced worst-case", () => {
     // These values back the pricing model's per-game worst-case ceiling; a
     // regression here silently widens cost risk, so pin them exactly.
+    // MAX_TOKENS was deliberately raised 8k → 100k on 2026-07-17 (prod builds
+    // truncated at 8k) — headroom, not expected spend; real writes stay ~10-15k.
     expect(AGENT_LIMITS).toEqual({
       MAX_AGENT_TURNS: 15,
       MAX_VALIDATION_RETRIES: 1,
-      MAX_TOKENS: 8000,
+      MAX_TOKENS: 100_000,
     });
+  });
+});
+
+describe("per-model output-cap clamping", () => {
+  // The driver must never be asked for more output tokens than its model
+  // accepts — Anthropic 400s on max_tokens above the model maximum.
+  async function driverMaxTokens(provider: "anthropic" | "xai", model: string): Promise<number> {
+    let captured: number | undefined;
+    mockDriverFactory = (...args: unknown[]) => {
+      captured = (args[1] as { maxTokens: number }).maxTokens;
+      return driverReturning([
+        {
+          toolCalls: [],
+          hasText: false,
+          expectsToolResults: false,
+          stopReason: "end_turn",
+          usage: emptyUsage,
+        },
+      ]);
+    };
+    // The run fails (no code written) — only the captured driver opts matter.
+    await runGameAgent({ provider, apiKey: "k", model, task: TASK }).catch(() => {});
+    return captured!;
+  }
+
+  it("passes the full ceiling to models whose cap exceeds it", async () => {
+    expect(await driverMaxTokens("anthropic", "claude-opus-4-8")).toBe(100_000);
+  });
+
+  it("clamps to the model's registered output cap", async () => {
+    expect(await driverMaxTokens("anthropic", "claude-sonnet-4-6")).toBe(64_000);
+  });
+
+  it("falls back to the conservative cap for unregistered models", async () => {
+    expect(await driverMaxTokens("xai", "grok-4.3")).toBe(64_000);
   });
 });
 

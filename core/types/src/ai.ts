@@ -18,6 +18,10 @@ export interface AIModel {
   id: string;
   name: string;
   capabilities: ("voice" | "text" | "live" | "thinking" | "image" | "agentic")[];
+  /** Hard output-token cap the provider enforces for this model. Used to clamp
+   *  agent `max_tokens` (asking above the cap is a 400 on Anthropic). Unset ⇒
+   *  callers apply a conservative fallback (see `getModelOutputCap`). */
+  maxOutputTokens?: number;
 }
 
 export interface AIVoice {

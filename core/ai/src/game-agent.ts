@@ -18,6 +18,7 @@ import type { AIProviderId } from "@dodi/types/ai";
 import type { TokenUsage } from "@dodi/types/usage";
 
 import { buildAgentSystemPrompt } from "./game-agent-prompt";
+import { getModelOutputCap } from "./providers";
 import {
   executeTool,
   type LastWriteResult,
@@ -33,15 +34,19 @@ import {
 export type { PriorTurn } from "./game-agent-drivers";
 
 /**
- * Cost caps for a single game action. `MAX_TOKENS` is the per-write OUTPUT cap
- * and `MAX_VALIDATION_RETRIES` bounds the number of writes; together they bound
- * the worst-case cost of a generation. `MAX_TOKENS` is the value to calibrate
- * from real `output_tokens` metrics — raise it if large bundles truncate.
+ * Cost caps for a single game action. `MAX_TOKENS` is the per-write OUTPUT
+ * ceiling and `MAX_VALIDATION_RETRIES` bounds the number of writes; together
+ * they bound the worst-case cost of a generation. Raised 8k → 100k on
+ * 2026-07-17 after prod builds truncated mid-`write_game_code` (error_logs
+ * stopReason "max_tokens") — real bundles peak around 10-15k output tokens, so
+ * this is deliberate headroom, not expected spend. The effective per-request
+ * value is clamped to the model's own output cap (`getModelOutputCap`), since
+ * requesting above a model's maximum is a 400 on Anthropic.
  */
 export const AGENT_LIMITS = {
   MAX_AGENT_TURNS: 15,
   MAX_VALIDATION_RETRIES: 1,
-  MAX_TOKENS: 8000,
+  MAX_TOKENS: 100_000,
 } as const;
 
 /** Thrown when the loop is cancelled via its AbortSignal (parent pressed Stop). */
@@ -137,7 +142,7 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
     apiKey,
     model,
     systemPrompt: buildAgentSystemPrompt(task.childContext),
-    maxTokens: AGENT_LIMITS.MAX_TOKENS,
+    maxTokens: Math.min(AGENT_LIMITS.MAX_TOKENS, getModelOutputCap(provider, model)),
   });
   // Seed with any resumed conversation, then the concrete task request.
   driver.seed(priorTurns, buildCodeTaskUserMessage(task));
