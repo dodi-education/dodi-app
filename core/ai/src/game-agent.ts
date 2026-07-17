@@ -253,11 +253,18 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
     : "";
   // The parent explicitly enabled background generation — using the tool is
   // expected, not optional (unless an image already exists from a prior build).
+  // With attachments present, the parent's instruction may pick an uploaded
+  // image instead — the nudge must not override that.
   const backgroundNote =
     onGenerateBackgroundImage && !toolContext.carriedBackgroundImage
-      ? "\n\nThe parent enabled AI background generation for this game: call " +
-        "generate_background_image with a scene description BEFORE write_game_code and " +
-        `reference the result via the ${BACKGROUND_IMAGE_PLACEHOLDER} contract.`
+      ? "\n\nThe parent enabled AI background generation for this game: give it a real " +
+        "background image BEFORE write_game_code — via generate_background_image with a " +
+        "scene description" +
+        (goalPayload.images?.length
+          ? ", or via use_uploaded_background if the parent asks to use an attached image " +
+            "as the background (the parent's instruction wins)"
+          : "") +
+        ` — and reference the result via the ${BACKGROUND_IMAGE_PLACEHOLDER} contract.`
       : "";
   driver.seed(trimPriorImages(priorTurns), {
     text: buildCodeTaskUserMessage(task) + carriedNote + backgroundNote,

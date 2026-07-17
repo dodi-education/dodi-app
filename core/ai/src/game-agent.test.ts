@@ -456,11 +456,34 @@ describe("background image loop integration", () => {
       onGenerateBackgroundImage: vi.fn().mockResolvedValue(BG),
     });
     expect(enabled.getSeedText()).toContain("parent enabled AI background generation");
+    expect(enabled.getSeedText()).not.toContain("use_uploaded_background");
 
     const disabled = capturingDriver([writeTurn, turn([])]);
     mockDriverFactory = () => disabled.driver;
     await runGameAgent({ provider: "anthropic", apiKey: "k", model: "m", task: TASK });
     expect(disabled.getSeedText()).not.toContain("parent enabled AI background generation");
+  });
+
+  it("with attachments, the nudge defers to the parent's uploaded-background choice", async () => {
+    const writeTurn = turn([
+      {
+        id: "w1",
+        name: "write_game_code",
+        input: { code: compliant(""), markdown: "m", title: "T", capabilities: [] },
+      },
+    ]);
+    const captured = capturingDriver([writeTurn, turn([])]);
+    mockDriverFactory = () => captured.driver;
+    await runGameAgent({
+      provider: "anthropic",
+      apiKey: "k",
+      model: "m",
+      task: { ...TASK, payload: { prompt: "a game", images: ["data:image/png;base64,AAAA"] } },
+      onGenerateBackgroundImage: vi.fn().mockResolvedValue(BG),
+    });
+    const seed = captured.getSeedText();
+    expect(seed).toContain("use_uploaded_background");
+    expect(seed).toContain("the parent's instruction wins");
   });
 
   it("uses an uploaded reference image as the background via use_uploaded_background", async () => {

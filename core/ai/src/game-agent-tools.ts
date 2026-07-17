@@ -186,7 +186,9 @@ const GENERATE_BACKGROUND_IMAGE_TOOL: Anthropic.Tool = {
   description:
     "Generate the game's background illustration with the account's image model. Call it " +
     "BEFORE write_game_code (at most once — regenerate only if the parent asks for a " +
-    "different background). Your code then references the image via the " +
+    "different background). If the parent asked to use an ATTACHED image as the " +
+    "background, call use_uploaded_background instead — do NOT generate a recreation. " +
+    "Your code then references the image via the " +
     `${BACKGROUND_IMAGE_PLACEHOLDER} placeholder; the app substitutes the real image after ` +
     "you finish, so never write a data: URL yourself.",
   input_schema: {
