@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { DodiFullGame } from "@/components/dodi/dodi-full-game";
 import { Icon } from "@/components/shared/icon";
 import { KidButton } from "@/components/kid/kid-button";
+import { STAGE, stageWidthVars } from "@/lib/games/stage";
 
 interface GameViewShellProps {
   /** Destination of the back button (e.g. "/games"). */
@@ -52,7 +53,12 @@ export function GameViewShell({
             </Link>
           </KidButton>
         </div>
-        <div className="flex min-w-0 flex-1 items-center justify-between gap-3 lg:flex-wrap">
+        {/* Capped at the stage width on lg so the right-aligned action lines up
+            with the game canvas's right edge below (same column, same var). */}
+        <div
+          style={stageWidthVars(STAGE.reservedKid)}
+          className="flex min-w-0 flex-1 items-center justify-between gap-3 lg:max-w-[var(--stage-w)] lg:flex-wrap"
+        >
           <div className="min-w-0">
             <h1 className="truncate text-[17px] font-extrabold text-ink lg:text-[21px]">
               {title}

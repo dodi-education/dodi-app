@@ -10,6 +10,8 @@ import {
 } from "@/components/games/game-sandbox";
 import { GameStage } from "@/components/games/game-stage";
 import { GameViewShell } from "@/components/games/game-view-shell";
+import { Icon } from "@/components/shared/icon";
+import { KidButton } from "@/components/kid/kid-button";
 import { STAGE } from "@/lib/games/stage";
 import { gameDebug, gameDebugWarn } from "@dodi/games/debug";
 import {
@@ -497,6 +499,24 @@ export function GamePlayView({
     }, AUTOSAVE_DEBOUNCE_MS);
   }, [isSnapshotSession, runAutosave]);
 
+  // ── Reset: remount the sandbox with no saved state ──────────────────────
+  // Host-level and game-agnostic — the game boots exactly as on first open.
+  // The fresh state then flows through the regular autosave pipeline (the
+  // ready-state push plus the direct schedule below), overwriting the slot so
+  // the reset survives a reload.
+  const [resetNonce, setResetNonce] = useState(0);
+  const handleResetGame = useCallback((): void => {
+    if (autosaveTimerRef.current) {
+      clearTimeout(autosaveTimerRef.current);
+      autosaveTimerRef.current = null;
+    }
+    lastAutosavedRef.current = null;
+    setGameError(null);
+    setAutosave({ checked: true });
+    setResetNonce((nonce) => nonce + 1);
+    scheduleAutosaveRef.current();
+  }, []);
+
   useEffect(() => {
     scheduleAutosaveRef.current = scheduleAutosave;
   }, [scheduleAutosave]);
@@ -801,6 +821,21 @@ export function GamePlayView({
       backLabel={snapshot ? tSnapshots("title") : t("title")}
       title={title}
       description={description}
+      action={
+        isSnapshotSession ? undefined : (
+          <KidButton
+            variant="icon"
+            size="none"
+            onClick={handleResetGame}
+            disabled={!autosave.checked}
+            title={t("resetGame")}
+            aria-label={t("resetGame")}
+            className="rounded-[12px] border border-danger/30 bg-white text-danger shadow-sm hover:bg-danger-soft"
+          >
+            <Icon name="delete" size={20} stroke={2} />
+          </KidButton>
+        )
+      }
     >
       {gameError && (
         <div className="mb-4 rounded-[14px] bg-danger-soft px-3 py-2 text-xs font-semibold text-danger">
@@ -812,6 +847,7 @@ export function GamePlayView({
           sandbox init already carries the restored state. */}
       {autosave.checked && (
         <GameStage
+          key={resetNonce}
           sandboxRef={sandboxRef}
           stageRef={stageCardRef}
           gameId={gameId}

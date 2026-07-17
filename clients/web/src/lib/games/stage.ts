@@ -25,6 +25,17 @@ export { STAGE, STAGE_ASPECT_CSS, GAME_CANVAS_TEMPLATE } from "@dodi/games/stage
 export function stageSizeStyle(reserved: number = STAGE.reservedKid): CSSProperties {
   return {
     aspectRatio: STAGE_ASPECT_CSS,
+    ...stageWidthVars(reserved),
+  } as CSSProperties;
+}
+
+/**
+ * Only the `--stage-h`/`--stage-w` sizing vars, without the aspect-ratio — for
+ * chrome that should line up with the stage's width (e.g. the title bar above
+ * the play stage) but keeps its own height.
+ */
+export function stageWidthVars(reserved: number = STAGE.reservedKid): CSSProperties {
+  return {
     // Height budget: capped on big screens, floored on tiny ones, minus surrounding chrome.
     ["--stage-h" as string]: `max(${STAGE.minHeight}px, min(${STAGE.maxHeightDesktop}px, calc(100dvh - ${reserved}px)))`,
     // Width derives from that budget so the portrait card never overflows its column or the viewport.

@@ -360,6 +360,7 @@
     "unsupportedCommandsDropped": "Skipped {count} unsupported command(s).",
     "liveState": "Live game state",
     "gameCommandFailedLabel": "Game command error",
+    "resetGame": "Start over",
     "voiceStart": "Start voice",
     "voiceStop": "Stop voice",
     "voiceMute": "Mute mic",
