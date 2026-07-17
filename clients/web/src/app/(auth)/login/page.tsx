@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PasswordInput } from "@/components/ui/password-input";
 import { clearSealedSecret } from "@/lib/sealed-secret";
 import { createClient } from "@/lib/supabase/client";
 import { useAccountStore } from "@/stores/account-store";
@@ -115,12 +116,13 @@ export default function LoginPage() {
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="password">{t("password")}</Label>
-            <Input
+            <PasswordInput
               id="password"
-              type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
+              showPasswordLabel={t("showPassword")}
+              hidePasswordLabel={t("hidePassword")}
             />
           </div>
           {error && (

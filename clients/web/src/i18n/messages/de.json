@@ -19,6 +19,8 @@
     "password": "Passwort",
     "confirmPassword": "Passwort bestätigen",
     "passwordPlaceholder": "Mindestens 8 Zeichen",
+    "showPassword": "Passwort anzeigen",
+    "hidePassword": "Passwort verbergen",
     "signingIn": "Anmelden...",
     "forgotPassword": "Passwort vergessen?",
     "noAccount": "Noch kein Konto?",

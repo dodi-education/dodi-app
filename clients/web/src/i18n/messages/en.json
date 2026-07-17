@@ -19,6 +19,8 @@
     "password": "Password",
     "confirmPassword": "Confirm password",
     "passwordPlaceholder": "At least 8 characters",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
     "signingIn": "Signing in...",
     "forgotPassword": "Forgot your password?",
     "noAccount": "Don't have an account?",
