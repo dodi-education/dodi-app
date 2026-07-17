@@ -463,6 +463,67 @@ describe("background image loop integration", () => {
     expect(disabled.getSeedText()).not.toContain("parent enabled AI background generation");
   });
 
+  it("uses an uploaded reference image as the background via use_uploaded_background", async () => {
+    const UPLOAD = "data:image/jpeg;base64,VVBMT0FE";
+    const PREPARED = "data:image/jpeg;base64,U01BTEw=";
+    let capturedTools: string[] | undefined;
+    const captured = capturingDriver([
+      turn([{ id: "t1", name: "use_uploaded_background", input: { imageIndex: 1 } }]),
+      turn([
+        {
+          id: "w1",
+          name: "write_game_code",
+          input: { code: compliant(PLACEHOLDER_BLOCK), markdown: "m", title: "T", capabilities: [] },
+        },
+      ]),
+      turn([]),
+    ]);
+    mockDriverFactory = (...args: unknown[]) => {
+      capturedTools = (args[1] as { tools?: Array<{ name: string }> }).tools?.map((t) => t.name);
+      return captured.driver;
+    };
+
+    const prepare = vi.fn().mockResolvedValue(PREPARED);
+    const result = await runGameAgent({
+      provider: "anthropic",
+      apiKey: "k",
+      model: "m",
+      task: { ...TASK, payload: { prompt: "a game", images: [UPLOAD] } },
+      onPrepareBackgroundImage: prepare,
+    });
+
+    // The tool is offered because the message carries reference images.
+    expect(capturedTools).toContain("use_uploaded_background");
+    expect(capturedTools).not.toContain("generate_background_image");
+    expect(prepare).toHaveBeenCalledWith(UPLOAD);
+    // Bounded upload rides the side channel; the transcript sees only the contract.
+    expect(captured.toolResults[0][0].content).toContain("{{BACKGROUND_IMAGE}}");
+    expect(captured.toolResults[0][0].content).not.toContain("VVBMT0FE");
+    expect(result.backgroundImage).toBe(PREPARED);
+    expect(result.codeBundle).toContain("{{BACKGROUND_IMAGE}}");
+    expect(result.validationPassed).toBe(true);
+  });
+
+  it("does not offer use_uploaded_background without attachments", async () => {
+    let capturedTools: string[] | undefined;
+    mockDriverFactory = (...args: unknown[]) => {
+      capturedTools = (args[1] as { tools?: Array<{ name: string }> }).tools?.map((t) => t.name);
+      return driverReturning([
+        {
+          toolCalls: [],
+          hasText: false,
+          expectsToolResults: false,
+          stopReason: "end_turn",
+          usage: emptyUsage,
+        },
+      ]);
+    };
+    await runGameAgent({ provider: "anthropic", apiKey: "k", model: "m", task: TASK }).catch(
+      () => {},
+    );
+    expect(capturedTools).not.toContain("use_uploaded_background");
+  });
+
   it("propagates a generation failure so the studio can surface it", async () => {
     const captured = capturingDriver([
       turn([{ id: "t1", name: "generate_background_image", input: { scene: "a meadow" } }]),

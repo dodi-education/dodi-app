@@ -481,6 +481,25 @@ export function GameStudio({ initialGame }: GameStudioProps) {
     return map[s];
   };
 
+  // Bound an image for the bundle: downscale to the stage size, recompress once
+  // if it's still heavy (~160k data-URL chars ≈ 120KB binary).
+  const boundBackgroundImage = async (dataUrl: string): Promise<string> => {
+    let scaled = await downscaleDataUrl(dataUrl, {
+      maxWidth: STAGE.logicalWidth,
+      maxHeight: STAGE.logicalHeight,
+      quality: 0.8,
+    });
+    if (scaled && scaled.length > 160_000) {
+      scaled = await downscaleDataUrl(dataUrl, {
+        maxWidth: STAGE.logicalWidth,
+        maxHeight: STAGE.logicalHeight,
+        quality: 0.6,
+      });
+    }
+    if (!scaled) throw new Error("Background image processing failed");
+    return scaled;
+  };
+
   // Client-side background-image generation injected into the agent loop (only
   // when the setting is on): resolve provider + vault key, generate at the
   // stage's aspect, and bound the result before it enters the bundle.
@@ -492,21 +511,7 @@ export function GameStudio({ initialGame }: GameStudioProps) {
       buildBackgroundPrompt(scene, game.perspective),
       { aspectRatio: `${STAGE.aspectW}:${STAGE.aspectH}` },
     );
-    let scaled = await downscaleDataUrl(generated.dataUrl, {
-      maxWidth: STAGE.logicalWidth,
-      maxHeight: STAGE.logicalHeight,
-      quality: 0.8,
-    });
-    // ~160k data-URL chars ≈ 120KB binary — recompress once if we're over.
-    if (scaled && scaled.length > 160_000) {
-      scaled = await downscaleDataUrl(generated.dataUrl, {
-        maxWidth: STAGE.logicalWidth,
-        maxHeight: STAGE.logicalHeight,
-        quality: 0.6,
-      });
-    }
-    if (!scaled) throw new Error("Background image processing failed");
-    return scaled;
+    return boundBackgroundImage(generated.dataUrl);
   };
 
   async function send(raw?: string): Promise<void> {
@@ -640,6 +645,9 @@ export function GameStudio({ initialGame }: GameStudioProps) {
           setStep(s);
         },
         onGenerateBackgroundImage: game.generateBackgroundImage ? makeBackgroundImage : undefined,
+        // Independent of the generate toggle: "use my attached image as the
+        // background" needs no image provider, just the bundle-size bound.
+        onPrepareBackgroundImage: boundBackgroundImage,
       });
 
       // Swap the background placeholder for the real image BEFORE anything

@@ -205,9 +205,55 @@ const GENERATE_BACKGROUND_IMAGE_TOOL: Anthropic.Tool = {
   },
 };
 
-/** The agent's toolset; the background-image tool appears only when enabled. */
-export function buildAgentTools(opts: { backgroundImage: boolean }): Anthropic.Tool[] {
-  return opts.backgroundImage ? [...AGENT_TOOLS, GENERATE_BACKGROUND_IMAGE_TOOL] : AGENT_TOOLS;
+const USE_UPLOADED_BACKGROUND_TOOL: Anthropic.Tool = {
+  name: "use_uploaded_background",
+  description:
+    "Use one of the parent's attached reference images as the game's background, verbatim. " +
+    "Call it BEFORE write_game_code when the parent asks for an attached image as the " +
+    "background. Your code then references the image via the " +
+    `${BACKGROUND_IMAGE_PLACEHOLDER} placeholder; the app substitutes the real image after ` +
+    "you finish, so never write a data: URL yourself.",
+  input_schema: {
+    type: "object" as const,
+    properties: {
+      imageIndex: {
+        type: "integer",
+        description:
+          "1-based number of the attached reference image to use, in the order the parent " +
+          "attached them. On update tasks the current-state screenshot does NOT count — " +
+          "1 is the first reference image after it.",
+      },
+    },
+    required: ["imageIndex"],
+  },
+};
+
+/**
+ * The agent's toolset. The background tools appear only when usable:
+ * generation when the setting + provider are on, uploaded backgrounds when the
+ * parent's message carries reference images.
+ */
+export function buildAgentTools(opts: {
+  backgroundImage: boolean;
+  uploadedImages?: boolean;
+}): Anthropic.Tool[] {
+  const extras: Anthropic.Tool[] = [];
+  if (opts.backgroundImage) extras.push(GENERATE_BACKGROUND_IMAGE_TOOL);
+  if (opts.uploadedImages) extras.push(USE_UPLOADED_BACKGROUND_TOOL);
+  return extras.length > 0 ? [...AGENT_TOOLS, ...extras] : AGENT_TOOLS;
+}
+
+/** Model-facing contract for referencing the background via the placeholder. */
+function backgroundUsageInstruction(firstLine: string): string {
+  return [
+    firstLine,
+    "",
+    "Reference it EXACTLY ONCE in your code by emitting this verbatim block inside <head>:",
+    BACKGROUND_STYLE_BLOCK,
+    "and use it on your game root, e.g.:",
+    "  background: var(--background-image) center / cover no-repeat;",
+    `Never write a data: URL yourself — the app substitutes ${BACKGROUND_IMAGE_PLACEHOLDER} with the real image after you finish. Layer your gradients/shapes and all text as DOM elements on top of it.`,
+  ].join("\n");
 }
 
 // ---------------------------------------------------------------------------
@@ -227,8 +273,15 @@ export interface ToolContext {
   generateBackgroundImage?: (scene: string) => Promise<string>;
   /** Background carried over from the existing bundle on update tasks. */
   carriedBackgroundImage?: string;
-  /** Background generated during THIS run (set by the tool case). */
+  /** Background generated or chosen during THIS run (set by the tool cases). */
   freshBackgroundImage?: string;
+  /** Parent-attached reference images (data URLs) from the current message. */
+  referenceImages?: string[];
+  /**
+   * Client-injected bound-for-bundle preparation (downscale/recompress) applied
+   * to an uploaded image before it becomes the background. Absent → used as-is.
+   */
+  prepareBackgroundImage?: (dataUrl: string) => Promise<string>;
   /** Image generations spent this run (cost guard). */
   backgroundImageCalls?: number;
   /** Set when a generation attempt threw (surfaced to the studio as a notice). */
@@ -416,15 +469,7 @@ export async function executeTool(
         // the model only ever sees the placeholder contract below.
         context.freshBackgroundImage = await context.generateBackgroundImage(scene);
         return {
-          result: [
-            "Background image generated successfully.",
-            "",
-            "Reference it EXACTLY ONCE in your code by emitting this verbatim block inside <head>:",
-            BACKGROUND_STYLE_BLOCK,
-            "and use it on your game root, e.g.:",
-            "  background: var(--background-image) center / cover no-repeat;",
-            `Never write a data: URL yourself — the app substitutes ${BACKGROUND_IMAGE_PLACEHOLDER} with the real image after you finish. Layer your gradients/shapes and all text as DOM elements on top of it.`,
-          ].join("\n"),
+          result: backgroundUsageInstruction("Background image generated successfully."),
         };
       } catch {
         context.backgroundImageFailed = true;
@@ -434,6 +479,50 @@ export async function executeTool(
             error:
               "Image generation failed — build the game without a generated background " +
               `and do NOT reference ${BACKGROUND_IMAGE_PLACEHOLDER}.`,
+          }),
+        };
+      }
+    }
+
+    case "use_uploaded_background": {
+      const refs = context.referenceImages ?? [];
+      if (refs.length === 0) {
+        return {
+          result: JSON.stringify({
+            ok: false,
+            error: "No attached reference images are available on this message.",
+          }),
+        };
+      }
+      const index =
+        typeof toolInput.imageIndex === "number" ? Math.trunc(toolInput.imageIndex) : NaN;
+      if (!Number.isFinite(index) || index < 1 || index > refs.length) {
+        return {
+          result: JSON.stringify({
+            ok: false,
+            error: `imageIndex must be between 1 and ${refs.length}.`,
+          }),
+        };
+      }
+      try {
+        const raw = refs[index - 1];
+        // Bound it for the bundle (client-side downscale) — never into the transcript.
+        context.freshBackgroundImage = context.prepareBackgroundImage
+          ? await context.prepareBackgroundImage(raw)
+          : raw;
+        return {
+          result: backgroundUsageInstruction(
+            `Attached image ${index} is now the game's background.`,
+          ),
+        };
+      } catch {
+        context.backgroundImageFailed = true;
+        return {
+          result: JSON.stringify({
+            ok: false,
+            error:
+              "The attached image could not be prepared as a background — build the game " +
+              `without it and do NOT reference ${BACKGROUND_IMAGE_PLACEHOLDER}.`,
           }),
         };
       }

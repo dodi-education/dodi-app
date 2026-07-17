@@ -105,6 +105,11 @@ export interface RunGameAgentParams {
    * tool. Returns a downscaled data URL; throws on failure.
    */
   onGenerateBackgroundImage?: (scene: string) => Promise<string>;
+  /**
+   * Client-injected bound-for-bundle preparation (downscale/recompress) for an
+   * uploaded reference image chosen as the background (use_uploaded_background).
+   */
+  onPrepareBackgroundImage?: (dataUrl: string) => Promise<string>;
 }
 
 /** How many of the most recent image-bearing user turns re-send their images. */
@@ -188,8 +193,17 @@ function buildCodeTaskUserMessage(task: AgentTaskRequest): string {
 }
 
 export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCodeResult> {
-  const { provider, apiKey, model, task, priorTurns, signal, onStep, onGenerateBackgroundImage } =
-    params;
+  const {
+    provider,
+    apiKey,
+    model,
+    task,
+    priorTurns,
+    signal,
+    onStep,
+    onGenerateBackgroundImage,
+    onPrepareBackgroundImage,
+  } = params;
   const emitStep = onStep ?? (() => {});
   const checkAborted = (): void => {
     if (signal?.aborted) throw new AgentAbortedError();
@@ -205,13 +219,20 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
       perspective: goalPayload.perspective ?? null,
     }),
     maxTokens: Math.min(AGENT_LIMITS.MAX_TOKENS, getModelOutputCap(provider, model)),
-    tools: buildAgentTools({ backgroundImage: Boolean(onGenerateBackgroundImage) }),
+    tools: buildAgentTools({
+      backgroundImage: Boolean(onGenerateBackgroundImage),
+      uploadedImages: Boolean(goalPayload.images?.length),
+    }),
   });
 
   // Update tasks preload the existing code so read_existing_game returns it —
   // with any inline background image swapped back to its placeholder so base64
   // never enters the model transcript (runs regardless of the current setting).
-  const toolContext: ToolContext = { generateBackgroundImage: onGenerateBackgroundImage };
+  const toolContext: ToolContext = {
+    generateBackgroundImage: onGenerateBackgroundImage,
+    prepareBackgroundImage: onPrepareBackgroundImage,
+    referenceImages: goalPayload.images,
+  };
   if (task.taskType === "update_game") {
     const payload = task.payload as UpdateGamePayload;
     const extracted = extractBackgroundImage(payload.existingCode);
@@ -276,7 +297,7 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
       call.name === "read_char_paths"
     ) {
       emitStep("reading_docs");
-    } else if (call.name === "generate_background_image") {
+    } else if (call.name === "generate_background_image" || call.name === "use_uploaded_background") {
       emitStep("generating_image");
     } else if (call.name === "write_game_code") {
       emitStep("writing_code");

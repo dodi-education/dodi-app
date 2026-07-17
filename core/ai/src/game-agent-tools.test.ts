@@ -19,6 +19,14 @@ describe("buildAgentTools", () => {
     expect(on.map((t) => t.name)).toContain("generate_background_image");
     expect(on).toHaveLength(AGENT_TOOLS.length + 1);
   });
+
+  it("adds use_uploaded_background only when the message has reference images", () => {
+    const withUploads = buildAgentTools({ backgroundImage: false, uploadedImages: true });
+    expect(withUploads.map((t) => t.name)).toContain("use_uploaded_background");
+    expect(withUploads.map((t) => t.name)).not.toContain("generate_background_image");
+    const both = buildAgentTools({ backgroundImage: true, uploadedImages: true });
+    expect(both).toHaveLength(AGENT_TOOLS.length + 2);
+  });
 });
 
 describe("executeTool generate_background_image", () => {
@@ -71,6 +79,54 @@ describe("executeTool generate_background_image", () => {
     expect(parsed.error).toContain("do NOT reference");
     expect(context.freshBackgroundImage).toBeUndefined();
     expect(context.backgroundImageFailed).toBe(true);
+  });
+});
+
+describe("executeTool use_uploaded_background", () => {
+  const REFS = ["data:image/jpeg;base64,Rk9UTzE=", "data:image/jpeg;base64,Rk9UTzI="];
+
+  it("errors when no reference images exist", async () => {
+    const { result } = await executeTool("use_uploaded_background", { imageIndex: 1 }, {});
+    expect(JSON.parse(result)).toMatchObject({ ok: false });
+  });
+
+  it("errors on an out-of-range or invalid index", async () => {
+    for (const imageIndex of [0, 3, Number.NaN, "1" as unknown as number]) {
+      const { result } = await executeTool(
+        "use_uploaded_background",
+        { imageIndex },
+        { referenceImages: REFS },
+      );
+      expect(JSON.parse(result)).toMatchObject({ ok: false });
+    }
+  });
+
+  it("prepares the chosen image and returns the placeholder contract only", async () => {
+    const prepare = vi.fn().mockResolvedValue("data:image/jpeg;base64,U01BTEw=");
+    const context: ToolContext = { referenceImages: REFS, prepareBackgroundImage: prepare };
+    const { result } = await executeTool("use_uploaded_background", { imageIndex: 2 }, context);
+    expect(prepare).toHaveBeenCalledWith(REFS[1]);
+    expect(context.freshBackgroundImage).toBe("data:image/jpeg;base64,U01BTEw=");
+    expect(result).toContain("Attached image 2");
+    expect(result).toContain("{{BACKGROUND_IMAGE}}");
+    expect(result).not.toContain("data:image");
+  });
+
+  it("uses the image as-is when no prepare callback is injected", async () => {
+    const context: ToolContext = { referenceImages: REFS };
+    await executeTool("use_uploaded_background", { imageIndex: 1 }, context);
+    expect(context.freshBackgroundImage).toBe(REFS[0]);
+  });
+
+  it("maps a preparation failure to a graceful error and flags it", async () => {
+    const context: ToolContext = {
+      referenceImages: REFS,
+      prepareBackgroundImage: vi.fn().mockRejectedValue(new Error("canvas died")),
+    };
+    const { result } = await executeTool("use_uploaded_background", { imageIndex: 1 }, context);
+    expect(JSON.parse(result)).toMatchObject({ ok: false });
+    expect(context.backgroundImageFailed).toBe(true);
+    expect(context.freshBackgroundImage).toBeUndefined();
   });
 });
 
