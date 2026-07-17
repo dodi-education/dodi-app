@@ -44,6 +44,7 @@ import {
   IconNumber123,
   IconPalette,
   IconPencil,
+  IconPhoto,
   IconPhotoAi,
   IconPlayerPlayFilled,
   IconPlus,
@@ -146,6 +147,7 @@ export type IconName =
   | "flask"
   | "seedling"
   | "ai"
+  | "photo"
   | "photo-ai";
 
 const ICONS: Record<IconName, ComponentType<TablerIconProps>> = {
@@ -221,6 +223,7 @@ const ICONS: Record<IconName, ComponentType<TablerIconProps>> = {
   flask: IconFlask,
   seedling: IconSeedling,
   ai: IconAi,
+  photo: IconPhoto,
   "photo-ai": IconPhotoAi,
 };
 

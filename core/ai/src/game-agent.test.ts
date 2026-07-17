@@ -1,7 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { GameCodeDriver, GameTurn } from "./game-agent-drivers";
-import { AGENT_LIMITS, GameAgentError, runGameAgent } from "./game-agent";
+import type {
+  GameCodeDriver,
+  GameToolResult,
+  GameTurn,
+  PriorTurn,
+  UserContent,
+} from "./game-agent-drivers";
+import { AGENT_LIMITS, GameAgentError, MAX_IMAGE_TURNS, runGameAgent } from "./game-agent";
 import type { AgentTaskRequest } from "@dodi/types/tasks";
 
 vi.mock("./game-agent-drivers", async (importOriginal) => {
@@ -117,5 +123,369 @@ describe("runGameAgent failure diagnostics", () => {
         sawText: true,
       });
     });
+  });
+});
+
+describe("prior-turn image window", () => {
+  const IMG = "data:image/png;base64,AAAA";
+
+  async function seededTurns(priorTurns: PriorTurn[]): Promise<PriorTurn[] | undefined> {
+    let captured: PriorTurn[] | undefined;
+    mockDriverFactory = () => {
+      const driver = driverReturning([
+        {
+          toolCalls: [],
+          hasText: false,
+          expectsToolResults: false,
+          stopReason: "end_turn",
+          usage: emptyUsage,
+        },
+      ]);
+      return {
+        ...driver,
+        seed: (turns: PriorTurn[] | undefined, _first: string | UserContent) => {
+          captured = turns;
+        },
+      };
+    };
+    await runGameAgent({
+      provider: "anthropic",
+      apiKey: "k",
+      model: "m",
+      task: TASK,
+      priorTurns,
+    }).catch(() => {});
+    return captured;
+  }
+
+  it("keeps images only on the most recent MAX_IMAGE_TURNS user turns", async () => {
+    const turns: PriorTurn[] = [
+      { role: "user", text: "one", images: [IMG] },
+      { role: "assistant", text: "a" },
+      { role: "user", text: "two", images: [IMG] },
+      { role: "assistant", text: "b" },
+      { role: "user", text: "three", images: [IMG] },
+    ];
+    const seeded = await seededTurns(turns);
+    expect(MAX_IMAGE_TURNS).toBe(2);
+    expect(seeded).toEqual([
+      { role: "user", text: "one\n[image attached]" },
+      { role: "assistant", text: "a" },
+      { role: "user", text: "two", images: [IMG] },
+      { role: "assistant", text: "b" },
+      { role: "user", text: "three", images: [IMG] },
+    ]);
+  });
+
+  it("leaves image-free histories untouched", async () => {
+    const turns: PriorTurn[] = [
+      { role: "user", text: "one" },
+      { role: "assistant", text: "a" },
+    ];
+    expect(await seededTurns(turns)).toEqual(turns);
+  });
+});
+
+describe("task attachments", () => {
+  const IMG = "data:image/png;base64,AAAA";
+
+  it("payload images ride the seeded task message", async () => {
+    let captured: string | UserContent | undefined;
+    mockDriverFactory = () => {
+      const driver = driverReturning([
+        {
+          toolCalls: [],
+          hasText: false,
+          expectsToolResults: false,
+          stopReason: "end_turn",
+          usage: emptyUsage,
+        },
+      ]);
+      return {
+        ...driver,
+        seed: (_turns: PriorTurn[] | undefined, first: string | UserContent) => {
+          captured = first;
+        },
+      };
+    };
+    await runGameAgent({
+      provider: "anthropic",
+      apiKey: "k",
+      model: "m",
+      task: { ...TASK, payload: { prompt: "a game", images: [IMG] } },
+    }).catch(() => {});
+
+    expect(captured).toBeTypeOf("object");
+    const content = captured as UserContent;
+    expect(content.images).toEqual([IMG]);
+    expect(content.text).toContain("1 reference image(s) are attached");
+  });
+
+  it("update tasks put the screenshot first, before reference images", async () => {
+    const SHOT = "data:image/jpeg;base64,SHOT";
+    let captured: string | UserContent | undefined;
+    mockDriverFactory = () => {
+      const driver = driverReturning([
+        {
+          toolCalls: [],
+          hasText: false,
+          expectsToolResults: false,
+          stopReason: "end_turn",
+          usage: emptyUsage,
+        },
+      ]);
+      return {
+        ...driver,
+        seed: (_turns: PriorTurn[] | undefined, first: string | UserContent) => {
+          captured = first;
+        },
+      };
+    };
+    await runGameAgent({
+      provider: "anthropic",
+      apiKey: "k",
+      model: "m",
+      task: {
+        ...TASK,
+        taskType: "update_game",
+        payload: {
+          instruction: "bigger font",
+          existingCode: "<html></html>",
+          screenshot: SHOT,
+          images: [IMG],
+        },
+      },
+    }).catch(() => {});
+
+    const content = captured as UserContent;
+    expect(content.images).toEqual([SHOT, IMG]);
+    expect(content.text).toContain("FIRST attached image is a screenshot");
+    expect(content.text).toContain("reference image(s) are attached after the screenshot");
+  });
+});
+
+describe("parent-owned title", () => {
+  const writeTurn = (title: string): GameTurn => ({
+    toolCalls: [
+      {
+        id: "w1",
+        name: "write_game_code",
+        input: { code: "<html><script>x=1</script></html>", markdown: "m", title, capabilities: [] },
+      },
+    ],
+    hasText: false,
+    expectsToolResults: true,
+    stopReason: "tool_use",
+    usage: emptyUsage,
+  });
+  const endTurn: GameTurn = {
+    toolCalls: [],
+    hasText: false,
+    expectsToolResults: false,
+    stopReason: "end_turn",
+    usage: emptyUsage,
+  };
+
+  it("update tasks keep the game's existing title even when the model writes a new one", async () => {
+    mockDriverFactory = () => driverReturning([writeTurn("Model Renamed It"), endTurn]);
+    const result = await runGameAgent({
+      provider: "anthropic",
+      apiKey: "k",
+      model: "m",
+      task: {
+        ...TASK,
+        taskType: "update_game",
+        payload: {
+          instruction: "bigger font",
+          existingCode: "<html></html>",
+          title: "Buchstabensuppe",
+        },
+      },
+    });
+    expect(result.title).toBe("Buchstabensuppe");
+  });
+
+  it("generate tasks keep a parent-set title", async () => {
+    mockDriverFactory = () => driverReturning([writeTurn("Model Title"), endTurn]);
+    const result = await runGameAgent({
+      provider: "anthropic",
+      apiKey: "k",
+      model: "m",
+      task: { ...TASK, payload: { prompt: "a game", title: "Apple Orchard" } },
+    });
+    expect(result.title).toBe("Apple Orchard");
+  });
+
+  it("falls back to the model's title when no title exists", async () => {
+    mockDriverFactory = () => driverReturning([writeTurn("Model Title"), endTurn]);
+    const result = await runGameAgent({
+      provider: "anthropic",
+      apiKey: "k",
+      model: "m",
+      task: { ...TASK, payload: { prompt: "a game" } },
+    });
+    expect(result.title).toBe("Model Title");
+  });
+});
+
+describe("background image loop integration", () => {
+  const BG = "data:image/jpeg;base64,QkFDS0dST1VORA==";
+  const PLACEHOLDER_BLOCK = `<style id="background-image">:root{--background-image:url("{{BACKGROUND_IMAGE}}")}</style>`;
+  const compliant = (extra: string): string =>
+    `<!doctype html><html><body>${extra}<script>
+      window.addEventListener('message', function (e) {
+        if (e.data.type === 'dodi:init') parent.postMessage({ type: 'game:ready', payload: { capabilities: [] } }, '*');
+        if (e.data.type === 'dodi:command') parent.postMessage({ type: 'game:result' }, '*');
+      });
+    </script></body></html>`;
+
+  const turn = (toolCalls: GameTurn["toolCalls"]): GameTurn => ({
+    toolCalls,
+    hasText: false,
+    expectsToolResults: toolCalls.length > 0,
+    stopReason: toolCalls.length > 0 ? "tool_use" : "end_turn",
+    usage: emptyUsage,
+  });
+
+  function capturingDriver(turns: GameTurn[]) {
+    const toolResults: GameToolResult[][] = [];
+    let seedText = "";
+    let i = 0;
+    const driver: GameCodeDriver = {
+      seed: (_t, first) => {
+        seedText = typeof first === "string" ? first : first.text;
+      },
+      addUserMessage: () => {},
+      addToolResults: (rs) => {
+        toolResults.push(rs);
+      },
+      runTurn: () => Promise.resolve(turns[Math.min(i++, turns.length - 1)]),
+    };
+    return { driver, toolResults, getSeedText: () => seedText };
+  }
+
+  it("generates via the injected callback; base64 never enters the transcript", async () => {
+    const code = compliant(PLACEHOLDER_BLOCK);
+    const captured = capturingDriver([
+      turn([{ id: "t1", name: "generate_background_image", input: { scene: "a sunny meadow" } }]),
+      turn([
+        {
+          id: "t2",
+          name: "write_game_code",
+          input: { code, markdown: "m", title: "T", capabilities: [] },
+        },
+      ]),
+      turn([]),
+    ]);
+    mockDriverFactory = () => captured.driver;
+
+    const generate = vi.fn().mockResolvedValue(BG);
+    const result = await runGameAgent({
+      provider: "anthropic",
+      apiKey: "k",
+      model: "m",
+      task: TASK,
+      onGenerateBackgroundImage: generate,
+    });
+
+    expect(generate).toHaveBeenCalledWith("a sunny meadow");
+    // Tool result carries the placeholder contract, never the image bytes.
+    const bgResult = captured.toolResults[0][0];
+    expect(bgResult.content).toContain("{{BACKGROUND_IMAGE}}");
+    expect(bgResult.content).not.toContain("data:image");
+    // The bundle stays in placeholder form; the image rides the side channel.
+    expect(result.codeBundle).toContain("{{BACKGROUND_IMAGE}}");
+    expect(result.backgroundImage).toBe(BG);
+    expect(result.validationPassed).toBe(true);
+  });
+
+  it("update tasks reverse-swap the existing background out of the model's view", async () => {
+    const placeholderCode = compliant(PLACEHOLDER_BLOCK);
+    const inlinedCode = placeholderCode.replace("{{BACKGROUND_IMAGE}}", BG);
+    const captured = capturingDriver([
+      turn([{ id: "r1", name: "read_existing_game", input: {} }]),
+      turn([
+        {
+          id: "w1",
+          name: "write_game_code",
+          input: { code: placeholderCode, markdown: "m", title: "T", capabilities: [] },
+        },
+      ]),
+      turn([]),
+    ]);
+    mockDriverFactory = () => captured.driver;
+
+    const result = await runGameAgent({
+      provider: "anthropic",
+      apiKey: "k",
+      model: "m",
+      task: {
+        ...TASK,
+        taskType: "update_game",
+        payload: { instruction: "tweak it", existingCode: inlinedCode },
+      },
+    });
+
+    // read_existing_game must show placeholder form, never the base64.
+    const readResult = captured.toolResults[0][0];
+    expect(readResult.content).toContain("{{BACKGROUND_IMAGE}}");
+    expect(readResult.content).not.toContain(BG);
+    // The carried image survives while still referenced.
+    expect(result.backgroundImage).toBe(BG);
+    expect(result.codeBundle).toContain("{{BACKGROUND_IMAGE}}");
+    // The task message tells the model the background exists.
+    expect(captured.getSeedText()).toContain("existing game has a generated background image");
+  });
+
+  it("nudges the model to call the tool when enabled (and only then)", async () => {
+    const writeTurn = turn([
+      {
+        id: "w1",
+        name: "write_game_code",
+        input: { code: compliant(""), markdown: "m", title: "T", capabilities: [] },
+      },
+    ]);
+
+    const enabled = capturingDriver([writeTurn, turn([])]);
+    mockDriverFactory = () => enabled.driver;
+    await runGameAgent({
+      provider: "anthropic",
+      apiKey: "k",
+      model: "m",
+      task: TASK,
+      onGenerateBackgroundImage: vi.fn().mockResolvedValue(BG),
+    });
+    expect(enabled.getSeedText()).toContain("parent enabled AI background generation");
+
+    const disabled = capturingDriver([writeTurn, turn([])]);
+    mockDriverFactory = () => disabled.driver;
+    await runGameAgent({ provider: "anthropic", apiKey: "k", model: "m", task: TASK });
+    expect(disabled.getSeedText()).not.toContain("parent enabled AI background generation");
+  });
+
+  it("propagates a generation failure so the studio can surface it", async () => {
+    const captured = capturingDriver([
+      turn([{ id: "t1", name: "generate_background_image", input: { scene: "a meadow" } }]),
+      turn([
+        {
+          id: "w1",
+          name: "write_game_code",
+          input: { code: compliant(""), markdown: "m", title: "T", capabilities: [] },
+        },
+      ]),
+      turn([]),
+    ]);
+    mockDriverFactory = () => captured.driver;
+
+    const result = await runGameAgent({
+      provider: "anthropic",
+      apiKey: "k",
+      model: "m",
+      task: TASK,
+      onGenerateBackgroundImage: vi.fn().mockRejectedValue(new Error("provider down")),
+    });
+
+    expect(result.backgroundImage).toBeUndefined();
+    expect(result.backgroundImageFailed).toBe(true);
   });
 });

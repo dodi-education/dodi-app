@@ -4,6 +4,7 @@
  * Defines the request/response shapes for the coding agent API.
  */
 
+import type { GamePerspective } from "./games";
 import type { ProgressKind, SuccessCriteria } from "./success";
 import type { TokenUsage } from "./usage";
 
@@ -21,6 +22,10 @@ export interface GenerateGamePayload {
   learningGoal?: string;
   /** Parent's plain-language success definition (how Dodi knows the child succeeded). */
   successDefinition?: string;
+  /** Required camera perspective for the design (absent = agent chooses). */
+  perspective?: GamePerspective;
+  /** Parent-attached reference images (data URLs) — visual guidance for the design. */
+  images?: string[];
 }
 
 export interface UpdateGamePayload {
@@ -30,6 +35,12 @@ export interface UpdateGamePayload {
   title?: string;
   learningGoal?: string;
   successDefinition?: string;
+  /** Required camera perspective for the design (absent = agent chooses). */
+  perspective?: GamePerspective;
+  /** Parent-attached reference images (data URLs) — visual guidance for the design. */
+  images?: string[];
+  /** Screenshot (data URL) of the game as it currently looks — attached first. */
+  screenshot?: string;
 }
 
 export interface ReadGameStatePayload {
@@ -68,6 +79,14 @@ export interface AgentCodeResult {
   tags: string[];
   codeBundle: string;
   markdown: string;
+  /**
+   * Generated (or carried-over) background image as a data URL. The codeBundle
+   * references it via the {{BACKGROUND_IMAGE}} placeholder — callers inject it
+   * (injectBackgroundImage) before rendering/persisting.
+   */
+  backgroundImage?: string;
+  /** An image-generation attempt threw during the run (studio shows a notice). */
+  backgroundImageFailed?: boolean;
   metadata: Record<string, unknown>;
   learningGoal: string;
   successDefinition: string;

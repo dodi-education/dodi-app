@@ -12,6 +12,7 @@ import type OpenAI from "openai";
 import type { AIProviderId } from "@dodi/types/ai";
 import type { TokenUsage } from "@dodi/types/usage";
 
+import { parseImageDataUrl } from "./data-url";
 import { anthropicUsage, geminiUsage, xaiUsage } from "./usage-map";
 import { createXaiClient } from "./xai";
 
@@ -36,9 +37,7 @@ export async function analyzeGameState(
   params: AnalyzeGameStateParams,
 ): Promise<{ analysis: string; usage: TokenUsage }> {
   const { provider, model, apiKey, gameState, question, gameMarkdown, gameCodeBundle } = params;
-  const snapshotImage = params.snapshot
-    ? params.snapshot.match(/^data:image\/(png|jpeg|gif|webp);base64,(.+)$/)
-    : null;
+  const snapshotImage = params.snapshot ? parseImageDataUrl(params.snapshot) : null;
   const hasSnapshot = !!snapshotImage;
 
   const userText = [`Question: ${question}`, "", "## Current Game State", JSON.stringify(gameState, null, 2)];
@@ -66,7 +65,7 @@ export async function analyzeGameState(
     const genModel = genAI.getGenerativeModel({ model, systemInstruction: systemPrompt });
     const parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [];
     if (snapshotImage) {
-      parts.push({ inlineData: { mimeType: `image/${snapshotImage[1]}`, data: snapshotImage[2] } });
+      parts.push({ inlineData: { mimeType: snapshotImage.mediaType, data: snapshotImage.base64 } });
     }
     parts.push({ text: userText.join("\n") });
     const response = await genModel.generateContent(parts);
@@ -83,7 +82,7 @@ export async function analyzeGameState(
     if (snapshotImage) {
       content.push({
         type: "image_url",
-        image_url: { url: `data:image/${snapshotImage[1]};base64,${snapshotImage[2]}` },
+        image_url: { url: `data:${snapshotImage.mediaType};base64,${snapshotImage.base64}` },
       });
     }
     content.push({ type: "text", text: userText.join("\n") });
@@ -109,8 +108,8 @@ export async function analyzeGameState(
       type: "image",
       source: {
         type: "base64",
-        media_type: `image/${snapshotImage[1]}` as "image/png" | "image/jpeg" | "image/gif" | "image/webp",
-        data: snapshotImage[2],
+        media_type: snapshotImage.mediaType,
+        data: snapshotImage.base64,
       },
     });
   }

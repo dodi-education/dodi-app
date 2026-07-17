@@ -1,7 +1,8 @@
 /**
- * Downscale a game-surface capture (PNG data URL from `get_snapshot`) into a
- * small JPEG thumbnail for the snapshot gallery info blob — keeps every gallery
- * decrypt cheap and the sealed blob far under its size cap.
+ * Browser-side raster utilities: downscale a capture/upload into a bounded JPEG
+ * data URL. Used for snapshot-gallery thumbnails (tiny, keeps every gallery
+ * decrypt cheap), studio reference-image attachments, and edit-time screenshots
+ * (bounded before they hit provider requests + the sealed transcript).
  */
 
 function loadImage(dataUrl: string): Promise<HTMLImageElement> {
@@ -13,11 +14,18 @@ function loadImage(dataUrl: string): Promise<HTMLImageElement> {
   });
 }
 
+export interface DownscaleOptions {
+  maxWidth?: number;
+  maxHeight?: number;
+  /** JPEG quality 0..1. */
+  quality?: number;
+}
+
 export async function downscaleDataUrl(
   dataUrl: string,
-  maxWidth = 240,
-  maxHeight = 300,
+  options: DownscaleOptions = {},
 ): Promise<string | null> {
+  const { maxWidth = 240, maxHeight = 300, quality = 0.7 } = options;
   try {
     const img = await loadImage(dataUrl);
     if (img.width < 1 || img.height < 1) return null;
@@ -33,8 +41,23 @@ export async function downscaleDataUrl(
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, width, height);
     ctx.drawImage(img, 0, 0, width, height);
-    return canvas.toDataURL("image/jpeg", 0.7);
+    return canvas.toDataURL("image/jpeg", quality);
   } catch {
     return null;
   }
+}
+
+/** Read a picked/pasted file into a data URL. */
+export function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error("file could not be read"));
+    reader.readAsDataURL(file);
+  });
+}
+
+/** Append incoming attachments to the existing set, bounded to `max`. */
+export function capImages(existing: string[], incoming: string[], max: number): string[] {
+  return [...existing, ...incoming].slice(0, max);
 }

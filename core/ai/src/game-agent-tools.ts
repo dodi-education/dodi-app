@@ -2,13 +2,26 @@
  * Tool definitions and execution for the game-coding agent's agentic loop.
  *
  * The agent calls these during its multi-turn conversation to write, validate,
- * and read game code. Pure execution (no I/O) so it runs client-side in the
- * browser loop — the provider key never leaves the vault.
+ * and read game code. Execution is side-effect-free except for the injected
+ * `generateBackgroundImage` callback (the only I/O, provided by the client) —
+ * everything runs client-side in the browser loop so the provider key never
+ * leaves the vault.
  */
 
 import Anthropic from "@anthropic-ai/sdk";
 
 import { validateGameCode, type ValidationResult } from "@dodi/games/agent-validator";
+import {
+  BACKGROUND_IMAGE_PLACEHOLDER,
+  BACKGROUND_STYLE_BLOCK,
+  hasBackgroundPlaceholder,
+} from "@dodi/games/background-image";
+import {
+  CHAR_STROKE_COORDS,
+  CHAR_STROKES_GUIDE,
+  getCharStrokes,
+  type CharStrokes,
+} from "@dodi/games/char-strokes";
 import {
   BRIDGE_INTERFACE_TEMPLATE,
   coerceProgressKind,
@@ -145,17 +158,81 @@ export const AGENT_TOOLS: Anthropic.Tool[] = [
       properties: {},
     },
   },
+  {
+    name: "read_char_paths",
+    description:
+      "Correct stroke geometry, ORDER, and DIRECTION (German school print convention) for " +
+      "letters A-Z/a-z, digits 0-9, and German ÄÖÜäöüß. Use this for ANY game that traces, " +
+      "draws, or animates how characters are written — never invent letterform paths. " +
+      "Request exactly the characters the game teaches.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        chars: {
+          type: "string",
+          description: 'All characters to fetch, as one string (e.g. "ABCabc123ä").',
+        },
+      },
+      required: ["chars"],
+    },
+  },
 ];
+
+/** Cost guard: image generations allowed per agent run. */
+export const MAX_BACKGROUND_IMAGE_CALLS = 2;
+
+const GENERATE_BACKGROUND_IMAGE_TOOL: Anthropic.Tool = {
+  name: "generate_background_image",
+  description:
+    "Generate the game's background illustration with the account's image model. Call it " +
+    "BEFORE write_game_code (at most once — regenerate only if the parent asks for a " +
+    "different background). Your code then references the image via the " +
+    `${BACKGROUND_IMAGE_PLACEHOLDER} placeholder; the app substitutes the real image after ` +
+    "you finish, so never write a data: URL yourself.",
+  input_schema: {
+    type: "object" as const,
+    properties: {
+      scene: {
+        type: "string",
+        description:
+          "Scene description for the illustration: environment/backdrop only (no main " +
+          "characters, no interactive objects, no UI). It MUST be text-free — absolutely no " +
+          "letters, numbers, words, or signs anywhere in the image (game text stays DOM/SVG " +
+          "so it can be translated). Match the game's theme, mood, and required perspective.",
+      },
+    },
+    required: ["scene"],
+  },
+};
+
+/** The agent's toolset; the background-image tool appears only when enabled. */
+export function buildAgentTools(opts: { backgroundImage: boolean }): Anthropic.Tool[] {
+  return opts.backgroundImage ? [...AGENT_TOOLS, GENERATE_BACKGROUND_IMAGE_TOOL] : AGENT_TOOLS;
+}
 
 // ---------------------------------------------------------------------------
 // Tool execution context
 // ---------------------------------------------------------------------------
 
 export interface ToolContext {
-  /** Current game code (for read_existing_game) */
+  /** Current game code (for read_existing_game) — always placeholder form. */
   existingCode?: string;
   /** Current game markdown (for read_existing_game) */
   existingMarkdown?: string;
+  /**
+   * Client-injected image generation (the only I/O a tool may do). Present only
+   * when the game's "generate background image" setting is on AND an image
+   * provider is resolvable. Returns a downscaled data URL; throws on failure.
+   */
+  generateBackgroundImage?: (scene: string) => Promise<string>;
+  /** Background carried over from the existing bundle on update tasks. */
+  carriedBackgroundImage?: string;
+  /** Background generated during THIS run (set by the tool case). */
+  freshBackgroundImage?: string;
+  /** Image generations spent this run (cost guard). */
+  backgroundImageCalls?: number;
+  /** Set when a generation attempt threw (surfaced to the studio as a notice). */
+  backgroundImageFailed?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -179,11 +256,11 @@ export interface LastWriteResult {
 // Tool execution
 // ---------------------------------------------------------------------------
 
-export function executeTool(
+export async function executeTool(
   toolName: string,
   toolInput: Record<string, unknown>,
   context: ToolContext,
-): { result: string; writeResult?: LastWriteResult } {
+): Promise<{ result: string; writeResult?: LastWriteResult }> {
   switch (toolName) {
     case "write_game_code": {
       const code = typeof toolInput.code === "string" ? toolInput.code : "";
@@ -242,7 +319,13 @@ export function executeTool(
 
     case "validate_game": {
       const code = typeof toolInput.code === "string" ? toolInput.code : "";
-      const validation: ValidationResult = validateGameCode(code);
+      // "Image available" = generated this run, or carried over AND still
+      // referenced (a carried background may be dropped deliberately — e.g.
+      // the parent asked to remove it — so its absence is never an error).
+      const hasBackgroundImage =
+        context.freshBackgroundImage !== undefined ||
+        (context.carriedBackgroundImage !== undefined && hasBackgroundPlaceholder(code));
+      const validation: ValidationResult = validateGameCode(code, { hasBackgroundImage });
 
       return {
         result: JSON.stringify({
@@ -280,6 +363,80 @@ export function executeTool(
           SUCCESS_SYSTEM_TEMPLATE,
         ].join("\n"),
       };
+    }
+
+    case "read_char_paths": {
+      const raw = typeof toolInput.chars === "string" ? toolInput.chars : "";
+      const unique = [...new Set([...raw.replace(/\s+/g, "")])].slice(0, 96);
+      if (unique.length === 0) {
+        return { result: JSON.stringify({ ok: false, error: "chars is required" }) };
+      }
+      const glyphs: Record<string, CharStrokes> = {};
+      const missing: string[] = [];
+      for (const ch of unique) {
+        const strokes = getCharStrokes(ch);
+        if (strokes) glyphs[ch] = strokes;
+        else missing.push(ch);
+      }
+      return {
+        result: [
+          CHAR_STROKES_GUIDE,
+          "",
+          JSON.stringify({ coords: CHAR_STROKE_COORDS, glyphs, missing }),
+        ].join("\n"),
+      };
+    }
+
+    case "generate_background_image": {
+      if (!context.generateBackgroundImage) {
+        return {
+          result: JSON.stringify({
+            ok: false,
+            error: "Background image generation is not enabled for this game.",
+          }),
+        };
+      }
+      const scene = typeof toolInput.scene === "string" ? toolInput.scene.trim() : "";
+      if (!scene) {
+        return { result: JSON.stringify({ ok: false, error: "scene is required" }) };
+      }
+      context.backgroundImageCalls = (context.backgroundImageCalls ?? 0) + 1;
+      if (context.backgroundImageCalls > MAX_BACKGROUND_IMAGE_CALLS) {
+        return {
+          result: JSON.stringify({
+            ok: false,
+            error:
+              "Image generation budget for this build is used up — keep the image you " +
+              "already generated.",
+          }),
+        };
+      }
+      try {
+        // The data URL stays OUT of the tool result (and thus the transcript):
+        // the model only ever sees the placeholder contract below.
+        context.freshBackgroundImage = await context.generateBackgroundImage(scene);
+        return {
+          result: [
+            "Background image generated successfully.",
+            "",
+            "Reference it EXACTLY ONCE in your code by emitting this verbatim block inside <head>:",
+            BACKGROUND_STYLE_BLOCK,
+            "and use it on your game root, e.g.:",
+            "  background: var(--background-image) center / cover no-repeat;",
+            `Never write a data: URL yourself — the app substitutes ${BACKGROUND_IMAGE_PLACEHOLDER} with the real image after you finish. Layer your gradients/shapes and all text as DOM elements on top of it.`,
+          ].join("\n"),
+        };
+      } catch {
+        context.backgroundImageFailed = true;
+        return {
+          result: JSON.stringify({
+            ok: false,
+            error:
+              "Image generation failed — build the game without a generated background " +
+              `and do NOT reference ${BACKGROUND_IMAGE_PLACEHOLDER}.`,
+          }),
+        };
+      }
     }
 
     case "read_existing_game": {

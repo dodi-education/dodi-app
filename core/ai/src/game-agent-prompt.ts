@@ -6,10 +6,12 @@
  * server-blind generation) as well as any node job.
  */
 
+import { designLanguageDoc, PERSPECTIVE_LABELS } from "@dodi/games/design-language";
 import { BRIDGE_INTERFACE_TEMPLATE } from "@dodi/games/game-spec";
 import { GAME_CANVAS_TEMPLATE } from "@dodi/games/stage";
 import { SUCCESS_SYSTEM_TEMPLATE } from "@dodi/games/success";
 import { standardCommandsDoc } from "@dodi/games/toolbox";
+import type { GamePerspective } from "@dodi/types/games";
 
 export interface AgentPromptContext {
   age?: number;
@@ -19,6 +21,8 @@ export interface AgentPromptContext {
    * to shape difficulty/visuals/concept — never copied into game content.
    */
   learningContext?: string;
+  /** Parent-configured camera perspective (null/undefined = agent chooses). */
+  perspective?: GamePerspective | null;
 }
 
 export function buildAgentSystemPrompt(context: AgentPromptContext): string {
@@ -51,6 +55,14 @@ explicitly asks for it, you MUST NOT:
   on-screen text, characters, or narration.
 - Reference the child by name in your change summary or any message you write.
 Use generic, neutral character names (e.g. "the explorer", "Robot", "the player") instead.
+
+## Attachments
+The parent may attach images to a request:
+- Reference images are visual guidance — match their style, layout, mood, or subject in
+  your design. NEVER copy text out of an image into the game.
+- On update tasks, the first attached image may be a screenshot of the game exactly as it
+  looks right now. Use it to judge the current visual state against the Visual Design
+  Language below before deciding what to change.
 
 ## Sandbox Constraints
 The game runs inside an iframe with sandbox="allow-scripts" and NO network access.
@@ -89,6 +101,8 @@ report every required metric through state.dodi.metrics and game:progress messag
 
 ${GAME_CANVAS_TEMPLATE}
 
+${designLanguageDoc(context.perspective)}
+
 ## Game Structure Requirements
 - Single HTML file with inline CSS and JS
 - Fill the fixed game canvas exactly (see the Game Canvas contract above) — never assume the full device viewport
@@ -96,7 +110,11 @@ ${GAME_CANVAS_TEMPLATE}
 - Kid-safe content — no violence, scary themes, or inappropriate content
 - Age-appropriate difficulty based on the child's age
 - All visible text in the game should be in the child's configured language (${context.language})
-- Colorful, engaging visual design
+- Follow the Visual Design Language above — it is a hard requirement, not a suggestion${
+    context.perspective
+      ? `\n- REQUIRED PERSPECTIVE: ${PERSPECTIVE_LABELS[context.perspective]} — the game MUST be designed from this perspective (see the perspective rules above)`
+      : ""
+  }
 
 ## Code Quality
 - Use modern JavaScript (ES2020+)

@@ -76,6 +76,13 @@ const ParentGetSaveStateMessageSchema = z.object({
   token: BridgeTokenSchema,
 });
 
+// Answered by the host-injected sandbox shim (not game code): capture the game
+// surface and reply game:event { event: "host_snapshot", snapshot }.
+const ParentHostSnapshotMessageSchema = z.object({
+  type: z.literal("dodi:host_snapshot"),
+  token: BridgeTokenSchema,
+});
+
 const GameReadyMessageSchema = z.object({
   type: z.literal("game:ready"),
   token: BridgeTokenSchema,
@@ -146,6 +153,7 @@ export const ParentToGameMessageSchema = z.discriminatedUnion("type", [
   ParentGetStateMessageSchema,
   ParentGetSaveStateMessageSchema,
   ParentSuccessMessageSchema,
+  ParentHostSnapshotMessageSchema,
 ]);
 
 export const GameToParentMessageSchema = z.discriminatedUnion("type", [

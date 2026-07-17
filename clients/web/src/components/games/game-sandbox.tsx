@@ -37,6 +37,13 @@ export interface GameSandboxHandle {
   requestSaveState: () => void;
   /** Tell the game the success goal was met so it can celebrate. */
   notifySuccess: (payload?: { summary?: string; metrics?: MetricsSummary }) => void;
+  /**
+   * Capture the current game surface as a data URL. With `preferGameCapture`
+   * the game's own `get_snapshot` implementation is asked first (best fidelity
+   * for canvas games); the host-injected shim capture is the universal
+   * fallback. Resolves null when both fail (never rejects).
+   */
+  requestSnapshot: (opts?: { preferGameCapture?: boolean }) => Promise<string | null>;
 }
 
 interface GameSandboxProps {
@@ -60,20 +67,81 @@ const SANDBOX_CSP =
 
 const INIT_RETRY_INTERVAL_MS = 300;
 const INIT_MAX_RETRIES = 10;
+/** How long each snapshot capture attempt (game-implemented or shim) may take. */
+const SNAPSHOT_TIMEOUT_MS = 2500;
 
-/** Inject a tiny shim before the first <script> that logs all incoming AND outgoing messages. */
-function injectDebugShim(html: string): string {
+/**
+ * Inject the host shim before the first <script>: logs all incoming messages
+ * and answers `dodi:host_snapshot` with a capture of the game surface — the
+ * dominant <canvas> when one covers the view, else a DOM rasterization via SVG
+ * foreignObject. Fully inline (CSP: no network) and game-cooperation-free.
+ */
+function injectHostShim(html: string): string {
   const shim = `<script>
-window.addEventListener('message',function(e){
-  var d=e.data;
-  if(d&&typeof d==='object'&&typeof d.type==='string'){
-    console.log('[iframe-shim] IN: '+d.type,d);
+(function(){
+  function dominantCanvas(){
+    var vw=window.innerWidth,vh=window.innerHeight;
+    var list=document.querySelectorAll('canvas');
+    var best=null,bestArea=0;
+    for(var i=0;i<list.length;i++){
+      var r=list[i].getBoundingClientRect();
+      var area=r.width*r.height;
+      if(area>bestArea){best=list[i];bestArea=area;}
+    }
+    // Only trust a canvas that actually IS the game surface, not a decoration.
+    if(!best||bestArea<vw*vh*0.5)return null;
+    return best;
   }
-});
-// Outgoing messages can't be logged from inside the sandbox: it's origin "null",
-// so reassigning the cross-origin parent.postMessage throws a SecurityError. The
-// host logs the messages it receives instead (see GameSandbox onMessage).
-console.log('[iframe-shim] shim active');
+  function captureCanvas(){
+    try{
+      var c=dominantCanvas();
+      if(!c||!c.width||!c.height)return null;
+      return c.toDataURL('image/png');
+    }catch(e){return null;}
+  }
+  function captureDom(done){
+    try{
+      var w=document.documentElement.clientWidth||window.innerWidth;
+      var h=document.documentElement.clientHeight||window.innerHeight;
+      if(!w||!h)return done(null);
+      var clone=document.documentElement.cloneNode(true);
+      var scripts=clone.querySelectorAll('script');
+      for(var i=0;i<scripts.length;i++)scripts[i].parentNode.removeChild(scripts[i]);
+      var xml=new XMLSerializer().serializeToString(clone);
+      var svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+w+'" height="'+h+'">'
+        +'<foreignObject width="100%" height="100%">'+xml+'</foreignObject></svg>';
+      var img=new Image();
+      img.onload=function(){
+        try{
+          var canvas=document.createElement('canvas');
+          canvas.width=w;canvas.height=h;
+          var ctx=canvas.getContext('2d');
+          ctx.fillStyle='#ffffff';ctx.fillRect(0,0,w,h);
+          ctx.drawImage(img,0,0);
+          done(canvas.toDataURL('image/png'));
+        }catch(e){done(null);}
+      };
+      img.onerror=function(){done(null);};
+      img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
+    }catch(e){done(null);}
+  }
+  window.addEventListener('message',function(e){
+    var d=e.data;
+    if(!d||typeof d!=='object'||typeof d.type!=='string')return;
+    console.log('[iframe-shim] IN: '+d.type,d);
+    if(d.type!=='dodi:host_snapshot')return;
+    var reply=function(snapshot){
+      parent.postMessage({type:'game:event',token:d.token,payload:{event:'host_snapshot',snapshot:snapshot}},'*');
+    };
+    var fromCanvas=captureCanvas();
+    if(fromCanvas)return reply(fromCanvas);
+    captureDom(reply);
+  });
+  // Outgoing messages can't be logged from inside the sandbox: it's origin "null",
+  // so reassigning the cross-origin parent.postMessage throws a SecurityError. The
+  // host logs the messages it receives instead (see GameSandbox onMessage).
+  console.log('[iframe-shim] shim active');
+})();
 </script>`;
   // Insert before the first <script> in the body so it runs first
   const idx = html.indexOf("<script>");
@@ -83,7 +151,7 @@ console.log('[iframe-shim] shim active');
   return html + shim;
 }
 
-function buildSandboxSrcDoc(codeBundle: string): string {
+export function buildSandboxSrcDoc(codeBundle: string): string {
   const cspMeta = `<meta http-equiv=\"Content-Security-Policy\" content=\"${SANDBOX_CSP}\" />`;
 
   let doc: string;
@@ -107,7 +175,7 @@ function buildSandboxSrcDoc(codeBundle: string): string {
     ].join("\n");
   }
 
-  return injectDebugShim(doc);
+  return injectHostShim(doc);
 }
 
 export const GameSandbox = forwardRef<GameSandboxHandle, GameSandboxProps>(
@@ -121,6 +189,8 @@ export const GameSandbox = forwardRef<GameSandboxHandle, GameSandboxProps>(
     const gameReadyRef = useRef(false);
     const initRetryRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const pendingCommandsRef = useRef<GameCommand[]>([]);
+    // Pending requestSnapshot resolver — fed by game:event snapshot/host_snapshot.
+    const snapshotResolverRef = useRef<((snapshot: string | null) => void) | null>(null);
     // Read goal/savedState from refs inside init so identity changes never re-init the game.
     const goalRef = useRef<GameGoal | undefined>(goal);
     goalRef.current = goal;
@@ -176,6 +246,35 @@ export const GameSandbox = forwardRef<GameSandboxHandle, GameSandboxProps>(
       }, INIT_RETRY_INTERVAL_MS);
     }, [bridgeToken, gameId, postEnvelope, clearInitRetry]);
 
+    // One capture attempt: ask the game (get_snapshot command) or the shim
+    // (dodi:host_snapshot), then wait for the matching game:event reply.
+    const requestSnapshotOnce = useCallback(
+      (kind: "game" | "host") =>
+        new Promise<string | null>((resolve) => {
+          let settled = false;
+          const finish = (snapshot: string | null): void => {
+            if (settled) return;
+            settled = true;
+            if (snapshotResolverRef.current === finish) snapshotResolverRef.current = null;
+            resolve(snapshot);
+          };
+          // A newer request supersedes any stalled one.
+          snapshotResolverRef.current?.(null);
+          snapshotResolverRef.current = finish;
+          if (kind === "game") {
+            postEnvelope({
+              type: "dodi:command",
+              token: bridgeToken,
+              payload: { command: { type: "get_snapshot" } },
+            });
+          } else {
+            postEnvelope({ type: "dodi:host_snapshot", token: bridgeToken });
+          }
+          setTimeout(() => finish(null), SNAPSHOT_TIMEOUT_MS);
+        }),
+      [bridgeToken, postEnvelope],
+    );
+
     useImperativeHandle(
       ref,
       () => ({
@@ -214,8 +313,16 @@ export const GameSandbox = forwardRef<GameSandboxHandle, GameSandboxProps>(
             payload: payload ?? {},
           });
         },
+        async requestSnapshot(opts) {
+          gameDebug("sandbox", "requestSnapshot called", opts);
+          if (opts?.preferGameCapture) {
+            const viaGame = await requestSnapshotOnce("game");
+            if (viaGame) return viaGame;
+          }
+          return requestSnapshotOnce("host");
+        },
       }),
-      [bridgeToken, postEnvelope],
+      [bridgeToken, postEnvelope, requestSnapshotOnce],
     );
 
     useEffect(() => {
@@ -276,6 +383,17 @@ export const GameSandbox = forwardRef<GameSandboxHandle, GameSandboxProps>(
             progressLabel: message.payload.progressLabel,
             metrics: message.payload.metrics,
           });
+        }
+
+        if (
+          message.type === "game:event" &&
+          (message.payload.event === "snapshot" || message.payload.event === "host_snapshot")
+        ) {
+          const resolver = snapshotResolverRef.current;
+          if (resolver) {
+            const snapshot = (message.payload as Record<string, unknown>).snapshot;
+            resolver(typeof snapshot === "string" && snapshot ? snapshot : null);
+          }
         }
 
         if (message.type === "game:result" && message.payload.state) {

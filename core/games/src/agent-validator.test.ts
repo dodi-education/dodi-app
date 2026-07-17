@@ -49,3 +49,33 @@ describe("validateGameCode — capabilities", () => {
     expect(r.errors.some((e) => e.includes("set_generated_image"))).toBe(true);
   });
 });
+
+describe("validateGameCode — background image placeholder", () => {
+  const withPlaceholder = () =>
+    bundle(``).replace(
+      "<body>",
+      `<body><style id="background-image">:root{--background-image:url("{{BACKGROUND_IMAGE}}")}</style>`,
+    );
+
+  it("image available + placeholder referenced → valid", () => {
+    const r = validateGameCode(withPlaceholder(), { hasBackgroundImage: true });
+    expect(r.valid).toBe(true);
+  });
+
+  it("image available + placeholder missing → error", () => {
+    const r = validateGameCode(bundle(``), { hasBackgroundImage: true });
+    expect(r.valid).toBe(false);
+    expect(r.errors.some((e) => e.includes("{{BACKGROUND_IMAGE}}"))).toBe(true);
+  });
+
+  it("no image + placeholder referenced → error", () => {
+    const r = validateGameCode(withPlaceholder(), { hasBackgroundImage: false });
+    expect(r.valid).toBe(false);
+    expect(r.errors.some((e) => e.includes("no background image"))).toBe(true);
+  });
+
+  it("no image + no placeholder → valid; option omitted → never checked", () => {
+    expect(validateGameCode(bundle(``), { hasBackgroundImage: false }).valid).toBe(true);
+    expect(validateGameCode(withPlaceholder()).valid).toBe(true);
+  });
+});

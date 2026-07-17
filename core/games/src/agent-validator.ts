@@ -6,6 +6,7 @@
  * browser agent loop (client-side generation) and anywhere else.
  */
 
+import { BACKGROUND_IMAGE_PLACEHOLDER, hasBackgroundPlaceholder } from "./background-image";
 import type { MetricKey, ProgressKind } from "./success";
 import { STANDARD_TOOLS_BY_NAME } from "./toolbox";
 
@@ -23,6 +24,11 @@ export interface ValidateGameOptions {
   requiredMetrics?: MetricKey[];
   /** Standardized commands the game declared — checked ⊆ registry + present in code. */
   capabilities?: string[];
+  /**
+   * Whether a generated background image exists for this build — the code must
+   * then reference {{BACKGROUND_IMAGE}} (and must not without one).
+   */
+  hasBackgroundImage?: boolean;
 }
 
 const BLOCKED_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
@@ -93,6 +99,23 @@ export function validateGameCode(
       if (!new RegExp(`\\b${metric}\\b`).test(code)) {
         errors.push(`Goal game must report the '${metric}' metric required by its success criteria`);
       }
+    }
+  }
+
+  // Background-image placeholder consistency (see @dodi/games/background-image).
+  if (options?.hasBackgroundImage !== undefined) {
+    const referenced = hasBackgroundPlaceholder(code);
+    if (options.hasBackgroundImage && !referenced) {
+      errors.push(
+        `A background image was generated but the code never references ${BACKGROUND_IMAGE_PLACEHOLDER} ` +
+          `— emit the background-image style block and use var(--background-image)`,
+      );
+    }
+    if (!options.hasBackgroundImage && referenced) {
+      errors.push(
+        `Code references ${BACKGROUND_IMAGE_PLACEHOLDER} but no background image exists — ` +
+          `remove the background-image style block`,
+      );
     }
   }
 

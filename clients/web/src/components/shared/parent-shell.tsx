@@ -123,18 +123,6 @@ export function ParentShell({ children }: { children: React.ReactNode }) {
               >
                 <Icon name="menu" size={22} stroke={2} />
               </button>
-              <Link
-                href="/parent/dashboard"
-                className="shrink-0"
-                aria-label={t("dashboard")}
-              >
-                <Image
-                  src="/images/dodi-head-active.png"
-                  alt=""
-                  width={26}
-                  height={26}
-                />
-              </Link>
             </div>
           }
           right={<KidViewButton compact />}

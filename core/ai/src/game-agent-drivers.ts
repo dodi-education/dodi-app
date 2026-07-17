@@ -17,6 +17,7 @@ import type OpenAI from "openai";
 import type { AIProviderId } from "@dodi/types/ai";
 import type { TokenUsage } from "@dodi/types/usage";
 
+import { parseImageDataUrl } from "./data-url";
 import { AGENT_TOOLS } from "./game-agent-tools";
 import { anthropicUsage, xaiUsage } from "./usage-map";
 import { createXaiClient } from "./xai";
@@ -25,6 +26,23 @@ import { createXaiClient } from "./xai";
 export interface PriorTurn {
   role: "user" | "assistant";
   text: string;
+  /** Attached images as data URLs (reference images on user turns). */
+  images?: string[];
+}
+
+/** A user message with optional image attachments (data URLs). */
+export interface UserContent {
+  text: string;
+  images?: string[];
+}
+
+function toUserContent(content: string | UserContent): UserContent {
+  return typeof content === "string" ? { text: content } : content;
+}
+
+/** Attached data URLs that parse as provider-acceptable images. */
+function validImages(images: string[] | undefined): string[] {
+  return (images ?? []).filter((i) => parseImageDataUrl(i) !== null);
 }
 
 /** Provider-neutral tool call surfaced from a model turn. */
@@ -55,9 +73,9 @@ export interface GameTurn {
 
 export interface GameCodeDriver {
   /** Initialize the transcript from any resumed turns + the concrete task. */
-  seed(priorTurns: PriorTurn[] | undefined, firstUserMessage: string): void;
-  /** Append a plain user message (nudges, validation-fix requests). */
-  addUserMessage(text: string): void;
+  seed(priorTurns: PriorTurn[] | undefined, firstUserMessage: string | UserContent): void;
+  /** Append a user message (nudges, validation-fix requests, attachments). */
+  addUserMessage(content: string | UserContent): void;
   /** Run one model turn; appends the assistant reply to the transcript. */
   runTurn(): Promise<GameTurn>;
   /** Append tool results for the calls returned by the last turn. */
@@ -70,6 +88,8 @@ export interface GameDriverOptions {
   model: string;
   systemPrompt: string;
   maxTokens: number;
+  /** Toolset for this run (defaults to the base AGENT_TOOLS). */
+  tools?: Anthropic.Tool[];
 }
 
 function parseJsonObject(raw: string | undefined | null): Record<string, unknown> {
@@ -88,17 +108,52 @@ function parseJsonObject(raw: string | undefined | null): Record<string, unknown
 // Anthropic driver
 // ---------------------------------------------------------------------------
 
+/** Content blocks for one turn — images first, then the text. Empty when blank. */
+function toAnthropicBlocks(content: UserContent): Anthropic.ContentBlockParam[] {
+  const blocks: Anthropic.ContentBlockParam[] = [];
+  for (const image of validImages(content.images)) {
+    const parsed = parseImageDataUrl(image)!;
+    blocks.push({
+      type: "image",
+      source: { type: "base64", media_type: parsed.mediaType, data: parsed.base64 },
+    });
+  }
+  const text = content.text.trim();
+  if (text) blocks.push({ type: "text", text });
+  return blocks;
+}
+
+/**
+ * User content for a request message: plain string when text-only (keeps the
+ * transcript readable in devtools), content blocks when images ride along.
+ */
+export function toAnthropicContent(
+  content: string | UserContent,
+): string | Anthropic.ContentBlockParam[] {
+  const normalized = toUserContent(content);
+  if (validImages(normalized.images).length === 0) return normalized.text;
+  return toAnthropicBlocks(normalized);
+}
+
 /** Collapse consecutive same-role turns so the API always sees alternating roles. */
 function toSeedMessages(turns: PriorTurn[]): Anthropic.MessageParam[] {
   const out: Anthropic.MessageParam[] = [];
   for (const turn of turns) {
-    const text = turn.text.trim();
-    if (!text) continue;
+    const blocks = toAnthropicBlocks({ text: turn.text, images: turn.images });
+    if (blocks.length === 0) continue;
     const last = out[out.length - 1];
     if (last && last.role === turn.role) {
-      last.content = `${last.content as string}\n\n${text}`;
+      const prev: Anthropic.ContentBlockParam[] =
+        typeof last.content === "string"
+          ? [{ type: "text", text: last.content }]
+          : (last.content as Anthropic.ContentBlockParam[]);
+      last.content = [...prev, ...blocks];
     } else {
-      out.push({ role: turn.role, content: text });
+      // Text-only turns stay plain strings (the common case); mixed turns are blocks.
+      out.push({
+        role: turn.role,
+        content: blocks.length === 1 && blocks[0].type === "text" ? blocks[0].text : blocks,
+      });
     }
   }
   return out;
@@ -135,6 +190,7 @@ class AnthropicGameDriver implements GameCodeDriver {
   #client: Anthropic;
   #model: string;
   #maxTokens: number;
+  #tools: Anthropic.Tool[];
   #system: Anthropic.TextBlockParam[];
   #messages: Anthropic.MessageParam[] = [];
 
@@ -142,6 +198,7 @@ class AnthropicGameDriver implements GameCodeDriver {
     this.#client = new Anthropic({ apiKey: opts.apiKey, dangerouslyAllowBrowser: true });
     this.#model = opts.model;
     this.#maxTokens = opts.maxTokens;
+    this.#tools = opts.tools ?? AGENT_TOOLS;
     // Cache the static prefix (tools render before system, so this one breakpoint
     // covers both). The rolling per-turn breakpoint is added at request time.
     this.#system = [
@@ -149,13 +206,13 @@ class AnthropicGameDriver implements GameCodeDriver {
     ];
   }
 
-  seed(priorTurns: PriorTurn[] | undefined, firstUserMessage: string): void {
+  seed(priorTurns: PriorTurn[] | undefined, firstUserMessage: string | UserContent): void {
     this.#messages = priorTurns?.length ? toSeedMessages(priorTurns) : [];
-    this.#messages.push({ role: "user", content: firstUserMessage });
+    this.#messages.push({ role: "user", content: toAnthropicContent(firstUserMessage) });
   }
 
-  addUserMessage(text: string): void {
-    this.#messages.push({ role: "user", content: text });
+  addUserMessage(content: string | UserContent): void {
+    this.#messages.push({ role: "user", content: toAnthropicContent(content) });
   }
 
   async runTurn(): Promise<GameTurn> {
@@ -167,7 +224,7 @@ class AnthropicGameDriver implements GameCodeDriver {
       model: this.#model,
       max_tokens: this.#maxTokens,
       system: this.#system,
-      tools: AGENT_TOOLS,
+      tools: this.#tools,
       messages: messagesWithRollingCache(this.#messages),
     });
     const response = await stream.finalMessage();
@@ -224,6 +281,25 @@ export function toOpenAITools(
   }));
 }
 
+/**
+ * User content for an OpenAI-compatible request: plain string when text-only,
+ * content parts (image_url takes the data URL directly) when images ride along.
+ */
+export function toXaiContent(
+  content: string | UserContent,
+): string | OpenAI.Chat.Completions.ChatCompletionContentPart[] {
+  const normalized = toUserContent(content);
+  const images = validImages(normalized.images);
+  if (images.length === 0) return normalized.text;
+  const parts: OpenAI.Chat.Completions.ChatCompletionContentPart[] = images.map((url) => ({
+    type: "image_url",
+    image_url: { url },
+  }));
+  const text = normalized.text.trim();
+  if (text) parts.push({ type: "text", text });
+  return parts;
+}
+
 class XaiGameDriver implements GameCodeDriver {
   #client: OpenAI;
   #model: string;
@@ -237,20 +313,25 @@ class XaiGameDriver implements GameCodeDriver {
     this.#model = opts.model;
     this.#maxTokens = opts.maxTokens;
     this.#systemPrompt = opts.systemPrompt;
-    this.#tools = toOpenAITools(AGENT_TOOLS);
+    this.#tools = toOpenAITools(opts.tools ?? AGENT_TOOLS);
   }
 
-  seed(priorTurns: PriorTurn[] | undefined, firstUserMessage: string): void {
+  seed(priorTurns: PriorTurn[] | undefined, firstUserMessage: string | UserContent): void {
     this.#messages = [{ role: "system", content: this.#systemPrompt }];
     for (const turn of priorTurns ?? []) {
       const text = turn.text.trim();
-      if (text) this.#messages.push({ role: turn.role, content: text });
+      // Assistant turns are text-only in the OpenAI shape; user turns may carry images.
+      if (turn.role === "user" && validImages(turn.images).length > 0) {
+        this.#messages.push({ role: "user", content: toXaiContent({ text, images: turn.images }) });
+      } else if (text) {
+        this.#messages.push({ role: turn.role, content: text });
+      }
     }
-    this.#messages.push({ role: "user", content: firstUserMessage });
+    this.#messages.push({ role: "user", content: toXaiContent(firstUserMessage) });
   }
 
-  addUserMessage(text: string): void {
-    this.#messages.push({ role: "user", content: text });
+  addUserMessage(content: string | UserContent): void {
+    this.#messages.push({ role: "user", content: toXaiContent(content) });
   }
 
   async runTurn(): Promise<GameTurn> {

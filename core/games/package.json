@@ -9,6 +9,9 @@
     "./success": "./src/success.ts",
     "./game-spec": "./src/game-spec.ts",
     "./stage": "./src/stage.ts",
+    "./design-language": "./src/design-language.ts",
+    "./background-image": "./src/background-image.ts",
+    "./char-strokes": "./src/char-strokes.ts",
     "./bridge-protocol": "./src/bridge-protocol.ts",
     "./toolbox": "./src/toolbox.ts",
     "./command-markers": "./src/command-markers.ts",
@@ -24,7 +27,8 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "docs:strokes": "jiti scripts/generate-char-strokes-refpage.ts"
   },
   "dependencies": {
     "@dodi/types": "workspace:*",

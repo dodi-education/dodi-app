@@ -213,3 +213,70 @@
     animation: none;
   }
 }
+
+/* ── Game-studio code viewer — Prism token colors ─────────────────────────
+   Prism emits global `.token …` classes; scope them under `.dodi-code` so the
+   theme applies only to the studio's syntax-highlighted code panel. Light
+   theme (GitHub-light inspired) tuned for the white editor surface set in
+   `code-viewer.tsx`. */
+.dodi-code .token.comment,
+.dodi-code .token.prolog,
+.dodi-code .token.doctype,
+.dodi-code .token.cdata {
+  color: #8a94a4;
+  font-style: italic;
+}
+.dodi-code .token.punctuation {
+  color: #6b7787;
+}
+.dodi-code .token.namespace {
+  opacity: 0.7;
+}
+/* HTML tag names, inserted */
+.dodi-code .token.tag,
+.dodi-code .token.inserted {
+  color: #1f883d;
+}
+/* numbers, booleans, constants, CSS properties, symbols */
+.dodi-code .token.number,
+.dodi-code .token.boolean,
+.dodi-code .token.constant,
+.dodi-code .token.property,
+.dodi-code .token.symbol {
+  color: #0550ae;
+}
+/* strings, attribute values, chars, urls */
+.dodi-code .token.string,
+.dodi-code .token.attr-value,
+.dodi-code .token.char,
+.dodi-code .token.url,
+.dodi-code .language-css .token.string,
+.dodi-code .style .token.string {
+  color: #0a3069;
+}
+/* attribute names, functions, class names, selectors, builtins */
+.dodi-code .token.attr-name,
+.dodi-code .token.function,
+.dodi-code .token.class-name,
+.dodi-code .token.selector,
+.dodi-code .token.builtin {
+  color: #8250df;
+}
+/* keywords, at-rules, operators, entities, regex, important, deleted */
+.dodi-code .token.keyword,
+.dodi-code .token.atrule,
+.dodi-code .token.operator,
+.dodi-code .token.entity,
+.dodi-code .token.regex,
+.dodi-code .token.variable,
+.dodi-code .token.important,
+.dodi-code .token.deleted {
+  color: #cf222e;
+}
+.dodi-code .token.important,
+.dodi-code .token.bold {
+  font-weight: 700;
+}
+.dodi-code .token.italic {
+  font-style: italic;
+}

@@ -10,8 +10,13 @@ vi.mock("openai", () => ({
   },
 }));
 
-import { AGENT_TOOLS } from "./game-agent-tools";
-import { createGameDriver, toOpenAITools } from "./game-agent-drivers";
+import { AGENT_TOOLS, buildAgentTools } from "./game-agent-tools";
+import {
+  createGameDriver,
+  toAnthropicContent,
+  toOpenAITools,
+  toXaiContent,
+} from "./game-agent-drivers";
 
 beforeEach(() => {
   create.mockReset();
@@ -163,5 +168,98 @@ describe("XaiGameDriver", () => {
     driver.seed(undefined, "go");
     const turn = await driver.runTurn();
     expect(turn.toolCalls).toEqual([{ id: "c1", name: "write_game_code", input: {} }]);
+  });
+});
+
+const PNG = "data:image/png;base64,AAAA";
+const JPEG = "data:image/jpeg;base64,BBBB";
+
+describe("content mappers", () => {
+  it("text-only content stays a plain string", () => {
+    expect(toAnthropicContent("hello")).toBe("hello");
+    expect(toAnthropicContent({ text: "hello" })).toBe("hello");
+    expect(toXaiContent({ text: "hello", images: [] })).toBe("hello");
+  });
+
+  it("invalid attachments are dropped (falls back to plain text)", () => {
+    expect(toAnthropicContent({ text: "hi", images: ["nonsense", "data:text/plain;base64,x"] })).toBe(
+      "hi",
+    );
+  });
+
+  it("toAnthropicContent puts image blocks first, text last", () => {
+    const content = toAnthropicContent({ text: "match this style", images: [PNG, JPEG] });
+    expect(content).toEqual([
+      { type: "image", source: { type: "base64", media_type: "image/png", data: "AAAA" } },
+      { type: "image", source: { type: "base64", media_type: "image/jpeg", data: "BBBB" } },
+      { type: "text", text: "match this style" },
+    ]);
+  });
+
+  it("toXaiContent maps images to image_url parts with the raw data URL", () => {
+    const content = toXaiContent({ text: "match this style", images: [PNG] });
+    expect(content).toEqual([
+      { type: "image_url", image_url: { url: PNG } },
+      { type: "text", text: "match this style" },
+    ]);
+  });
+});
+
+describe("driver toolset override", () => {
+  it("xAI driver forwards the run's toolset to the request", async () => {
+    create.mockResolvedValueOnce({
+      choices: [{ finish_reason: "stop", message: { role: "assistant", content: "ok" } }],
+      usage: { prompt_tokens: 1, completion_tokens: 1 },
+    });
+    const driver = createGameDriver("xai", {
+      apiKey: "k",
+      model: "grok-4.3",
+      systemPrompt: "s",
+      maxTokens: 10,
+      tools: buildAgentTools({ backgroundImage: true }),
+    });
+    driver.seed(undefined, "go");
+    await driver.runTurn();
+    const req = create.mock.calls[0][0] as { tools: Array<{ function: { name: string } }> };
+    expect(req.tools).toHaveLength(AGENT_TOOLS.length + 1);
+    expect(req.tools.map((t) => t.function.name)).toContain("generate_background_image");
+  });
+});
+
+describe("XaiGameDriver image seeding", () => {
+  it("prior user turns and the first message carry image parts", async () => {
+    create.mockResolvedValueOnce({
+      choices: [{ finish_reason: "stop", message: { role: "assistant", content: "ok" } }],
+      usage: { prompt_tokens: 1, completion_tokens: 1 },
+    });
+
+    const driver = createGameDriver("xai", {
+      apiKey: "k",
+      model: "grok-4.3",
+      systemPrompt: "SYS",
+      maxTokens: 10,
+    });
+    driver.seed(
+      [
+        { role: "user", text: "earlier prompt", images: [PNG] },
+        { role: "assistant", text: "earlier reply" },
+      ],
+      { text: "update it", images: [JPEG] },
+    );
+    await driver.runTurn();
+
+    const req = create.mock.calls[0][0] as {
+      messages: Array<{ role: string; content: unknown }>;
+    };
+    expect(req.messages.map((m) => m.role)).toEqual(["system", "user", "assistant", "user"]);
+    expect(req.messages[1].content).toEqual([
+      { type: "image_url", image_url: { url: PNG } },
+      { type: "text", text: "earlier prompt" },
+    ]);
+    expect(req.messages[2].content).toBe("earlier reply");
+    expect(req.messages[3].content).toEqual([
+      { type: "image_url", image_url: { url: JPEG } },
+      { type: "text", text: "update it" },
+    ]);
   });
 });

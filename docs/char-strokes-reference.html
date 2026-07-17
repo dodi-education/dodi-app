@@ -1,0 +1,647 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stroke order · char-strokes reference</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; margin: 0; }
+  body { font-family: ui-rounded, "Segoe UI", system-ui, sans-serif; background: #f1f5f9; color: #0f172a; padding: 28px 24px 48px; }
+  header { max-width: 1180px; margin: 0 auto 10px; }
+  h1 { font-size: 26px; letter-spacing: -0.02em; }
+  header p { color: #475569; font-size: 14px; margin-top: 6px; max-width: 72ch; line-height: 1.55; }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: center; margin: 14px auto 6px; max-width: 1180px;
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 12px 16px; font-size: 13px; color: #334155; }
+  .legend b { font-weight: 700; }
+  .chip { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%;
+    border: 2px solid #2563eb; color: #2563eb; font-weight: 700; font-size: 11px; background: #fff; margin-right: 6px; }
+  .swatches i { display: inline-block; width: 14px; height: 5px; border-radius: 3px; margin-right: 4px; }
+  section { max-width: 1180px; margin: 26px auto 0; }
+  h2 { font-size: 15px; letter-spacing: 0.08em; color: #64748b; margin-bottom: 10px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 10px; }
+  .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 8px 8px 4px; cursor: pointer;
+    transition: box-shadow .15s, transform .15s; }
+  .card:hover, .card:focus-visible { box-shadow: 0 8px 22px rgba(15, 23, 42, 0.12); transform: translateY(-2px); outline: none; }
+  .card svg { width: 100%; display: block; }
+  figcaption { display: flex; justify-content: space-between; align-items: baseline; padding: 2px 6px 4px; font-weight: 700; font-size: 15px; }
+  figcaption span { font-weight: 500; font-size: 11px; color: #94a3b8; }
+  footer { max-width: 1180px; margin: 34px auto 0; font-size: 12px; color: #94a3b8; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Stroke Order — Letters &amp; Numbers</h1>
+  <p>How each character is written (German school print convention): the numbered dots show
+     where every stroke <b>starts</b> and the <b>order</b> the strokes are drawn in; the arrows
+     show the <b>writing direction</b>. Hover or tap a character to play its stroke order.</p>
+</header>
+<div class="legend">
+  <span><span class="chip">1</span><b>Start point</b> &amp; stroke number</span>
+  <span>➤ <b>Direction</b> (arrow mid-stroke + at the end)</span>
+  <span class="swatches"><b>Order:</b> <i style="background:#0f172a"></i>1 <i style="background:#2563eb"></i>2 <i style="background:#dc2626"></i>3 <i style="background:#16a34a"></i>4 <i style="background:#9333ea"></i>5 <i style="background:#d97706"></i>6</span>
+  <span>Dashed lines: cap line · x-height · baseline · descender</span>
+</div>
+<svg width="0" height="0" style="position:absolute"><defs><marker id="arr0" viewBox="0 0 8 8" refX="5.6" refY="4" markerWidth="7" markerHeight="7"
+       markerUnits="userSpaceOnUse" orient="auto"><path d="M0.8,0.8 L6.8,4 L0.8,7.2 Z" fill="#0f172a"/></marker><marker id="arr1" viewBox="0 0 8 8" refX="5.6" refY="4" markerWidth="7" markerHeight="7"
+       markerUnits="userSpaceOnUse" orient="auto"><path d="M0.8,0.8 L6.8,4 L0.8,7.2 Z" fill="#2563eb"/></marker><marker id="arr2" viewBox="0 0 8 8" refX="5.6" refY="4" markerWidth="7" markerHeight="7"
+       markerUnits="userSpaceOnUse" orient="auto"><path d="M0.8,0.8 L6.8,4 L0.8,7.2 Z" fill="#dc2626"/></marker><marker id="arr3" viewBox="0 0 8 8" refX="5.6" refY="4" markerWidth="7" markerHeight="7"
+       markerUnits="userSpaceOnUse" orient="auto"><path d="M0.8,0.8 L6.8,4 L0.8,7.2 Z" fill="#16a34a"/></marker><marker id="arr4" viewBox="0 0 8 8" refX="5.6" refY="4" markerWidth="7" markerHeight="7"
+       markerUnits="userSpaceOnUse" orient="auto"><path d="M0.8,0.8 L6.8,4 L0.8,7.2 Z" fill="#9333ea"/></marker><marker id="arr5" viewBox="0 0 8 8" refX="5.6" refY="4" markerWidth="7" markerHeight="7"
+       markerUnits="userSpaceOnUse" orient="auto"><path d="M0.8,0.8 L6.8,4 L0.8,7.2 Z" fill="#d97706"/></marker></defs></svg>
+<section><h2>DIGITS</h2><div class="grid"><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order 0"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="50,11 40,15.6 32.7,28 30,45 32.7,62 40,74.4 50,79 60,74.4 67.3,62 70,45 67.3,28 60,15.6 50,11" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(60,74.4) rotate(-59.51426629366846)"/><g class="badge"><circle cx="50" cy="11" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="50" y="13.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g></svg>
+    <figcaption>0<span>1 stroke</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order 1"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="36,28 44,19.5 52,11 52,28.3 52,45.5 52,62.8 52,80" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(52,45.5) rotate(90)"/><g class="badge"><circle cx="36" cy="28" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="36" y="30.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g></svg>
+    <figcaption>1<span>1 stroke</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order 2"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="33,24 38,14 50,11 62,14 67,24 64,35 53,48 41,60 34,70 33,80 50,80 68,80" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(41,60) rotate(124.99202019855868)"/><g class="badge"><circle cx="33" cy="24" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="33" y="26.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g></svg>
+    <figcaption>2<span>1 stroke</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order 3"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="34,20 41,12 53,11 63,15 66,25 62,35 52,41 49,42 52,43 63,49 67,60 63,72 52,79 40,79 32,71" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(52,43) rotate(28.610459665965216)"/><g class="badge"><circle cx="34" cy="20" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="34" y="22.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g></svg>
+    <figcaption>3<span>1 stroke</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order 4"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="56,12 48,25.3 40,38.7 32,52 51,52 70,52" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(32,52) rotate(0)"/><polyline class="stroke" points="58,24 58,42.7 58,61.3 58,80" fill="none" stroke="#2563eb"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr1)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#2563eb" opacity="0.95"
+    transform="translate(58,61.3) rotate(90)"/><g class="badge"><circle cx="56" cy="12" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="56" y="14.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g><g class="badge"><circle cx="58" cy="24" r="5.6" fill="#fff" stroke="#2563eb" stroke-width="1.4"/>
+        <text x="58" y="26.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#2563eb">2</text></g></svg>
+    <figcaption>4<span>2 strokes</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order 5"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="38,12 37,27 36,40 46,37 57,38 65,46 67,58 63,70 52,78 40,78 32,70" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(67,58) rotate(108.43494882292202)"/><polyline class="stroke" points="38,12 52,12 66,12" fill="none" stroke="#2563eb"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr1)"/><g class="badge"><circle cx="38" cy="12" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="38" y="14.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g><g class="badge"><circle cx="38" cy="12" r="5.6" fill="#fff" stroke="#2563eb" stroke-width="1.4"/>
+        <text x="38" y="14.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#2563eb">2</text></g></svg>
+    <figcaption>5<span>2 strokes</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order 6"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="63,13 52,11 43,16 36,27 32,42 31,56 35,69 44,78 55,79 64,73 67,62 63,52 54,46 44,47 36,54 32,62" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(64,73) rotate(-74.74488129694222)"/><g class="badge"><circle cx="63" cy="13" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="63" y="15.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g></svg>
+    <figcaption>6<span>1 stroke</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order 7"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="32,12 50,12 68,12 59.3,34.7 50.7,57.3 42,80" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(59.3,34.7) rotate(110.83337015701451)"/><polyline class="stroke" points="38,48 50,48 62,48" fill="none" stroke="#2563eb"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr1)"/><g class="badge"><circle cx="32" cy="12" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="32" y="14.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g><g class="badge"><circle cx="38" cy="48" r="5.6" fill="#fff" stroke="#2563eb" stroke-width="1.4"/>
+        <text x="38" y="50.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#2563eb">2</text></g></svg>
+    <figcaption>7<span>2 strokes</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order 8"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="63,20 54,12 43,12 35,19 35,29 42,38 54,44 63,51 66,62 62,73 51,79 40,76 34,67 35,57 43,48 55,41 62,33 63,24 57,15" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(51,79) rotate(-164.74488129694225)"/><g class="badge"><circle cx="63" cy="20" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="63" y="22.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g></svg>
+    <figcaption>8<span>1 stroke</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order 9"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="61,14.7 51.3,12.1 42.3,17.1 37.3,27.8 38.4,40.1 45,49.3 54.7,51.9 63.7,46.9 68.7,36.2 67.6,23.9 61,14.7" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(54.7,51.9) rotate(-29.054604099077146)"/><polyline class="stroke" points="69,30 66.7,46.7 64.3,63.3 62,80" fill="none" stroke="#2563eb"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr1)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#2563eb" opacity="0.95"
+    transform="translate(64.3,63.3) rotate(97.84170321510307)"/><g class="badge"><circle cx="61" cy="14.7" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="61" y="17.3" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g><g class="badge"><circle cx="69" cy="30" r="5.6" fill="#fff" stroke="#2563eb" stroke-width="1.4"/>
+        <text x="69" y="32.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#2563eb">2</text></g></svg>
+    <figcaption>9<span>2 strokes</span></figcaption>
+  </figure></div></section><section><h2>CAPITALS</h2><div class="grid"><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order A"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="27,80 34.7,56.7 42.3,33.3 50,10" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(42.3,33.3) rotate(-71.71272038493811)"/><polyline class="stroke" points="50,10 57.7,33.3 65.3,56.7 73,80" fill="none" stroke="#2563eb"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr1)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#2563eb" opacity="0.95"
+    transform="translate(65.3,56.7) rotate(71.71272038493811)"/><polyline class="stroke" points="35,55 50,55 65,55" fill="none" stroke="#dc2626"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr2)"/><g class="badge"><circle cx="27" cy="80" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="27" y="82.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g><g class="badge"><circle cx="50" cy="10" r="5.6" fill="#fff" stroke="#2563eb" stroke-width="1.4"/>
+        <text x="50" y="12.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#2563eb">2</text></g><g class="badge"><circle cx="35" cy="55" r="5.6" fill="#fff" stroke="#dc2626" stroke-width="1.4"/>
+        <text x="35" y="57.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#dc2626">3</text></g></svg>
+    <figcaption>A<span>3 strokes</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order B"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="30,10 30,27.5 30,45 30,62.5 30,80" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(30,62.5) rotate(90)"/><polyline class="stroke" points="30,10 52,10 61.5,12.3 68.5,18.8 71,27.5 68.5,36.3 61.5,42.7 52,45 30,45 55,45 64.5,47.3 71.5,53.8 74,62.5 71.5,71.3 64.5,77.7 55,80 30,80" fill="none" stroke="#2563eb"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr1)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#2563eb" opacity="0.95"
+    transform="translate(55,45) rotate(13.609731895812184)"/><g class="badge"><circle cx="30" cy="10" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="30" y="12.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g><g class="badge"><circle cx="30" cy="10" r="5.6" fill="#fff" stroke="#2563eb" stroke-width="1.4"/>
+        <text x="30" y="12.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#2563eb">2</text></g></svg>
+    <figcaption>B<span>2 strokes</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order C"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="64,14.7 54.5,10.2 44.6,11.7 35.9,19 30.1,30.8 28,45 30.1,59.2 35.9,71 44.6,78.3 54.5,79.8 64,75.3" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(30.1,59.2) rotate(63.82471001824007)"/><g class="badge"><circle cx="64" cy="14.7" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="64" y="17.3" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g></svg>
+    <figcaption>C<span>1 stroke</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order D"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="30,10 30,27.5 30,45 30,62.5 30,80" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(30,62.5) rotate(90)"/><polyline class="stroke" points="30,10 45,10 55.7,12.7 64.8,20.3 70.9,31.6 73,45 70.9,58.4 64.8,69.7 55.7,77.3 45,80 30,80" fill="none" stroke="#2563eb"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr1)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#2563eb" opacity="0.95"
+    transform="translate(70.9,58.4) rotate(118.36119432957376)"/><g class="badge"><circle cx="30" cy="10" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="30" y="12.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g><g class="badge"><circle cx="30" cy="10" r="5.6" fill="#fff" stroke="#2563eb" stroke-width="1.4"/>
+        <text x="30" y="12.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#2563eb">2</text></g></svg>
+    <figcaption>D<span>2 strokes</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order E"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="30,10 30,27.5 30,45 30,62.5 30,80" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(30,62.5) rotate(90)"/><polyline class="stroke" points="30,10 50,10 70,10" fill="none" stroke="#2563eb"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr1)"/><polyline class="stroke" points="30,45 46,45 62,45" fill="none" stroke="#dc2626"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr2)"/><polyline class="stroke" points="30,80 50,80 70,80" fill="none" stroke="#16a34a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr3)"/><g class="badge"><circle cx="30" cy="10" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="30" y="12.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g><g class="badge"><circle cx="30" cy="10" r="5.6" fill="#fff" stroke="#2563eb" stroke-width="1.4"/>
+        <text x="30" y="12.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#2563eb">2</text></g><g class="badge"><circle cx="30" cy="45" r="5.6" fill="#fff" stroke="#dc2626" stroke-width="1.4"/>
+        <text x="30" y="47.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#dc2626">3</text></g><g class="badge"><circle cx="30" cy="80" r="5.6" fill="#fff" stroke="#16a34a" stroke-width="1.4"/>
+        <text x="30" y="82.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#16a34a">4</text></g></svg>
+    <figcaption>E<span>4 strokes</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order F"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="30,10 30,27.5 30,45 30,62.5 30,80" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(30,62.5) rotate(90)"/><polyline class="stroke" points="30,10 50,10 70,10" fill="none" stroke="#2563eb"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr1)"/><polyline class="stroke" points="30,45 45,45 60,45" fill="none" stroke="#dc2626"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr2)"/><g class="badge"><circle cx="30" cy="10" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="30" y="12.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g><g class="badge"><circle cx="30" cy="10" r="5.6" fill="#fff" stroke="#2563eb" stroke-width="1.4"/>
+        <text x="30" y="12.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#2563eb">2</text></g><g class="badge"><circle cx="30" cy="45" r="5.6" fill="#fff" stroke="#dc2626" stroke-width="1.4"/>
+        <text x="30" y="47.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#dc2626">3</text></g></svg>
+    <figcaption>F<span>3 strokes</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order G"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="62,14.7 52.3,10.2 42.2,11.9 33.4,19.7 27.7,32 26,46.7 28.7,61 35.2,72.5 44.3,79 54.5,79.4 63.9,73.5 70.8,62.5 70.8,60" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(35.2,72.5) rotate(35.5376777919744)"/><polyline class="stroke" points="50,60 60.5,60 71,60" fill="none" stroke="#2563eb"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr1)"/><g class="badge"><circle cx="62" cy="14.7" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="62" y="17.3" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g><g class="badge"><circle cx="50" cy="60" r="5.6" fill="#fff" stroke="#2563eb" stroke-width="1.4"/>
+        <text x="50" y="62.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#2563eb">2</text></g></svg>
+    <figcaption>G<span>2 strokes</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order H"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="30,10 30,27.5 30,45 30,62.5 30,80" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(30,62.5) rotate(90)"/><polyline class="stroke" points="70,10 70,27.5 70,45 70,62.5 70,80" fill="none" stroke="#2563eb"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr1)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#2563eb" opacity="0.95"
+    transform="translate(70,62.5) rotate(90)"/><polyline class="stroke" points="30,45 50,45 70,45" fill="none" stroke="#dc2626"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr2)"/><g class="badge"><circle cx="30" cy="10" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="30" y="12.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g><g class="badge"><circle cx="70" cy="10" r="5.6" fill="#fff" stroke="#2563eb" stroke-width="1.4"/>
+        <text x="70" y="12.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#2563eb">2</text></g><g class="badge"><circle cx="30" cy="45" r="5.6" fill="#fff" stroke="#dc2626" stroke-width="1.4"/>
+        <text x="30" y="47.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#dc2626">3</text></g></svg>
+    <figcaption>H<span>3 strokes</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order I"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="50,10 50,27.5 50,45 50,62.5 50,80" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(50,62.5) rotate(90)"/><g class="badge"><circle cx="50" cy="10" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="50" y="12.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g></svg>
+    <figcaption>I<span>1 stroke</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order J"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="58,10 58,28.7 58,47.3 58,66 56.3,72.5 51.5,77.3 45,79 38.5,77.3 33.7,72.5" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(51.5,77.3) rotate(165.34324888423956)"/><g class="badge"><circle cx="58" cy="10" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="58" y="12.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g></svg>
+    <figcaption>J<span>1 stroke</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order K"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="32,10 32,27.5 32,45 32,62.5 32,80" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(32,62.5) rotate(90)"/><polyline class="stroke" points="70,10 58,21.7 46,33.3 34,45 46.7,56.7 59.3,68.3 72,80" fill="none" stroke="#2563eb"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr1)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#2563eb" opacity="0.95"
+    transform="translate(46.7,56.7) rotate(42.633752008544214)"/><g class="badge"><circle cx="32" cy="10" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="32" y="12.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g><g class="badge"><circle cx="70" cy="10" r="5.6" fill="#fff" stroke="#2563eb" stroke-width="1.4"/>
+        <text x="70" y="12.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#2563eb">2</text></g></svg>
+    <figcaption>K<span>2 strokes</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order L"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="32,10 32,27.5 32,45 32,62.5 32,80" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(32,62.5) rotate(90)"/><polyline class="stroke" points="32,80 51,80 70,80" fill="none" stroke="#2563eb"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr1)"/><g class="badge"><circle cx="32" cy="10" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="32" y="12.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g><g class="badge"><circle cx="32" cy="80" r="5.6" fill="#fff" stroke="#2563eb" stroke-width="1.4"/>
+        <text x="32" y="82.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#2563eb">2</text></g></svg>
+    <figcaption>L<span>2 strokes</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order M"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="28,10 28,27.5 28,45 28,62.5 28,80" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(28,62.5) rotate(90)"/><polyline class="stroke" points="28,10 35.3,26 42.7,42 50,58 57.3,42 64.7,26 72,10 72,33.3 72,56.7 72,80" fill="none" stroke="#2563eb"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr1)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#2563eb" opacity="0.95"
+    transform="translate(72,10) rotate(90)"/><g class="badge"><circle cx="28" cy="10" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="28" y="12.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g><g class="badge"><circle cx="28" cy="10" r="5.6" fill="#fff" stroke="#2563eb" stroke-width="1.4"/>
+        <text x="28" y="12.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#2563eb">2</text></g></svg>
+    <figcaption>M<span>2 strokes</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order N"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="30,10 30,27.5 30,45 30,62.5 30,80" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(30,62.5) rotate(90)"/><polyline class="stroke" points="30,10 40,27.5 50,45 60,62.5 70,80 70,56.7 70,33.3 70,10" fill="none" stroke="#2563eb"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr1)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#2563eb" opacity="0.95"
+    transform="translate(70,80) rotate(-90)"/><g class="badge"><circle cx="30" cy="10" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="30" y="12.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g><g class="badge"><circle cx="30" cy="10" r="5.6" fill="#fff" stroke="#2563eb" stroke-width="1.4"/>
+        <text x="30" y="12.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#2563eb">2</text></g></svg>
+    <figcaption>N<span>2 strokes</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order O"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="50,10 38,14.7 29.2,27.5 26,45 29.2,62.5 38,75.3 50,80 62,75.3 70.8,62.5 74,45 70.8,27.5 62,14.7 50,10" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(62,75.3) rotate(-55.49147701233159)"/><g class="badge"><circle cx="50" cy="10" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="50" y="12.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g></svg>
+    <figcaption>O<span>1 stroke</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order P"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="30,10 30,27.5 30,45 30,62.5 30,80" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(30,62.5) rotate(90)"/><polyline class="stroke" points="30,10 52,10 62,12.5 69.3,19.5 72,29 69.3,38.5 62,45.5 52,48 30,48" fill="none" stroke="#2563eb"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr1)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#2563eb" opacity="0.95"
+    transform="translate(69.3,38.5) rotate(136.2018330644521)"/><g class="badge"><circle cx="30" cy="10" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="30" y="12.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g><g class="badge"><circle cx="30" cy="10" r="5.6" fill="#fff" stroke="#2563eb" stroke-width="1.4"/>
+        <text x="30" y="12.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#2563eb">2</text></g></svg>
+    <figcaption>P<span>2 strokes</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order Q"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="50,10 38,14.7 29.2,27.5 26,45 29.2,62.5 38,75.3 50,80 62,75.3 70.8,62.5 74,45 70.8,27.5 62,14.7 50,10" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(62,75.3) rotate(-55.49147701233159)"/><polyline class="stroke" points="60,64 68,74 76,84" fill="none" stroke="#2563eb"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr1)"/><g class="badge"><circle cx="50" cy="10" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="50" y="12.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g><g class="badge"><circle cx="60" cy="64" r="5.6" fill="#fff" stroke="#2563eb" stroke-width="1.4"/>
+        <text x="60" y="66.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#2563eb">2</text></g></svg>
+    <figcaption>Q<span>2 strokes</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order R"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="30,10 30,27.5 30,45 30,62.5 30,80" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(30,62.5) rotate(90)"/><polyline class="stroke" points="30,10 52,10 62,12.4 69.3,19 72,28 69.3,37 62,43.6 52,46 32,46 44.7,57.3 57.3,68.7 70,80" fill="none" stroke="#2563eb"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr1)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#2563eb" opacity="0.95"
+    transform="translate(52,46) rotate(180)"/><g class="badge"><circle cx="30" cy="10" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="30" y="12.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g><g class="badge"><circle cx="30" cy="10" r="5.6" fill="#fff" stroke="#2563eb" stroke-width="1.4"/>
+        <text x="30" y="12.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#2563eb">2</text></g></svg>
+    <figcaption>R<span>2 strokes</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order S"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="66,18 56,11 42,11 33,17 31,26 36,35 48,42 60,49 67,58 66,69 57,78 42,80 31,74 27,66" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(67,58) rotate(95.19442890773483)"/><g class="badge"><circle cx="66" cy="18" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="66" y="20.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g></svg>
+    <figcaption>S<span>1 stroke</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order T"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="28,10 50,10 72,10" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><polyline class="stroke" points="50,10 50,27.5 50,45 50,62.5 50,80" fill="none" stroke="#2563eb"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr1)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#2563eb" opacity="0.95"
+    transform="translate(50,62.5) rotate(90)"/><g class="badge"><circle cx="28" cy="10" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="28" y="12.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g><g class="badge"><circle cx="50" cy="10" r="5.6" fill="#fff" stroke="#2563eb" stroke-width="1.4"/>
+        <text x="50" y="12.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#2563eb">2</text></g></svg>
+    <figcaption>T<span>2 strokes</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order U"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="30,10 30,26.7 30,43.3 30,60 32.7,70 40,77.3 50,80 60,77.3 67.3,70 70,60 70,43.3 70,26.7 70,10" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(60,77.3) rotate(-45)"/><g class="badge"><circle cx="30" cy="10" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="30" y="12.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g></svg>
+    <figcaption>U<span>1 stroke</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order V"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="28,10 35.3,33.3 42.7,56.7 50,80 57.3,56.7 64.7,33.3 72,10" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(57.3,56.7) rotate(-72.45099777093222)"/><g class="badge"><circle cx="28" cy="10" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="28" y="12.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g></svg>
+    <figcaption>V<span>1 stroke</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order W"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="24,10 28.7,33.3 33.3,56.7 38,80 44,55 50,30 56,55 62,80 66.7,56.7 71.3,33.3 76,10" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(56,55) rotate(76.5042667192042)"/><g class="badge"><circle cx="24" cy="10" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="24" y="12.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g></svg>
+    <figcaption>W<span>1 stroke</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order X"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="30,10 43.3,33.3 56.7,56.7 70,80" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(56.7,56.7) rotate(60.28160773469483)"/><polyline class="stroke" points="70,10 56.7,33.3 43.3,56.7 30,80" fill="none" stroke="#2563eb"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr1)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#2563eb" opacity="0.95"
+    transform="translate(43.3,56.7) rotate(119.71839226530517)"/><g class="badge"><circle cx="30" cy="10" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="30" y="12.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g><g class="badge"><circle cx="70" cy="10" r="5.6" fill="#fff" stroke="#2563eb" stroke-width="1.4"/>
+        <text x="70" y="12.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#2563eb">2</text></g></svg>
+    <figcaption>X<span>2 strokes</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order Y"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="30,10 40,27.5 50,45" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><polyline class="stroke" points="70,10 60,27.5 50,45 50,62.5 50,80" fill="none" stroke="#2563eb"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr1)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#2563eb" opacity="0.95"
+    transform="translate(50,62.5) rotate(90)"/><g class="badge"><circle cx="30" cy="10" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="30" y="12.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g><g class="badge"><circle cx="70" cy="10" r="5.6" fill="#fff" stroke="#2563eb" stroke-width="1.4"/>
+        <text x="70" y="12.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#2563eb">2</text></g></svg>
+    <figcaption>Y<span>2 strokes</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order Z"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="30,10 50,10 70,10 56.7,33.3 43.3,56.7 30,80 50,80 70,80" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(43.3,56.7) rotate(119.71839226530517)"/><g class="badge"><circle cx="30" cy="10" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="30" y="12.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g></svg>
+    <figcaption>Z<span>1 stroke</span></figcaption>
+  </figure></div></section><section><h2>LOWERCASE</h2><div class="grid"><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order a"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="57.9,49.1 48.2,45 38,47.7 31.2,55.9 30.5,66.7 36.1,75.9 45.8,80 56,77.3 62.8,69.1 63.5,58.3 57.9,49.1" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(45.8,80) rotate(-14.82647997035568)"/><polyline class="stroke" points="64,45 64,56.7 64,68.3 64,80" fill="none" stroke="#2563eb"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr1)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#2563eb" opacity="0.95"
+    transform="translate(64,68.3) rotate(90)"/><g class="badge"><circle cx="57.9" cy="49.1" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="57.9" y="51.7" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g><g class="badge"><circle cx="64" cy="45" r="5.6" fill="#fff" stroke="#2563eb" stroke-width="1.4"/>
+        <text x="64" y="47.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#2563eb">2</text></g></svg>
+    <figcaption>a<span>2 strokes</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order b"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="32,10 32,27.5 32,45 32,62.5 32,80" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(32,62.5) rotate(90)"/><polyline class="stroke" points="35.7,51.3 43.9,45.6 53.5,46.1 61.1,52.5 64,62.5 61.1,72.5 53.5,78.9 43.9,79.4 35.7,73.7" fill="none" stroke="#2563eb"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr1)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#2563eb" opacity="0.95"
+    transform="translate(61.1,72.5) rotate(139.89909245378774)"/><g class="badge"><circle cx="32" cy="10" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="32" y="12.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g><g class="badge"><circle cx="35.7" cy="51.3" r="5.6" fill="#fff" stroke="#2563eb" stroke-width="1.4"/>
+        <text x="35.7" y="53.9" text-anchor="middle" font-size="7.4" font-weight="700" fill="#2563eb">2</text></g></svg>
+    <figcaption>b<span>2 strokes</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order c"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="59.8,48.2 51.1,45 42.2,47 35.5,53.4 33,62.5 35.5,71.6 42.2,78 51.1,80 59.8,76.8" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(35.5,71.6) rotate(43.688112217495906)"/><g class="badge"><circle cx="59.8" cy="48.2" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="59.8" y="50.800000000000004" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g></svg>
+    <figcaption>c<span>1 stroke</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order d"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="57.9,49.1 48.2,45 38,47.7 31.2,55.9 30.5,66.7 36.1,75.9 45.8,80 56,77.3 62.8,69.1 63.5,58.3 57.9,49.1" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(45.8,80) rotate(-14.82647997035568)"/><polyline class="stroke" points="64,10 64,27.5 64,45 64,62.5 64,80" fill="none" stroke="#2563eb"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr1)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#2563eb" opacity="0.95"
+    transform="translate(64,62.5) rotate(90)"/><g class="badge"><circle cx="57.9" cy="49.1" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="57.9" y="51.7" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g><g class="badge"><circle cx="64" cy="10" r="5.6" fill="#fff" stroke="#2563eb" stroke-width="1.4"/>
+        <text x="64" y="12.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#2563eb">2</text></g></svg>
+    <figcaption>d<span>2 strokes</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order e"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="33,57 49.3,57 65.5,57 64.6,56.8 59.1,48.6 50.2,45.1 41,47.2 34.4,54.4 32.6,64.2 36.2,73.5 44,79.2 53.5,79.3 61.5,74" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(34.4,54.4) rotate(100.40771131249005)"/><g class="badge"><circle cx="33" cy="57" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="33" y="59.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g></svg>
+    <figcaption>e<span>1 stroke</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order f"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="62,17 57,11 48,10 42,15 41,24 41,52 41,80" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(41,24) rotate(90)"/><polyline class="stroke" points="32,45 44,45 56,45" fill="none" stroke="#2563eb"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr1)"/><g class="badge"><circle cx="62" cy="17" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="62" y="19.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g><g class="badge"><circle cx="32" cy="45" r="5.6" fill="#fff" stroke="#2563eb" stroke-width="1.4"/>
+        <text x="32" y="47.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#2563eb">2</text></g></svg>
+    <figcaption>f<span>2 strokes</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order g"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="57.9,49.1 48.2,45 38,47.7 31.2,55.9 30.5,66.7 36.1,75.9 45.8,80 56,77.3 62.8,69.1 63.5,58.3 57.9,49.1" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(45.8,80) rotate(-14.82647997035568)"/><polyline class="stroke" points="64,45 64,59.3 64,73.7 64,88 62.3,92.5 57.5,95.8 51,97 44.5,95.8" fill="none" stroke="#2563eb"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr1)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#2563eb" opacity="0.95"
+    transform="translate(62.3,92.5) rotate(145.49147701233161)"/><g class="badge"><circle cx="57.9" cy="49.1" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="57.9" y="51.7" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g><g class="badge"><circle cx="64" cy="45" r="5.6" fill="#fff" stroke="#2563eb" stroke-width="1.4"/>
+        <text x="64" y="47.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#2563eb">2</text></g></svg>
+    <figcaption>g<span>2 strokes</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order h"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="32,10 32,27.5 32,45 32,62.5 32,80" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(32,62.5) rotate(90)"/><polyline class="stroke" points="32,58 33.9,51.5 39,46.7 46,45 53,46.7 58.1,51.5 60,58 60,69 60,80" fill="none" stroke="#2563eb"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr1)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#2563eb" opacity="0.95"
+    transform="translate(58.1,51.5) rotate(73.7059525434011)"/><g class="badge"><circle cx="32" cy="10" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="32" y="12.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g><g class="badge"><circle cx="32" cy="58" r="5.6" fill="#fff" stroke="#2563eb" stroke-width="1.4"/>
+        <text x="32" y="60.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#2563eb">2</text></g></svg>
+    <figcaption>h<span>2 strokes</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order i"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="50,45 50,56.7 50,68.3 50,80" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(50,68.3) rotate(90)"/><polyline class="stroke" points="50,31 50,33.5" fill="none" stroke="#2563eb"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" /><g class="badge"><circle cx="50" cy="45" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="50" y="47.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g><g class="badge"><circle cx="50" cy="31" r="5.6" fill="#fff" stroke="#2563eb" stroke-width="1.4"/>
+        <text x="50" y="33.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#2563eb">2</text></g></svg>
+    <figcaption>i<span>2 strokes</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order j"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="54,45 54,59.3 54,73.7 54,88 52.3,92.5 47.5,95.8 41,97 34.5,95.8" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(52.3,92.5) rotate(145.49147701233161)"/><polyline class="stroke" points="54,31 54,33.5" fill="none" stroke="#2563eb"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" /><g class="badge"><circle cx="54" cy="45" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="54" y="47.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g><g class="badge"><circle cx="54" cy="31" r="5.6" fill="#fff" stroke="#2563eb" stroke-width="1.4"/>
+        <text x="54" y="33.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#2563eb">2</text></g></svg>
+    <figcaption>j<span>2 strokes</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order k"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="32,10 32,27.5 32,45 32,62.5 32,80" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(32,62.5) rotate(90)"/><polyline class="stroke" points="62,45 48,53.5 34,62 49,71 64,80" fill="none" stroke="#2563eb"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr1)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#2563eb" opacity="0.95"
+    transform="translate(49,71) rotate(30.96375653207352)"/><g class="badge"><circle cx="32" cy="10" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="32" y="12.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g><g class="badge"><circle cx="62" cy="45" r="5.6" fill="#fff" stroke="#2563eb" stroke-width="1.4"/>
+        <text x="62" y="47.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#2563eb">2</text></g></svg>
+    <figcaption>k<span>2 strokes</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order l"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="50,10 50,27.5 50,45 50,62.5 50,80" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(50,62.5) rotate(90)"/><g class="badge"><circle cx="50" cy="10" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="50" y="12.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g></svg>
+    <figcaption>l<span>1 stroke</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order m"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="28,45 28,56.7 28,68.3 28,80" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(28,68.3) rotate(90)"/><polyline class="stroke" points="28,59 29.9,50.8 34.9,45.7 41.1,45.7 46.1,50.8 48,59 48,69.5 48,80" fill="none" stroke="#2563eb"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr1)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#2563eb" opacity="0.95"
+    transform="translate(46.1,50.8) rotate(76.95436293705141)"/><polyline class="stroke" points="48,59 49.9,50.8 54.9,45.7 61.1,45.7 66.1,50.8 68,59 68,69.5 68,80" fill="none" stroke="#dc2626"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr2)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#dc2626" opacity="0.95"
+    transform="translate(66.1,50.8) rotate(76.95436293705137)"/><g class="badge"><circle cx="28" cy="45" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="28" y="47.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g><g class="badge"><circle cx="28" cy="59" r="5.6" fill="#fff" stroke="#2563eb" stroke-width="1.4"/>
+        <text x="28" y="61.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#2563eb">2</text></g><g class="badge"><circle cx="48" cy="59" r="5.6" fill="#fff" stroke="#dc2626" stroke-width="1.4"/>
+        <text x="48" y="61.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#dc2626">3</text></g></svg>
+    <figcaption>m<span>3 strokes</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order n"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="33,45 33,56.7 33,68.3 33,80" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(33,68.3) rotate(90)"/><polyline class="stroke" points="33,60 35,52.5 40.5,47 48,45 55.5,47 61,52.5 63,60 63,70 63,80" fill="none" stroke="#2563eb"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr1)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#2563eb" opacity="0.95"
+    transform="translate(61,52.5) rotate(75.06858282186246)"/><g class="badge"><circle cx="33" cy="45" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="33" y="47.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g><g class="badge"><circle cx="33" cy="60" r="5.6" fill="#fff" stroke="#2563eb" stroke-width="1.4"/>
+        <text x="33" y="62.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#2563eb">2</text></g></svg>
+    <figcaption>n<span>2 strokes</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order o"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="50,45 40,48.3 33.8,57.1 33.8,67.9 40,76.7 50,80 60,76.7 66.2,67.9 66.2,57.1 60,48.3 50,45" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(60,76.7) rotate(-54.8335639642071)"/><g class="badge"><circle cx="50" cy="45" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="50" y="47.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g></svg>
+    <figcaption>o<span>1 stroke</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order p"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="33,45 33,58.3 33,71.5 33,84.8 33,98" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(33,84.8) rotate(90)"/><polyline class="stroke" points="35.7,51.3 43.9,45.6 53.5,46.1 61.1,52.5 64,62.5 61.1,72.5 53.5,78.9 43.9,79.4 35.7,73.7" fill="none" stroke="#2563eb"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr1)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#2563eb" opacity="0.95"
+    transform="translate(61.1,72.5) rotate(139.89909245378774)"/><g class="badge"><circle cx="33" cy="45" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="33" y="47.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g><g class="badge"><circle cx="35.7" cy="51.3" r="5.6" fill="#fff" stroke="#2563eb" stroke-width="1.4"/>
+        <text x="35.7" y="53.9" text-anchor="middle" font-size="7.4" font-weight="700" fill="#2563eb">2</text></g></svg>
+    <figcaption>p<span>2 strokes</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order q"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="57.9,49.1 48.2,45 38,47.7 31.2,55.9 30.5,66.7 36.1,75.9 45.8,80 56,77.3 62.8,69.1 63.5,58.3 57.9,49.1" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(45.8,80) rotate(-14.82647997035568)"/><polyline class="stroke" points="64,45 64,61.3 64,77.7 64,94 70,98" fill="none" stroke="#2563eb"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr1)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#2563eb" opacity="0.95"
+    transform="translate(64,94) rotate(33.690067525979785)"/><g class="badge"><circle cx="57.9" cy="49.1" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="57.9" y="51.7" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g><g class="badge"><circle cx="64" cy="45" r="5.6" fill="#fff" stroke="#2563eb" stroke-width="1.4"/>
+        <text x="64" y="47.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#2563eb">2</text></g></svg>
+    <figcaption>q<span>2 strokes</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order r"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="36,45 36,56.7 36,68.3 36,80" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(36,68.3) rotate(90)"/><polyline class="stroke" points="36,58 37.6,51.5 42,46.7 48,45 54,46.7" fill="none" stroke="#2563eb"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr1)"/><g class="badge"><circle cx="36" cy="45" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="36" y="47.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g><g class="badge"><circle cx="36" cy="58" r="5.6" fill="#fff" stroke="#2563eb" stroke-width="1.4"/>
+        <text x="36" y="60.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#2563eb">2</text></g></svg>
+    <figcaption>r<span>2 strokes</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order s"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="61,50 54,45 45,45 38,49 37,55 42,60 50,63 58,66 62,71 60,77 52,80 43,80 36,76" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(58,66) rotate(51.34019174590991)"/><g class="badge"><circle cx="61" cy="50" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="61" y="52.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g></svg>
+    <figcaption>s<span>1 stroke</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order t"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="46,28 46,43 46,58 46,73 48,78 54,80" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(46,73) rotate(68.19859051364818)"/><polyline class="stroke" points="34,45 47,45 60,45" fill="none" stroke="#2563eb"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr1)"/><g class="badge"><circle cx="46" cy="28" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="46" y="30.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g><g class="badge"><circle cx="34" cy="45" r="5.6" fill="#fff" stroke="#2563eb" stroke-width="1.4"/>
+        <text x="34" y="47.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#2563eb">2</text></g></svg>
+    <figcaption>t<span>2 strokes</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order u"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="34,45 34,55.5 34,66 36.3,73.6 42.3,78.4 49.7,78.4 55.7,73.6 58,66 58,55.5 58,45" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(55.7,73.6) rotate(-73.16252737432362)"/><polyline class="stroke" points="58,45 58,56.7 58,68.3 58,80" fill="none" stroke="#2563eb"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr1)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#2563eb" opacity="0.95"
+    transform="translate(58,68.3) rotate(90)"/><g class="badge"><circle cx="34" cy="45" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="34" y="47.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g><g class="badge"><circle cx="58" cy="45" r="5.6" fill="#fff" stroke="#2563eb" stroke-width="1.4"/>
+        <text x="58" y="47.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#2563eb">2</text></g></svg>
+    <figcaption>u<span>2 strokes</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order v"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="32,45 41,62.5 50,80 59,62.5 68,45" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(59,62.5) rotate(-62.78388844269253)"/><g class="badge"><circle cx="32" cy="45" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="32" y="47.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g></svg>
+    <figcaption>v<span>1 stroke</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order w"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="28,45 34,62.5 40,80 45,66 50,52 55,66 60,80 66,62.5 72,45" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(55,66) rotate(70.3461759419467)"/><g class="badge"><circle cx="28" cy="45" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="28" y="47.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g></svg>
+    <figcaption>w<span>1 stroke</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order x"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="34,45 44.7,56.7 55.3,68.3 66,80" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(55.3,68.3) rotate(47.556150078578284)"/><polyline class="stroke" points="66,45 55.3,56.7 44.7,68.3 34,80" fill="none" stroke="#2563eb"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr1)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#2563eb" opacity="0.95"
+    transform="translate(44.7,68.3) rotate(132.44384992142173)"/><g class="badge"><circle cx="34" cy="45" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="34" y="47.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g><g class="badge"><circle cx="66" cy="45" r="5.6" fill="#fff" stroke="#2563eb" stroke-width="1.4"/>
+        <text x="66" y="47.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#2563eb">2</text></g></svg>
+    <figcaption>x<span>2 strokes</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order y"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="32,45 41,62.5 50,80" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><polyline class="stroke" points="68,45 61.5,58.3 55,71.5 48.5,84.8 42,98" fill="none" stroke="#2563eb"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr1)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#2563eb" opacity="0.95"
+    transform="translate(48.5,84.8) rotate(116.21675285641923)"/><g class="badge"><circle cx="32" cy="45" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="32" y="47.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g><g class="badge"><circle cx="68" cy="45" r="5.6" fill="#fff" stroke="#2563eb" stroke-width="1.4"/>
+        <text x="68" y="47.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#2563eb">2</text></g></svg>
+    <figcaption>y<span>2 strokes</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order z"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="34,45 50,45 66,45 50,62.5 34,80 50,80 66,80" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(34,80) rotate(0)"/><g class="badge"><circle cx="34" cy="45" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="34" y="47.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g></svg>
+    <figcaption>z<span>1 stroke</span></figcaption>
+  </figure></div></section><section><h2>GERMAN UMLAUTS &amp; ß</h2><div class="grid"><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order Ä"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="27,80 34.7,56.7 42.3,33.3 50,10" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(42.3,33.3) rotate(-71.71272038493811)"/><polyline class="stroke" points="50,10 57.7,33.3 65.3,56.7 73,80" fill="none" stroke="#2563eb"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr1)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#2563eb" opacity="0.95"
+    transform="translate(65.3,56.7) rotate(71.71272038493811)"/><polyline class="stroke" points="35,55 50,55 65,55" fill="none" stroke="#dc2626"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr2)"/><polyline class="stroke" points="41,2 41,4.5" fill="none" stroke="#16a34a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" /><polyline class="stroke" points="59,2 59,4.5" fill="none" stroke="#9333ea"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" /><g class="badge"><circle cx="27" cy="80" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="27" y="82.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g><g class="badge"><circle cx="50" cy="10" r="5.6" fill="#fff" stroke="#2563eb" stroke-width="1.4"/>
+        <text x="50" y="12.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#2563eb">2</text></g><g class="badge"><circle cx="35" cy="55" r="5.6" fill="#fff" stroke="#dc2626" stroke-width="1.4"/>
+        <text x="35" y="57.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#dc2626">3</text></g><g class="badge"><circle cx="41" cy="2" r="5.6" fill="#fff" stroke="#16a34a" stroke-width="1.4"/>
+        <text x="41" y="4.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#16a34a">4</text></g><g class="badge"><circle cx="59" cy="2" r="5.6" fill="#fff" stroke="#9333ea" stroke-width="1.4"/>
+        <text x="59" y="4.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#9333ea">5</text></g></svg>
+    <figcaption>Ä<span>5 strokes</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order Ö"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="50,10 38,14.7 29.2,27.5 26,45 29.2,62.5 38,75.3 50,80 62,75.3 70.8,62.5 74,45 70.8,27.5 62,14.7 50,10" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(62,75.3) rotate(-55.49147701233159)"/><polyline class="stroke" points="41,2 41,4.5" fill="none" stroke="#2563eb"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" /><polyline class="stroke" points="59,2 59,4.5" fill="none" stroke="#dc2626"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" /><g class="badge"><circle cx="50" cy="10" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="50" y="12.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g><g class="badge"><circle cx="41" cy="2" r="5.6" fill="#fff" stroke="#2563eb" stroke-width="1.4"/>
+        <text x="41" y="4.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#2563eb">2</text></g><g class="badge"><circle cx="59" cy="2" r="5.6" fill="#fff" stroke="#dc2626" stroke-width="1.4"/>
+        <text x="59" y="4.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#dc2626">3</text></g></svg>
+    <figcaption>Ö<span>3 strokes</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order Ü"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="30,10 30,26.7 30,43.3 30,60 32.7,70 40,77.3 50,80 60,77.3 67.3,70 70,60 70,43.3 70,26.7 70,10" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(60,77.3) rotate(-45)"/><polyline class="stroke" points="41,2 41,4.5" fill="none" stroke="#2563eb"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" /><polyline class="stroke" points="59,2 59,4.5" fill="none" stroke="#dc2626"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" /><g class="badge"><circle cx="30" cy="10" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="30" y="12.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g><g class="badge"><circle cx="41" cy="2" r="5.6" fill="#fff" stroke="#2563eb" stroke-width="1.4"/>
+        <text x="41" y="4.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#2563eb">2</text></g><g class="badge"><circle cx="59" cy="2" r="5.6" fill="#fff" stroke="#dc2626" stroke-width="1.4"/>
+        <text x="59" y="4.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#dc2626">3</text></g></svg>
+    <figcaption>Ü<span>3 strokes</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order ä"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="57.9,49.1 48.2,45 38,47.7 31.2,55.9 30.5,66.7 36.1,75.9 45.8,80 56,77.3 62.8,69.1 63.5,58.3 57.9,49.1" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(45.8,80) rotate(-14.82647997035568)"/><polyline class="stroke" points="64,45 64,56.7 64,68.3 64,80" fill="none" stroke="#2563eb"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr1)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#2563eb" opacity="0.95"
+    transform="translate(64,68.3) rotate(90)"/><polyline class="stroke" points="41,33 41,35.5" fill="none" stroke="#dc2626"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" /><polyline class="stroke" points="59,33 59,35.5" fill="none" stroke="#16a34a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" /><g class="badge"><circle cx="57.9" cy="49.1" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="57.9" y="51.7" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g><g class="badge"><circle cx="64" cy="45" r="5.6" fill="#fff" stroke="#2563eb" stroke-width="1.4"/>
+        <text x="64" y="47.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#2563eb">2</text></g><g class="badge"><circle cx="41" cy="33" r="5.6" fill="#fff" stroke="#dc2626" stroke-width="1.4"/>
+        <text x="41" y="35.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#dc2626">3</text></g><g class="badge"><circle cx="59" cy="33" r="5.6" fill="#fff" stroke="#16a34a" stroke-width="1.4"/>
+        <text x="59" y="35.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#16a34a">4</text></g></svg>
+    <figcaption>ä<span>4 strokes</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order ö"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="50,45 40,48.3 33.8,57.1 33.8,67.9 40,76.7 50,80 60,76.7 66.2,67.9 66.2,57.1 60,48.3 50,45" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(60,76.7) rotate(-54.8335639642071)"/><polyline class="stroke" points="41,33 41,35.5" fill="none" stroke="#2563eb"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" /><polyline class="stroke" points="59,33 59,35.5" fill="none" stroke="#dc2626"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" /><g class="badge"><circle cx="50" cy="45" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="50" y="47.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g><g class="badge"><circle cx="41" cy="33" r="5.6" fill="#fff" stroke="#2563eb" stroke-width="1.4"/>
+        <text x="41" y="35.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#2563eb">2</text></g><g class="badge"><circle cx="59" cy="33" r="5.6" fill="#fff" stroke="#dc2626" stroke-width="1.4"/>
+        <text x="59" y="35.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#dc2626">3</text></g></svg>
+    <figcaption>ö<span>3 strokes</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order ü"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="34,45 34,55.5 34,66 36.3,73.6 42.3,78.4 49.7,78.4 55.7,73.6 58,66 58,55.5 58,45" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(55.7,73.6) rotate(-73.16252737432362)"/><polyline class="stroke" points="58,45 58,56.7 58,68.3 58,80" fill="none" stroke="#2563eb"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr1)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#2563eb" opacity="0.95"
+    transform="translate(58,68.3) rotate(90)"/><polyline class="stroke" points="41,33 41,35.5" fill="none" stroke="#dc2626"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" /><polyline class="stroke" points="59,33 59,35.5" fill="none" stroke="#16a34a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" /><g class="badge"><circle cx="34" cy="45" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="34" y="47.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g><g class="badge"><circle cx="58" cy="45" r="5.6" fill="#fff" stroke="#2563eb" stroke-width="1.4"/>
+        <text x="58" y="47.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#2563eb">2</text></g><g class="badge"><circle cx="41" cy="33" r="5.6" fill="#fff" stroke="#dc2626" stroke-width="1.4"/>
+        <text x="41" y="35.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#dc2626">3</text></g><g class="badge"><circle cx="59" cy="33" r="5.6" fill="#fff" stroke="#16a34a" stroke-width="1.4"/>
+        <text x="59" y="35.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#16a34a">4</text></g></svg>
+    <figcaption>ü<span>4 strokes</span></figcaption>
+  </figure><figure class="card" tabindex="0">
+    <svg viewBox="-6 -8 112 114" aria-label="Stroke order ß"><line x1="-2" y1="10" x2="102" y2="10" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="45" x2="102" y2="45" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="80" x2="102" y2="80" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><line x1="-2" y1="98" x2="102" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2.5 2.5"/><polyline class="stroke" points="33,80 33,45 33,22 37,13 46,10 55,12 60,19 59,28 53,34 60,39 66,48 67,60 62,72 53,79 44,79" fill="none" stroke="#0f172a"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arr0)"/><path d="M-1.2,-2.6 L3.8,0 L-1.2,2.6 Z" fill="#0f172a" opacity="0.95"
+    transform="translate(53,34) rotate(35.53767779197438)"/><g class="badge"><circle cx="33" cy="80" r="5.6" fill="#fff" stroke="#0f172a" stroke-width="1.4"/>
+        <text x="33" y="82.6" text-anchor="middle" font-size="7.4" font-weight="700" fill="#0f172a">1</text></g></svg>
+    <figcaption>ß<span>1 stroke</span></figcaption>
+  </figure></div></section>
+<footer>Generated from <code>core/games/src/char-strokes.ts</code> (german-school-print). Regenerate: <code>cd core/games &amp;&amp; pnpm docs:strokes</code></footer>
+<script>
+  function animate(card) {
+    if (card.dataset.busy) return;
+    card.dataset.busy = "1";
+    const polys = Array.from(card.querySelectorAll("polyline.stroke"));
+    let delay = 0, total = 0;
+    for (const p of polys) {
+      const l = p.getTotalLength();
+      p.style.transition = "none";
+      p.style.strokeDasharray = l + " " + l;
+      p.style.strokeDashoffset = l;
+      void p.getBoundingClientRect();
+      const dur = Math.max(260, l * 9);
+      p.style.transition = "stroke-dashoffset " + dur + "ms ease-in-out " + delay + "ms";
+      p.style.strokeDashoffset = "0";
+      delay += dur + 140;
+      total = delay;
+    }
+    setTimeout(() => {
+      for (const p of polys) { p.style.transition = "none"; p.style.strokeDasharray = "none"; }
+      delete card.dataset.busy;
+    }, total + 250);
+  }
+  for (const card of document.querySelectorAll(".card")) {
+    card.addEventListener("mouseenter", () => animate(card));
+    card.addEventListener("click", () => animate(card));
+  }
+</script>
+</body>
+</html>

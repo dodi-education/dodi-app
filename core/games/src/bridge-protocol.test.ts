@@ -74,3 +74,40 @@ describe("save-state bridge messages", () => {
     ).toBe(false);
   });
 });
+
+describe("host-snapshot bridge messages", () => {
+  it("parses dodi:host_snapshot", () => {
+    const parsed = ParentToGameMessageSchema.safeParse({
+      type: "dodi:host_snapshot",
+      token,
+    });
+    expect(parsed.success).toBe(true);
+  });
+
+  it("rejects dodi:host_snapshot with a bad token", () => {
+    expect(
+      ParentToGameMessageSchema.safeParse({
+        type: "dodi:host_snapshot",
+        token: "short",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("accepts the shim's game:event host_snapshot reply via the catchall", () => {
+    const parsed = GameToParentMessageSchema.safeParse({
+      type: "game:event",
+      token,
+      payload: { event: "host_snapshot", snapshot: "data:image/png;base64,AAAA" },
+    });
+    expect(parsed.success).toBe(true);
+  });
+
+  it("accepts a null snapshot on a failed capture", () => {
+    const parsed = GameToParentMessageSchema.safeParse({
+      type: "game:event",
+      token,
+      payload: { event: "host_snapshot", snapshot: null },
+    });
+    expect(parsed.success).toBe(true);
+  });
+});

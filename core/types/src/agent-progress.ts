@@ -9,6 +9,7 @@ import type { AgentCodeResult } from "./tasks";
 
 export type AgentStep =
   | "reading_docs"
+  | "generating_image"
   | "writing_code"
   | "validating"
   | "fixing_validation"

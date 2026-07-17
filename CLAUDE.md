@@ -58,8 +58,9 @@ Structured relational schemas remain correct for **operational data** — accoun
 - Explicit return types on exported functions and API route handlers
 
 ### Naming
-- **Brand Name** dodi should always be written in all small letters in the frontend UI (marketing landing etc.). Exception: When naming files (e.g. DodiAvatar) it can be written with capital "D" when needed and general code conventions would require it. Avoid starting sentences with "dodi".
+- **Brand Name** dodi should always be written in all small letters in the frontend UI (marketing landing etc.). Avoid starting sentences with "dodi".
 - **Files**: kebab-case (`game-sandbox.tsx`, `ai-provider.ts`)
+- **File & variable names**: Avoid using "dodi" in file, varialbe, class, etc. names.
 - **Components**: PascalCase (`GameSandbox`, `DodiAvatar`)
 - **Hooks**: camelCase with `use` prefix (`useProfile`, `useDodiChat`)
 - **Stores**: camelCase with `Store` suffix (`profileStore`, `gameStore`)

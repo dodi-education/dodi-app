@@ -16,6 +16,7 @@ import {
   replaceGameSharings,
 } from "@/services/games";
 import { UNBUILT_GAME_PLACEHOLDER } from "@dodi/games/placeholder";
+import type { GameMetadata } from "@dodi/types/games";
 import {
   getTranslationsForGames,
   applyTranslation,
@@ -51,6 +52,7 @@ const CreateGameSchema = z.object({
   markdown: z.string().max(100000).optional(),
   learningGoal: z.string().max(2000).optional(),
   successDefinition: z.string().max(2000).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
   isActive: z.boolean().optional(),
   audience: z
     .object({
@@ -173,6 +175,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       tags: data.tags,
       markdown: data.markdown,
       codeBundle: hasCode ? data.codeBundle! : UNBUILT_GAME_PLACEHOLDER,
+      metadata: data.metadata as GameMetadata | undefined,
       learningGoal: data.learningGoal ?? "",
       successDefinition: data.successDefinition ?? "",
       progressKind: data.successDefinition?.trim() ? "goal" : "open",

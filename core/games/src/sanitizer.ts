@@ -4,9 +4,14 @@
  * Pure + isomorphic: runs client-side (before persisting a generated game) and
  * server-side (defense-in-depth on the games write routes). Enforces the sandbox
  * contract — no network, no external scripts, size cap.
+ *
+ * Two size regimes exist: the CODE budget (200KB, enforced by the agent
+ * validator on the placeholder form the model writes) and this STORED budget
+ * (512KB), which additionally covers the inline background-image data URL the
+ * client swaps in before persisting (see @dodi/games/background-image).
  */
 
-const MAX_GAME_BUNDLE_BYTES = 200 * 1024;
+const MAX_GAME_BUNDLE_WITH_ASSETS_BYTES = 512 * 1024;
 
 const BLOCKED_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
   { pattern: /<script\b[^>]*\bsrc\s*=\s*/i, reason: "External script loads are not allowed" },
@@ -29,9 +34,9 @@ function getUtf8ByteLength(value: string): number {
 
 export function assertSafeGameBundle(code: string): void {
   const sizeBytes = getUtf8ByteLength(code);
-  if (sizeBytes > MAX_GAME_BUNDLE_BYTES) {
+  if (sizeBytes > MAX_GAME_BUNDLE_WITH_ASSETS_BYTES) {
     throw new Error(
-      `Game bundle exceeds maximum size of ${MAX_GAME_BUNDLE_BYTES} bytes`,
+      `Game bundle exceeds maximum size of ${MAX_GAME_BUNDLE_WITH_ASSETS_BYTES} bytes`,
     );
   }
 
@@ -53,5 +58,5 @@ export function sanitizeGameBundle(code: string): SanitizedGameBundle {
 }
 
 export function getGameBundleLimitBytes(): number {
-  return MAX_GAME_BUNDLE_BYTES;
+  return MAX_GAME_BUNDLE_WITH_ASSETS_BYTES;
 }

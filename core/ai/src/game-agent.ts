@@ -12,6 +12,11 @@
  */
 
 import { validateGameCode } from "@dodi/games/agent-validator";
+import {
+  BACKGROUND_IMAGE_PLACEHOLDER,
+  extractBackgroundImage,
+  hasBackgroundPlaceholder,
+} from "@dodi/games/background-image";
 import type { AgentCodeResult, AgentTaskRequest, GenerateGamePayload, UpdateGamePayload } from "@dodi/types/tasks";
 import type { AgentStep } from "@dodi/types/agent-progress";
 import type { AIProviderId } from "@dodi/types/ai";
@@ -20,6 +25,7 @@ import type { TokenUsage } from "@dodi/types/usage";
 import { buildAgentSystemPrompt } from "./game-agent-prompt";
 import { getModelOutputCap } from "./providers";
 import {
+  buildAgentTools,
   executeTool,
   type LastWriteResult,
   type ToolContext,
@@ -93,16 +99,51 @@ export interface RunGameAgentParams {
   signal?: AbortSignal;
   /** Progress callback driving the studio's step indicator. */
   onStep?: (step: AgentStep) => void;
+  /**
+   * Client-injected background-image generation (image provider + vault key are
+   * resolved by the caller). Presence enables the generate_background_image
+   * tool. Returns a downscaled data URL; throws on failure.
+   */
+  onGenerateBackgroundImage?: (scene: string) => Promise<string>;
+}
+
+/** How many of the most recent image-bearing user turns re-send their images. */
+export const MAX_IMAGE_TURNS = 2;
+
+/**
+ * Strip images from all but the most recent MAX_IMAGE_TURNS user turns so old
+ * attachments stop costing image tokens on every subsequent build. The full
+ * images stay in the sealed transcript for display — this only trims what is
+ * re-fed to the model.
+ */
+function trimPriorImages(turns: PriorTurn[] | undefined): PriorTurn[] | undefined {
+  if (!turns?.length) return turns;
+  let kept = 0;
+  const reversed = [...turns].reverse().map((turn): PriorTurn => {
+    if (turn.role !== "user" || !turn.images?.length) return turn;
+    if (kept < MAX_IMAGE_TURNS) {
+      kept++;
+      return turn;
+    }
+    return { role: turn.role, text: `${turn.text}\n[image attached]` };
+  });
+  return reversed.reverse();
 }
 
 function buildCodeTaskUserMessage(task: AgentTaskRequest): string {
   if (task.taskType === "generate_game") {
     const payload = task.payload as GenerateGamePayload;
     const lines = ["Create a new game based on this description:", "", payload.prompt];
-    if (payload.title) lines.push("", `Suggested title: ${payload.title}`);
+    if (payload.title) lines.push("", `Title: ${payload.title} (set by the parent — keep it)`);
     if (payload.tags?.length) lines.push(`Tags: ${payload.tags.join(", ")}`);
     if (payload.learningGoal) lines.push("", `Learning goal: ${payload.learningGoal}`);
     if (payload.successDefinition) lines.push(`Success definition: ${payload.successDefinition}`);
+    if (payload.images?.length) {
+      lines.push(
+        "",
+        `${payload.images.length} reference image(s) are attached — use them as visual guidance.`,
+      );
+    }
     lines.push(
       "",
       "Steps:",
@@ -116,9 +157,24 @@ function buildCodeTaskUserMessage(task: AgentTaskRequest): string {
 
   const payload = task.payload as UpdateGamePayload;
   const lines = ["Update the existing game with this change:", "", payload.instruction];
-  if (payload.title) lines.push("", `Updated title: ${payload.title}`);
+  if (payload.title) lines.push("", `Title: ${payload.title} (set by the parent — keep it)`);
   if (payload.learningGoal) lines.push("", `Learning goal: ${payload.learningGoal}`);
   if (payload.successDefinition) lines.push(`Success definition: ${payload.successDefinition}`);
+  if (payload.screenshot) {
+    lines.push(
+      "",
+      "The FIRST attached image is a screenshot of the game exactly as it looks right now — " +
+        "assess the current visuals from it before deciding your changes.",
+    );
+  }
+  if (payload.images?.length) {
+    lines.push(
+      "",
+      `${payload.images.length} reference image(s) are attached${
+        payload.screenshot ? " after the screenshot" : ""
+      } — use them as visual guidance.`,
+    );
+  }
   lines.push(
     "",
     "Steps:",
@@ -132,30 +188,61 @@ function buildCodeTaskUserMessage(task: AgentTaskRequest): string {
 }
 
 export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCodeResult> {
-  const { provider, apiKey, model, task, priorTurns, signal, onStep } = params;
+  const { provider, apiKey, model, task, priorTurns, signal, onStep, onGenerateBackgroundImage } =
+    params;
   const emitStep = onStep ?? (() => {});
   const checkAborted = (): void => {
     if (signal?.aborted) throw new AgentAbortedError();
   };
 
+  const goalPayload = task.payload as Partial<GenerateGamePayload & UpdateGamePayload>;
+
   const driver = createGameDriver(provider, {
     apiKey,
     model,
-    systemPrompt: buildAgentSystemPrompt(task.childContext),
+    systemPrompt: buildAgentSystemPrompt({
+      ...task.childContext,
+      perspective: goalPayload.perspective ?? null,
+    }),
     maxTokens: Math.min(AGENT_LIMITS.MAX_TOKENS, getModelOutputCap(provider, model)),
+    tools: buildAgentTools({ backgroundImage: Boolean(onGenerateBackgroundImage) }),
   });
-  // Seed with any resumed conversation, then the concrete task request.
-  driver.seed(priorTurns, buildCodeTaskUserMessage(task));
 
-  // Update tasks preload the existing code so read_existing_game returns it.
-  const toolContext: ToolContext = {};
+  // Update tasks preload the existing code so read_existing_game returns it —
+  // with any inline background image swapped back to its placeholder so base64
+  // never enters the model transcript (runs regardless of the current setting).
+  const toolContext: ToolContext = { generateBackgroundImage: onGenerateBackgroundImage };
   if (task.taskType === "update_game") {
     const payload = task.payload as UpdateGamePayload;
-    toolContext.existingCode = payload.existingCode;
+    const extracted = extractBackgroundImage(payload.existingCode);
+    toolContext.existingCode = extracted.code;
     toolContext.existingMarkdown = payload.existingMarkdown;
+    if (extracted.dataUrl) toolContext.carriedBackgroundImage = extracted.dataUrl;
   }
 
-  const goalPayload = task.payload as Partial<GenerateGamePayload & UpdateGamePayload>;
+  // Seed with any resumed conversation, then the concrete task request. Update
+  // tasks lead with the current-state screenshot, then any reference images.
+  const taskImages = goalPayload.screenshot
+    ? [goalPayload.screenshot, ...(goalPayload.images ?? [])]
+    : goalPayload.images;
+  const carriedNote = toolContext.carriedBackgroundImage
+    ? "\n\nThe existing game has a generated background image, represented in the code by the " +
+      `${BACKGROUND_IMAGE_PLACEHOLDER} placeholder — keep the background-image style block unless the ` +
+      "parent asks to remove or replace the background."
+    : "";
+  // The parent explicitly enabled background generation — using the tool is
+  // expected, not optional (unless an image already exists from a prior build).
+  const backgroundNote =
+    onGenerateBackgroundImage && !toolContext.carriedBackgroundImage
+      ? "\n\nThe parent enabled AI background generation for this game: call " +
+        "generate_background_image with a scene description BEFORE write_game_code and " +
+        `reference the result via the ${BACKGROUND_IMAGE_PLACEHOLDER} contract.`
+      : "";
+  driver.seed(trimPriorImages(priorTurns), {
+    text: buildCodeTaskUserMessage(task) + carriedNote + backgroundNote,
+    images: taskImages,
+  });
+
   const learningGoal = goalPayload.learningGoal ?? "";
   const successDefinition = goalPayload.successDefinition ?? "";
 
@@ -182,15 +269,21 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
     usage.cacheReadTokens += u.cacheReadTokens;
   };
 
-  const runToolTurn = (call: GameToolCall): GameToolResult => {
-    if (call.name === "read_bridge_docs" || call.name === "read_existing_game") {
+  const runToolTurn = async (call: GameToolCall): Promise<GameToolResult> => {
+    if (
+      call.name === "read_bridge_docs" ||
+      call.name === "read_existing_game" ||
+      call.name === "read_char_paths"
+    ) {
       emitStep("reading_docs");
+    } else if (call.name === "generate_background_image") {
+      emitStep("generating_image");
     } else if (call.name === "write_game_code") {
       emitStep("writing_code");
     } else if (call.name === "validate_game") {
       emitStep("validating");
     }
-    const { result, writeResult } = executeTool(call.name, call.input, toolContext);
+    const { result, writeResult } = await executeTool(call.name, call.input, toolContext);
     if (writeResult) {
       lastWrite = writeResult;
       toolContext.existingCode = writeResult.code;
@@ -224,7 +317,8 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
       break;
     }
 
-    const toolResults = result.toolCalls.map(runToolTurn);
+    // Promise.all preserves order, so each tool_use id gets its matching result.
+    const toolResults = await Promise.all(result.toolCalls.map(runToolTurn));
     driver.addToolResults(toolResults);
 
     if (!result.expectsToolResults) break;
@@ -243,6 +337,12 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
     progressKind: lastWrite!.progressKind,
     requiredMetrics: lastWrite!.successCriteria.requiredMetrics,
     capabilities: lastWrite!.capabilities,
+    // "Image available": generated this run, or carried AND still referenced (a
+    // carried background may be dropped deliberately — never an error).
+    hasBackgroundImage:
+      toolContext.freshBackgroundImage !== undefined ||
+      (toolContext.carriedBackgroundImage !== undefined &&
+        hasBackgroundPlaceholder(lastWrite!.code)),
   });
 
   // Final validation with a bounded fix loop.
@@ -263,7 +363,7 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
 
       if (fix.toolCalls.length === 0) break;
 
-      const fixResults = fix.toolCalls.map(runToolTurn);
+      const fixResults = await Promise.all(fix.toolCalls.map(runToolTurn));
       driver.addToolResults(fixResults);
 
       const recheck = validateGameCode(lastWrite.code, goalOpts());
@@ -273,13 +373,26 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
 
   const finalValidation = validateGameCode(lastWrite.code, goalOpts());
 
+  // The bundle stays in placeholder form — the caller injects the image before
+  // rendering/persisting. A carried image survives only while still referenced.
+  const backgroundImage =
+    toolContext.freshBackgroundImage ??
+    (hasBackgroundPlaceholder(lastWrite.code) ? toolContext.carriedBackgroundImage : undefined);
+
+  // The title is parent-owned: when the task payload carries one (the parent's
+  // setting on both generate and update tasks) it wins. The model's title is
+  // only a fallback for untitled flows (e.g. voice-created games).
+  const parentTitle = goalPayload.title?.trim();
+
   return {
     taskType: task.taskType as "generate_game" | "update_game",
-    title: lastWrite.title,
+    title: parentTitle || lastWrite.title,
     description: lastWrite.description,
     tags: lastWrite.tags,
     codeBundle: lastWrite.code,
     markdown: lastWrite.markdown,
+    backgroundImage,
+    backgroundImageFailed: toolContext.backgroundImageFailed,
     metadata: { capabilities: lastWrite.capabilities },
     learningGoal,
     successDefinition,

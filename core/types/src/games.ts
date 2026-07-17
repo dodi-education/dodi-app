@@ -49,6 +49,12 @@ export interface GameSharingState {
  */
 export type DrawingStyle = "picture" | "mandala";
 
+/**
+ * Camera perspective the game's visual design is built around. Absent/null =
+ * unspecified: the generation agent picks the best fit for the game concept.
+ */
+export type GamePerspective = "bird" | "side" | "isometric";
+
 export type GameMetadata = Record<string, Json | undefined> & {
   version?: string;
   category?: string;
@@ -56,6 +62,10 @@ export type GameMetadata = Record<string, Json | undefined> & {
   supportsVoiceCommands?: boolean;
   /** Picture style for the client-side `generate_drawing` image prompt. */
   drawingStyle?: DrawingStyle;
+  /** Required camera perspective for the game's design (absent = agent chooses). */
+  perspective?: GamePerspective;
+  /** Generate an AI background image during builds (needs an image provider). */
+  generateBackgroundImage?: boolean;
 };
 
 export interface GameAssistantResponse {
@@ -103,12 +113,22 @@ export interface ParentSuccessMessage extends ParentToGameEnvelopeBase {
   };
 }
 
+/**
+ * Host → shim: capture the game surface without game cooperation. Answered by
+ * the injected sandbox shim (not game code) with a
+ * `game:event { event: "host_snapshot", snapshot }` reply.
+ */
+export interface ParentHostSnapshotMessage extends ParentToGameEnvelopeBase {
+  type: "dodi:host_snapshot";
+}
+
 export type ParentToGameMessage =
   | ParentInitMessage
   | ParentCommandMessage
   | ParentGetStateMessage
   | ParentGetSaveStateMessage
-  | ParentSuccessMessage;
+  | ParentSuccessMessage
+  | ParentHostSnapshotMessage;
 
 export interface GameToParentEnvelopeBase {
   token: string;

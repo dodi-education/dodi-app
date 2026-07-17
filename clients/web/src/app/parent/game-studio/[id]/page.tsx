@@ -12,6 +12,7 @@ import { createClient } from "@/lib/supabase/client";
 import { coerceProgressKind } from "@dodi/games/game-spec";
 import { isUnbuiltBundle } from "@dodi/games/placeholder";
 import type { Game } from "@dodi/types/database";
+import type { GameMetadata } from "@dodi/types/games";
 
 export default function EditGameStudioPage() {
   const params = useParams<{ id: string }>();
@@ -56,6 +57,7 @@ export default function EditGameStudioPage() {
             ? [game.kid_id]
             : [];
 
+      const metadata = (game.metadata ?? {}) as GameMetadata;
       setInitialGame({
         id: game.id,
         title: game.title,
@@ -71,6 +73,9 @@ export default function EditGameStudioPage() {
         // "Built" once Dodi has replaced the unbuilt placeholder with real code.
         built: !isUnbuiltBundle(game.code_bundle),
         isActive: game.is_active,
+        perspective: metadata.perspective ?? null,
+        generateBackgroundImage: Boolean(metadata.generateBackgroundImage),
+        capabilities: metadata.capabilities ?? [],
         // Sealed prior conversation — the studio unseals it to resume editing.
         agentTranscriptEnc: game.agent_transcript_enc,
       });

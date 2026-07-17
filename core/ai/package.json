@@ -25,7 +25,8 @@
     "./image-providers/factory": "./src/image-providers/factory.ts",
     "./image-providers/gemini": "./src/image-providers/gemini.ts",
     "./image-providers/xai": "./src/image-providers/xai.ts",
-    "./image-providers/coloring-prompt": "./src/image-providers/coloring-prompt.ts"
+    "./image-providers/coloring-prompt": "./src/image-providers/coloring-prompt.ts",
+    "./image-providers/background-prompt": "./src/image-providers/background-prompt.ts"
   },
   "main": "./src/index.ts",
   "types": "./src/index.ts",
