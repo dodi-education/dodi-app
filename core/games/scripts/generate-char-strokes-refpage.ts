@@ -60,10 +60,21 @@ function card(ch: string): string {
         stroke-width="3" stroke-linecap="round" stroke-linejoin="round" ${marker}/>${midArrow(s, color)}`;
     })
     .join("");
+  // Strokes often share a start point (A's diagonals, stem+bars of E/B/…) — nudge
+  // colliding badges along their own stroke's direction so every number stays visible.
+  const placed: CharStrokePoint[] = [];
   const badges = strokes
     .map((s, i) => {
       const color = COLORS[i % COLORS.length];
-      const [x, y] = s[0];
+      let [x, y] = s[0];
+      const [nx, ny] = s[1] ?? s[0];
+      const d = Math.hypot(nx - s[0][0], ny - s[0][1]) || 1;
+      const [ux, uy] = [(nx - s[0][0]) / d, (ny - s[0][1]) / d];
+      for (let tries = 0; tries < 4 && placed.some((p) => Math.hypot(p[0] - x, p[1] - y) < 10); tries++) {
+        x += ux * 7;
+        y += uy * 7;
+      }
+      placed.push([x, y]);
       return `<g class="badge"><circle cx="${x}" cy="${y}" r="5.6" fill="#fff" stroke="${color}" stroke-width="1.4"/>
         <text x="${x}" y="${y + 2.6}" text-anchor="middle" font-size="7.4" font-weight="700" fill="${color}">${i + 1}</text></g>`;
     })

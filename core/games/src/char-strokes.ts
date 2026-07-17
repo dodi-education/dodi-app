@@ -88,8 +88,8 @@ function withUmlautDots(base: CharStrokes, y: number): CharStrokes {
 // ─── Capitals (y 10..80) ────────────────────────────────────────────────────
 
 const CAPITALS: Record<string, CharStrokes> = {
-  // Up-stroke first: bottom-left → apex, then apex → bottom-right, then crossbar.
-  A: [line(27, 80, 50, 10), line(50, 10, 73, 80), line(35, 55, 65, 55, 2)],
+  // Both diagonals start at the apex and are drawn downward, then the crossbar.
+  A: [line(50, 10, 27, 80), line(50, 10, 73, 80), line(35, 55, 65, 55, 2)],
   B: [
     line(30, 10, 30, 80, 4),
     join(

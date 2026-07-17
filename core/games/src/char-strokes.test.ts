@@ -94,11 +94,12 @@ describe("stroke order & direction (German school print)", () => {
     expect(stem[0][1]).toBeLessThan(stem[stem.length - 1][1]);
   });
 
-  it("A = up-stroke from bottom-left to apex, down to bottom-right, then crossbar", () => {
-    const [up, down, bar] = getCharStrokes("A")!;
-    expect(up[0][1]).toBeGreaterThan(up[up.length - 1][1]); // rises to the apex
-    expect(up[0][0]).toBeLessThan(up[up.length - 1][0]); // from the left
-    expect(down[0][1]).toBeLessThan(down[down.length - 1][1]); // falls from the apex
+  it("A = left diagonal apex→down, right diagonal apex→down, then crossbar", () => {
+    const [left, right, bar] = getCharStrokes("A")!;
+    expect(left[0][1]).toBeLessThan(left[left.length - 1][1]); // starts at the apex, falls
+    expect(left[0][0]).toBeGreaterThan(left[left.length - 1][0]); // toward bottom-LEFT
+    expect(right[0][1]).toBeLessThan(right[right.length - 1][1]); // starts at the apex, falls
+    expect(right[0][0]).toBeLessThan(right[right.length - 1][0]); // toward bottom-RIGHT
     expect(bar[0][0]).toBeLessThan(bar[bar.length - 1][0]); // crossbar left→right
   });
 
