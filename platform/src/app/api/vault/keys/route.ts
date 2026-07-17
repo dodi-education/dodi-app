@@ -9,6 +9,7 @@ import { NextResponse } from "next/server";
 
 import { StoredVaultKeysSchema } from "@dodi/protocol/schemas";
 
+import { logServerError } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
 import { createLogger } from "@/logger";
 import {
@@ -28,6 +29,10 @@ export async function GET(request: Request): Promise<NextResponse> {
     const vaultKeys = await getStoredVaultKeys(supabase, accountId);
     return NextResponse.json({ vaultKeys });
   } catch (error) {
+    logServerError("api/vault/keys#GET", error, {
+      accountId,
+      httpStatus: 500,
+    });
     const message =
       error instanceof Error ? error.message : "Failed to load vault keys";
     log.error("get_failed", { error: message });
@@ -53,6 +58,10 @@ export async function PUT(request: Request): Promise<NextResponse> {
     await setStoredVaultKeys(supabase, accountId, parsed.data as StoredVaultKeys);
     return NextResponse.json({ ok: true });
   } catch (error) {
+    logServerError("api/vault/keys#PUT", error, {
+      accountId,
+      httpStatus: 500,
+    });
     const message =
       error instanceof Error ? error.message : "Failed to store vault keys";
     log.error("put_failed", { error: message });

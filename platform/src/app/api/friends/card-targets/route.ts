@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { serverErrorResponse } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
 import { serviceClient } from "@/lib/supabase";
 import { listCardRefreshTargets } from "@/services/friends";
@@ -25,8 +26,11 @@ export async function GET(request: Request): Promise<NextResponse> {
     });
     return NextResponse.json(targets);
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Failed to list card targets";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return serverErrorResponse(
+      error,
+      "Failed to list card targets",
+      "api/friends/card-targets#GET",
+      { accountId: auth.accountId },
+    );
   }
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 
+import { serverErrorResponse } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
 import { serviceClient } from "@/lib/supabase";
 import { lookupFriendTarget } from "@/services/friends";
@@ -35,8 +36,8 @@ export async function POST(request: Request): Promise<NextResponse> {
     }
     return NextResponse.json(target);
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Lookup failed";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return serverErrorResponse(error, "Lookup failed", "api/friends/lookup#POST", {
+      accountId: auth.accountId,
+    });
   }
 }

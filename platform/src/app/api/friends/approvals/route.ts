@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { serverErrorResponse } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
 import { serviceClient } from "@/lib/supabase";
 import { listPendingApprovals } from "@/services/friends";
@@ -13,8 +14,8 @@ export async function GET(request: Request): Promise<NextResponse> {
     const approvals = await listPendingApprovals(serviceClient(), auth.accountId);
     return NextResponse.json(approvals);
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Failed to fetch approvals";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return serverErrorResponse(error, "Failed to fetch approvals", "api/friends/approvals#GET", {
+      accountId: auth.accountId,
+    });
   }
 }

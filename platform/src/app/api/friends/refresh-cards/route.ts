@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 
+import { serverErrorResponse } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
 import { serviceClient } from "@/lib/supabase";
 import { refreshFriendCards } from "@/services/friends";
@@ -45,8 +46,11 @@ export async function POST(request: Request): Promise<NextResponse> {
     });
     return NextResponse.json({ updated });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Failed to refresh cards";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return serverErrorResponse(
+      error,
+      "Failed to refresh cards",
+      "api/friends/refresh-cards#POST",
+      { accountId: auth.accountId },
+    );
   }
 }

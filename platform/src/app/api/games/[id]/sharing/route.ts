@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { serverErrorResponse } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
 import { getGame, getGameSharing } from "@/services/games";
 
@@ -26,8 +27,8 @@ export async function GET(
     const sharing = await getGameSharing(supabase, game.id);
     return NextResponse.json(sharing);
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Failed to fetch sharing";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return serverErrorResponse(error, "Failed to fetch sharing", "api/games/[id]/sharing#GET", {
+      accountId,
+    });
   }
 }

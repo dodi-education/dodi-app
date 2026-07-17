@@ -52,6 +52,27 @@ export class AgentAbortedError extends Error {
   }
 }
 
+/** How far the loop got before failing — content-free, safe to report as
+ *  telemetry. `lastStopReason === "max_tokens"` means the write was truncated
+ *  (the MAX_TOKENS cap is too small for the requested game). */
+export interface GameAgentDiagnostics {
+  turns: number;
+  lastStopReason: string | null;
+  sawToolCalls: boolean;
+  sawText: boolean;
+}
+
+/** Thrown when the loop finishes without the model ever writing game code. */
+export class GameAgentError extends Error {
+  readonly diagnostics: GameAgentDiagnostics;
+
+  constructor(message: string, diagnostics: GameAgentDiagnostics) {
+    super(message);
+    this.name = "GameAgentError";
+    this.diagnostics = diagnostics;
+  }
+}
+
 export interface RunGameAgentParams {
   /** Agentic (tool-use) provider driving generation (anthropic | xai). */
   provider: AIProviderId;
@@ -136,6 +157,9 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
   let lastWrite: LastWriteResult | undefined;
   let iterationCount = 0;
   let validationRetries = 0;
+  let lastStopReason: string | null = null;
+  let sawToolCalls = false;
+  let sawText = false;
 
   // Accumulate token usage across every model call (main loop + fix loop) so the
   // caller can report the true per-generation cost. Structural param type avoids
@@ -176,6 +200,9 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
     const result = await driver.runTurn();
     iterationCount++;
     addUsage(result.usage);
+    lastStopReason = result.stopReason;
+    sawToolCalls ||= result.toolCalls.length > 0;
+    sawText ||= result.hasText;
 
     if (result.toolCalls.length === 0) {
       if (lastWrite) {
@@ -199,7 +226,12 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
   }
 
   if (!lastWrite) {
-    throw new Error("Agent did not produce any game code");
+    throw new GameAgentError("Agent did not produce any game code", {
+      turns: iterationCount,
+      lastStopReason,
+      sawToolCalls,
+      sawText,
+    });
   }
 
   const goalOpts = () => ({

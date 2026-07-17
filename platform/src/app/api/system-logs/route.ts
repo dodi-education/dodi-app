@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { serverErrorResponse } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
 import { listSystemLogs } from "@/services/system-logs";
 
@@ -29,8 +30,11 @@ export async function GET(request: Request): Promise<NextResponse> {
 
     return NextResponse.json(logs);
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Failed to fetch logs";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return serverErrorResponse(
+      error,
+      "Failed to fetch logs",
+      "api/system-logs#GET",
+      { accountId },
+    );
   }
 }

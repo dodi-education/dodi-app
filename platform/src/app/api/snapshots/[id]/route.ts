@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 
+import { serverErrorResponse } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
 import { serviceClient } from "@/lib/supabase";
 import {
@@ -32,9 +33,12 @@ export async function GET(
     }
     return NextResponse.json(snapshot);
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Failed to fetch snapshot";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return serverErrorResponse(
+      error,
+      "Failed to fetch snapshot",
+      "api/snapshots/[id]#GET",
+      { accountId: auth.accountId },
+    );
   }
 }
 

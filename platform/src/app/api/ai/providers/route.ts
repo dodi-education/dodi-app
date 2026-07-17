@@ -9,6 +9,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 
+import { serverErrorResponse } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
 import {
   getEncryptedProviders,
@@ -27,11 +28,11 @@ export async function GET(request: Request): Promise<NextResponse> {
   try {
     const encryptedProviders = await getEncryptedProviders(supabase, accountId);
     return NextResponse.json({ encryptedProviders });
-  } catch {
-    return NextResponse.json(
-      { error: "Failed to fetch providers" },
-      { status: 500 },
-    );
+  } catch (error) {
+    return serverErrorResponse(error, "Failed to fetch providers", "api/ai/providers#GET", {
+      accountId,
+      expose: false,
+    });
   }
 }
 
@@ -53,8 +54,8 @@ export async function PUT(request: Request): Promise<NextResponse> {
     await setEncryptedProviders(supabase, accountId, parsed.data.encryptedProviders);
     return NextResponse.json({ ok: true });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Failed to save providers";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return serverErrorResponse(error, "Failed to save providers", "api/ai/providers#PUT", {
+      accountId,
+    });
   }
 }

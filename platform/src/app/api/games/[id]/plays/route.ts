@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 
+import { serverErrorResponse } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
 import { getGame, isGameVisibleToKid } from "@/services/games";
 import { getKid } from "@/services/kids";
@@ -61,7 +62,8 @@ export async function POST(
 
     return NextResponse.json({ playId: play.id }, { status: 201 });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to start play";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return serverErrorResponse(error, "Failed to start play", "api/games/[id]/plays#POST", {
+      accountId,
+    });
   }
 }

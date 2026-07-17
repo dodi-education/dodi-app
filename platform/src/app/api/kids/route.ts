@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 
+import { logServerError, serverErrorResponse } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
 import { getAccount } from "@/services/accounts";
 import { createKid, listKids } from "@/services/kids";
@@ -21,11 +22,11 @@ export async function GET(request: Request): Promise<NextResponse> {
   try {
     const kids = await listKids(supabase, accountId);
     return NextResponse.json(kids);
-  } catch {
-    return NextResponse.json(
-      { error: "Failed to fetch kids" },
-      { status: 500 },
-    );
+  } catch (error) {
+    return serverErrorResponse(error, "Failed to fetch kids", "api/kids#GET", {
+      accountId,
+      expose: false,
+    });
   }
 }
 
@@ -70,9 +71,15 @@ export async function POST(request: Request): Promise<NextResponse> {
       const message =
         error instanceof Error ? error.message : "Failed to create kid";
       if (message.includes("duplicate")) continue;
+      logServerError("api/kids#POST", error, { accountId, httpStatus: 500 });
       return NextResponse.json({ error: message }, { status: 500 });
     }
   }
+  logServerError(
+    "api/kids#POST",
+    new Error("Could not assign a unique handle, please try again"),
+    { accountId, httpStatus: 500 },
+  );
   return NextResponse.json(
     { error: "Could not assign a unique handle, please try again" },
     { status: 500 },

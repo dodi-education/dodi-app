@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 
+import { serverErrorResponse } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
 import {
   deleteKid,
@@ -55,11 +56,11 @@ export async function GET(
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
     return NextResponse.json(kid);
-  } catch {
-    return NextResponse.json(
-      { error: "Failed to fetch kid" },
-      { status: 500 },
-    );
+  } catch (error) {
+    return serverErrorResponse(error, "Failed to fetch kid", "api/kids/[id]#GET", {
+      accountId,
+      expose: false,
+    });
   }
 }
 
@@ -92,9 +93,9 @@ export async function PATCH(
     const kid = await updateKid(supabase, id, result.data);
     return NextResponse.json(kid);
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Failed to update kid";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return serverErrorResponse(error, "Failed to update kid", "api/kids/[id]#PATCH", {
+      accountId,
+    });
   }
 }
 
@@ -116,10 +117,10 @@ export async function DELETE(
   try {
     await deleteKid(supabase, id);
     return NextResponse.json({ success: true });
-  } catch {
-    return NextResponse.json(
-      { error: "Failed to delete kid" },
-      { status: 500 },
-    );
+  } catch (error) {
+    return serverErrorResponse(error, "Failed to delete kid", "api/kids/[id]#DELETE", {
+      accountId,
+      expose: false,
+    });
   }
 }

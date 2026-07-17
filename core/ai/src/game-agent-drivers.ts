@@ -47,6 +47,9 @@ export interface GameTurn {
   /** Model wants to continue after tool results (Anthropic stop_reason
    *  "tool_use" / OpenAI finish_reason "tool_calls"). */
   expectsToolResults: boolean;
+  /** Raw provider stop/finish reason — surfaced in failure diagnostics so a
+   *  "max_tokens" truncation is distinguishable from the model just stopping. */
+  stopReason: string | null;
   usage: TokenUsage;
 }
 
@@ -181,6 +184,7 @@ class AnthropicGameDriver implements GameCodeDriver {
       })),
       hasText: textBlocks.length > 0,
       expectsToolResults: response.stop_reason === "tool_use",
+      stopReason: response.stop_reason,
       usage: anthropicUsage(response.usage),
     };
   }
@@ -275,6 +279,7 @@ class XaiGameDriver implements GameCodeDriver {
       }),
       hasText: typeof msg?.content === "string" && msg.content.trim().length > 0,
       expectsToolResults: choice?.finish_reason === "tool_calls",
+      stopReason: choice?.finish_reason ?? null,
       usage: xaiUsage(res.usage),
     };
   }

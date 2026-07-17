@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { serverErrorResponse } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
 import { serviceClient } from "@/lib/supabase";
 import { listRequests } from "@/services/friends";
@@ -30,8 +31,8 @@ export async function GET(request: Request): Promise<NextResponse> {
     });
     return NextResponse.json(requests);
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Failed to fetch requests";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return serverErrorResponse(error, "Failed to fetch requests", "api/friends/requests#GET", {
+      accountId: auth.accountId,
+    });
   }
 }

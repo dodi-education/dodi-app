@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { serverErrorResponse } from "@/lib/error-logs";
 import { serviceClient } from "@/lib/supabase";
 import { createPendingDevice } from "@/services/devices";
 
@@ -24,6 +25,6 @@ export async function POST(request: Request): Promise<Response> {
     });
     return NextResponse.json({ pairingCode });
   } catch (e) {
-    return NextResponse.json({ error: (e as Error).message }, { status: 500 });
+    return serverErrorResponse(e, "Failed to enroll device", "api/devices/enroll#POST");
   }
 }

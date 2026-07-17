@@ -34,8 +34,14 @@ import { useVaultStore } from "@/stores/vault-store";
 import { resolveClientGame } from "@/lib/ai/resolve-client-game";
 import { calculateChildAge, getLanguageDisplayName } from "@dodi/ai/dodi-context";
 import { buildLearningContext, measureLearningContext } from "@dodi/ai/learning-context";
-import { runGameAgent, AgentAbortedError, type PriorTurn } from "@dodi/ai/game-agent";
+import { runGameAgent, AgentAbortedError, GameAgentError, type PriorTurn } from "@dodi/ai/game-agent";
 import { reportUsage } from "@/lib/usage/report-usage";
+import {
+  browserFailureMeta,
+  describeError,
+  reportErrorLog,
+  startFailureTimer,
+} from "@/lib/errors/report-error-log";
 import { mapSuccessDefinition } from "@dodi/ai/success-mapping";
 import type { AgentStep } from "@dodi/types/agent-progress";
 import type { AgentCodeResult, AgentTaskRequest } from "@dodi/types/tasks";
@@ -446,10 +452,15 @@ export function GameStudio({ initialGame }: GameStudioProps) {
 
     const controller = new AbortController();
     abortRef.current = controller;
+    // Failure telemetry inputs: the loop runs entirely in the browser, so the
+    // report below is the only trace a failed build leaves anywhere.
+    const startedAt = startFailureTimer();
+    let lastStep: AgentStep | null = null;
+    let gameCfg: Awaited<ReturnType<typeof resolveClientGame>> = null;
     try {
       // The provider key lives only in the unlocked vault — resolve it here and
       // run the ENTIRE agent loop in the browser, so it never reaches our servers.
-      const gameCfg = await resolveClientGame();
+      gameCfg = await resolveClientGame();
       if (!gameCfg) {
         setThinking(false);
         setError(t("needProviderKey"));
@@ -488,7 +499,10 @@ export function GameStudio({ initialGame }: GameStudioProps) {
         task,
         priorTurns: history as PriorTurn[],
         signal: controller.signal,
-        onStep: setStep,
+        onStep: (s) => {
+          lastStep = s;
+          setStep(s);
+        },
       });
 
       // Sanitize client-side before it touches state/persistence (the games route
@@ -561,12 +575,45 @@ export function GameStudio({ initialGame }: GameStudioProps) {
       } catch (saveErr) {
         const reason = saveErr instanceof Error ? saveErr.message : "";
         setError(reason ? t("saveFailed", { reason }) : t("saveFailedGeneric"));
+        reportErrorLog({
+          context: "game_save",
+          kidId: primaryKidId,
+          gameId: game.id,
+          provider: gameCfg.provider,
+          model: gameCfg.model,
+          ...describeError(saveErr, [gameCfg.apiKey]),
+        });
       }
     } catch (err) {
       // Pressing Stop aborts the loop — don't dress that up as a failure.
       if (err instanceof AgentAbortedError || controller.signal.aborted) {
         setMessages((m) => [...m, { role: "assistant", text: t("stopped") }]);
       } else {
+        // The user sees only the generic message (no server/provider errors
+        // bubble up) — the real error goes to telemetry, where the meta below
+        // separates a killed connection (offline/hidden tab) from a truncated
+        // write (stopReason max_tokens) or a provider API error (httpStatus).
+        console.error("[game-studio] build failed", err);
+        const diag = err instanceof GameAgentError ? err.diagnostics : null;
+        reportErrorLog({
+          context: isUpdate ? "game_update" : "game_build",
+          kidId: primaryKidId,
+          gameId: game.id,
+          provider: gameCfg?.provider,
+          model: gameCfg?.model,
+          ...describeError(err, gameCfg ? [gameCfg.apiKey] : []),
+          meta: browserFailureMeta(startedAt, {
+            lastStep: lastStep ?? undefined,
+            ...(diag
+              ? {
+                  turns: diag.turns,
+                  stopReason: diag.lastStopReason ?? undefined,
+                  sawToolCalls: diag.sawToolCalls,
+                  sawText: diag.sawText,
+                }
+              : {}),
+          }),
+        });
         setError(t("buildFailed"));
         setMessages((m) => [...m, { role: "assistant", text: t("buildFailed") }]);
       }

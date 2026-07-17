@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 
+import { logServerError, serverErrorResponse } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
 import { createLogger } from "@/logger";
 import { getKid } from "@/services/kids";
@@ -85,9 +86,9 @@ export async function GET(request: Request): Promise<NextResponse> {
       }));
       return NextResponse.json(withSharing);
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to fetch games";
-      return NextResponse.json({ error: message }, { status: 500 });
+      return serverErrorResponse(error, "Failed to fetch games", "api/games#GET", {
+        accountId,
+      });
     }
   }
 
@@ -127,8 +128,9 @@ export async function GET(request: Request): Promise<NextResponse> {
 
     return NextResponse.json(translatedGames);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to fetch games";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return serverErrorResponse(error, "Failed to fetch games", "api/games#GET", {
+      accountId,
+    });
   }
 }
 
@@ -192,6 +194,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   } catch (error) {
     const message = describeError(error);
     log.error("creation_failed", { kidId, error: message });
+    logServerError("api/games#POST", error, { accountId, httpStatus: 500 });
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

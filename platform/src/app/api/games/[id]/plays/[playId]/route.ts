@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 
+import { serverErrorResponse } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
 import { getPlay, updatePlay } from "@/services/game-plays";
 import { MetricsSummarySchema } from "@dodi/games/success";
@@ -53,7 +54,8 @@ export async function PATCH(
       { status: 200 },
     );
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to update play";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return serverErrorResponse(error, "Failed to update play", "api/games/[id]/plays/[playId]#PATCH", {
+      accountId,
+    });
   }
 }

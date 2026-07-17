@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 
+import { serverErrorResponse } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
 import { getAccount } from "@/services/accounts";
 import { createPersona, listPersonas } from "@/services/personas";
@@ -21,10 +22,12 @@ export async function GET(request: Request): Promise<NextResponse> {
   try {
     const personas = await listPersonas(supabase, accountId);
     return NextResponse.json(personas);
-  } catch {
-    return NextResponse.json(
-      { error: "Failed to fetch personas" },
-      { status: 500 },
+  } catch (error) {
+    return serverErrorResponse(
+      error,
+      "Failed to fetch personas",
+      "api/personas#GET",
+      { accountId, expose: false },
     );
   }
 }
@@ -64,8 +67,11 @@ export async function POST(request: Request): Promise<NextResponse> {
     });
     return NextResponse.json(persona, { status: 201 });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Failed to create persona";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return serverErrorResponse(
+      error,
+      "Failed to create persona",
+      "api/personas#POST",
+      { accountId },
+    );
   }
 }

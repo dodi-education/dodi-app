@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 
+import { serverErrorResponse } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
 import { getModelConfig, updateModelConfig } from "@/services/ai-providers";
 import type { AccountModelConfig } from "@dodi/types/ai";
@@ -27,11 +28,11 @@ export async function GET(request: Request): Promise<NextResponse> {
   try {
     const config = await getModelConfig(supabase, accountId);
     return NextResponse.json(config);
-  } catch {
-    return NextResponse.json(
-      { error: "Failed to fetch config" },
-      { status: 500 },
-    );
+  } catch (error) {
+    return serverErrorResponse(error, "Failed to fetch config", "api/ai/config#GET", {
+      accountId,
+      expose: false,
+    });
   }
 }
 
@@ -65,8 +66,8 @@ export async function PATCH(request: Request): Promise<NextResponse> {
     await updateModelConfig(supabase, accountId, config);
     return NextResponse.json(config);
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Failed to update config";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return serverErrorResponse(error, "Failed to update config", "api/ai/config#PATCH", {
+      accountId,
+    });
   }
 }

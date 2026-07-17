@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database } from "@dodi/types/database";
+import { serverErrorResponse } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
 import {
   addFavorite,
@@ -58,9 +59,9 @@ export async function PUT(
     await addFavorite(supabase, { accountId, kidId: kidId!, gameId: id });
     return NextResponse.json({ is_favorite: true });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Failed to favorite game";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return serverErrorResponse(error, "Failed to favorite game", "api/games/[id]/favorite#PUT", {
+      accountId,
+    });
   }
 }
 
@@ -81,8 +82,8 @@ export async function DELETE(
     await removeFavorite(supabase, { kidId: kidId!, gameId: id });
     return NextResponse.json({ is_favorite: false });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Failed to unfavorite game";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return serverErrorResponse(error, "Failed to unfavorite game", "api/games/[id]/favorite#DELETE", {
+      accountId,
+    });
   }
 }

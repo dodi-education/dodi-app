@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 
+import { serverErrorResponse } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
 import { publishFriendKeys } from "@/services/friends";
 
@@ -44,8 +45,8 @@ export async function POST(
     });
     return NextResponse.json({ success: true });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Failed to publish friend keys";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return serverErrorResponse(error, "Failed to publish friend keys", "api/kids/[id]/friend-keys#POST", {
+      accountId,
+    });
   }
 }

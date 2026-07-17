@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { serverErrorResponse } from "@/lib/error-logs";
 import { anonClient } from "@/lib/supabase";
 import { getLocalizedPlans } from "@/services/plans";
 
@@ -14,7 +15,6 @@ export async function GET(request: Request): Promise<Response> {
     const plans = await getLocalizedPlans(anonClient(), locale);
     return NextResponse.json({ plans });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to load plans";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return serverErrorResponse(error, "Failed to load plans", "api/plans#GET");
   }
 }

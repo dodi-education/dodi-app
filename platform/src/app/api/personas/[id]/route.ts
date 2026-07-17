@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 
+import { serverErrorResponse } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
 import {
   deletePersona,
@@ -35,10 +36,12 @@ export async function GET(
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
     return NextResponse.json(persona);
-  } catch {
-    return NextResponse.json(
-      { error: "Failed to fetch persona" },
-      { status: 500 },
+  } catch (error) {
+    return serverErrorResponse(
+      error,
+      "Failed to fetch persona",
+      "api/personas/[id]#GET",
+      { accountId, expose: false },
     );
   }
 }
@@ -78,9 +81,12 @@ export async function PATCH(
     const persona = await updatePersona(supabase, id, result.data);
     return NextResponse.json(persona);
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Failed to update persona";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return serverErrorResponse(
+      error,
+      "Failed to update persona",
+      "api/personas/[id]#PATCH",
+      { accountId },
+    );
   }
 }
 
@@ -108,10 +114,12 @@ export async function DELETE(
   try {
     await deletePersona(supabase, id);
     return NextResponse.json({ success: true });
-  } catch {
-    return NextResponse.json(
-      { error: "Failed to delete persona" },
-      { status: 500 },
+  } catch (error) {
+    return serverErrorResponse(
+      error,
+      "Failed to delete persona",
+      "api/personas/[id]#DELETE",
+      { accountId, expose: false },
     );
   }
 }

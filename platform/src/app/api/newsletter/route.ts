@@ -4,6 +4,7 @@ import { z } from "zod/v4";
 
 import { clientIp, hashIp } from "@/lib/client-ip";
 import { sendEmail } from "@/lib/email";
+import { serverErrorResponse } from "@/lib/error-logs";
 import { serviceClient } from "@/lib/supabase";
 import { NewsletterWelcomeEmail } from "@/emails/newsletter-welcome";
 import { newsletterWelcomeCopy } from "@/emails/strings";
@@ -84,9 +85,11 @@ export async function POST(request: Request): Promise<NextResponse> {
       window: RATE_WINDOW,
     });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Failed to record signup";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return serverErrorResponse(
+      error,
+      "Failed to record signup",
+      "api/newsletter#POST",
+    );
   }
 
   if (outcome.rateLimited) {

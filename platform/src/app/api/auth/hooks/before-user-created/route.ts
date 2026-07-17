@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { Webhook } from "standardwebhooks";
 
 import { createLogger } from "@/logger";
+import { logServerError } from "@/lib/error-logs";
 import { getRegistrationMode, isInviteCodeActive } from "@/services/registration";
 import { serviceClient } from "@/lib/supabase";
 
@@ -43,6 +44,11 @@ export async function POST(request: Request): Promise<Response> {
   const secret = process.env.BEFORE_USER_CREATED_HOOK_SECRET;
   if (!secret) {
     log.error("hook_secret_missing", {});
+    logServerError(
+      "api/auth/hooks/before-user-created#POST",
+      new Error("Registration hook is not configured."),
+      { httpStatus: 500 },
+    );
     return NextResponse.json(
       { error: { http_code: 500, message: "Registration hook is not configured." } },
       { status: 500 },
@@ -85,6 +91,7 @@ export async function POST(request: Request): Promise<Response> {
       active = await isInviteCodeActive(serviceClient(), code);
     } catch (e) {
       log.error("invite_check_failed", { message: (e as Error).message });
+      logServerError("api/auth/hooks/before-user-created#POST", e, { httpStatus: 500 });
       return reject(500, "Could not verify the invite code. Please try again.");
     }
 

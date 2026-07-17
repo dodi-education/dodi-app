@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { serverErrorResponse } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
 import { serviceClient } from "@/lib/supabase";
 import { listFriends } from "@/services/friends";
@@ -21,8 +22,8 @@ export async function GET(request: Request): Promise<NextResponse> {
     });
     return NextResponse.json(friends);
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Failed to fetch friends";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return serverErrorResponse(error, "Failed to fetch friends", "api/friends#GET", {
+      accountId: auth.accountId,
+    });
   }
 }

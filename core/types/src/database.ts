@@ -518,6 +518,57 @@ export interface Database {
         };
         Relationships: [];
       };
+      error_logs: {
+        Row: {
+          id: string;
+          account_id: string | null;
+          kid_id: string | null;
+          game_id: string | null;
+          type: "client" | "server";
+          context: string;
+          provider: string | null;
+          model: string | null;
+          error_name: string | null;
+          error_message: string | null;
+          http_status: number | null;
+          meta: Json | null;
+          user_agent: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          account_id?: string | null;
+          kid_id?: string | null;
+          game_id?: string | null;
+          type: "client" | "server";
+          context: string;
+          provider?: string | null;
+          model?: string | null;
+          error_name?: string | null;
+          error_message?: string | null;
+          http_status?: number | null;
+          meta?: Json | null;
+          user_agent?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          account_id?: string | null;
+          kid_id?: string | null;
+          game_id?: string | null;
+          type?: "client" | "server";
+          context?: string;
+          provider?: string | null;
+          model?: string | null;
+          error_name?: string | null;
+          error_message?: string | null;
+          http_status?: number | null;
+          meta?: Json | null;
+          user_agent?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       game_sharings: {
         Row: {
           id: string;
@@ -908,6 +959,9 @@ export type PlatformConfig =
 export type UsageEvent = Database["public"]["Tables"]["usage_events"]["Row"];
 export type UsageEventInsert =
   Database["public"]["Tables"]["usage_events"]["Insert"];
+export type ErrorLog = Database["public"]["Tables"]["error_logs"]["Row"];
+export type ErrorLogInsert =
+  Database["public"]["Tables"]["error_logs"]["Insert"];
 /**
  * Slim persona projection embedded in kid read shapes ("data travels with the
  * row that owns it"): the API joins it server-side via the active_persona_id

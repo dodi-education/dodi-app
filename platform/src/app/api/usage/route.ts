@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 
+import { serverErrorResponse } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
 import { getKid } from "@/services/kids";
 import { getMonthlyUsage, recordUsage } from "@/services/usage";
@@ -74,8 +75,9 @@ export async function POST(request: Request): Promise<Response> {
     const event = await recordUsage(supabase, { accountId, ...report });
     return NextResponse.json({ id: event.id }, { status: 201 });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to record usage";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return serverErrorResponse(error, "Failed to record usage", "api/usage#POST", {
+      accountId,
+    });
   }
 }
 
@@ -98,7 +100,8 @@ export async function GET(request: Request): Promise<Response> {
       voiceSeconds: monthly.voiceSeconds,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to load usage";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return serverErrorResponse(error, "Failed to load usage", "api/usage#GET", {
+      accountId,
+    });
   }
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 
+import { serverErrorResponse } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
 import { sanitizeGameBundle } from "@/game-sanitizer";
 import type { GameUpdate, Json } from "@dodi/types/database";
@@ -82,8 +83,9 @@ export async function GET(
     const translation = await getTranslation(supabase, game.id, locale);
     return NextResponse.json(applyTranslation(game, translation));
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to fetch game";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return serverErrorResponse(error, "Failed to fetch game", "api/games/[id]#GET", {
+      accountId,
+    });
   }
 }
 
@@ -163,8 +165,9 @@ export async function PATCH(
 
     return NextResponse.json(game);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to update game";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return serverErrorResponse(error, "Failed to update game", "api/games/[id]#PATCH", {
+      accountId,
+    });
   }
 }
 
@@ -194,7 +197,8 @@ export async function DELETE(
     await deleteCustomGame(supabase, id);
     return NextResponse.json({ success: true });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to delete game";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return serverErrorResponse(error, "Failed to delete game", "api/games/[id]#DELETE", {
+      accountId,
+    });
   }
 }

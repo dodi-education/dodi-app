@@ -294,6 +294,31 @@ CREATE TABLE IF NOT EXISTS "public"."usage_events" (
 ALTER TABLE "public"."usage_events" OWNER TO "postgres";
 
 
+CREATE TABLE IF NOT EXISTS "public"."error_logs" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    -- NULL for server errors caught outside a user context.
+    "account_id" "uuid",
+    "kid_id" "uuid",
+    "game_id" "uuid",
+    "type" "text" NOT NULL,
+    "context" "text" NOT NULL,
+    "provider" "text",
+    "model" "text",
+    "error_name" "text",
+    "error_message" "text",
+    "http_status" integer,
+    "meta" "jsonb",
+    "user_agent" "text",
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "error_logs_type_check" CHECK (("type" = ANY (ARRAY['client'::"text", 'server'::"text"])))
+);
+
+
+ALTER TABLE "public"."error_logs" OWNER TO "postgres";
+
+COMMENT ON TABLE "public"."error_logs" IS 'Error telemetry, gated by ERROR_LOGS (all|client|server|none; unset ⇒ all). type=client: failures of browser-run flows (BYOK agent loops etc.) that never touch our servers, reported via /api/error-logs. type=server: errors caught in platform API routes. Sanitized client-side AND capped server-side: error name/message + operational meta only — never prompts, kid content, or provider keys.';
+
+
 CREATE TABLE IF NOT EXISTS "public"."personas" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "account_id" "uuid",
@@ -399,6 +424,12 @@ CREATE INDEX "usage_events_account_created_idx" ON "public"."usage_events" USING
 CREATE INDEX "usage_events_account_kid_created_idx" ON "public"."usage_events" USING "btree" ("account_id", "kid_id", "created_at" DESC);
 
 
+CREATE INDEX "error_logs_account_created_idx" ON "public"."error_logs" USING "btree" ("account_id", "created_at" DESC);
+
+
+CREATE INDEX "error_logs_created_at_idx" ON "public"."error_logs" USING "btree" ("created_at" DESC);
+
+
 CREATE INDEX "games_account_kid_created_idx" ON "public"."games" USING "btree" ("account_id", "kid_id", "created_at" DESC);
 
 
@@ -491,6 +522,22 @@ ALTER TABLE ONLY "public"."usage_events"
     ADD CONSTRAINT "usage_events_game_id_fkey" FOREIGN KEY ("game_id") REFERENCES "public"."games"("id") ON DELETE SET NULL;
 
 
+ALTER TABLE ONLY "public"."error_logs"
+    ADD CONSTRAINT "error_logs_pkey" PRIMARY KEY ("id");
+
+
+ALTER TABLE ONLY "public"."error_logs"
+    ADD CONSTRAINT "error_logs_account_id_fkey" FOREIGN KEY ("account_id") REFERENCES "public"."accounts"("id") ON DELETE CASCADE;
+
+
+ALTER TABLE ONLY "public"."error_logs"
+    ADD CONSTRAINT "error_logs_kid_id_fkey" FOREIGN KEY ("kid_id") REFERENCES "public"."kids"("id") ON DELETE SET NULL;
+
+
+ALTER TABLE ONLY "public"."error_logs"
+    ADD CONSTRAINT "error_logs_game_id_fkey" FOREIGN KEY ("game_id") REFERENCES "public"."games"("id") ON DELETE SET NULL;
+
+
 ALTER TABLE ONLY "public"."game_sharings"
     ADD CONSTRAINT "game_sharings_game_id_fkey" FOREIGN KEY ("game_id") REFERENCES "public"."games"("id") ON DELETE CASCADE;
 
@@ -570,6 +617,12 @@ CREATE POLICY "Users can create own usage events" ON "public"."usage_events" FOR
 CREATE POLICY "Users can view own usage events" ON "public"."usage_events" FOR SELECT USING (("auth"."uid"() = "account_id"));
 
 
+CREATE POLICY "Users can create own error logs" ON "public"."error_logs" FOR INSERT WITH CHECK (("auth"."uid"() = "account_id"));
+
+
+CREATE POLICY "Users can view own error logs" ON "public"."error_logs" FOR SELECT USING (("auth"."uid"() = "account_id"));
+
+
 CREATE POLICY "Users can create own game sharings" ON "public"."game_sharings" FOR INSERT WITH CHECK (("auth"."uid"() = "account_id"));
 
 
@@ -643,6 +696,9 @@ ALTER TABLE "public"."game_plays" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."usage_events" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."error_logs" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."game_sharings" ENABLE ROW LEVEL SECURITY;
@@ -721,6 +777,11 @@ GRANT ALL ON TABLE "public"."game_plays" TO "service_role";
 GRANT ALL ON TABLE "public"."usage_events" TO "anon";
 GRANT ALL ON TABLE "public"."usage_events" TO "authenticated";
 GRANT ALL ON TABLE "public"."usage_events" TO "service_role";
+
+
+GRANT ALL ON TABLE "public"."error_logs" TO "anon";
+GRANT ALL ON TABLE "public"."error_logs" TO "authenticated";
+GRANT ALL ON TABLE "public"."error_logs" TO "service_role";
 
 
 GRANT ALL ON TABLE "public"."game_sharings" TO "anon";

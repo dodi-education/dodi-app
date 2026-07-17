@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { serverErrorResponse } from "@/lib/error-logs";
 import { resolveAuth, unauthorizedResponse } from "@/lib/resolve-auth";
 
 export async function GET(request: Request): Promise<Response> {
@@ -7,9 +8,11 @@ export async function GET(request: Request): Promise<Response> {
     const { accountId, via } = await resolveAuth(request);
     return NextResponse.json({ accountId, via });
   } catch (error) {
-    return unauthorizedResponse(error) ?? NextResponse.json(
-      { error: "Internal error" },
-      { status: 500 },
+    return (
+      unauthorizedResponse(error) ??
+      serverErrorResponse(error, "Internal error", "api/whoami#GET", {
+        expose: false,
+      })
     );
   }
 }

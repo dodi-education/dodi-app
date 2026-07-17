@@ -12,6 +12,7 @@
     "./games": "./src/games.ts",
     "./tasks": "./src/tasks.ts",
     "./usage": "./src/usage.ts",
+    "./error-logs": "./src/error-logs.ts",
     "./success": "./src/success.ts",
     "./gemini-live": "./src/gemini-live.ts",
     "./logger": "./src/logger.ts"
