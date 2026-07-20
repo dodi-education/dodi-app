@@ -19,44 +19,55 @@ import { useDateFormat } from "@/components/providers/date-format-provider";
 import { useKids } from "@/hooks/use-kids";
 import { decryptPersona } from "@dodi/vault";
 import { useVaultStore } from "@/stores/vault-store";
-import type { Persona, SystemLog } from "@dodi/types/database";
+import type { Persona, Activity } from "@dodi/types/database";
 
 interface PersonaOption {
   id: string;
   name: string;
 }
 
+/** Non-memory kid activity kinds only (memory lives on the kid memory page). */
 const EVENT_TYPES = [
   "session_start",
-  "memory_stored",
-  "memory_discarded",
-  "memory_updated",
-  "error",
+  "game_started",
+  "game_command_executed",
+  "game_command_failed",
+  "snapshot_created",
+  "snapshot_shared",
+  "friend_request_sent",
+  "friend_request_accepted",
 ] as const;
 
 const EVENT_BADGE_VARIANTS: Record<string, "blue" | "destructive" | "gray"> = {
   session_start: "blue",
-  error: "destructive",
+  game_started: "blue",
+  game_command_failed: "destructive",
 };
 
 const PAGE_SIZE = 50;
 
-function getEventLabel(event: string, t: ReturnType<typeof useTranslations>): string {
+function getEventLabel(
+  event: string,
+  t: ReturnType<typeof useTranslations>,
+): string {
   const labelMap: Record<string, string> = {
     session_start: t("sessionStart"),
-    memory_stored: t("memoryStored"),
-    memory_discarded: t("memoryDiscarded"),
-    memory_updated: t("memoryUpdated"),
-    error: t("error"),
+    game_started: t("gameStarted"),
+    game_command_executed: t("gameCommandExecuted"),
+    game_command_failed: t("gameCommandFailed"),
+    snapshot_created: t("snapshotCreated"),
+    snapshot_shared: t("snapshotShared"),
+    friend_request_sent: t("friendRequestSent"),
+    friend_request_accepted: t("friendRequestAccepted"),
   };
   return labelMap[event] ?? event;
 }
 
-export default function SystemLogsPage() {
-  const t = useTranslations("systemLogs");
+export default function ActivitiesPage() {
+  const t = useTranslations("activities");
   const { formatDateTime } = useDateFormat();
 
-  const [logs, setLogs] = useState<SystemLog[]>([]);
+  const [rows, setRows] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(false);
 
@@ -73,7 +84,8 @@ export default function SystemLogsPage() {
   // their names for the filter labels (the system default passes through).
   useEffect(() => {
     if (!session) return;
-    dodi.request("/api/personas")
+    dodi
+      .request("/api/personas")
       .then((r) => r.json())
       .then((data: Persona[]) => {
         if (!Array.isArray(data)) return;
@@ -87,7 +99,7 @@ export default function SystemLogsPage() {
       .catch(() => {});
   }, [session]);
 
-  const fetchLogs = useCallback(
+  const fetchRows = useCallback(
     async (offset: number, append: boolean) => {
       setLoading(true);
       try {
@@ -98,11 +110,11 @@ export default function SystemLogsPage() {
         params.set("limit", String(PAGE_SIZE));
         params.set("offset", String(offset));
 
-        const res = await dodi.request(`/api/system-logs?${params.toString()}`);
+        const res = await dodi.request(`/api/activities?${params.toString()}`);
         if (!res.ok) throw new Error("Failed to fetch");
 
-        const data: SystemLog[] = await res.json();
-        setLogs((prev) => (append ? [...prev, ...data] : data));
+        const data: Activity[] = await res.json();
+        setRows((prev) => (append ? [...prev, ...data] : data));
         setHasMore(data.length === PAGE_SIZE);
       } catch {
         // non-critical
@@ -113,16 +125,14 @@ export default function SystemLogsPage() {
     [filterKid, filterPersona, filterEvent],
   );
 
-  // Refetch when filters change
   useEffect(() => {
-    fetchLogs(0, false);
-  }, [fetchLogs]);
+    fetchRows(0, false);
+  }, [fetchRows]);
 
   const kidNameMap = new Map(kids.map((p) => [p.id, p.display_name]));
 
   return (
     <div>
-      {/* Filter bar */}
       <div className="mb-6 flex flex-wrap gap-3">
         <Select value={filterKid} onValueChange={setFilterKid}>
           <SelectTrigger className="w-[180px]">
@@ -167,45 +177,45 @@ export default function SystemLogsPage() {
         </Select>
       </div>
 
-      {/* Log list */}
-      {logs.length === 0 && !loading ? (
+      {rows.length === 0 && !loading ? (
         <div className="rounded-lg border border-dashed border-border-strong px-5 py-8 text-center text-sm text-muted-foreground">
-          {filterKid === "all" && filterPersona === "all" && filterEvent === "all"
+          {filterKid === "all" &&
+          filterPersona === "all" &&
+          filterEvent === "all"
             ? t("noLogs")
             : t("noResults")}
         </div>
       ) : (
         <Section title={t("heading")}>
-          {logs.map((log) => (
-            <Row key={log.id}>
+          {rows.map((row) => (
+            <Row key={row.id}>
               <RowMain>
                 <RowTitle>
-                  <span className="line-clamp-1 font-medium">{log.message}</span>
+                  <span className="line-clamp-1 font-medium">{row.message}</span>
                 </RowTitle>
                 <RowMeta>
-                  {filterKid === "all" && kidNameMap.get(log.kid_id) && (
+                  {filterKid === "all" && kidNameMap.get(row.kid_id) && (
                     <>
-                      {kidNameMap.get(log.kid_id)}
+                      {kidNameMap.get(row.kid_id)}
                       <DotSep />
                     </>
                   )}
-                  {formatDateTime(log.created_at)}
+                  {formatDateTime(row.created_at)}
                 </RowMeta>
               </RowMain>
-              <Badge variant={EVENT_BADGE_VARIANTS[log.event] ?? "gray"}>
-                {getEventLabel(log.event, t)}
+              <Badge variant={EVENT_BADGE_VARIANTS[row.event] ?? "gray"}>
+                {getEventLabel(row.event, t)}
               </Badge>
             </Row>
           ))}
         </Section>
       )}
 
-      {/* Load more */}
       {hasMore && (
         <div className="flex justify-center">
           <Button
             variant="outline"
-            onClick={() => fetchLogs(logs.length, true)}
+            onClick={() => fetchRows(rows.length, true)}
             disabled={loading}
           >
             {loading ? "..." : t("loadMore")}

@@ -75,8 +75,8 @@ export function DodiFullHome({
   // Manual override: `?process-memory=1` force-processes the day's accumulated
   // transcript into memory now, without waiting for a day change. Read once
   // imperatively (no useSearchParams → no Suspense boundary needed) and strip
-  // the param so a refresh won't re-trigger. The store's in-flight guard makes
-  // this safe alongside the auto-connect drain above.
+  // the param so a refresh won't re-trigger. The store serializes this behind
+  // the auto-connect's own memory run above, so it's never lost to that race.
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);

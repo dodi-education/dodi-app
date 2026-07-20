@@ -623,6 +623,12 @@ export function GamePlayView({
           payloadEnc: sealOwnSnapshotPayload(session, content.payload),
           payloadBytes: estimateSnapshotPayloadBytes(content.payload),
         });
+        const { logKidActivity } = await import("@/lib/activities/log-activity");
+        logKidActivity({
+          kidId,
+          event: "snapshot_created",
+          message: `Snapshot saved: ${snapshotTitle}`,
+        });
         store.resolveClientCommand({
           ok: true,
           message: `The snapshot "${snapshotTitle}" is saved. In ONE short, cheerful sentence, tell the child it's saved in their snapshot collection — do not repeat yourself.`,
@@ -680,13 +686,15 @@ export function GamePlayView({
         if (!content) throw new Error("no_save_state");
         triggerSnapshotFlash(content);
 
-        // Share implies save: the kid keeps their own copy…
+        // Share implies save: the kid keeps their own copy, marked with the
+        // recipient so the parent view can list it under "Sent"…
         await createOwnSnapshot({
           kidId,
           gameId: content.payload.gameId,
           infoEnc: sealOwnSnapshotInfo(session, content.info),
           payloadEnc: sealOwnSnapshotPayload(session, content.payload),
           payloadBytes: estimateSnapshotPayloadBytes(content.payload),
+          sharedWithKidId: resolution.counterpartKidId,
         });
         // …and the friend gets a self-contained copy sealed to their keys. The
         // payload and row keep the sender's gameId as a soft reference.
@@ -703,6 +711,12 @@ export function GamePlayView({
           infoEnc: infoEnvelope,
           payloadEnc: payloadEnvelope,
           payloadBytes: estimateSnapshotPayloadBytes(content.payload),
+        });
+        const { logKidActivity } = await import("@/lib/activities/log-activity");
+        logKidActivity({
+          kidId,
+          event: "snapshot_shared",
+          message: `Snapshot shared with ${resolution.displayName}: ${snapshotTitle}`,
         });
         store.resolveClientCommand({
           ok: true,

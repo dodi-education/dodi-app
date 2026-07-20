@@ -1,5 +1,6 @@
 import { create } from "zustand";
 
+import { dodi } from "@/lib/api";
 import { createVoiceClient } from "@/lib/ai/create-voice-client";
 import type {
   VoiceClient,
@@ -10,6 +11,13 @@ import { AudioStreamer } from "@/lib/ai/audio-streamer";
 import { AudioRecorder } from "@/lib/ai/audio-recorder";
 import { buildGameVoiceConfig, buildHomeVoiceConfig } from "@/lib/ai/voice-session";
 import { runClientMemoryUpdate } from "@/lib/ai/client-memory-update";
+import {
+  beginDay,
+  flushNow,
+  recordRound,
+  syncAndSeed,
+} from "@/lib/ai/transcript-sync";
+import { logKidActivity } from "@/lib/activities/log-activity";
 import { reportUsage } from "@/lib/usage/report-usage";
 import { runGameTextAssistant } from "@/lib/ai/client-game-assistant";
 import { resolveClientThinking } from "@/lib/ai/resolve-client-thinking";
@@ -60,37 +68,6 @@ export interface CompanionMessage {
   id: string;
   role: "kid" | "dodi";
   text: string;
-}
-
-// One round/response, coalesced from the streaming transcription fragments of a
-// single speaker run (not one entry per word chunk).
-interface TranscriptEntry {
-  role: "dodi" | "kid";
-  text: string;
-  timestamp: string; // when the round started
-}
-
-// One Dodi voice session — the rounds exchanged after a single connect.
-interface SessionTranscript {
-  startedAt: string; // connect / session start (ISO)
-  entries: TranscriptEntry[];
-}
-
-// Today's accumulating transcript for one kid, stamped with the local day it
-// belongs to. Grows across every session within the day; promoted to the pending
-// outbox once a new day's first connect sees a stale `date`.
-interface CurrentBatch {
-  kidId: string;
-  date: string; // local YYYY-MM-DD
-  sessions: SessionTranscript[];
-}
-
-// The outbox: sessions awaiting a successful encrypted write to the DB. Cleared
-// only after `runClientMemoryUpdate` confirms the PATCH, so a failed or vault-
-// locked attempt is retried on the next connect rather than lost.
-interface PendingBatch {
-  kidId: string;
-  sessions: SessionTranscript[];
 }
 
 interface GameVoiceSessionConfig {
@@ -198,26 +175,27 @@ let recorder: AudioRecorder | null = null;
 let abortController: AbortController | null = null;
 
 let currentKidId: string | null = null;
-// Today's sessions, loaded from the stored CurrentBatch at connect and mirrored
-// to localStorage at the end of each round.
-let daySessions: SessionTranscript[] = [];
-// The session opened by the current connect — lazily appended to daySessions on
-// its first completed round (so empty sessions are never stored).
-let currentSession: SessionTranscript | null = null;
 // Round coalescer: streaming transcription fragments accumulate here until the
 // speaker changes or the turn completes, then flush as ONE entry.
 let roundRole: "kid" | "dodi" | null = null;
 let roundText = "";
 let roundStartedAt: string | null = null;
 let sessionStartedAt: string | null = null;
-// Single-tab guard so a manual trigger + an auto-connect (or two connects)
-// can't submit the same pending batch to the thinking model twice.
-let memoryDrainInFlight = false;
+// Memory updates are serialized through this chain. Auto (connect-time) runs
+// coalesce while one is queued or running; a manual ?process-memory run always
+// appends — queued behind an in-flight run, never dropped (the in-flight run
+// may have listed the open days before the manual flush landed).
+let memoryUpdateChain: Promise<void> = Promise.resolve();
+let autoMemoryRunQueued = false;
 let greetingSent = false;
 let hasGreetedThisPageLoad = false;
 let sessionIsBirthday = false;
 let micRequestInFlight = false;
 let tapStartedAtMs: number | null = null;
+// Persisted deaf target for this connect: when the kid's `deafened_dodi_at` is
+// set, Dodi comes up deaf directly (no audio resume, no greeting) instead of
+// active — so the target state is known from the first moment of the connect.
+let sessionStartDeaf = false;
 
 // Game voice state refs
 let turnBuffer = "";
@@ -293,13 +271,6 @@ let contextGeneration = 0;
 // Constants
 // ---------------------------------------------------------------------------
 
-// Minimum accumulated entries before a day's batch is worth submitting to the
-// thinking model (skipped unless a manual trigger forces it).
-const MIN_MEMORY_BATCH_ENTRIES = 3;
-// Hard cap on the pending outbox so a long stretch of unprocessable days (vault
-// never unlocked, no thinking provider) can't grow past the localStorage quota.
-// Oldest entries are dropped first — memory is a rolling dossier, not an audit log.
-const MAX_PENDING_ENTRIES = 2000;
 const MAX_MESSAGES = 40;
 const STATE_DEBOUNCE_MS = 500;
 // How long to hold each client tool call open before giving up (so dropped/
@@ -352,18 +323,16 @@ function sleepFromInactivity(): void {
   const state = store.getState();
   if (state.state !== "active" && state.state !== "deaf") return;
 
-  // Flush the in-progress round + day sessions; do NOT process or clear — memory
-  // is processed as one chunk on the next day's first connect.
+  // Flush the in-progress round and push the outbox to the DB; memory
+  // processing happens on the next connect.
   flushRound();
-  persistToLocalStorage();
+  if (currentKidId) void flushNow(currentKidId);
 
   window.removeEventListener("beforeunload", handleBeforeUnload);
   window.removeEventListener("pagehide", handlePageHide);
   stopInteractionListeners();
 
   currentKidId = null;
-  daySessions = [];
-  currentSession = null;
   sessionStartedAt = null;
 
   cleanup();
@@ -385,147 +354,18 @@ function resetInactivityTimer(): void {
 }
 
 // ---------------------------------------------------------------------------
-// Transcript / outbox helpers
+// Transcript rounds (persistence lives in @/lib/ai/transcript-sync)
 // ---------------------------------------------------------------------------
 
-/** Local calendar day as YYYY-MM-DD (en-CA renders ISO-shaped). */
-function localDay(): string {
-  return new Date().toLocaleDateString("en-CA");
-}
-
-function currentKey(kidId: string): string {
-  return `dodi-transcript-${kidId}`;
-}
-
-function pendingKey(kidId: string): string {
-  return `dodi-memory-pending-${kidId}`;
-}
-
-function totalEntries(sessions: SessionTranscript[]): number {
-  return sessions.reduce((n, s) => n + s.entries.length, 0);
-}
-
-function formatTranscript(sessions: SessionTranscript[]): string {
-  return sessions
-    .map((s) => {
-      const body = s.entries
-        .map(
-          (e) =>
-            `[${e.timestamp}] ${e.role === "dodi" ? "Dodi" : "Kid"}: ${e.text}`,
-        )
-        .join("\n");
-      return `### Session ${s.startedAt}\n${body}`;
-    })
-    .join("\n\n");
-}
-
-function readCurrent(kidId: string): CurrentBatch | null {
-  try {
-    const raw = localStorage.getItem(currentKey(kidId));
-    if (!raw) return null;
-    return JSON.parse(raw) as CurrentBatch;
-  } catch {
-    return null;
-  }
-}
-
-function writeCurrent(kidId: string, batch: CurrentBatch): void {
-  try {
-    localStorage.setItem(currentKey(kidId), JSON.stringify(batch));
-  } catch {
-    // ignore (quota / unavailable)
-  }
-}
-
-function clearCurrent(kidId: string): void {
-  try {
-    localStorage.removeItem(currentKey(kidId));
-  } catch {
-    // ignore
-  }
-}
-
-function readPending(kidId: string): PendingBatch | null {
-  try {
-    const raw = localStorage.getItem(pendingKey(kidId));
-    if (!raw) return null;
-    return JSON.parse(raw) as PendingBatch;
-  } catch {
-    return null;
-  }
-}
-
-// Cap total pending entries so a long unprocessable stretch can't exceed the
-// localStorage quota; drop whole oldest sessions first (never truncate within a
-// session, so a round stays intact).
-function capPendingSessions(sessions: SessionTranscript[]): SessionTranscript[] {
-  const out = [...sessions];
-  let total = totalEntries(out);
-  while (total > MAX_PENDING_ENTRIES && out.length > 1) {
-    total -= out[0].entries.length;
-    out.shift();
-  }
-  return out;
-}
-
-function writePending(kidId: string, sessions: SessionTranscript[]): void {
-  try {
-    const data: PendingBatch = {
-      kidId,
-      sessions: capPendingSessions(sessions),
-    };
-    localStorage.setItem(pendingKey(kidId), JSON.stringify(data));
-  } catch {
-    // ignore
-  }
-}
-
-function clearPending(kidId: string): void {
-  try {
-    localStorage.removeItem(pendingKey(kidId));
-  } catch {
-    // ignore
-  }
-}
-
-/** Append sessions to the outbox (oldest dropped past MAX_PENDING_ENTRIES). */
-function appendToPending(kidId: string, sessions: SessionTranscript[]): void {
-  const existing = readPending(kidId)?.sessions ?? [];
-  writePending(kidId, [...existing, ...sessions]);
-}
-
-/** Mirror today's sessions to the dated current-day key. */
-function persistToLocalStorage(): void {
-  if (!currentKidId) return;
-  writeCurrent(currentKidId, {
-    kidId: currentKidId,
-    date: localDay(),
-    sessions: daySessions,
-  });
-}
-
-/** Lazily create the session opened by the current connect (no empty sessions). */
-function ensureCurrentSession(): SessionTranscript {
-  if (!currentSession) {
-    currentSession = {
-      startedAt: sessionStartedAt ?? new Date().toISOString(),
-      entries: [],
-    };
-    daySessions.push(currentSession);
-  }
-  return currentSession;
-}
-
-/** Finalize the buffered speaker-run into a single transcript entry. */
+/** Finalize the buffered speaker-run into one recorded transcript round. */
 function flushRound(): void {
   const text = roundText.trim();
   if (roundRole && text) {
-    ensureCurrentSession().entries.push({
+    recordRound({
       role: roundRole,
       text,
-      timestamp: roundStartedAt ?? new Date().toISOString(),
+      occurredAt: roundStartedAt ?? new Date().toISOString(),
     });
-    persistToLocalStorage();
   }
   roundRole = null;
   roundText = "";
@@ -543,63 +383,48 @@ function appendRoundFragment(role: "kid" | "dodi", fragment: string): void {
 }
 
 /**
- * If the stored current batch belongs to a previous day, move it into the
- * pending outbox. Writes pending BEFORE clearing current so a crash/quota-throw
- * between the two can never lose the day's transcript (worst case it lingers in
- * both keys and is re-promoted, which the thinking model reconciles).
+ * Flush the outbox, then process unprocessed day transcripts into memory.
+ * `includeToday` is the manual ?process-memory path.
  */
-function promoteStaleDay(kidId: string): void {
-  const current = readCurrent(kidId);
-  if (!current || totalEntries(current.sessions) === 0) return;
-  // A missing date (written by older code) is treated as stale.
-  if (current.date === localDay()) return;
-  appendToPending(kidId, current.sessions);
-  clearCurrent(kidId);
-}
-
-/**
- * Submit the outbox to the thinking model as one chunk; clear it only on a
- * confirmed write. Guarded against concurrent drains; skips below the minimum
- * unless `force` (manual trigger).
- */
-function drainPending(kidId: string, force: boolean): void {
-  if (memoryDrainInFlight) return;
-  const pending = readPending(kidId);
-  const count = pending ? totalEntries(pending.sessions) : 0;
-  if (count === 0) return;
-  if (!force && count < MIN_MEMORY_BATCH_ENTRIES) return;
-
-  memoryDrainInFlight = true;
-  void runClientMemoryUpdate(kidId, formatTranscript(pending!.sessions))
-    .then((ok) => {
-      if (ok) clearPending(kidId);
-    })
-    .catch(() => {
-      // keep the outbox for retry
-    })
-    .finally(() => {
-      memoryDrainInFlight = false;
+function flushAndProcessMemory(
+  kidId: string,
+  opts: { includeToday?: boolean } = {},
+): void {
+  void (async () => {
+    if (opts.includeToday) {
+      await flushNow(kidId);
+    } else {
+      await syncAndSeed(kidId);
+      // Coalesce overlapping auto runs (e.g. rapid reconnects) — one pass over
+      // the open days is enough.
+      if (autoMemoryRunQueued) return;
+      autoMemoryRunQueued = true;
+    }
+    memoryUpdateChain = memoryUpdateChain.then(async () => {
+      try {
+        await runClientMemoryUpdate(kidId, opts);
+      } finally {
+        if (!opts.includeToday) autoMemoryRunQueued = false;
+      }
     });
+  })();
 }
 
 // ---------------------------------------------------------------------------
 // Page lifecycle handlers
 // ---------------------------------------------------------------------------
 
-// On unload we flush the in-progress round and persist the day's sessions to
-// localStorage; the next connect promotes/processes them entirely client-side.
-// We deliberately do NOT POST the raw transcript to the server — under E2EE it
-// must never see the plaintext transcript.
+// On unload we flush the in-progress round into the outbox (synchronous
+// localStorage write = crash persistence); the next connect POSTs it. Under
+// E2EE only ciphertext ever reaches the server.
 function handleBeforeUnload(): void {
   voiceMeterStop(true);
   flushRound();
-  persistToLocalStorage();
 }
 
 function handlePageHide(): void {
   voiceMeterStop(true);
   flushRound();
-  persistToLocalStorage();
 }
 
 // ---------------------------------------------------------------------------
@@ -668,6 +493,37 @@ function resetFlowFlags(): void {
   sessionIsBirthday = false;
   micRequestInFlight = false;
   tapStartedAtMs = null;
+  sessionStartDeaf = false;
+}
+
+/**
+ * Persist the deliberate deaf toggle to the kid row so it survives reconnects.
+ * NULL ⇒ Dodi listens normally; a timestamp ⇒ the kid muted her. Best-effort:
+ * the local cache is patched first so the UI (and the next connect's target)
+ * stay consistent even if the PATCH is lost. No-ops when the persisted value
+ * already matches, so the any-click "wake" path doesn't spam redundant writes.
+ */
+function persistDeafenedState(deafened: boolean): void {
+  const kidId = currentKidId;
+  if (!kidId) return;
+
+  const store = useKidStore.getState();
+  const currentValue = store.byId?.[kidId]?.deafened_dodi_at ?? null;
+  if ((currentValue != null) === deafened) return;
+
+  const value = deafened ? new Date().toISOString() : null;
+  store.patchLocal?.(kidId, { deafened_dodi_at: value });
+
+  void dodi
+    .request(`/api/kids/${kidId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ deafened_dodi_at: value }),
+    })
+    .catch(() => {
+      // Best-effort: the local patch keeps the UI coherent and the next connect
+      // re-reads the row, so a dropped write self-heals rather than hard-fails.
+    });
 }
 
 function getGreetingMode(kidId: string, isBirthday: boolean): "long" | "short" | "birthday" {
@@ -1027,16 +883,12 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
     window.removeEventListener("pagehide", handlePageHide);
     cleanup();
 
-    // Day-batch memory: promote a previous day's sessions into the outbox, drain
-    // the outbox (one chunk to the thinking model), then load today's sessions so
-    // this connect appends a fresh session to them. Nothing is cleared except on
-    // a confirmed encrypted write (inside drainPending).
-    promoteStaleDay(kidId);
-    drainPending(kidId, false);
-    const todayBatch = readCurrent(kidId);
-    daySessions =
-      todayBatch && todayBatch.date === localDay() ? todayBatch.sessions : [];
-    currentSession = null;
+    // DB-first transcripts: start today's day model, seed it from the stored
+    // mirror + flush any outbox backlog, then process unprocessed past days
+    // into memory. Sequential inside flushAndProcessMemory so the memory
+    // update sees the freshly flushed rows.
+    beginDay(kidId);
+    flushAndProcessMemory(kidId);
     roundRole = null;
     roundText = "";
     roundStartedAt = null;
@@ -1060,6 +912,17 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
     });
 
     try {
+      // Resolve the persisted deaf target up front so it's known from the very
+      // first moment of the connect: a set `deafened_dodi_at` means the kid
+      // muted Dodi last time, so we come up deaf directly rather than active.
+      try {
+        const kid = await useKidStore.getState().loadOne(kidId);
+        if (gen !== contextGeneration || controller.signal.aborted) return;
+        sessionStartDeaf = kid?.deafened_dodi_at != null;
+      } catch {
+        sessionStartDeaf = false;
+      }
+
       const currentContext = get().context;
       let config: GameVoiceSessionConfig;
 
@@ -1112,6 +975,10 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
     tapStartedAtMs = performance.now();
 
     transitionToActive(set, get);
+    // The kid deliberately woke Dodi → clear the persisted deaf state so the
+    // next connect comes up listening. (No-ops if it wasn't set.)
+    sessionStartDeaf = false;
+    persistDeafenedState(false);
   },
 
   deactivate: () => {
@@ -1119,6 +986,10 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
     if (current.state !== "active") return;
 
     transitionToDeaf(set, true);
+    // The kid deliberately muted Dodi → persist it so she stays deaf across
+    // reconnects until re-enabled.
+    sessionStartDeaf = true;
+    persistDeafenedState(true);
   },
 
   toggleActive: () => {
@@ -1137,15 +1008,12 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
     window.removeEventListener("beforeunload", handleBeforeUnload);
     window.removeEventListener("pagehide", handlePageHide);
 
-    // Flush the in-progress round + day sessions so the next connect can
-    // promote/process them; do NOT process or clear here (avoids fragmenting
-    // the day).
+    // Flush the in-progress round and push the outbox to the DB; memory
+    // processing stays a connect-time concern.
     flushRound();
-    persistToLocalStorage();
+    if (currentKidId) void flushNow(currentKidId);
 
     currentKidId = null;
-    daySessions = [];
-    currentSession = null;
     sessionStartedAt = null;
     hasGreetedThisPageLoad = false;
 
@@ -1167,25 +1035,10 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
   processMemoryNow: (kidId: string) => {
     if (!kidId) return;
 
-    // Flush the in-progress round, then move EVERYTHING accumulated (today
-    // included) into the outbox and reset the live sessions synchronously.
-    // Rounds that arrive after this start a fresh current-day batch — so nothing
-    // is double-processed and nothing is lost.
-    if (currentKidId === kidId) {
-      flushRound();
-      persistToLocalStorage();
-    }
-    const current = readCurrent(kidId);
-    if (current && totalEntries(current.sessions) > 0) {
-      appendToPending(kidId, current.sessions);
-    }
-    clearCurrent(kidId);
-    if (currentKidId === kidId) {
-      daySessions = [];
-      currentSession = null;
-    }
-
-    drainPending(kidId, true);
+    // Flush the in-progress round, push the outbox to the DB, then process
+    // everything including today's still-open transcript.
+    if (currentKidId === kidId) flushRound();
+    flushAndProcessMemory(kidId, { includeToday: true });
   },
 
   sendTextMessage: async (message: string, gameId?: string) => {
@@ -1311,6 +1164,20 @@ function createEventHandler(
 
     switch (event.type) {
       case "setupComplete": {
+        // Insights: voice session connected (dashboard counts session_start).
+        logKidActivity({
+          kidId,
+          event: "session_start",
+          message: "Voice session started",
+        });
+        // Persisted deaf: the kid muted Dodi previously, so come up deaf
+        // directly — no audio resume, no greeting — until she's tapped awake.
+        // Manual-style deaf (gestureNeeded false) so an incidental page click
+        // can't wake her; only a deliberate tap on the Dodi control does.
+        if (sessionStartDeaf) {
+          transitionToDeaf(set, true);
+          break;
+        }
         // Try to resume AudioContext without a gesture
         if (streamer) {
           void streamer.tryResume().then((audioOk) => {

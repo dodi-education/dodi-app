@@ -33,6 +33,8 @@ export interface SnapshotView {
   senderKidId: string | null;
   /** Sender kid's published signing key — verifies the sealed blobs. */
   senderSignPublicKey: string | null;
+  /** On own rows created by sharing: the friend kid the copy was sent to. */
+  sharedWithKidId: string | null;
 }
 
 export interface SnapshotDetailView extends SnapshotView {
@@ -72,10 +74,13 @@ async function jsonRequest<T>(path: string, init?: RequestInit): Promise<T> {
 // API calls
 // ---------------------------------------------------------------------------
 
-export function fetchSnapshots(kidId: string): Promise<SnapshotView[]> {
-  return jsonRequest<SnapshotView[]>(
-    `/api/snapshots?kidId=${encodeURIComponent(kidId)}`,
-  );
+export function fetchSnapshots(
+  kidId: string,
+  opts?: { includeAutosave?: boolean },
+): Promise<SnapshotView[]> {
+  const params = new URLSearchParams({ kidId });
+  if (opts?.includeAutosave) params.set("includeAutosave", "1");
+  return jsonRequest<SnapshotView[]>(`/api/snapshots?${params.toString()}`);
 }
 
 export function fetchSnapshot(id: string): Promise<SnapshotDetailView> {
@@ -90,6 +95,8 @@ export interface CreateOwnSnapshotInput {
   infoEnc: string;
   payloadEnc: string;
   payloadBytes: number;
+  /** The friend kid this copy was sent to when created by sharing. */
+  sharedWithKidId?: string | null;
 }
 
 export function createOwnSnapshot(
@@ -237,6 +244,8 @@ export type ShareFriendResolution =
       friendshipId: string;
       /** Recipient's published KEM key (base64url) — seal the envelopes to this. */
       kemPublicKey: string;
+      /** Recipient's kid id — recorded on the sender's copy as the sent marker. */
+      counterpartKidId: string;
       displayName: string;
       /** The sender kid's own friend keys (signs the envelopes). */
       myKeys: KidFriendKeys;
@@ -287,6 +296,7 @@ export async function resolveFriendForShare(
     kind: "ok",
     friendshipId: decoded.id,
     kemPublicKey: view.counterpartKemPublicKey,
+    counterpartKidId: view.counterpartKidId,
     displayName: decoded.name ?? decoded.nickname ?? rawName.trim(),
     myKeys,
   };

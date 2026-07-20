@@ -20,7 +20,7 @@ export type VaultCollection =
   | "game"
   | "game_translation"
   | "agent_session"
-  | "system_log";
+  | "event_log";
 
 /** JSON-safe scalar allowed in plaintext metadata. */
 export type MetadataValue = string | number | boolean | null;

@@ -916,6 +916,18 @@ ALTER TABLE "public"."kids" ADD COLUMN IF NOT EXISTS "avatar_pin" "text";
 COMMENT ON COLUMN "public"."kids"."avatar_config" IS 'E2EE enc:v1: JSON string { color, avatar } — the kid''s chosen look, sealed under the account VMK. Server cannot decrypt.';
 COMMENT ON COLUMN "public"."kids"."avatar_pin" IS 'E2EE enc:v1: JSON array of 3 avatar ids — the optional avatar-PIN puzzle. NULL = disabled. Server cannot decrypt.';
 
+-- ---------------------------------------------------------------------------
+-- kids: persisted "deaf" state for the Dodi voice companion.
+-- NULL = Dodi listens normally. A timestamp means the kid deliberately muted
+-- Dodi (deafened her); the client reads it on connect and comes up deaf
+-- directly — never flashing into the active/listening state — until the kid
+-- taps to wake her, which clears it back to NULL. Plaintext operational state
+-- (not sensitive), server-visible so it round-trips through the kids API.
+-- ---------------------------------------------------------------------------
+ALTER TABLE "public"."kids" ADD COLUMN IF NOT EXISTS "deafened_dodi_at" timestamp with time zone;
+
+COMMENT ON COLUMN "public"."kids"."deafened_dodi_at" IS 'Persisted Dodi deaf state: NULL = listens normally; a timestamp = kid muted Dodi, so she comes up deaf on connect until re-enabled. Plaintext operational state.';
+
 CREATE TABLE IF NOT EXISTS "public"."friendships" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "requester_account_id" "uuid" NOT NULL,
@@ -1355,6 +1367,7 @@ CREATE TABLE IF NOT EXISTS "public"."game_snapshots" (
     "origin" "text" DEFAULT 'own'::"text" NOT NULL,
     "sender_kid_id" "uuid",
     "friendship_id" "uuid",
+    "shared_with_kid_id" "uuid",
     "info_enc" "text" NOT NULL,
     "payload_enc" "text" NOT NULL,
     "payload_bytes" integer DEFAULT 0 NOT NULL,
@@ -1382,6 +1395,8 @@ ALTER TABLE ONLY "public"."game_snapshots"
     ADD CONSTRAINT "game_snapshots_sender_kid_id_fkey" FOREIGN KEY ("sender_kid_id") REFERENCES "public"."kids"("id") ON DELETE SET NULL;
 ALTER TABLE ONLY "public"."game_snapshots"
     ADD CONSTRAINT "game_snapshots_friendship_id_fkey" FOREIGN KEY ("friendship_id") REFERENCES "public"."friendships"("id") ON DELETE SET NULL;
+ALTER TABLE ONLY "public"."game_snapshots"
+    ADD CONSTRAINT "game_snapshots_shared_with_kid_id_fkey" FOREIGN KEY ("shared_with_kid_id") REFERENCES "public"."kids"("id") ON DELETE SET NULL;
 
 CREATE INDEX "game_snapshots_kid_created_idx" ON "public"."game_snapshots" USING "btree" ("kid_id", "created_at" DESC);
 CREATE INDEX "game_snapshots_account_created_idx" ON "public"."game_snapshots" USING "btree" ("account_id", "created_at" DESC);
@@ -1410,3 +1425,4 @@ COMMENT ON COLUMN "public"."game_snapshots"."payload_enc" IS 'Opaque heavy blob 
 COMMENT ON COLUMN "public"."game_snapshots"."payload_bytes" IS 'Approximate plaintext payload size in bytes — recorded for future per-kid storage quota enforcement.';
 COMMENT ON COLUMN "public"."game_snapshots"."game_id" IS 'Soft reference to the source game (the sender''s game for received snapshots); NULL only after game deletion.';
 COMMENT ON COLUMN "public"."game_snapshots"."origin" IS 'own = manually saved by this kid; received = delivered by a friend; autosave = the kid''s single resume slot per game (hidden from the collection, overwritten in place).';
+COMMENT ON COLUMN "public"."game_snapshots"."shared_with_kid_id" IS 'Sender-side "sent" marker on own rows: the friend kid this snapshot was delivered to when it was created by sharing (share implies save). NULL for plain saves; set NULL if the friend kid is deleted.';

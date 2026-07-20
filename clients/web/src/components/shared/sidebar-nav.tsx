@@ -33,15 +33,20 @@ export function useNavGroups(): NavGroup[] {
           label: t("gameStudio"),
           icon: "games",
         },
+        {
+          href: "/parent/snapshots",
+          label: t("parentSnapshots"),
+          icon: "camera",
+        },
       ],
     },
     {
-      label: t("navGroupActivity"),
+      label: t("navGroupInsights"),
       items: [
         {
-          href: "/parent/system-logs",
-          label: t("systemLogs"),
-          icon: "system_logs",
+          href: "/parent/activities",
+          label: t("activities"),
+          icon: "activities",
         },
         {
           href: "/parent/usage",

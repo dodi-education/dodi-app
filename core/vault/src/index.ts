@@ -9,3 +9,4 @@ export * from "./session";
 export * from "./kid-crypto";
 export * from "./persona-crypto";
 export * from "./api-keys-crypto";
+export * from "./memory-crypto";

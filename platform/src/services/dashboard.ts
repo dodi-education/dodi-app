@@ -21,13 +21,13 @@ export async function getDashboardStats(
 
   const [today, week, games] = await Promise.all([
     supabase
-      .from("system_logs")
+      .from("activities")
       .select("id", { count: "exact", head: true })
       .eq("account_id", accountId)
       .eq("event", "session_start")
       .gte("created_at", startOfToday.toISOString()),
     supabase
-      .from("system_logs")
+      .from("activities")
       .select("id", { count: "exact", head: true })
       .eq("account_id", accountId)
       .eq("event", "session_start")

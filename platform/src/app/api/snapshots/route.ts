@@ -6,12 +6,17 @@ import { requireAuth } from "@/lib/resolve-auth";
 import { serviceClient } from "@/lib/supabase";
 import { createOwnSnapshot, listSnapshots } from "@/services/snapshots";
 
-/** A kid's snapshot collection (light rows — no payload blob). Requires ?kidId=. */
+/**
+ * A kid's snapshot collection (light rows — no payload blob). Requires ?kidId=.
+ * `?includeAutosave=1` also returns the hidden per-game autosave slots
+ * (parent overview).
+ */
 export async function GET(request: Request): Promise<NextResponse> {
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
 
-  const kidId = new URL(request.url).searchParams.get("kidId");
+  const params = new URL(request.url).searchParams;
+  const kidId = params.get("kidId");
   if (!kidId) {
     return NextResponse.json({ error: "kidId is required" }, { status: 400 });
   }
@@ -20,6 +25,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     const snapshots = await listSnapshots(serviceClient(), {
       accountId: auth.accountId,
       kidId,
+      includeAutosave: params.get("includeAutosave") === "1",
     });
     return NextResponse.json(snapshots);
   } catch (error) {
@@ -39,6 +45,8 @@ const CreateSchema = z.object({
   infoEnc: z.string().min(1).max(300_000),
   payloadEnc: z.string().min(1).max(2_000_000),
   payloadBytes: z.number().int().nonnegative(),
+  // Sender-side "sent" marker when the save was created by sharing.
+  sharedWithKidId: z.string().uuid().nullable().optional(),
 });
 
 /** Store one of the caller's kid's own snapshots. */
@@ -63,6 +71,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       infoEnc: result.data.infoEnc,
       payloadEnc: result.data.payloadEnc,
       payloadBytes: result.data.payloadBytes,
+      sharedWithKidId: result.data.sharedWithKidId ?? null,
     });
     return NextResponse.json(created, { status: 201 });
   } catch (error) {

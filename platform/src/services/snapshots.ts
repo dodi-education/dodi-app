@@ -28,6 +28,8 @@ export interface SnapshotListItem {
   senderKidId: string | null;
   /** Sender kid's published signing key — pass when opening the sealed blobs. */
   senderSignPublicKey: string | null;
+  /** On own rows created by sharing: the friend kid the copy was sent to. */
+  sharedWithKidId: string | null;
 }
 
 export interface SnapshotDetail extends SnapshotListItem {
@@ -45,18 +47,17 @@ async function getKidRow(supabase: Client, kidId: string): Promise<Kid | null> {
 }
 
 /**
- * True when an insert failed the games FK: the snapshot references a game
- * that no longer exists (e.g. re-sharing/re-saving an old snapshot after the
- * source game was deleted). Callers retry with a NULL soft reference — the
- * payload is self-contained, so losing the pointer must never lose the save.
+ * True when an insert failed the FK on `column`: the snapshot references a
+ * row that no longer exists (e.g. re-sharing/re-saving an old snapshot after
+ * the source game was deleted). Callers retry with a NULL soft reference —
+ * the payload is self-contained, so losing a pointer must never lose the save.
  */
-function isMissingGameReference(
+function isMissingReference(
   error: { code?: string; message?: string } | null,
+  column: string,
 ): boolean {
   return (
-    !!error &&
-    error.code === "23503" &&
-    (error.message ?? "").includes("game_id")
+    !!error && error.code === "23503" && (error.message ?? "").includes(column)
   );
 }
 
@@ -111,6 +112,7 @@ function toListItem(
     senderSignPublicKey: row.sender_kid_id
       ? (senderKeys.get(row.sender_kid_id) ?? null)
       : null,
+    sharedWithKidId: row.shared_with_kid_id,
   };
 }
 
@@ -119,27 +121,33 @@ export interface KidScopeInput {
   kidId: string;
 }
 
+export interface ListSnapshotsInput extends KidScopeInput {
+  /** Also return the hidden per-game autosave slots (parent overview). */
+  includeAutosave?: boolean;
+}
+
 /**
  * A kid's snapshot collection (own + received), newest first. Light rows only.
- * Autosave rows are the per-game resume slot, not part of the collection.
+ * Autosave rows are the per-game resume slot, not part of the collection —
+ * they surface only when `includeAutosave` is set (parent overview).
  */
 export async function listSnapshots(
   supabase: Client,
-  input: KidScopeInput,
+  input: ListSnapshotsInput,
 ): Promise<SnapshotListItem[]> {
   const kid = await getKidRow(supabase, input.kidId);
   if (!kid || kid.account_id !== input.accountId) {
     throw new Error("kid_not_found");
   }
-  const { data, error } = await supabase
+  let query = supabase
     .from("game_snapshots")
     .select(
-      "id, origin, game_id, info_enc, payload_bytes, viewed_at, created_at, sender_kid_id",
+      "id, origin, game_id, info_enc, payload_bytes, viewed_at, created_at, sender_kid_id, shared_with_kid_id",
     )
     .eq("kid_id", input.kidId)
-    .eq("account_id", input.accountId)
-    .neq("origin", "autosave")
-    .order("created_at", { ascending: false });
+    .eq("account_id", input.accountId);
+  if (!input.includeAutosave) query = query.neq("origin", "autosave");
+  const { data, error } = await query.order("created_at", { ascending: false });
   if (error) throw new Error(error.message);
   const rows = (data ?? []) as GameSnapshot[];
   const senderKeys = await senderSignKeyMap(
@@ -170,6 +178,8 @@ export interface CreateOwnSnapshotInput extends KidScopeInput {
   infoEnc: string;
   payloadEnc: string;
   payloadBytes: number;
+  /** The friend kid this copy was sent to when created by sharing. */
+  sharedWithKidId?: string | null;
 }
 
 /** Store a kid's own snapshot (both blobs sealed under the account VMK). */
@@ -181,26 +191,30 @@ export async function createOwnSnapshot(
   if (!kid || kid.account_id !== input.accountId) {
     throw new Error("kid_not_found");
   }
-  const insert: GameSnapshotInsert = {
+  let insert: GameSnapshotInsert = {
     account_id: input.accountId,
     kid_id: input.kidId,
     game_id: input.gameId,
     origin: "own",
+    shared_with_kid_id: input.sharedWithKidId ?? null,
     info_enc: input.infoEnc,
     payload_enc: input.payloadEnc,
     payload_bytes: input.payloadBytes,
   };
-  let { data, error } = await supabase
-    .from("game_snapshots")
-    .insert(insert)
-    .select("id, created_at")
-    .single();
-  if (error && isMissingGameReference(error) && insert.game_id !== null) {
-    ({ data, error } = await supabase
-      .from("game_snapshots")
-      .insert({ ...insert, game_id: null })
-      .select("id, created_at")
-      .single());
+  const tryInsert = (row: GameSnapshotInsert) =>
+    supabase.from("game_snapshots").insert(row).select("id, created_at").single();
+  let { data, error } = await tryInsert(insert);
+  if (error && isMissingReference(error, "game_id") && insert.game_id !== null) {
+    insert = { ...insert, game_id: null };
+    ({ data, error } = await tryInsert(insert));
+  }
+  if (
+    error &&
+    isMissingReference(error, "shared_with_kid_id") &&
+    insert.shared_with_kid_id != null
+  ) {
+    insert = { ...insert, shared_with_kid_id: null };
+    ({ data, error } = await tryInsert(insert));
   }
   if (error) throw new Error(error.message);
   const row = data as { id: string; created_at: string };
@@ -370,7 +384,7 @@ export async function shareSnapshot(
     .insert(insert)
     .select("id")
     .single();
-  if (insertError && isMissingGameReference(insertError) && insert.game_id !== null) {
+  if (insertError && isMissingReference(insertError, "game_id") && insert.game_id !== null) {
     ({ data: created, error: insertError } = await supabase
       .from("game_snapshots")
       .insert({ ...insert, game_id: null })

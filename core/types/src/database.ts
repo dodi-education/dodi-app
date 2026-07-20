@@ -101,6 +101,9 @@ export interface Database {
           can_be_added_as_friend: boolean;
           incoming_friend_requests_require_parent_approval: boolean;
           outgoing_friend_requests_require_parent_approval: boolean;
+          // Persisted deaf state: NULL = Dodi listens normally; a timestamp means
+          // the kid muted Dodi, so she comes up deaf on connect until re-enabled.
+          deafened_dodi_at: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -124,6 +127,7 @@ export interface Database {
           can_be_added_as_friend?: boolean;
           incoming_friend_requests_require_parent_approval?: boolean;
           outgoing_friend_requests_require_parent_approval?: boolean;
+          deafened_dodi_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -147,6 +151,7 @@ export interface Database {
           can_be_added_as_friend?: boolean;
           incoming_friend_requests_require_parent_approval?: boolean;
           outgoing_friend_requests_require_parent_approval?: boolean;
+          deafened_dodi_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -386,6 +391,7 @@ export interface Database {
           origin: "own" | "received" | "autosave";
           sender_kid_id: string | null;
           friendship_id: string | null;
+          shared_with_kid_id: string | null;
           info_enc: string;
           payload_enc: string;
           payload_bytes: number;
@@ -401,6 +407,7 @@ export interface Database {
           origin?: "own" | "received" | "autosave";
           sender_kid_id?: string | null;
           friendship_id?: string | null;
+          shared_with_kid_id?: string | null;
           info_enc: string;
           payload_enc: string;
           payload_bytes?: number;
@@ -416,6 +423,7 @@ export interface Database {
           origin?: "own" | "received" | "autosave";
           sender_kid_id?: string | null;
           friendship_id?: string | null;
+          shared_with_kid_id?: string | null;
           info_enc?: string;
           payload_enc?: string;
           payload_bytes?: number;
@@ -425,7 +433,7 @@ export interface Database {
         };
         Relationships: [];
       };
-      usage_events: {
+      ai_usage_logs: {
         Row: {
           id: string;
           account_id: string;
@@ -647,7 +655,7 @@ export interface Database {
         };
         Relationships: [];
       };
-      system_logs: {
+      activities: {
         Row: {
           id: string;
           kid_id: string;
@@ -673,6 +681,141 @@ export interface Database {
           persona_id?: string | null;
           event?: string;
           message?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      transcripts: {
+        Row: {
+          id: string;
+          account_id: string;
+          kid_id: string;
+          local_date: string;
+          persona_id: string | null;
+          status: "open" | "processed";
+          content_enc: string | null;
+          processed_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          account_id: string;
+          kid_id: string;
+          local_date: string;
+          persona_id?: string | null;
+          status?: "open" | "processed";
+          content_enc?: string | null;
+          processed_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          account_id?: string;
+          kid_id?: string;
+          local_date?: string;
+          persona_id?: string | null;
+          status?: "open" | "processed";
+          content_enc?: string | null;
+          processed_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      transcript_entries: {
+        Row: {
+          id: string;
+          transcript_id: string;
+          account_id: string;
+          kid_id: string;
+          role: "dodi" | "kid";
+          content_enc: string;
+          occurred_at: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          transcript_id: string;
+          account_id: string;
+          kid_id: string;
+          role: "dodi" | "kid";
+          content_enc: string;
+          occurred_at: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          transcript_id?: string;
+          account_id?: string;
+          kid_id?: string;
+          role?: "dodi" | "kid";
+          content_enc?: string;
+          occurred_at?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      memories: {
+        Row: {
+          id: string;
+          account_id: string;
+          kid_id: string;
+          content_enc: string;
+          category: string | null;
+          status: "active" | "discarded";
+          created_at: string;
+          discarded_at: string | null;
+          discarded_by: "system" | "parent" | null;
+          discard_memory_source_id: string | null;
+        };
+        Insert: {
+          id?: string;
+          account_id: string;
+          kid_id: string;
+          content_enc: string;
+          category?: string | null;
+          status?: "active" | "discarded";
+          created_at?: string;
+          discarded_at?: string | null;
+          discarded_by?: "system" | "parent" | null;
+          discard_memory_source_id?: string | null;
+        };
+        Update: {
+          id?: string;
+          account_id?: string;
+          kid_id?: string;
+          content_enc?: string;
+          category?: string | null;
+          status?: "active" | "discarded";
+          created_at?: string;
+          discarded_at?: string | null;
+          discarded_by?: "system" | "parent" | null;
+          discard_memory_source_id?: string | null;
+        };
+        Relationships: [];
+      };
+      memory_sources: {
+        Row: {
+          id: string;
+          memory_id: string;
+          transcript_entry_id: string;
+          relation: "supports" | "contradicts";
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          memory_id: string;
+          transcript_entry_id: string;
+          relation: "supports" | "contradicts";
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          memory_id?: string;
+          transcript_entry_id?: string;
+          relation?: "supports" | "contradicts";
           created_at?: string;
         };
         Relationships: [];
@@ -956,9 +1099,13 @@ export type PlatformPlanTranslation =
   Database["public"]["Tables"]["platform_plan_translations"]["Row"];
 export type PlatformConfig =
   Database["public"]["Tables"]["platform_config"]["Row"];
-export type UsageEvent = Database["public"]["Tables"]["usage_events"]["Row"];
-export type UsageEventInsert =
-  Database["public"]["Tables"]["usage_events"]["Insert"];
+export type AiUsageLog = Database["public"]["Tables"]["ai_usage_logs"]["Row"];
+export type AiUsageLogInsert =
+  Database["public"]["Tables"]["ai_usage_logs"]["Insert"];
+/** @deprecated Prefer AiUsageLog — alias kept for gradual call-site updates. */
+export type UsageEvent = AiUsageLog;
+/** @deprecated Prefer AiUsageLogInsert */
+export type UsageEventInsert = AiUsageLogInsert;
 export type ErrorLog = Database["public"]["Tables"]["error_logs"]["Row"];
 export type ErrorLogInsert =
   Database["public"]["Tables"]["error_logs"]["Insert"];
@@ -998,9 +1145,52 @@ export type GameSnapshotUpdate =
   Database["public"]["Tables"]["game_snapshots"]["Update"];
 /** own = saved by the kid; received = sealed to them by a friend (share). */
 export type SnapshotOrigin = "own" | "received" | "autosave";
-export type SystemLog = Database["public"]["Tables"]["system_logs"]["Row"];
-export type SystemLogInsert =
-  Database["public"]["Tables"]["system_logs"]["Insert"];
+export type Activity = Database["public"]["Tables"]["activities"]["Row"];
+export type ActivityInsert =
+  Database["public"]["Tables"]["activities"]["Insert"];
+/** @deprecated Prefer Activity */
+export type EventLog = Activity;
+/** @deprecated Prefer ActivityInsert */
+export type EventLogInsert = ActivityInsert;
+
+export type Transcript = Database["public"]["Tables"]["transcripts"]["Row"];
+export type TranscriptInsert =
+  Database["public"]["Tables"]["transcripts"]["Insert"];
+export type TranscriptUpdate =
+  Database["public"]["Tables"]["transcripts"]["Update"];
+export type TranscriptEntry =
+  Database["public"]["Tables"]["transcript_entries"]["Row"];
+export type TranscriptEntryInsert =
+  Database["public"]["Tables"]["transcript_entries"]["Insert"];
+export type Memory = Database["public"]["Tables"]["memories"]["Row"];
+export type MemoryInsert = Database["public"]["Tables"]["memories"]["Insert"];
+export type MemoryUpdate = Database["public"]["Tables"]["memories"]["Update"];
+export type MemorySource =
+  Database["public"]["Tables"]["memory_sources"]["Row"];
+export type MemorySourceInsert =
+  Database["public"]["Tables"]["memory_sources"]["Insert"];
+export type MemoryRelation = "supports" | "contradicts";
+export type MemoryStatus = "active" | "discarded";
+export type MemoryDiscardedBy = "system" | "parent";
+export type TranscriptStatus = "open" | "processed";
+export type TranscriptEntryRole = "dodi" | "kid";
+
+/**
+ * Slim transcript-entry projection embedded in memory-source read shapes
+ * (?includeSources=1) so dossier citations resolve without a second fetch.
+ * content_enc stays E2EE ciphertext; decryption is client-side.
+ */
+export interface MemorySourceEntryRef {
+  id: string;
+  role: TranscriptEntryRole;
+  content_enc: string;
+  occurred_at: string;
+}
+
+/** Read shape of a memory source with its cited entry embedded (may be null if the entry row is gone). */
+export interface MemorySourceWithEntry extends MemorySource {
+  entry: MemorySourceEntryRef | null;
+}
 export type Device = Database["public"]["Tables"]["devices"]["Row"];
 export type DeviceInsert = Database["public"]["Tables"]["devices"]["Insert"];
 export type DeviceUpdate = Database["public"]["Tables"]["devices"]["Update"];

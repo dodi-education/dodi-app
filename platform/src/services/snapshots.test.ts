@@ -109,6 +109,7 @@ class FakeBuilder {
         origin: "own",
         sender_kid_id: null,
         friendship_id: null,
+        shared_with_kid_id: null,
         payload_bytes: 0,
         viewed_at: null,
         created_at: "t0",
@@ -220,6 +221,7 @@ function snapshotRow(overrides: Partial<GameSnapshot>): GameSnapshot {
     origin: "own",
     sender_kid_id: null,
     friendship_id: null,
+    shared_with_kid_id: null,
     info_enc: "enc:v1:info",
     payload_enc: "enc:v1:payload",
     payload_bytes: 100,
@@ -494,6 +496,42 @@ describe("createOwnSnapshot", () => {
       }),
     ).rejects.toThrow("kid_not_found");
   });
+
+  it("records the sent-to friend kid when the save was created by sharing", async () => {
+    const store = setup();
+    await createOwnSnapshot(fakeClient(store), {
+      accountId: "acc-a",
+      kidId: "kid-a",
+      gameId: "game-1",
+      sharedWithKidId: "kid-b",
+      ...SEALED,
+    });
+    expect(store.game_snapshots[0].shared_with_kid_id).toBe("kid-b");
+  });
+
+  it("degrades the sent marker to NULL when the friend kid is gone", async () => {
+    const store = setup({
+      insertErrors: [
+        {
+          code: "23503",
+          message:
+            'insert or update on table "game_snapshots" violates foreign key constraint "game_snapshots_shared_with_kid_id_fkey"',
+        },
+      ],
+    });
+    const created = await createOwnSnapshot(fakeClient(store), {
+      accountId: "acc-a",
+      kidId: "kid-a",
+      gameId: "game-1",
+      sharedWithKidId: "kid-deleted",
+      ...SEALED,
+    });
+    expect(created.id).toBeTruthy();
+    expect(store.game_snapshots).toHaveLength(1);
+    expect(store.game_snapshots[0].shared_with_kid_id).toBeNull();
+    // The save itself must survive losing the pointer.
+    expect(store.game_snapshots[0].game_id).toBe("game-1");
+  });
 });
 
 describe("listSnapshots / getSnapshot", () => {
@@ -529,6 +567,45 @@ describe("listSnapshots / getSnapshot", () => {
     expect(received?.senderSignPublicKey).toBe("sign-b");
     // Light rows must not carry the heavy payload blob.
     expect("payloadEnc" in (received ?? {})).toBe(false);
+  });
+
+  it("surfaces autosave slots only when includeAutosave is set", async () => {
+    const store = setup({
+      game_snapshots: [
+        snapshotRow({ id: "s-own", kid_id: "kid-a", account_id: "acc-a" }),
+        snapshotRow({
+          id: "s-autosave",
+          kid_id: "kid-a",
+          account_id: "acc-a",
+          origin: "autosave",
+          game_id: "game-1",
+        }),
+      ],
+    });
+    const items = await listSnapshots(fakeClient(store), {
+      accountId: "acc-a",
+      kidId: "kid-a",
+      includeAutosave: true,
+    });
+    expect(items.map((i) => i.id).sort()).toEqual(["s-autosave", "s-own"]);
+  });
+
+  it("carries the sent marker on list items", async () => {
+    const store = setup({
+      game_snapshots: [
+        snapshotRow({
+          id: "s-sent",
+          kid_id: "kid-a",
+          account_id: "acc-a",
+          shared_with_kid_id: "kid-b",
+        }),
+      ],
+    });
+    const items = await listSnapshots(fakeClient(store), {
+      accountId: "acc-a",
+      kidId: "kid-a",
+    });
+    expect(items[0].sharedWithKidId).toBe("kid-b");
   });
 
   it("rejects listing for a kid of another account", async () => {

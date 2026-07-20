@@ -61,7 +61,7 @@ export default function GamePlayPage() {
                 headers: { "content-type": "application/json" },
                 body: JSON.stringify({
                   kidId: pid,
-                  event: "game_played",
+                  event: "game_started",
                   message: "Started game",
                 }),
               })

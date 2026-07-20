@@ -1,41 +1,37 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { Database, SystemLog, SystemLogInsert } from "@dodi/types/database";
+import type { Database, Activity, ActivityInsert } from "@dodi/types/database";
 
 type Client = SupabaseClient<Database>;
 
-/** Insert a single log entry. */
-export async function logMemoryEvent(
+/** Insert a single activity row. */
+export async function logActivity(
   supabase: Client,
-  entry: SystemLogInsert,
+  entry: ActivityInsert,
 ): Promise<void> {
-  const { error } = await supabase
-    .from("system_logs")
-    .insert(entry);
+  const { error } = await supabase.from("activities").insert(entry);
 
   if (error) {
     // Log failures should not crash the caller — swallow and warn
-    console.error("[system-logs] Failed to insert log entry:", error.message);
+    console.error("[activities] Failed to insert activity:", error.message);
   }
 }
 
-/** Batch insert multiple log entries. */
-export async function logMemoryEvents(
+/** Batch insert multiple activity rows. */
+export async function logActivities(
   supabase: Client,
-  entries: SystemLogInsert[],
+  entries: ActivityInsert[],
 ): Promise<void> {
   if (entries.length === 0) return;
 
-  const { error } = await supabase
-    .from("system_logs")
-    .insert(entries);
+  const { error } = await supabase.from("activities").insert(entries);
 
   if (error) {
-    console.error("[system-logs] Failed to insert log entries:", error.message);
+    console.error("[activities] Failed to insert activities:", error.message);
   }
 }
 
-interface ListSystemLogsOptions {
+interface ListActivitiesOptions {
   kidId?: string;
   personaId?: string;
   event?: string;
@@ -43,12 +39,12 @@ interface ListSystemLogsOptions {
   offset?: number;
 }
 
-/** List system logs for an account, with optional filters and pagination. */
-export async function listSystemLogs(
+/** List activities for an account, with optional filters and pagination. */
+export async function listActivities(
   supabase: Client,
   accountId: string,
-  options: ListSystemLogsOptions = {},
-): Promise<SystemLog[]> {
+  options: ListActivitiesOptions = {},
+): Promise<Activity[]> {
   const {
     kidId,
     personaId,
@@ -58,7 +54,7 @@ export async function listSystemLogs(
   } = options;
 
   let query = supabase
-    .from("system_logs")
+    .from("activities")
     .select("*")
     .eq("account_id", accountId)
     .order("created_at", { ascending: false })
@@ -79,5 +75,5 @@ export async function listSystemLogs(
   const { data, error } = await query;
 
   if (error) throw error;
-  return (data ?? []) as unknown as SystemLog[];
+  return (data ?? []) as unknown as Activity[];
 }

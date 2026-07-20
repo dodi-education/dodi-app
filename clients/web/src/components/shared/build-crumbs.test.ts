@@ -16,11 +16,14 @@ describe("buildCrumbs", () => {
     expect(buildCrumbs("/parent/dashboard", t)).toEqual([
       { label: "nav.dashboard" },
     ]);
-    expect(buildCrumbs("/parent/system-logs", t)).toEqual([
-      { label: "nav.systemLogs" },
+    expect(buildCrumbs("/parent/activities", t)).toEqual([
+      { label: "nav.activities" },
     ]);
     expect(buildCrumbs("/parent/usage", t)).toEqual([
       { label: "nav.usage" },
+    ]);
+    expect(buildCrumbs("/parent/snapshots", t)).toEqual([
+      { label: "nav.parentSnapshots" },
     ]);
   });
 

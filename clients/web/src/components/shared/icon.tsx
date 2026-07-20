@@ -35,6 +35,7 @@ import {
   IconLoader2,
   IconLock,
   IconLogout,
+  IconLogs,
   IconMasksTheater,
   IconMathSymbols,
   IconMenu2,
@@ -128,7 +129,8 @@ export type IconName =
   | "switch_vertical"
   | "user_plus"
   | "agent_sessions"
-  | "system_logs"
+  | "activities"
+  | "event_logs"
   | "usage"
   | "volume"
   // Game-tag icons — Tabler slugs (see @dodi/games/tags); "philosophy" is custom.
@@ -204,7 +206,8 @@ const ICONS: Record<IconName, ComponentType<TablerIconProps>> = {
   switch_vertical: IconSwitchVertical,
   user_plus: IconUserPlus,
   agent_sessions: IconRobot,
-  system_logs: IconBrain,
+  activities: IconLogs,
+  event_logs: IconLogs,
   usage: IconReceipt2,
   volume: IconVolume,
   // Game-tag icons (see @dodi/games/tags).

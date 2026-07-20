@@ -35,6 +35,9 @@ const UpdateKidSchema = z.object({
   can_be_added_as_friend: z.boolean().optional(),
   incoming_friend_requests_require_parent_approval: z.boolean().optional(),
   outgoing_friend_requests_require_parent_approval: z.boolean().optional(),
+  // Persisted Dodi deaf state (plaintext operational): an ISO timestamp when the
+  // kid muted Dodi, or null to re-enable listening.
+  deafened_dodi_at: z.iso.datetime().nullable().optional(),
 });
 
 interface RouteContext {

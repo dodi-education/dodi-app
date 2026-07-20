@@ -43,7 +43,7 @@ export interface UsageReport {
 }
 
 /**
- * Per-call sizes measured client-side and persisted as typed `usage_events.meta_*`
+ * Per-call sizes measured client-side and persisted as typed `ai_usage_logs.meta_*`
  * columns — one field per context component so we can track how they evolve across
  * users over time. All optional; each event type populates the subset it has.
  * Never content — only counts/lengths, so it stays provider-blind.

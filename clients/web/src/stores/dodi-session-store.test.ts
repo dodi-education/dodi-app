@@ -1,12 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * Coverage for the day-batched memory outbox in the dodi session store. Storage
- * is grouped per Dodi session (connect) and per ROUND (one coalesced entry per
- * speaker run, not per streamed word chunk): accumulate the day's sessions in
- * localStorage, promote a stale day into a pending outbox on the next connect,
- * drain it as one chunk to the thinking model, and clear it ONLY on a confirmed
- * write. Plus the manual `processMemoryNow` force-drain.
+ * Coverage for the dodi session store's transcript wiring: rounds are coalesced
+ * (one entry per speaker run, not per streamed word chunk) and recorded through
+ * the transcript-sync module (mocked here — its persistence behavior is pinned
+ * in transcript-sync.test.ts), and connect/processMemoryNow drive the
+ * seed→flush→memory-update chain with a single-flight guard.
  *
  * Runs in the node test env, so all browser-coupled imports of the store are
  * mocked, and `localStorage` / `window` / `document` are stubbed manually.
@@ -14,6 +13,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   runClientMemoryUpdate,
+  beginDaySpy,
+  recordRoundSpy,
+  syncAndSeedSpy,
+  flushNowSpy,
   liveHandler,
   sendToolResponseSpy,
   sendContextSpy,
@@ -21,8 +24,16 @@ const {
   dodiRequestSpy,
   resolveThinkingSpy,
   analyzeSpy,
+  kidLoadOneSpy,
+  kidPatchLocalSpy,
+  kidById,
+  tryResumeResult,
 } = vi.hoisted(() => ({
   runClientMemoryUpdate: vi.fn(),
+  beginDaySpy: vi.fn(),
+  recordRoundSpy: vi.fn(),
+  syncAndSeedSpy: vi.fn(),
+  flushNowSpy: vi.fn(),
   liveHandler: { current: null as ((e: unknown) => void) | null },
   sendToolResponseSpy: vi.fn(),
   sendContextSpy: vi.fn(),
@@ -30,9 +41,21 @@ const {
   dodiRequestSpy: vi.fn(),
   resolveThinkingSpy: vi.fn(),
   analyzeSpy: vi.fn(),
+  kidLoadOneSpy: vi.fn(),
+  kidPatchLocalSpy: vi.fn(),
+  kidById: { current: {} as Record<string, Record<string, unknown>> },
+  // Controls whether the AudioStreamer resumes without a gesture. false ⇒ the
+  // store lands in transient gesture-needed deaf (distinct from persisted deaf).
+  tryResumeResult: { current: true },
 }));
 
 vi.mock("@/lib/api", () => ({ dodi: { request: dodiRequestSpy } }));
+vi.mock("@/lib/ai/transcript-sync", () => ({
+  beginDay: beginDaySpy,
+  recordRound: recordRoundSpy,
+  syncAndSeed: syncAndSeedSpy,
+  flushNow: flushNowSpy,
+}));
 vi.mock("@/lib/ai/resolve-client-thinking", () => ({
   resolveClientThinking: resolveThinkingSpy,
 }));
@@ -42,7 +65,9 @@ vi.mock("@dodi/ai/game-analysis", () => ({ analyzeGameState: analyzeSpy }));
 vi.mock("@/stores/kid-store", () => ({
   useKidStore: {
     getState: () => ({
-      loadOne: async () => ({ display_name: "Ada", language: "en" }),
+      loadOne: kidLoadOneSpy,
+      patchLocal: kidPatchLocalSpy,
+      byId: kidById.current,
     }),
   },
 }));
@@ -78,7 +103,7 @@ vi.mock("@/lib/ai/audio-streamer", () => ({
     destroy() {}
     primeFromGesture() {}
     async tryResume() {
-      return true;
+      return tryResumeResult.current;
     }
     addPcmChunk() {}
     backlogSeconds() {
@@ -152,51 +177,6 @@ function makeLocalStorage() {
 
 const PID = "pid-1";
 const DAY1 = "2026-06-18T12:00:00.000Z"; // local day 2026-06-18 (UTC test env)
-const DAY2 = "2026-06-19T12:00:00.000Z";
-const DAY3 = "2026-06-20T12:00:00.000Z";
-
-interface Entry {
-  role: "kid" | "dodi";
-  text: string;
-  timestamp: string;
-}
-interface Session {
-  startedAt: string;
-  entries: Entry[];
-}
-
-function makeSession(startedAt: string, ...texts: string[]): Session {
-  return {
-    startedAt,
-    entries: texts.map((text, i) => ({
-      role: i % 2 === 0 ? "kid" : "dodi",
-      text,
-      timestamp: DAY1,
-    })),
-  };
-}
-
-function totalEntries(sessions: Session[]): number {
-  return sessions.reduce((n, s) => n + s.entries.length, 0);
-}
-
-const currentKey = (pid: string) => `dodi-transcript-${pid}`;
-const pendingKey = (pid: string) => `dodi-memory-pending-${pid}`;
-
-function seedCurrent(pid: string, date: string, sessions: Session[]) {
-  localStorage.setItem(
-    currentKey(pid),
-    JSON.stringify({ kidId: pid, date, sessions }),
-  );
-}
-function readCurrentRaw(pid: string) {
-  const raw = localStorage.getItem(currentKey(pid));
-  return raw ? JSON.parse(raw) : null;
-}
-function readPendingRaw(pid: string) {
-  const raw = localStorage.getItem(pendingKey(pid));
-  return raw ? JSON.parse(raw) : null;
-}
 
 const flush = async () => {
   for (let i = 0; i < 6; i++) await Promise.resolve();
@@ -237,17 +217,36 @@ function installTestEnv() {
 
   runClientMemoryUpdate.mockReset();
   runClientMemoryUpdate.mockResolvedValue(true);
+  beginDaySpy.mockReset();
+  recordRoundSpy.mockReset();
+  syncAndSeedSpy.mockReset();
+  syncAndSeedSpy.mockResolvedValue(undefined);
+  flushNowSpy.mockReset();
+  flushNowSpy.mockResolvedValue(undefined);
   sendToolResponseSpy.mockReset();
   sendContextSpy.mockReset();
   streamerStopSpy.mockReset();
   dodiRequestSpy.mockReset();
+  dodiRequestSpy.mockResolvedValue({ ok: true, json: async () => ({}) });
   resolveThinkingSpy.mockReset();
   analyzeSpy.mockReset();
+  // Kid cache: default kid has no persisted deaf state; patchLocal mirrors the
+  // real store by merging into byId so the dedup in persistDeafenedState works.
+  kidById.current = {};
+  kidLoadOneSpy.mockReset();
+  kidLoadOneSpy.mockResolvedValue({ display_name: "Ada", language: "en" });
+  kidPatchLocalSpy.mockReset();
+  kidPatchLocalSpy.mockImplementation(
+    (id: string, patch: Record<string, unknown>) => {
+      kidById.current[id] = { ...(kidById.current[id] ?? {}), ...patch };
+    },
+  );
   liveHandler.current = null;
+  tryResumeResult.current = true;
   useDodiSessionStore.setState({ state: "disconnected", context: { type: "home" } });
 }
 
-describe("dodi session store — day-batched memory outbox", () => {
+describe("dodi session store — transcript sync wiring", () => {
   beforeEach(() => {
     installTestEnv();
   });
@@ -256,184 +255,101 @@ describe("dodi session store — day-batched memory outbox", () => {
     vi.useRealTimers();
   });
 
-  it("promotes a previous day's sessions into the outbox and drains them", async () => {
-    seedCurrent(PID, "2026-06-18", [makeSession(DAY1, "hi", "hello", "more")]);
-    vi.setSystemTime(new Date(DAY2));
-
+  it("connect begins the day, seeds+flushes, then runs the memory update", async () => {
     await connect(PID);
 
-    expect(readCurrentRaw(PID)).toBeNull(); // promoted
+    expect(beginDaySpy).toHaveBeenCalledWith(PID);
+    expect(syncAndSeedSpy).toHaveBeenCalledWith(PID);
     expect(runClientMemoryUpdate).toHaveBeenCalledTimes(1);
-    const transcriptArg = runClientMemoryUpdate.mock.calls[0][1] as string;
-    expect(transcriptArg).toContain("### Session");
-    expect(transcriptArg).toContain("hi");
-    expect(transcriptArg).toContain("more");
-    expect(readPendingRaw(PID)).toBeNull(); // cleared on success
+    expect(runClientMemoryUpdate).toHaveBeenCalledWith(PID, {});
+    // The memory update must only run AFTER the outbox flush, so it sees the
+    // freshly flushed transcript rows.
+    expect(syncAndSeedSpy.mock.invocationCallOrder[0]).toBeLessThan(
+      runClientMemoryUpdate.mock.invocationCallOrder[0],
+    );
   });
 
-  it("does NOT promote or drain a same-day batch (keeps accumulating)", async () => {
-    seedCurrent(PID, "2026-06-18", [makeSession(DAY1, "a", "b")]);
-
-    await connect(PID);
-
-    expect(runClientMemoryUpdate).not.toHaveBeenCalled();
-    expect(readPendingRaw(PID)).toBeNull();
-    expect(totalEntries(readCurrentRaw(PID).sessions)).toBe(2);
-  });
-
-  it("loads today's sessions (processMemoryNow flushes them)", async () => {
-    seedCurrent(PID, "2026-06-18", [makeSession(DAY1, "one", "two")]);
-    await connect(PID);
-    runClientMemoryUpdate.mockClear();
-
-    useDodiSessionStore.getState().processMemoryNow(PID);
-    await flush();
-
-    expect(runClientMemoryUpdate).toHaveBeenCalledTimes(1);
-    const arg = runClientMemoryUpdate.mock.calls[0][1] as string;
-    expect(arg).toContain("one");
-    expect(arg).toContain("two");
-  });
-
-  it("keeps pending data even if clearing the current key throws (crash-safe order)", async () => {
-    seedCurrent(PID, "2026-06-18", [makeSession(DAY1, "x", "y", "z")]);
-    vi.setSystemTime(new Date(DAY2));
-    runClientMemoryUpdate.mockResolvedValue(false); // don't clear pending
-
-    const ls = (globalThis as unknown as { localStorage: Storage }).localStorage;
-    const origRemove = ls.removeItem.bind(ls);
-    ls.removeItem = (k: string) => {
-      if (k === currentKey(PID)) throw new Error("quota");
-      origRemove(k);
-    };
-
-    await connect(PID);
-
-    // Pending was written BEFORE the failed clear, so the data survives.
-    expect(totalEntries(readPendingRaw(PID).sessions)).toBe(3);
-    expect(readCurrentRaw(PID)).not.toBeNull(); // clear threw → still present
-  });
-
-  it("skips the drain below the minimum entry count, fires at/above it", async () => {
-    seedCurrent(PID, "2026-06-18", [makeSession(DAY1, "only", "two")]);
-    vi.setSystemTime(new Date(DAY2));
-    await connect(PID);
-    expect(runClientMemoryUpdate).not.toHaveBeenCalled();
-
-    seedCurrent(PID, "2026-06-19", [makeSession(DAY2, "a", "b", "c")]);
-    vi.setSystemTime(new Date(DAY3));
-    await connect(PID);
-    expect(runClientMemoryUpdate).toHaveBeenCalledTimes(1);
-  });
-
-  it("retains the outbox when the write fails, clears it when it succeeds", async () => {
-    seedCurrent(PID, "2026-06-18", [makeSession(DAY1, "a", "b", "c")]);
-    vi.setSystemTime(new Date(DAY2));
-    runClientMemoryUpdate.mockResolvedValue(false);
-
-    await connect(PID);
-    expect(totalEntries(readPendingRaw(PID).sessions)).toBe(3); // retained
-
-    runClientMemoryUpdate.mockResolvedValue(true);
-    await connect(PID);
-    expect(readPendingRaw(PID)).toBeNull();
-  });
-
-  it("guards against double-submitting the same pending batch", async () => {
-    seedCurrent(PID, "2026-06-18", [makeSession(DAY1, "a", "b", "c")]);
-    vi.setSystemTime(new Date(DAY2));
-
-    let resolveDrain!: (v: boolean) => void;
+  it("queues a manual process-memory run behind an in-flight auto run instead of dropping it", async () => {
+    // Regression: on a page load with ?process-memory=1 the auto-connect's
+    // memory update is already in flight when the manual trigger fires; the
+    // manual includeToday run must queue and still happen — never be dropped
+    // (dropping it left today's transcript permanently open).
+    let resolveAuto!: (v: boolean) => void;
     runClientMemoryUpdate.mockReturnValueOnce(
       new Promise<boolean>((r) => {
-        resolveDrain = r;
+        resolveAuto = r;
       }),
     );
 
-    await connect(PID); // drain #1 starts, hangs (guard held)
-    useDodiSessionStore.getState().processMemoryNow(PID); // would drain again
+    await connect(PID); // auto run starts, hangs
+    useDodiSessionStore.getState().processMemoryNow(PID); // manual trigger during the hang
+    await flush();
+    expect(runClientMemoryUpdate).toHaveBeenCalledTimes(1); // queued, not started
+
+    resolveAuto(true);
     await flush();
 
-    expect(runClientMemoryUpdate).toHaveBeenCalledTimes(1);
-
-    resolveDrain(true); // release the guard for the next test
-    await flush();
-  });
-
-  it("merges multiple unprocessed days into one pending batch", async () => {
-    runClientMemoryUpdate.mockResolvedValue(false); // never clears
-
-    seedCurrent(PID, "2026-06-18", [makeSession(DAY1, "d1a", "d1b", "d1c")]);
-    vi.setSystemTime(new Date(DAY2));
-    await connect(PID);
-    expect(totalEntries(readPendingRaw(PID).sessions)).toBe(3);
-
-    seedCurrent(PID, "2026-06-19", [makeSession(DAY2, "d2a", "d2b")]);
-    vi.setSystemTime(new Date(DAY3));
-    await connect(PID);
-
-    const sessions = readPendingRaw(PID).sessions as Session[];
-    expect(sessions).toHaveLength(2); // session structure preserved
-    expect(totalEntries(sessions)).toBe(5);
-    expect(sessions.flatMap((s) => s.entries.map((e) => e.text))).toEqual([
-      "d1a",
-      "d1b",
-      "d1c",
-      "d2a",
-      "d2b",
+    expect(runClientMemoryUpdate).toHaveBeenCalledTimes(2);
+    expect(runClientMemoryUpdate.mock.calls[1]).toEqual([
+      PID,
+      { includeToday: true },
     ]);
   });
 
-  it("caps the pending outbox at MAX_PENDING_ENTRIES (drops oldest sessions)", async () => {
-    runClientMemoryUpdate.mockResolvedValue(false);
-    const MAX = 2000;
-    // Many single-entry sessions totalling MAX.
-    const big = Array.from({ length: MAX }, (_, i) => ({
-      startedAt: DAY1,
-      entries: [{ role: "kid" as const, text: `old-${i}`, timestamp: DAY1 }],
-    }));
-    localStorage.setItem(
-      pendingKey(PID),
-      JSON.stringify({ kidId: PID, sessions: big }),
+  it("coalesces overlapping auto runs (reconnect while one is in flight)", async () => {
+    let resolveAuto!: (v: boolean) => void;
+    runClientMemoryUpdate.mockReturnValueOnce(
+      new Promise<boolean>((r) => {
+        resolveAuto = r;
+      }),
     );
-    seedCurrent(PID, "2026-06-18", [makeSession(DAY1, "new-1", "new-2", "new-3")]);
-    vi.setSystemTime(new Date(DAY2));
 
-    await connect(PID);
+    await connect(PID); // auto run #1 starts, hangs
+    await connect(PID); // reconnect → auto run #2 must coalesce away
+    expect(runClientMemoryUpdate).toHaveBeenCalledTimes(1);
 
-    const sessions = readPendingRaw(PID).sessions as Session[];
-    expect(totalEntries(sessions)).toBe(MAX);
-    const lastText = sessions[sessions.length - 1].entries.at(-1)!.text;
-    expect(lastText).toBe("new-3"); // newest kept
-    expect(sessions[0].entries[0].text).not.toBe("old-0"); // oldest dropped
+    resolveAuto(true);
+    await flush();
+    expect(runClientMemoryUpdate).toHaveBeenCalledTimes(1); // still just the one
   });
 
-  it("processMemoryNow force-drains a below-threshold same-day batch", async () => {
-    seedCurrent(PID, "2026-06-18", [makeSession(DAY1, "solo")]);
+  it("processMemoryNow flushes the round + outbox, then processes including today", async () => {
     await connect(PID);
-    expect(runClientMemoryUpdate).not.toHaveBeenCalled(); // same day, not drained
+    fire({ type: "setupComplete" });
+    await flush();
+    runClientMemoryUpdate.mockClear();
 
+    // An in-progress kid round is finalized by the manual trigger.
+    fire({ type: "inputTranscription", text: "Ich liebe Mangos" });
     useDodiSessionStore.getState().processMemoryNow(PID);
     await flush();
 
-    expect(runClientMemoryUpdate).toHaveBeenCalledTimes(1); // force bypasses min
-    expect(readPendingRaw(PID)).toBeNull(); // cleared on success
-    expect(readCurrentRaw(PID)).toBeNull();
+    expect(recordRoundSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ role: "kid", text: "Ich liebe Mangos" }),
+    );
+    expect(flushNowSpy).toHaveBeenCalledWith(PID);
+    expect(runClientMemoryUpdate).toHaveBeenCalledTimes(1);
+    expect(runClientMemoryUpdate).toHaveBeenCalledWith(PID, {
+      includeToday: true,
+    });
+    expect(flushNowSpy.mock.invocationCallOrder[0]).toBeLessThan(
+      runClientMemoryUpdate.mock.invocationCallOrder[0],
+    );
   });
 
-  it("endSession flushes the day sessions but never processes or clears them", async () => {
-    seedCurrent(PID, "2026-06-18", [makeSession(DAY1, "a", "b", "c")]);
+  it("endSession flushes the outbox but never processes memory", async () => {
     await connect(PID);
     runClientMemoryUpdate.mockClear();
+    flushNowSpy.mockClear();
 
     useDodiSessionStore.getState().endSession();
     await flush();
 
+    expect(flushNowSpy).toHaveBeenCalledWith(PID);
     expect(runClientMemoryUpdate).not.toHaveBeenCalled();
-    expect(totalEntries(readCurrentRaw(PID).sessions)).toBe(3);
   });
 
-  it("coalesces streaming fragments into one entry per speaker round", async () => {
+  it("coalesces streaming fragments into one recorded round per speaker run", async () => {
     await connect(PID);
     fire({ type: "setupComplete" });
     await flush(); // tryResume → transitionToActive → greetingSent
@@ -446,15 +362,131 @@ describe("dodi session store — day-batched memory outbox", () => {
     fire({ type: "outputTranscription", text: " Magst du sie?" });
     fire({ type: "turnComplete" });
 
-    const sessions = readCurrentRaw(PID).sessions as Session[];
-    expect(sessions).toHaveLength(1); // one session (one connect)
-    const entries = sessions[0].entries;
-    expect(entries).toHaveLength(2); // one kid round, one Dodi round — not 5
-    expect(entries[0]).toMatchObject({ role: "kid", text: "Ich mag gerne Mango." });
-    expect(entries[1]).toMatchObject({
+    // One recorded round per speaker run — not one per streamed fragment.
+    expect(recordRoundSpy).toHaveBeenCalledTimes(2);
+    expect(recordRoundSpy.mock.calls[0][0]).toMatchObject({
+      role: "kid",
+      text: "Ich mag gerne Mango.",
+    });
+    expect(recordRoundSpy.mock.calls[1][0]).toMatchObject({
       role: "dodi",
       text: "Mmmh, Mangos! Superlecker! Magst du sie?",
     });
+    // Round timestamps mark the round START, stamped when the speaker switched.
+    expect(recordRoundSpy.mock.calls[0][0].occurredAt).toBe(DAY1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Persisted deaf state: kids.deafened_dodi_at makes the "deaf" toggle durable.
+// NULL ⇒ Dodi comes up listening; a timestamp ⇒ she comes up deaf directly on
+// connect (no greeting, no audio resume) until the kid taps her awake, which
+// clears it. The deliberate toggle (activate/deactivate) writes it through the
+// kids API and patches the local cache.
+// ---------------------------------------------------------------------------
+
+describe("dodi session store — persisted deaf state", () => {
+  beforeEach(() => {
+    installTestEnv();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const state = () => useDodiSessionStore.getState();
+  const findKidPatch = () =>
+    dodiRequestSpy.mock.calls.find(
+      (c) =>
+        c[0] === `/api/kids/${PID}` &&
+        (c[1] as { method?: string } | undefined)?.method === "PATCH",
+    );
+  const patchBody = (call: unknown[]) =>
+    JSON.parse((call[1] as { body: string }).body) as {
+      deafened_dodi_at: string | null;
+    };
+
+  it("comes up deaf directly on connect when deafened_dodi_at is set", async () => {
+    kidLoadOneSpy.mockResolvedValue({
+      display_name: "Ada",
+      language: "en",
+      deafened_dodi_at: DAY1,
+    });
+
+    await connect(PID);
+    fire({ type: "setupComplete" });
+    await flush();
+
+    // Deaf, and NOT gesture-needed — an incidental page click can't wake her.
+    expect(state().state).toBe("deaf");
+    expect(state().gestureNeeded).toBe(false);
+  });
+
+  it("comes up active on connect when deafened_dodi_at is null", async () => {
+    await connect(PID);
+    fire({ type: "setupComplete" });
+    await flush();
+
+    expect(state().state).toBe("active");
+  });
+
+  it("deactivate persists a deafened_dodi_at timestamp and patches the cache", async () => {
+    await connect(PID);
+    fire({ type: "setupComplete" });
+    await flush();
+    expect(state().state).toBe("active");
+
+    dodiRequestSpy.mockClear();
+    state().deactivate();
+
+    expect(state().state).toBe("deaf");
+    const patch = findKidPatch();
+    expect(patch).toBeTruthy();
+    expect(patchBody(patch!).deafened_dodi_at).toBe(DAY1); // fake system clock
+    expect(kidById.current[PID]?.deafened_dodi_at).toBe(DAY1); // local cache
+  });
+
+  it("activate clears deafened_dodi_at when waking from persisted deaf", async () => {
+    kidById.current[PID] = { deafened_dodi_at: DAY1 };
+    kidLoadOneSpy.mockResolvedValue({
+      display_name: "Ada",
+      language: "en",
+      deafened_dodi_at: DAY1,
+    });
+
+    await connect(PID);
+    fire({ type: "setupComplete" });
+    await flush();
+    expect(state().state).toBe("deaf");
+
+    dodiRequestSpy.mockClear();
+    await state().activate();
+    await flush();
+
+    expect(state().state).toBe("active");
+    const patch = findKidPatch();
+    expect(patch).toBeTruthy();
+    expect(patchBody(patch!).deafened_dodi_at).toBeNull();
+    expect(kidById.current[PID]?.deafened_dodi_at ?? null).toBeNull();
+  });
+
+  it("waking from transient gesture-needed deaf does not persist (null→null no-op)", async () => {
+    // Audio couldn't resume without a gesture → transient deaf (gestureNeeded),
+    // which is NOT the persisted mute. Waking from it must not spam a redundant
+    // null→null write to the kid row.
+    tryResumeResult.current = false;
+    await connect(PID);
+    fire({ type: "setupComplete" });
+    await flush();
+    expect(state().state).toBe("deaf");
+    expect(state().gestureNeeded).toBe(true); // transient, distinct from persisted
+
+    dodiRequestSpy.mockClear();
+    await state().activate();
+    await flush();
+
+    expect(state().state).toBe("active");
+    expect(findKidPatch()).toBeUndefined(); // value already null → no write
   });
 });
 

@@ -282,6 +282,12 @@ export async function sendFriendRequest(
       nickname: session.encryptField(nickname.trim()),
     }),
   });
+  const { logKidActivity } = await import("@/lib/activities/log-activity");
+  logKidActivity({
+    kidId: kid.id,
+    event: "friend_request_sent",
+    message: "Friend request sent",
+  });
 }
 
 /** A friendship whose card this kid seals, plus the key to re-seal it. */
@@ -373,6 +379,12 @@ export async function acceptRequest(
   await jsonRequest(`/api/friends/${friendshipId}/respond`, {
     method: "POST",
     body: JSON.stringify({ kidId: kid.id, action: "accept", addresseeCard }),
+  });
+  const { logKidActivity } = await import("@/lib/activities/log-activity");
+  logKidActivity({
+    kidId: kid.id,
+    event: "friend_request_accepted",
+    message: "Friend request accepted",
   });
 }
 

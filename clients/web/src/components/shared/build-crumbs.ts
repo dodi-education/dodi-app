@@ -96,8 +96,14 @@ export function buildCrumbs(
       return crumbs;
     }
 
-    case "system-logs":
-      return [{ label: t("nav.systemLogs") }];
+    case "snapshots":
+      return [{ label: t("nav.parentSnapshots") }];
+
+    case "activities":
+      return [{ label: t("nav.activities") }];
+
+    case "event-logs":
+      return [{ label: t("nav.activities") }];
 
     case "usage":
       return [{ label: t("nav.usage") }];

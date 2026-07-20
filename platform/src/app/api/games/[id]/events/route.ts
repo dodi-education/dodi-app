@@ -5,12 +5,16 @@ import { serverErrorResponse } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
 import { getGame } from "@/services/games";
 import { getKid } from "@/services/kids";
-import { logMemoryEvent } from "@/services/system-logs";
+import { logActivity } from "@/services/activities";
 import { getTranslation, applyTranslation } from "@/services/game-translations";
 
 const LogGameEventSchema = z.object({
   kidId: z.string().uuid(),
-  event: z.enum(["game_played", "game_command_executed", "game_command_failed"]),
+  event: z.enum([
+    "game_started",
+    "game_command_executed",
+    "game_command_failed",
+  ]),
   message: z.string().min(1).max(800),
 });
 
@@ -53,11 +57,11 @@ export async function POST(
     const gameTranslation = await getTranslation(supabase, rawGame.id, kid.language);
     const game = applyTranslation(rawGame, gameTranslation);
 
-    await logMemoryEvent(supabase, {
+    await logActivity(supabase, {
       kid_id: kid.id,
       account_id: accountId,
       persona_id: kid.active_persona?.id ?? null,
-      event,
+      event: event,
       message: `[${game.title}] ${message}`,
     });
 

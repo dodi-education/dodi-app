@@ -170,6 +170,7 @@ function kid(overrides: Partial<Kid>): Kid {
     can_be_added_as_friend: true,
     incoming_friend_requests_require_parent_approval: false,
     outgoing_friend_requests_require_parent_approval: false,
+    deafened_dodi_at: null,
     created_at: "t0",
     updated_at: "t0",
     ...overrides,

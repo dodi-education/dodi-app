@@ -510,12 +510,21 @@ parent-defined goal — and, in future, generate challenges like "Solve 3 math g
 
 ## TODO
 
-- Check ways how to keep game build running on mobile (e.g. avoid dimming, web worker?)
+- Memory / transcripts (implemented foundation):
+- Add 3 transcript logging tiers: basic, advanced, full and change pricing wording to:
+  - Basic: 1 month
+  - Advanced: 6 months
+  - Full: Unlimited
+
+
+
+- Scroll to bottom (dodi chat)
+- Implement Venice.ai
+- Credit balances
+
 - Check: Prettier is currently broken repo-wide (.prettierrc wants prettier-plugin-tailwindcss, which isn't installed — pre-existing, I formatted my files with equivalent settings)
 
-- Enhance learning & transcript system
- - Every memory should be stored in a separate memory table entry and on a daily basis a summary is created from all memories and stored as markdown. Current local storage logic should can still be used for buffering (until persisted to DB)
- - Add 3 transcript logging tiers: basic, advanced, full (Basic: Only persist memory summary (remove parsed memory entries), Advanced: Keep parsed memory entries, parents can view memory entries as list items and the relevant transcript snippet that lead to the creation of the memory, Full: Store full transcript, independent of memories)
+
 
 - Configure Voice (Provider/Style) per persona
 

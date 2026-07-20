@@ -8,7 +8,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { Database, UsageEvent, UsageEventInsert } from "@dodi/types/database";
+import type { Database, AiUsageLog, AiUsageLogInsert } from "@dodi/types/database";
 import type { TokenUsage, UsageEventType, UsageMeta } from "@dodi/types/usage";
 
 type Client = SupabaseClient<Database>;
@@ -28,10 +28,10 @@ export interface RecordUsageInput {
 export async function recordUsage(
   supabase: Client,
   input: RecordUsageInput,
-): Promise<UsageEvent> {
+): Promise<AiUsageLog> {
   const m = input.meta ?? {};
 
-  const payload: UsageEventInsert = {
+  const payload: AiUsageLogInsert = {
     account_id: input.accountId,
     kid_id: input.kidId ?? null,
     game_id: input.gameId ?? null,
@@ -56,16 +56,16 @@ export async function recordUsage(
   };
 
   const { data, error } = await supabase
-    .from("usage_events")
+    .from("ai_usage_logs")
     .insert(payload)
     .select("*")
     .single();
 
   if (error) throw error;
-  return data as unknown as UsageEvent;
+  return data as unknown as AiUsageLog;
 }
 
-/** The subset of a usage_events row `aggregateMonthly` needs. */
+/** The subset of an ai_usage_logs row `aggregateMonthly` needs. */
 export interface UsageRow {
   event_type: string;
   provider: string;
@@ -175,7 +175,7 @@ export async function getMonthlyUsage(
   const start = startOfUtcMonth(monthStart);
   const end = addUtcMonth(start, 1);
   const { data, error } = await supabase
-    .from("usage_events")
+    .from("ai_usage_logs")
     .select(
       "event_type,provider,model,kid_id,input_tokens,output_tokens,cache_write_tokens,cache_read_tokens,voice_seconds",
     )
