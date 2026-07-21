@@ -25,11 +25,13 @@ import {
 import { STAGE } from "@/lib/games/stage";
 import { GAME_TAGS } from "@dodi/games/tags";
 import { sanitizeGameBundle } from "@dodi/games/sanitizer";
+import { UNBUILT_GAME_PLACEHOLDER } from "@dodi/games/placeholder";
 import { injectBackgroundImage } from "@dodi/games/background-image";
 import { buildGameExportFiles, gameExportFileName } from "@dodi/games/export";
 import { downloadBlob, packGameExportZip } from "@/lib/games/game-export-zip";
 import { tagStyle } from "@/components/parent/games/tag-style";
 import { CodeViewer } from "@/components/parent/games/code-viewer";
+import { PublishCard } from "@/components/parent/games/publish-card";
 import { useTagLabel } from "@/lib/games/tag-label";
 import { cn } from "@/lib/utils";
 import { capImages, downscaleDataUrl, fileToDataUrl } from "@/lib/games/thumbnail";
@@ -38,6 +40,13 @@ import { useMediaQuery } from "@/hooks/use-media-query";
 import { useNavigationGuard } from "@/hooks/use-navigation-guard";
 import { useWakeLock } from "@/hooks/use-wake-lock";
 import { useBreadcrumbStore } from "@/stores/breadcrumb-store";
+import {
+  decryptGameResponse,
+  decryptVersionResponse,
+  sealGameCreateFields,
+  sealGameFields,
+  useGameStore,
+} from "@/stores/game-store";
 import { useVaultStore } from "@/stores/vault-store";
 import { resolveClientGame } from "@/lib/ai/resolve-client-game";
 import { resolveClientImage } from "@/lib/ai/resolve-client-image";
@@ -55,7 +64,7 @@ import {
 } from "@/lib/errors/report-error-log";
 import { mapSuccessDefinition } from "@dodi/ai/success-mapping";
 import type { AgentStep } from "@dodi/types/agent-progress";
-import type { Game } from "@dodi/types/database";
+import type { Game, GameVersion, Json } from "@dodi/types/database";
 import type { GamePerspective } from "@dodi/types/games";
 import type { AgentCodeResult, AgentTaskRequest } from "@dodi/types/tasks";
 import type { ProgressKind } from "@dodi/games/success";
@@ -101,8 +110,19 @@ export interface StudioGame {
   agentTranscriptEnc?: string | null;
 }
 
+/** The stage's three tabs. Doubles as the `/game-studio/{id}/{tab}` segment. */
+export type StudioView = "settings" | "code" | "preview";
+
+const STUDIO_VIEWS: readonly StudioView[] = ["settings", "code", "preview"];
+
+export function isStudioView(value: string | undefined): value is StudioView {
+  return value !== undefined && STUDIO_VIEWS.includes(value as StudioView);
+}
+
 interface GameStudioProps {
   initialGame?: StudioGame;
+  /** Tab from the route; falls back to preview for a saved game, settings for a draft. */
+  initialView?: StudioView;
 }
 
 interface ChatMessage {
@@ -187,7 +207,7 @@ function restoreTranscript(initialGame?: StudioGame): ChatMessage[] {
   }
 }
 
-export function GameStudio({ initialGame }: GameStudioProps) {
+export function GameStudio({ initialGame, initialView }: GameStudioProps) {
   const t = useTranslations("gameStudio");
   const locale = useLocale();
   const router = useRouter();
@@ -214,9 +234,46 @@ export function GameStudio({ initialGame }: GameStudioProps) {
     return () => setLeaf(null);
   }, [game.title, setLeaf, t]);
 
-  const [view, setView] = useState<"preview" | "code" | "settings">(
-    initialGame?.id ? "preview" : "settings",
+  const [view, setViewState] = useState<StudioView>(
+    initialView ?? (initialGame?.id ? "preview" : "settings"),
   );
+
+  /**
+   * Switch tab and mirror it into the URL so the tab is linkable and survives a
+   * reload. Deliberately `history.replaceState` rather than a router navigation:
+   * re-rendering this route would remount the studio and take the live chat
+   * thread, a running agent build and the mounted sandbox with it. Replacing
+   * (not pushing) also keeps Back meaning "leave the studio" rather than
+   * unwinding a trail of tab switches. A draft has no id and so no URL yet.
+   */
+  const setView = useCallback(
+    (next: StudioView) => {
+      setViewState(next);
+      const gameId = initialGame?.id;
+      if (gameId && typeof window !== "undefined") {
+        window.history.replaceState(
+          null,
+          "",
+          `/parent/game-studio/${gameId}/${next}`,
+        );
+      }
+    },
+    [initialGame?.id],
+  );
+
+  // Canonicalize on entry: `/game-studio/{id}` (and anything unrecognized in the
+  // tab slot) becomes the tab actually being shown, so a reload or a shared link
+  // lands where the parent left off.
+  useEffect(() => {
+    const gameId = initialGame?.id;
+    if (!gameId) return;
+    const canonical = `/parent/game-studio/${gameId}/${view}`;
+    if (window.location.pathname !== canonical) {
+      window.history.replaceState(null, "", canonical);
+    }
+    // Entry only — later tab switches keep the URL in step via setView.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialGame?.id]);
   // Initial thread = the unsealed prior conversation (resume), or empty.
   const [messages, setMessages] = useState<ChatMessage[]>(() => restoreTranscript(initialGame));
   const [draft, setDraft] = useState("");
@@ -463,18 +520,21 @@ export function GameStudio({ initialGame }: GameStudioProps) {
     const agent_transcript_enc = session
       ? session.encryptJson(sealableTranscript(transcript))
       : null;
+    const sealed = await sealGameFields({
+      title: result.title || undefined,
+      description: result.description,
+      code_bundle: safeCode,
+      markdown: result.markdown,
+      learning_goal: result.learningGoal,
+      success_definition: result.successDefinition,
+      success_criteria: result.successCriteria as unknown as Json,
+    });
     const res = await dodi.request(`/api/games/${game.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        title: result.title || undefined,
-        description: result.description,
+        ...sealed,
         tags: result.tags,
-        code_bundle: safeCode,
-        markdown: result.markdown,
-        learning_goal: result.learningGoal,
-        success_definition: result.successDefinition,
-        success_criteria: result.successCriteria,
         progress_kind: result.progressKind,
         metadata: result.metadata,
         agent_transcript_enc,
@@ -482,7 +542,9 @@ export function GameStudio({ initialGame }: GameStudioProps) {
       }),
     });
     if (!res.ok) throw new Error(await readError(res));
-    return (await res.json()) as Game;
+    const saved = await decryptGameResponse((await res.json()) as Game);
+    useGameStore.getState().put(saved);
+    return saved;
   };
 
   // Download the game as a portable zip, assembled entirely in the browser from
@@ -494,9 +556,8 @@ export function GameStudio({ initialGame }: GameStudioProps) {
     setExporting(true);
     setError(null);
     try {
-      const res = await dodi.request(`/api/games/${game.id}`);
-      if (!res.ok) throw new Error(await readError(res));
-      const row = (await res.json()) as Game;
+      const row = await useGameStore.getState().loadOne(game.id, undefined, true);
+      if (!row) throw new Error(t("exportFailedGeneric"));
       const files = buildGameExportFiles({
         game: row,
         transcript:
@@ -565,7 +626,7 @@ export function GameStudio({ initialGame }: GameStudioProps) {
       try {
         const res = await dodi.request(`/api/games/${gameId}/versions/${previousVersionId}`);
         if (!res.ok) return;
-        const row = (await res.json()) as { code_bundle: string };
+        const row = await decryptVersionResponse((await res.json()) as GameVersion);
         if (!cancelled) {
           setVersionCodes((m) => ({ ...m, [previousVersionId]: row.code_bundle }));
         }
@@ -604,7 +665,8 @@ export function GameStudio({ initialGame }: GameStudioProps) {
         body: JSON.stringify({ restore_version_id: versionId }),
       });
       if (!res.ok) throw new Error(await readError(res));
-      const row = (await res.json()) as Game;
+      const row = await decryptGameResponse((await res.json()) as Game);
+      useGameStore.getState().put(row);
       setGame((g) => ({
         ...g,
         codeBundle: row.code_bundle,
@@ -670,16 +732,21 @@ export function GameStudio({ initialGame }: GameStudioProps) {
     setSavingEdit(true);
     setError(null);
     try {
+      // Sanitize the hand-edited code before sealing it — once encrypted, no
+      // later layer can inspect it.
+      const safeCode = sanitizeGameBundle(pending.code).code;
+      const sealed = await sealGameFields({ code_bundle: safeCode });
       const res = await dodi.request(`/api/games/${game.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          code_bundle: pending.code,
+          ...sealed,
           create_version: saveAsNewVersion,
         }),
       });
       if (!res.ok) throw new Error(await readError(res));
-      const row = (await res.json()) as Game;
+      const row = await decryptGameResponse((await res.json()) as Game);
+      useGameStore.getState().put(row);
       // Head overwritten in place → refresh its cached code with the saved result.
       if (!saveAsNewVersion && row.current_game_version_id) {
         const headId = row.current_game_version_id;
@@ -1111,15 +1178,23 @@ export function GameStudio({ initialGame }: GameStudioProps) {
           /* no provider / mapping failed — persist the text, keep criteria as-is */
         }
         if (mappedCriteria) setField("progressKind", mappedCriteria.progress_kind);
+        const sealed = await sealGameFields({
+          title: game.title || undefined,
+          learning_goal: game.learningGoal,
+          success_definition: game.successDefinition,
+          ...(mappedCriteria
+            ? { success_criteria: mappedCriteria.success_criteria as Json }
+            : {}),
+        });
         const res = await dodi.request(`/api/games/${game.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            title: game.title || undefined,
+            ...sealed,
             tags: game.tags,
-            learning_goal: game.learningGoal,
-            success_definition: game.successDefinition,
-            ...(mappedCriteria ?? {}),
+            ...(mappedCriteria
+              ? { progress_kind: mappedCriteria.progress_kind }
+              : {}),
             is_active: game.isActive,
             // Shallow-merged server-side, so capabilities/drawingStyle survive.
             metadata: {
@@ -1130,18 +1205,30 @@ export function GameStudio({ initialGame }: GameStudioProps) {
           }),
         });
         if (!res.ok) throw new Error(await readError(res));
+        useGameStore
+          .getState()
+          .put(await decryptGameResponse((await res.json()) as Game));
       } else {
-        // Persist a new game straight from settings (no build required).
+        // Persist a new game straight from settings (no build required). With no
+        // code yet we seal the placeholder ourselves — the server can't write
+        // plaintext into an encrypted column, and only we can read the marker
+        // back to tell "unbuilt" from a real game.
+        const sealed = await sealGameCreateFields({
+          title: game.title.trim(),
+          learningGoal: game.learningGoal || undefined,
+          successDefinition: game.successDefinition || undefined,
+          codeBundle: game.codeBundle || UNBUILT_GAME_PLACEHOLDER,
+        });
         const res = await dodi.request("/api/games", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             kidId: primaryKidId,
-            title: game.title.trim(),
+            ...sealed,
             tags: game.tags,
-            learningGoal: game.learningGoal || undefined,
-            successDefinition: game.successDefinition || undefined,
-            codeBundle: game.codeBundle || undefined,
+            progressKind: game.successDefinition.trim() ? "goal" : "open",
+            // Playable only once real code exists; an unbuilt draft is not.
+            isActive: Boolean(game.codeBundle),
             metadata: {
               perspective: game.perspective,
               generateBackgroundImage: game.generateBackgroundImage,
@@ -1151,6 +1238,7 @@ export function GameStudio({ initialGame }: GameStudioProps) {
         });
         if (!res.ok) throw new Error(await readError(res));
         const data = (await res.json()) as { id: string };
+        useGameStore.getState().invalidate();
         // Move to the draft's own URL so the build binds to this id and
         // reload/recovery works. The chat unlocks on the [id] route.
         router.push(`/parent/game-studio/${data.id}`);
@@ -1173,11 +1261,14 @@ export function GameStudio({ initialGame }: GameStudioProps) {
   async function toggleActive(): Promise<void> {
     if (!game.id || togglingActive) return;
     const next = !game.isActive;
+    const gameId = game.id;
     setField("isActive", next);
+    // The kid library reads is_active from the same cache, so flip it there too.
+    useGameStore.getState().patchLocal(gameId, { is_active: next });
     setTogglingActive(true);
     setError(null);
     try {
-      const res = await dodi.request(`/api/games/${game.id}`, {
+      const res = await dodi.request(`/api/games/${gameId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ is_active: next }),
@@ -1186,6 +1277,7 @@ export function GameStudio({ initialGame }: GameStudioProps) {
       router.refresh();
     } catch (e) {
       setField("isActive", !next); // revert the optimistic flip
+      useGameStore.getState().patchLocal(gameId, { is_active: !next });
       const reason = e instanceof Error && e.message ? e.message : "";
       setError(reason ? t("saveFailed", { reason }) : t("saveFailedGeneric"));
     } finally {
@@ -2143,6 +2235,8 @@ function SettingsForm({
           </Button>
         )}
       </div>
+
+      {game.id && <PublishCard gameId={game.id} built={game.built} />}
     </div>
   );
 }

@@ -15,7 +15,6 @@ import {
   listGames,
   replaceGameSharings,
 } from "@/services/games";
-import { UNBUILT_GAME_PLACEHOLDER } from "@dodi/games/placeholder";
 import type { GameMetadata } from "@dodi/types/games";
 import type { SuccessCriteria } from "@dodi/types/success";
 import {
@@ -38,22 +37,28 @@ function describeError(e: unknown): string {
 }
 
 /**
- * POST body — create a game. The code comes from one of:
- *  - `codeBundle` → an already-built bundle is persisted as-is.
- *  - neither   → a "not built yet" placeholder (built later via the parent studio).
- * Publication is just `isActive`; lifecycle ("built yet?") is read from the
- * bundle's marker, not a status field. Updating a game is `PATCH /api/games/:id`.
+ * POST body — create a game. `codeBundle` is required and arrives SEALED: for a
+ * game with no code yet the client seals `UNBUILT_GAME_PLACEHOLDER` itself (the
+ * server can no longer substitute a plaintext placeholder into an encrypted
+ * column). Whether a game is "built yet" is read from that marker after the
+ * client decrypts, not from a status field; visibility to kids is `isActive`.
+ * Updating a game is `PATCH /api/games/:id`.
+ *
+ * Caps are sized for ciphertext (an enc:v1: record costs ~43 + 1.34n chars) and
+ * are DoS guards only — the server cannot see the plaintext it is bounding.
  */
 const CreateGameSchema = z.object({
   kidId: z.string().uuid(),
-  codeBundle: z.string().optional(),
-  title: z.string().trim().min(1).max(200).optional(),
-  description: z.string().max(5000).optional(),
+  codeBundle: z.string().min(1).max(1_000_000),
+  title: z.string().trim().min(1).max(2_000),
+  description: z.string().max(20_000).optional(),
   tags: z.array(z.string().max(50)).max(20).optional(),
-  markdown: z.string().max(100000).optional(),
-  learningGoal: z.string().max(2000).optional(),
-  successDefinition: z.string().max(2000).optional(),
-  successCriteria: z.record(z.string(), z.unknown()).optional(),
+  markdown: z.string().max(400_000).optional(),
+  learningGoal: z.string().max(10_000).optional(),
+  successDefinition: z.string().max(10_000).optional(),
+  successCriteria: z
+    .union([z.string().max(50_000), z.record(z.string(), z.unknown())])
+    .optional(),
   progressKind: z.enum(["goal", "open"]).optional(),
   targetAgeMin: z.number().int().min(1).max(25).optional(),
   targetAgeMax: z.number().int().min(1).max(25).optional(),
@@ -78,7 +83,8 @@ export async function GET(request: Request): Promise<NextResponse> {
   const { searchParams } = new URL(request.url);
   const scope = searchParams.get("scope");
   const kidId = searchParams.get("kidId") ?? undefined;
-  const search = searchParams.get("search") ?? undefined;
+  // No `search` param: title/description are ciphertext here. Free-text search
+  // is a client-side filter over the decrypted library (see game-library.tsx).
   const includeSystem = searchParams.get("includeSystem") !== "false";
   const tags = searchParams.getAll("tag").filter(Boolean);
 
@@ -112,12 +118,7 @@ export async function GET(request: Request): Promise<NextResponse> {
   }
 
   try {
-    const games = await listGames(supabase, {
-      kidId,
-      includeSystem,
-      search,
-      tags,
-    });
+    const games = await listGames(supabase, { kidId, includeSystem, tags });
 
     const translations = await getTranslationsForGames(
       supabase,
@@ -168,13 +169,10 @@ export async function POST(request: Request): Promise<NextResponse> {
       return NextResponse.json({ error: "Kid not found" }, { status: 404 });
     }
 
-    // Persist a provided bundle, or a "not built yet" placeholder when none.
-    // `createCustomGame` sanitizes the bundle; the placeholder's marker lets
-    // the UI tell an unbuilt game from a real one (see lib/games/placeholder).
-    if (!data.title) {
-      return NextResponse.json({ error: "title is required" }, { status: 400 });
-    }
-    const hasCode = !!data.codeBundle;
+    // Every content field below is opaque here. "Built yet?", "is this a goal
+    // game?" and "should kids see it?" are all decided by the client, which is
+    // the only side that can read the bundle's placeholder marker and the
+    // success definition — hence the conservative defaults (inactive, open).
     const created = await createCustomGame(supabase, {
       accountId: accountId,
       kidId,
@@ -182,7 +180,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       description: data.description,
       tags: data.tags,
       markdown: data.markdown,
-      codeBundle: hasCode ? data.codeBundle! : UNBUILT_GAME_PLACEHOLDER,
+      codeBundle: data.codeBundle,
       metadata: data.metadata as GameMetadata | undefined,
       targetAgeMin: data.targetAgeMin,
       targetAgeMax: data.targetAgeMax,
@@ -190,12 +188,10 @@ export async function POST(request: Request): Promise<NextResponse> {
       learningGoal: data.learningGoal ?? "",
       successDefinition: data.successDefinition ?? "",
       successCriteria: data.successCriteria as SuccessCriteria | undefined,
-      progressKind:
-        data.progressKind ?? (data.successDefinition?.trim() ? "goal" : "open"),
+      progressKind: data.progressKind ?? "open",
       agentTranscriptEnc: data.agentTranscriptEnc,
       createdBy: "parent",
-      // Real code is playable; an unbuilt placeholder is not (caller may override).
-      isActive: data.isActive ?? hasCode,
+      isActive: data.isActive ?? false,
     });
 
     if (data.audience) {
@@ -204,9 +200,8 @@ export async function POST(request: Request): Promise<NextResponse> {
         kidIds: data.audience.audienceIds,
       });
     }
-    log.info("game_saved", { kidId, gameId: created.id, built: hasCode });
 
-    log.info("game_created", { kidId, gameId: created.id, title: created.title });
+    log.info("game_created", { kidId, gameId: created.id });
     return NextResponse.json(created, { status: 201 });
   } catch (error) {
     const message = describeError(error);

@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { GamePlayView } from "@/components/games/game-play-view";
 import { dodi } from "@/lib/api";
 import { getCookie } from "@/lib/cookies";
+import { useGameStore } from "@/stores/game-store";
 import {
   coerceProgressKind,
   coerceSuccessCriteria,
@@ -39,20 +40,20 @@ export default function GamePlayPage() {
 
     if (pid) {
       // `kidId` makes the platform derive the locale and enforce visibility
-      // (inactive/unshared games 404 even via a direct URL).
-      dodi
-        .request(`/api/games/${id}?kidId=${pid}`)
-        .then((r) => {
-          if (!r.ok) {
-            if (!cancelled) setMissing(true);
-            return null;
-          }
-          return r.json() as Promise<Game>;
-        })
+      // (inactive/unshared games 404 even via a direct URL). The store decrypts
+      // the row — everything below this point is plaintext.
+      useGameStore
+        .getState()
+        .loadOne(id, pid)
         .then((g) => {
-          if (cancelled || !g) return;
+          if (cancelled) return;
+          if (!g) {
+            setMissing(true);
+            return;
+          }
           setGame(g);
-          // Fire-and-forget memory log; the route derives persona + prefixes title.
+          // Fire-and-forget activity log; the route derives the persona and
+          // references the game by id (its title is E2EE).
           if (!loggedRef.current) {
             loggedRef.current = true;
             void dodi

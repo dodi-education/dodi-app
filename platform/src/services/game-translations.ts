@@ -2,6 +2,14 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database, Game, GameTranslation } from "@dodi/types/database";
 
+/**
+ * Per-locale title/description overrides for the SEEDED SYSTEM games, which are
+ * plaintext by design. Custom games are generated directly in the kid's language
+ * and their title/description are E2EE, so they never get translation rows —
+ * `applyTranslation` is a no-op for them. Anything that starts writing rows here
+ * must keep that boundary: a translation row is plaintext, so it may only ever
+ * exist for a game whose own fields are plaintext too (system or published).
+ */
 type Client = SupabaseClient<Database>;
 
 export async function getTranslation(
@@ -44,31 +52,6 @@ export async function getTranslationsForGames(
     map.set(row.game_id, row);
   }
   return map;
-}
-
-export async function upsertTranslation(
-  supabase: Client,
-  gameId: string,
-  locale: string,
-  fields: { title: string; description: string },
-): Promise<GameTranslation> {
-  const { data, error } = await supabase
-    .from("game_translations")
-    .upsert(
-      {
-        game_id: gameId,
-        locale,
-        title: fields.title,
-        description: fields.description,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "game_id,locale" },
-    )
-    .select("*")
-    .single();
-
-  if (error) throw error;
-  return data as unknown as GameTranslation;
 }
 
 export function applyTranslation(

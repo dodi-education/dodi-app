@@ -21,6 +21,7 @@ import { dodi } from "@/lib/api";
 import { unpackGameExportZip } from "@/lib/games/game-export-zip";
 import { cn } from "@/lib/utils";
 import { useKids } from "@/hooks/use-kids";
+import { sealGameCreateFields, useGameStore } from "@/stores/game-store";
 import { useVaultStore } from "@/stores/vault-store";
 import {
   GameImportError,
@@ -28,6 +29,8 @@ import {
   type ParsedGameExport,
   parseGameExportFiles,
 } from "@dodi/games/export";
+import { UNBUILT_GAME_PLACEHOLDER } from "@dodi/games/placeholder";
+import type { Json } from "@dodi/types/database";
 
 interface GameImportDialogProps {
   open: boolean;
@@ -117,21 +120,27 @@ export function GameImportDialog({ open, onOpenChange }: GameImportDialogProps) 
       const { manifest } = parsed;
       const agentTranscriptEnc =
         parsed.transcript && session ? session.encryptJson(parsed.transcript) : undefined;
+      // The archive is hostile input, already sanitized by parseGameExportFiles.
+      // Seal everything here: once it is ciphertext no later layer can check it,
+      // and an unbuilt archive gets the sealed placeholder rather than nothing.
+      const sealed = await sealGameCreateFields({
+        title: manifest.title,
+        description: manifest.description || undefined,
+        markdown: parsed.markdown || undefined,
+        codeBundle: parsed.unbuilt ? UNBUILT_GAME_PLACEHOLDER : parsed.codeBundle,
+        learningGoal: manifest.learningGoal || undefined,
+        successDefinition: manifest.successDefinition || undefined,
+        successCriteria: Object.keys(manifest.successCriteria).length
+          ? (manifest.successCriteria as unknown as Json)
+          : undefined,
+      });
       const res = await dodi.request("/api/games", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           kidId: primaryKidId,
-          title: manifest.title,
-          description: manifest.description || undefined,
+          ...sealed,
           tags: parsed.tags,
-          markdown: parsed.markdown || undefined,
-          codeBundle: parsed.unbuilt ? undefined : parsed.codeBundle,
-          learningGoal: manifest.learningGoal || undefined,
-          successDefinition: manifest.successDefinition || undefined,
-          successCriteria: Object.keys(manifest.successCriteria).length
-            ? manifest.successCriteria
-            : undefined,
           progressKind: manifest.progressKind,
           targetAgeMin: manifest.targetAgeMin,
           targetAgeMax: manifest.targetAgeMax,
@@ -148,6 +157,7 @@ export function GameImportDialog({ open, onOpenChange }: GameImportDialogProps) 
         throw new Error(data?.error || `HTTP ${res.status}`);
       }
       const created = (await res.json()) as { id: string };
+      useGameStore.getState().invalidate();
       handleOpenChange(false);
       router.push(`/parent/game-studio/${created.id}`);
     } catch (error) {

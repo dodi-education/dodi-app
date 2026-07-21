@@ -34,6 +34,9 @@ export interface Database {
           max_custom_personas: number;
           max_storage_mb_per_kid: number;
           memory_tier: "basic" | "advanced" | "full";
+          // Deliberately PUBLIC author byline for dodi Discover (like kids.social_id).
+          // Lowercase [a-z0-9_], 3-30 chars, unique. Null until the first publish.
+          publication_handle: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -52,6 +55,7 @@ export interface Database {
           max_custom_personas?: number;
           max_storage_mb_per_kid?: number;
           memory_tier?: "basic" | "advanced" | "full";
+          publication_handle?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -70,6 +74,7 @@ export interface Database {
           max_custom_personas?: number;
           max_storage_mb_per_kid?: number;
           memory_tier?: "basic" | "advanced" | "full";
+          publication_handle?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -256,6 +261,9 @@ export interface Database {
           source_game_id: string | null;
           system_key: string | null;
           is_system: boolean;
+          // E2EE: the eight content fields below carry enc:v1: records for private
+          // games, and PLAINTEXT for system games and publication copies — see
+          // `isEncryptableGame` in @dodi/vault/game-crypto for the single predicate.
           title: string;
           description: string;
           target_age_min: number;
@@ -266,6 +274,7 @@ export interface Database {
           markdown: string;
           learning_goal: string;
           success_definition: string;
+          /** enc:v1: JSON *string* scalar when sealed; a plain object when not. */
           success_criteria: Json;
           progress_kind: "goal" | "open";
           metadata: Json;
@@ -277,6 +286,13 @@ export interface Database {
           preview_image: string | null;
           /** Head of the game_versions chain (its code_bundle matches). NULL = system game or pre-versioning code. */
           current_game_version_id: string | null;
+          /** Set on a publication COPY at submit time. Non-NULL ⇒ this row is plaintext. */
+          publication_requested_at: string | null;
+          /** Stamped by the review pass once the submission is approved. */
+          published_at: string | null;
+          approved_by: "system" | "admin" | null;
+          /** Authorship (SET NULL), as opposed to account_id which is ownership (CASCADE). */
+          published_by_account_id: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -305,6 +321,10 @@ export interface Database {
           agent_transcript_enc?: string | null;
           preview_image?: string | null;
           current_game_version_id?: string | null;
+          publication_requested_at?: string | null;
+          published_at?: string | null;
+          approved_by?: "system" | "admin" | null;
+          published_by_account_id?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -333,6 +353,10 @@ export interface Database {
           agent_transcript_enc?: string | null;
           preview_image?: string | null;
           current_game_version_id?: string | null;
+          publication_requested_at?: string | null;
+          published_at?: string | null;
+          approved_by?: "system" | "admin" | null;
+          published_by_account_id?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -343,6 +367,7 @@ export interface Database {
           id: string;
           game_id: string;
           account_id: string;
+          /** enc:v1: — copied verbatim from games.code_bundle, so history inherits its encryption state. */
           code_bundle: string;
           /** Backward chain link; NULL = first version of the game. */
           previous_game_version_id: string | null;
@@ -694,7 +719,13 @@ export interface Database {
           account_id: string;
           persona_id: string | null;
           event: string;
+          /**
+           * PLAINTEXT — never write an E2EE value here (a game title, a kid's
+           * name). Reference the entity instead and resolve it client-side.
+           */
           message: string;
+          /** Soft reference so the feed can name a game whose title is E2EE. */
+          game_id: string | null;
           created_at: string;
         };
         Insert: {
@@ -704,6 +735,7 @@ export interface Database {
           persona_id?: string | null;
           event: string;
           message: string;
+          game_id?: string | null;
           created_at?: string;
         };
         Update: {
@@ -713,6 +745,7 @@ export interface Database {
           persona_id?: string | null;
           event?: string;
           message?: string;
+          game_id?: string | null;
           created_at?: string;
         };
         Relationships: [];

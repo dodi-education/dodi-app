@@ -182,6 +182,24 @@ At a a later stage, we also want to provide the possibility to choose between tw
 - The provider key is decrypted only in the unlocked browser vault. 
 - Never include in client bundles, logs, or error messages
 
+### Games are E2EE
+A `games` row is plaintext **iff** `is_system = true` OR `publication_requested_at IS NOT NULL`;
+every other row's `title`, `description`, `code_bundle`, `markdown`, `learning_goal`,
+`success_definition`, `success_criteria` and `preview_image` are `enc:v1:` records
+sealed client-side, as is `game_versions.code_bundle`. Consequences:
+- **Never read those fields server-side** — no search, no ordering, no logging, no
+  interpolating a title into `activities.message`. Reference the game by id and let
+  the client resolve the name from the decrypted cache.
+- The **client** sanitizes bundles (`@dodi/games/sanitizer`) before sealing; the server
+  can only sanitize on the publication path, where the copy is plaintext.
+- Reads go through `useGameStore` (`stores/game-store.ts`) — the single decrypt point.
+  Writes seal via `sealGameFields`/`sealGameCreateFields`; responses open via
+  `decryptGameResponse`.
+- Publishing **forks**: it inserts a second, plaintext `games` row
+  (`source_game_id` → the original) so the parent's game and its version history stay
+  sealed. Publication rows are written only via `serviceClient()` — RLS forbids users
+  writing them. See `services/game-publications.ts`.
+
 ### Game Sandboxing
 - All AI-generated game code runs in a sandboxed iframe:
   ```html
@@ -293,6 +311,7 @@ NEXT_PUBLIC_APP_URL=                  # App URL (for OAuth redirects, QR codes)
 REGISTRATION_MODE=                    # open | invite | closed (unset ⇒ open); server-only
 ERROR_LOGS=                      # Error telemetry persisted to error_logs: all | client | server | none, or comma list (unset ⇒ all); server-only
 BEFORE_USER_CREATED_HOOK_SECRET=      # Supabase auth-hook secret "v1,whsec_…" (server only)
+PUBLICATION_REVIEW_SECRET=            # Shared secret for the dodi Discover review endpoints, sent as x-review-secret (server only; unset ⇒ they refuse)
 RESEND_API_KEY=                       # Resend key: Supabase SMTP + app-level email via the SDK (server only)
 EMAIL_FROM=                           # App-level email sender on a Resend-verified domain (server only; prod verifies mail.dodi.app, dev dev-mail.dodi.app; default "dodi <team@mail.dodi.app>")
 ```

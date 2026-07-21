@@ -1,7 +1,7 @@
 "use client";
 
 import { dodi } from "@/lib/api";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 
@@ -10,11 +10,9 @@ import { KidButton } from "@/components/kid/kid-button";
 import { GameCard } from "@/components/games/game-card";
 import { tagStyle } from "@/components/parent/games/tag-style";
 import { useTagLabel } from "@/lib/games/tag-label";
+import { useKidGames } from "@/hooks/use-games";
+import { useGameStore } from "@/stores/game-store";
 import { GAME_TAG_IDS } from "@dodi/games/tags";
-import type { Game } from "@dodi/types/database";
-
-/** A game as delivered to the kid library — carries the per-kid favorite flag. */
-type LibraryGame = Game & { is_favorite: boolean };
 
 interface GameLibraryProps {
   kidId: string;
@@ -25,45 +23,19 @@ export function GameLibrary({ kidId }: GameLibraryProps) {
   const tagLabel = useTagLabel();
   const searchParams = useSearchParams();
 
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [games, setGames] = useState<LibraryGame[]>([]);
+  // Titles and descriptions are E2EE; the store hands them over decrypted, which
+  // is also what makes the free-text search below possible at all — the server
+  // cannot search ciphertext.
+  const { games: loaded, loading, error } = useKidGames(kidId);
+  const games = useMemo(() => loaded ?? [], [loaded]);
   const [search, setSearch] = useState(searchParams.get("search") ?? "");
   const [tagFilter, setTagFilter] = useState<string>(searchParams.get("tag") ?? "all");
-
-  const fetchGames = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const response = await dodi.request(`/api/games?kidId=${kidId}`);
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({ error: "Failed to fetch games" }));
-        throw new Error(data.error || "Failed to fetch games");
-      }
-
-      const data: LibraryGame[] = await response.json();
-      setGames(data);
-    } catch (fetchError) {
-      const message = fetchError instanceof Error ? fetchError.message : "Failed to fetch games";
-      setError(message);
-    } finally {
-      setLoading(false);
-    }
-  }, [kidId]);
-
-  useEffect(() => {
-    void fetchGames();
-  }, [fetchGames]);
 
   // Toggle a favorite with an optimistic flip; revert if the request fails.
   const toggleFavorite = useCallback(
     async (gameId: string, next: boolean) => {
-      setGames((prev) =>
-        prev.map((game) =>
-          game.id === gameId ? { ...game, is_favorite: next } : game,
-        ),
-      );
+      const { patchLocal } = useGameStore.getState();
+      patchLocal(gameId, { is_favorite: next });
       try {
         const response = await dodi.request(
           `/api/games/${gameId}/favorite?kidId=${kidId}`,
@@ -71,11 +43,7 @@ export function GameLibrary({ kidId }: GameLibraryProps) {
         );
         if (!response.ok) throw new Error("Failed to update favorite");
       } catch {
-        setGames((prev) =>
-          prev.map((game) =>
-            game.id === gameId ? { ...game, is_favorite: !next } : game,
-          ),
-        );
+        patchLocal(gameId, { is_favorite: !next });
       }
     },
     [kidId],

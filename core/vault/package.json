@@ -12,6 +12,7 @@
     "./session": "./src/session.ts",
     "./kid-crypto": "./src/kid-crypto.ts",
     "./persona-crypto": "./src/persona-crypto.ts",
+    "./game-crypto": "./src/game-crypto.ts",
     "./api-keys-crypto": "./src/api-keys-crypto.ts"
   },
   "main": "./src/index.ts",

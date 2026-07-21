@@ -16,6 +16,7 @@ import {
 import { Section } from "@/components/parent/section";
 import { DotSep, Row, RowMain, RowMeta, RowTitle } from "@/components/parent/rows";
 import { useDateFormat } from "@/components/providers/date-format-provider";
+import { useAccountGames } from "@/hooks/use-games";
 import { useKids } from "@/hooks/use-kids";
 import { decryptPersona } from "@dodi/vault";
 import { useVaultStore } from "@/stores/vault-store";
@@ -131,6 +132,14 @@ export default function ActivitiesPage() {
 
   const kidNameMap = new Map(kids.map((p) => [p.id, p.display_name]));
 
+  // Game titles are E2EE, so an activity row references the game by id and the
+  // name is resolved here from the decrypted cache — it is never written into
+  // the plaintext `message` column.
+  const { games: accountGames } = useAccountGames();
+  const gameNameMap = new Map(
+    (accountGames ?? []).map((g) => [g.id, g.title]),
+  );
+
   return (
     <div>
       <div className="mb-6 flex flex-wrap gap-3">
@@ -191,7 +200,11 @@ export default function ActivitiesPage() {
             <Row key={row.id}>
               <RowMain>
                 <RowTitle>
-                  <span className="line-clamp-1 font-medium">{row.message}</span>
+                  <span className="line-clamp-1 font-medium">
+                    {row.game_id && gameNameMap.get(row.game_id)
+                      ? `[${gameNameMap.get(row.game_id)}] ${row.message}`
+                      : row.message}
+                  </span>
                 </RowTitle>
                 <RowMeta>
                   {filterKid === "all" && kidNameMap.get(row.kid_id) && (

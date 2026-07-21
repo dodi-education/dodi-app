@@ -16,11 +16,12 @@ import {
   isTodayBirthday,
 } from "@dodi/ai/dodi-context";
 import { decryptPersona } from "@dodi/vault";
+import { useGameStore } from "@/stores/game-store";
 import { useKidStore } from "@/stores/kid-store";
 import { useProvidersStore } from "@/stores/providers-store";
 import { useVaultStore } from "@/stores/vault-store";
 import type { AccountModelConfig } from "@dodi/types/ai";
-import type { Game, Kid, Persona } from "@dodi/types/database";
+import type { Kid, Persona } from "@dodi/types/database";
 import type { GameMetadata } from "@dodi/types/games";
 
 export interface VoiceSessionConfig extends VoiceClientConfig {
@@ -104,10 +105,13 @@ export async function getActivePersona(activePersonaId: string | null): Promise<
   return decryptPersona(session, persona);
 }
 
-async function getGameCatalog(): Promise<CatalogEntry[]> {
-  const res = await dodi.request("/api/games");
-  if (!res.ok) return [];
-  const games = (await res.json()) as Game[];
+/**
+ * The launch_game catalog dodi reasons over. Titles are E2EE, so this can only
+ * be assembled from the decrypted cache — which is also why it is scoped to the
+ * kid: the catalog is exactly what that child is allowed to play.
+ */
+async function getGameCatalog(kidId: string): Promise<CatalogEntry[]> {
+  const games = await useGameStore.getState().loadForKid(kidId);
   return games.map((g) => ({
     id: g.id,
     title: g.title,
@@ -125,7 +129,7 @@ export async function buildHomeVoiceConfig(
   const config = await getModelConfig();
   const apiKey = await getVoiceKey(config);
   const persona = await getActivePersona(kid.active_persona?.id ?? null);
-  const gameCatalog = await getGameCatalog();
+  const gameCatalog = await getGameCatalog(kidId);
 
   const { systemInstruction, tools } = buildHomeVoiceContext({
     personaSoul: persona.soul,
@@ -158,10 +162,14 @@ export interface ResolvedGameInfo {
   capabilities: string[];
 }
 
-/** Resolve the game info: from the row normally, from the context for snapshot play. */
+/**
+ * Resolve the game info: from the row normally, from the context for snapshot
+ * play. `kidId` scopes the read so the platform derives that child's locale for
+ * system-game translations (and enforces visibility).
+ */
 export async function resolveGameInfo(
   ctx: GameSessionContextInput,
-  locale?: string,
+  kidId?: string,
 ): Promise<ResolvedGameInfo> {
   if (ctx.inline) {
     return {
@@ -172,10 +180,10 @@ export async function resolveGameInfo(
       capabilities: ctx.capabilities,
     };
   }
-  const query = locale ? `?locale=${locale}` : "";
-  const gameRes = await dodi.request(`/api/games/${ctx.gameId}${query}`);
-  if (!gameRes.ok) throw new Error("Game not found");
-  const game = (await gameRes.json()) as Game;
+  // Decrypted by the game cache: the whole prompt below — briefing, and the full
+  // source bundle — is plaintext only inside this browser.
+  const game = await useGameStore.getState().loadOne(ctx.gameId, kidId);
+  if (!game) throw new Error("Game not found");
   return {
     title: game.title,
     description: game.description,
@@ -196,7 +204,7 @@ export async function buildGameVoiceConfig(
   const config = await getModelConfig();
   const apiKey = await getVoiceKey(config);
   const persona = await getActivePersona(kid.active_persona?.id ?? null);
-  const info = await resolveGameInfo(ctx);
+  const info = await resolveGameInfo(ctx, kidId);
   const friendNames = info.capabilities.includes("save_state")
     ? await loadFriendNames(kid)
     : [];

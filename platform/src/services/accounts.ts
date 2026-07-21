@@ -125,6 +125,48 @@ export async function updateAccountNotificationPreferences(
 }
 
 /**
+ * Set the account's PUBLIC publication handle — the author byline on games
+ * published to dodi Discover. Plaintext on purpose: every real name in dodi is
+ * E2EE, so a listing can only credit a name the parent deliberately chose for
+ * publication (same reasoning as `kids.social_id`). Expects an already-validated,
+ * normalized handle. Returns false on a uniqueness collision so the caller can
+ * answer 409 rather than 500.
+ */
+export async function setAccountPublicationHandle(
+  supabase: Client,
+  accountId: string,
+  handle: string,
+): Promise<boolean> {
+  const { error } = await supabase
+    .from("accounts")
+    .update({ publication_handle: handle } as AccountUpdate)
+    .eq("id", accountId);
+
+  // 23505 = unique_violation → the handle is taken.
+  if (error && error.code === "23505") return false;
+  if (error) throw error;
+  return true;
+}
+
+/**
+ * Whether a handle is free. Needs the service-role client: RLS scopes account
+ * reads to the caller, and a "taken?" answer must span every account. Returns
+ * only a boolean — never a browsable list, same contract as friend lookup.
+ */
+export async function isPublicationHandleAvailable(
+  serviceSupabase: Client,
+  handle: string,
+): Promise<boolean> {
+  const { data, error } = await serviceSupabase
+    .from("accounts")
+    .select("id")
+    .eq("publication_handle", handle)
+    .maybeSingle();
+  if (error) throw error;
+  return data === null;
+}
+
+/**
  * Set or clear the account's parent PIN. The value, when present, is already
  * sealed (`enc:v1:`) by the client; `null` removes the PIN. The server never
  * sees the plaintext — it only stores/returns the opaque blob.

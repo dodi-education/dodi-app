@@ -36,7 +36,9 @@ export async function getDashboardStats(
       .from("games")
       .select("id", { count: "exact", head: true })
       .eq("account_id", accountId)
-      .eq("is_system", false),
+      .eq("is_system", false)
+      // Publication copies duplicate a game the parent already made.
+      .is("publication_requested_at", null),
   ]);
 
   return {

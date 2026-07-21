@@ -238,75 +238,7 @@ Dodi is a personalized, AI-powered learning platform that creates fun, targeted 
 
 ### Database Schema (Conceptual)
 
-```
-accounts
-├── id (uuid, PK)
-├── email
-├── encrypted_api_keys (jsonb, encrypted)
-├── model_config (jsonb) — voice model, game model per provider
-├── subscription_tier (enum: free, premium, ...)
-├── created_at, updated_at
-
-profiles (kid profiles)
-├── id (uuid, PK)
-├── account_id (FK → accounts)
-├── display_name (encrypted)
-├── name_tag (unique, human-readable)
-├── birthdate (encrypted)
-├── avatar_config (jsonb) — Dodi customization
-├── active_persona_id (FK → personas)
-├── memory (text, encrypted) — AI-maintained markdown dossier (see Memory Document Format)
-├── parent_notes (text, encrypted) — parent-authored context for AI (not modified by companion)
-├── preferences (jsonb) — UI preferences (theme, layout, accessibility)
-├── created_at, updated_at
-
-personas (Dodi personality presets)
-├── id (uuid, PK)
-├── account_id (FK → accounts)
-├── name
-├── soul (text) — markdown personality definition (identity, style, learning approach, boundaries)
-├── is_default (boolean) — one default per account, protected from deletion
-├── created_at, updated_at
-
-games
-├── id (uuid, PK)
-├── profile_id (FK → profiles) — creator
-├── title, description
-├── subject, difficulty, target_age_range
-├── tags (text[])
-├── estimated_duration
-├── code_bundle (text or storage ref) — the generated game code
-├── metadata (jsonb)
-├── is_shared (boolean, default false)
-├── created_at, updated_at
-
-friends
-├── profile_id (FK → profiles)
-├── friend_profile_id (FK → profiles)
-├── status (enum: pending, accepted, blocked)
-├── created_at
-
-shared_games
-├── game_id (FK → games)
-├── shared_with_profile_id (FK → profiles)
-├── shared_at
-
-schedules
-├── id (uuid, PK)
-├── profile_id (FK → profiles)
-├── day_of_week (int, 0-6)
-├── hour (int, 0-23)
-├── activity_label (text)
-├── activity_emoji (text)
-├── updated_at
-
-conversations (chat history with Dodi)
-├── id (uuid, PK)
-├── profile_id (FK → profiles)
-├── messages (jsonb[]) — role, content, timestamp
-├── context (text) — summarized context for AI
-├── created_at, updated_at
-```
+Defined in platform/supabase/migrations/20260613120000_baseline.sql
 
 ### Memory Document Format
 
@@ -393,7 +325,7 @@ AI-generated games run in a strictly sandboxed iframe:
 
 ## Internationalization
 
-### MVP Languages
+### Languages
 - **English** (default)
 - **German**
 
@@ -428,7 +360,7 @@ AI-generated games run in a strictly sandboxed iframe:
 
 ---
 
-## MVP Scope
+## Scope
 
 The MVP focuses on delivering a functional, delightful core experience:
 
@@ -460,8 +392,7 @@ The MVP focuses on delivering a functional, delightful core experience:
 - [x] Configure date time format
 - [x] Name tags and QR code generation
 - [x] Friend system (add, accept, manage)
-- [ ] Drawing game: Let the kid save drawings and share them with friends
-- [ ] Game sharing
+- [x] Drawing game: Let the kid save drawings and share them with friends
 
 ### Phase 5: Polish & PWA
 - [ ] PWA manifest + service worker
@@ -478,7 +409,7 @@ The MVP focuses on delivering a functional, delightful core experience:
 
 - **Native apps**: Port to iOS/Android via React Native or Capacitor
 - **Managed AI**: Offer built-in AI so parents don't need API keys
-- **Game marketplace**: Kids share and discover games from the community
+- **Game marketplace (dodi Discover)**: Kids share and discover games from the community
 - **Curriculum alignment**: Map games to educational standards
 - **Institutional accounts**: Schools and tutoring centers
 - **Advanced analytics**: Learning progress dashboards for parents
@@ -515,9 +446,19 @@ parent-defined goal — and, in future, generate challenges like "Solve 3 math g
 
 
 - Game store for parents (dodi Discover)
- - Allow parents to publish games to dodi Discover
- - Publication needs to go through specific harness (Filter out harmful/adult content, secret keys, personal infos, ...)
- - Report inappropriate content system
+ - [x] Publication state machine: submitting forks a plaintext copy of the game
+   (`games.publication_requested_at` / `published_at` / `approved_by` /
+   `published_by_account_id`), leaving the parent's E2EE original untouched.
+   Public author byline = `accounts.publication_handle`.
+ - [ ] The review harness itself (filter out harmful/adult content, secret keys,
+   personal infos, ...). The submitted copy is plaintext precisely so it can run;
+   it needs a dodi-owned provider key, since a parent's BYOK key cannot review on
+   dodi's behalf. Queue + stamp endpoints exist behind `PUBLICATION_REVIEW_SECRET`
+   (`GET /api/publications`, `POST /api/publications/[id]/review`).
+ - [ ] Discover browse + install UI (served via `serviceClient()` with an explicit
+   column projection, so publisher `account_id`/`kid_id` never leak)
+ - [ ] Admin approval UI (`approved_by = 'admin'`) and rejection reasons
+ - [ ] Report inappropriate content system
 
 
 

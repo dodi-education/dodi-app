@@ -3,7 +3,6 @@ import { z } from "zod/v4";
 
 import { serverErrorResponse } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
-import { sanitizeGameBundle } from "@/game-sanitizer";
 import type { GameUpdate, Json } from "@dodi/types/database";
 import {
   deleteCustomGame,
@@ -16,21 +15,30 @@ import {
 import { getKid } from "@/services/kids";
 import { getTranslation, applyTranslation } from "@/services/game-translations";
 
+// Content fields arrive SEALED (enc:v1:) for private games, so every cap here is
+// sized for ciphertext: an enc:v1: record costs about 43 + 1.34n characters. The
+// server cannot validate the plaintext shape — these bounds are DoS guards, not
+// business rules. The real plaintext limits live client-side in the studio and
+// in @dodi/games/sanitizer.
 const UpdateGameSchema = z.object({
-  title: z.string().min(1).max(120).optional(),
-  description: z.string().max(5000).optional(),
+  title: z.string().min(1).max(2_000).optional(),
+  description: z.string().max(20_000).optional(),
   target_age_min: z.number().int().min(1).max(25).optional(),
   target_age_max: z.number().int().min(1).max(25).optional(),
   estimated_duration_minutes: z.number().int().min(1).max(180).optional(),
   tags: z.array(z.string().min(1).max(40)).max(20).optional(),
-  code_bundle: z.string().min(1).optional(),
-  markdown: z.string().max(100000).optional(),
+  code_bundle: z.string().min(1).max(1_000_000).optional(),
+  markdown: z.string().max(400_000).optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
-  learning_goal: z.string().max(2000).optional(),
-  success_definition: z.string().max(2000).optional(),
+  learning_goal: z.string().max(10_000).optional(),
+  success_definition: z.string().max(10_000).optional(),
   // The client maps the success definition to structured criteria in the browser
-  // (BYOK: the provider key never reaches the server) and sends the result here.
-  success_criteria: z.record(z.string(), z.unknown()).optional(),
+  // (BYOK: the provider key never reaches the server) and sends the result here
+  // — sealed as an enc:v1: string for private games, a plain object otherwise.
+  success_criteria: z
+    .union([z.string().max(50_000), z.record(z.string(), z.unknown())])
+    .optional(),
+  preview_image: z.string().max(2_000_000).nullable().optional(),
   progress_kind: z.enum(["goal", "open"]).optional(),
   // enc:v1: sealed studio conversation transcript (server stays blind).
   agent_transcript_enc: z.string().nullable().optional(),
@@ -129,6 +137,16 @@ export async function PATCH(
       );
     }
 
+    // A submitted publication copy is frozen: editing it here would let a parent
+    // change the content after review saw it. Re-submit from the source game
+    // instead (RLS enforces this too — this is just the readable error).
+    if (existing.publication_requested_at) {
+      return NextResponse.json(
+        { error: "Cannot edit a published game — re-submit from the original" },
+        { status: 403 },
+      );
+    }
+
     // `audience` lives in the game_sharings table; `metadata` is a column that
     // we shallow-merge. `is_active` / `kid_id` flow through as plain columns.
     const {
@@ -163,16 +181,15 @@ export async function PATCH(
     }
 
     // The structured success criteria are mapped client-side (the provider key
-    // that drives the mapping lives only in the unlocked vault) and arrive as a
-    // plain object; progress_kind flows through as a plain column.
+    // that drives the mapping lives only in the unlocked vault) and arrive
+    // sealed; progress_kind flows through as a plain column.
     if (rawCriteria !== undefined) {
       updates.success_criteria = rawCriteria as unknown as Json;
     }
 
-    if (updates.code_bundle) {
-      updates.code_bundle = sanitizeGameBundle(updates.code_bundle).code;
-    }
-
+    // No bundle sanitizing here: the code is ciphertext. The studio sanitizes
+    // before sealing (@dodi/games/sanitizer), and the publication path
+    // re-sanitizes the plaintext copy it receives.
     const game =
       Object.keys(updates).length > 0
         ? await updateCustomGame(supabase, id, updates, { createVersion })

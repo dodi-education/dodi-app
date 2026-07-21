@@ -74,4 +74,14 @@ describe("isVisibleToKid", () => {
     const g = game();
     expect(isVisibleToKid(g, KID, new Map())).toBe(false);
   });
+
+  // A publication copy is a plaintext submission to the public catalog, owned by
+  // the same account as the private original. `listGames` filters it out at the
+  // query, and is_active=false is the second line of defence: it must never turn
+  // up in a kid's library, however it is shared.
+  it("hides a publication copy from kids, even family-shared", () => {
+    const g = game({ id: "publication-1", is_active: false, kid_id: null });
+    expect(isVisibleToKid(g, KID, sharingMap(g.id, { family: true }))).toBe(false);
+    expect(isVisibleToKid(g, KID, sharingMap(g.id, { kidIds: [KID] }))).toBe(false);
+  });
 });

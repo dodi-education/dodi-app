@@ -10,6 +10,7 @@
     "./friend-card": "./src/friend-card.ts",
     "./snapshot": "./src/snapshot.ts",
     "./schemas": "./src/schemas.ts",
+    "./publication-handle": "./src/publication-handle.ts",
     "./client": "./src/client.ts"
   },
   "main": "./src/index.ts",

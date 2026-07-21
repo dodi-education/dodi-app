@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useTranslations } from "next-intl";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { PageActions, Section } from "@/components/parent/section";
 import { Button } from "@/components/ui/button";
@@ -12,36 +12,36 @@ import {
   type GameListItem,
 } from "@/components/parent/games/game-studio-list";
 import { GameImportDialog } from "@/components/parent/games/game-import-dialog";
+import { useAccountGames } from "@/hooks/use-games";
 import { useKids } from "@/hooks/use-kids";
 import { dodi } from "@/lib/api";
-import type { Game } from "@dodi/types/database";
-
-type AccountGame = Game & {
-  sharing: { family: boolean; kidIds: string[] };
-};
+import { useGameStore } from "@/stores/game-store";
 
 export default function GameStudioPage() {
   const t = useTranslations("gameStudio");
 
   const { kids } = useKids();
-  const [games, setGames] = useState<AccountGame[] | null>(null);
+  // Decrypted titles come from the game cache (E2EE title/description).
+  const { games } = useAccountGames();
   const [importOpen, setImportOpen] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    dodi
-      .request("/api/games?scope=account")
-      .then((r) => (r.ok ? r.json() : []))
-      .then((d: AccountGame[]) => {
-        if (!cancelled) setGames(Array.isArray(d) ? d : []);
-      })
-      .catch(() => {
-        if (!cancelled) setGames([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  // Deleting cascades to versions, sharings, favorites and autosaves server-side;
+  // here we just drop the whole game cache so every view refetches (the kid
+  // libraries hold copies of this row too).
+  const deleteGame = useCallback(
+    async (id: string) => {
+      const res = await dodi.request(`/api/games/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        throw new Error(data?.error || t("deleteFailedGeneric"));
+      }
+      // Clearing the cache makes useAccountGames refetch on the next render.
+      useGameStore.getState().invalidate();
+    },
+    [t],
+  );
 
   const items: GameListItem[] = useMemo(() => {
     if (!games) return [];
@@ -95,7 +95,7 @@ export default function GameStudioPage() {
             {t("noGames")}
           </p>
         ) : (
-          <GameStudioList items={items} />
+          <GameStudioList items={items} onDelete={deleteGame} />
         )}
       </Section>
     </div>

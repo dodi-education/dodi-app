@@ -8,3 +8,4 @@ export * from "./friend-card";
 export * from "./snapshot";
 export * from "./schemas";
 export * from "./client";
+export * from "./publication-handle";

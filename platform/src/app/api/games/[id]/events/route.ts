@@ -6,7 +6,6 @@ import { requireAuth } from "@/lib/resolve-auth";
 import { getGame } from "@/services/games";
 import { getKid } from "@/services/kids";
 import { logActivity } from "@/services/activities";
-import { getTranslation, applyTranslation } from "@/services/game-translations";
 
 const LogGameEventSchema = z.object({
   kidId: z.string().uuid(),
@@ -49,20 +48,21 @@ export async function POST(
       return NextResponse.json({ error: "Kid not found" }, { status: 404 });
     }
 
-    const rawGame = await getGame(supabase, id);
-    if (!rawGame) {
+    const game = await getGame(supabase, id);
+    if (!game) {
       return NextResponse.json({ error: "Game not found" }, { status: 404 });
     }
 
-    const gameTranslation = await getTranslation(supabase, rawGame.id, kid.language);
-    const game = applyTranslation(rawGame, gameTranslation);
-
+    // The title is E2EE, so it must never be interpolated into the plaintext
+    // activities.message. Reference the game instead; the parent feed resolves
+    // the name client-side from the decrypted game cache.
     await logActivity(supabase, {
       kid_id: kid.id,
       account_id: accountId,
       persona_id: kid.active_persona?.id ?? null,
       event: event,
-      message: `[${game.title}] ${message}`,
+      message,
+      game_id: game.id,
     });
 
     return NextResponse.json({ success: true }, { status: 201 });

@@ -23,6 +23,7 @@ import {
   IconCode,
   IconCopy,
   IconDeviceGamepad2,
+  IconDots,
   IconDownload,
   IconEye,
   IconEyeOff,
@@ -99,6 +100,7 @@ export type IconName =
   | "dashboard"
   | "delete"
   | "diff"
+  | "dots"
   | "download"
   | "edit"
   | "feature_games"
@@ -180,6 +182,7 @@ const ICONS: Record<IconName, ComponentType<TablerIconProps>> = {
   dashboard: IconChartBar,
   delete: IconTrash,
   diff: IconFileDiff,
+  dots: IconDots,
   download: IconDownload,
   edit: IconPencil,
   feature_games: IconDeviceGamepad2,

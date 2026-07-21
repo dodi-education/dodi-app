@@ -1,3 +1,18 @@
+/**
+ * Games persistence.
+ *
+ * The eight content fields (title, description, code_bundle, markdown,
+ * learning_goal, success_definition, success_criteria, preview_image) arrive
+ * here already SEALED for private games — the browser encrypts them under the
+ * account VMK before the request leaves it, so nothing in this file may inspect,
+ * compare or transform them. In particular the bundle is sanitized client-side
+ * (@dodi/games/sanitizer) rather than here; the one place the server can and does
+ * sanitize is the publication path, where the submitted copy is plaintext by
+ * design (see ./game-publications).
+ *
+ * Plaintext, and therefore still queryable here: ids, FKs, tags, ages, duration,
+ * progress_kind, metadata, flags and timestamps.
+ */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type {
@@ -12,7 +27,6 @@ import type {
 import type { GameMetadata, GameSharingState } from "@dodi/types/games";
 import type { ProgressKind, SuccessCriteria } from "@dodi/types/success";
 import { GAME_TAG_IDS } from "@dodi/games/tags";
-import { sanitizeGameBundle } from "../game-sanitizer";
 
 type Client = SupabaseClient<Database>;
 
@@ -40,7 +54,6 @@ export function filterToCatalogTags(tags: string[] | undefined | null): string[]
 export interface ListGamesOptions {
   kidId?: string;
   includeSystem?: boolean;
-  search?: string;
   tags?: string[];
 }
 
@@ -125,52 +138,17 @@ async function loadSharingMap(supabase: Client): Promise<SharingMap> {
   return map;
 }
 
-export interface GameCatalogEntry {
-  id: string;
-  title: string;
-  description: string;
-  tags: string[];
-}
-
-export async function listGameCatalog(
-  supabase: Client,
-  kidId?: string,
-): Promise<GameCatalogEntry[]> {
-  let query = supabase
-    .from("games")
-    .select("id, title, description, tags")
-    .order("title", { ascending: true });
-
-  if (kidId) {
-    // System games, or active games owned by this kid. Inactive owned
-    // games stay out of the kid-facing catalog.
-    query = query.or(
-      `is_system.eq.true,and(kid_id.eq.${kidId},is_active.eq.true)`,
-    );
-  } else {
-    query = query.eq("is_system", true);
-  }
-
-  const { data, error } = await query;
-  if (error) throw error;
-
-  return (data ?? []) as unknown as GameCatalogEntry[];
-}
-
 export async function listGames(
   supabase: Client,
   options: ListGamesOptions,
 ): Promise<Game[]> {
-  const {
-    kidId,
-    includeSystem = true,
-    search,
-    tags,
-  } = options;
+  const { kidId, includeSystem = true, tags } = options;
 
   let query = supabase
     .from("games")
     .select("*")
+    // Publication copies are catalog submissions, not library entries.
+    .is("publication_requested_at", null)
     .order("is_system", { ascending: false })
     .order("created_at", { ascending: false });
 
@@ -204,17 +182,15 @@ export async function listGames(
       if (!hasTag) return false;
     }
 
-    if (search) {
-      const needle = search.toLowerCase();
-      const haystack = `${game.title} ${game.description}`.toLowerCase();
-      if (!haystack.includes(needle)) return false;
-    }
-
     return true;
   });
 }
 
-/** List all custom (non-system) games owned by an account, newest first. */
+/**
+ * List all custom (non-system) games owned by an account, newest first.
+ * Publication copies are excluded — they are submissions to the public catalog,
+ * managed from their source game's studio page, not separate studio entries.
+ */
 export async function listAccountGames(
   supabase: Client,
   accountId: string,
@@ -224,6 +200,7 @@ export async function listAccountGames(
     .select("*")
     .eq("account_id", accountId)
     .eq("is_system", false)
+    .is("publication_requested_at", null)
     .order("updated_at", { ascending: false });
 
   if (error) throw error;
@@ -252,8 +229,6 @@ export async function createCustomGame(
   supabase: Client,
   input: CreateCustomGameInput,
 ): Promise<Game> {
-  const sanitizedBundle = sanitizeGameBundle(input.codeBundle).code;
-
   const payload: GameInsert = {
     account_id: input.accountId,
     kid_id: input.kidId ?? null,
@@ -266,7 +241,7 @@ export async function createCustomGame(
     target_age_max: input.targetAgeMax ?? 12,
     estimated_duration_minutes: input.estimatedDurationMinutes ?? 10,
     tags: filterToCatalogTags(input.tags),
-    code_bundle: sanitizedBundle,
+    code_bundle: input.codeBundle,
     markdown: input.markdown ?? "",
     metadata: (input.metadata ?? {}) as GameInsert["metadata"],
     created_by: input.createdBy ?? "kid",
@@ -357,16 +332,16 @@ export async function updateCustomGame(
   }
 
   const nextUpdates: GameUpdate = { ...updates };
-  if (nextUpdates.code_bundle) {
-    nextUpdates.code_bundle = sanitizeGameBundle(nextUpdates.code_bundle).code;
-  }
   if (nextUpdates.tags) {
     nextUpdates.tags = filterToCatalogTags(nextUpdates.tags);
   }
 
-  const codeChanged = Boolean(
-    nextUpdates.code_bundle && nextUpdates.code_bundle !== existing.code_bundle,
-  );
+  // Sending `code_bundle` at all IS the change signal: the studio only includes
+  // it after a real build or a manual editor save. Comparing values would be
+  // meaningless anyway — resealing the same code yields different ciphertext
+  // every time (fresh nonce), so a value compare would append a version row on
+  // every save.
+  const codeChanged = Boolean(nextUpdates.code_bundle);
   if (codeChanged) {
     const newCode = nextUpdates.code_bundle as string;
     if (options.createVersion === false && existing.current_game_version_id) {
@@ -483,6 +458,16 @@ export async function deleteCustomGame(
   if (existing.is_system) {
     throw new Error("Cannot delete system game");
   }
+
+  // Withdraw any pending/live publication first. The FK is ON DELETE SET NULL,
+  // so leaving it would orphan a plaintext public copy with no way back to its
+  // owner — and deleting the original is a clear signal to unpublish.
+  const { error: publicationError } = await supabase
+    .from("games")
+    .delete()
+    .eq("source_game_id", gameId)
+    .not("publication_requested_at", "is", null);
+  if (publicationError) throw publicationError;
 
   // Autosave slots die with their game (manual snapshots are self-contained
   // and survive via the FK's ON DELETE SET NULL; an autosave without its game

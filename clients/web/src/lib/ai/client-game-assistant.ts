@@ -34,9 +34,10 @@ export async function runGameTextAssistant(
 
   const persona = await getActivePersona(kid.active_persona?.id ?? null);
 
-  // Locale-translated game (title/description) — or the inline info for
-  // snapshot play, where the game row may be deleted or another family's.
-  const info = await resolveGameInfo(ctx, kid.language);
+  // Decrypted, locale-translated game (the kid scope drives both) — or the
+  // inline info for snapshot play, where the game row may be deleted or
+  // another family's.
+  const info = await resolveGameInfo(ctx, kid.id);
   const friendNames = info.capabilities.includes("save_state")
     ? await loadFriendNames(kid)
     : [];
