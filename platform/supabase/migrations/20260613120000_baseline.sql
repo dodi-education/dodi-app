@@ -193,6 +193,10 @@ CREATE TABLE IF NOT EXISTS "public"."games" (
     -- a static SVG under /images/game-previews; custom-game screenshots (deferred)
     -- can later fill this same column. NULL ⇒ the UI falls back to a generic icon.
     "preview_image" "text",
+    -- The game_versions row whose code_bundle matches this game's code_bundle
+    -- (the studio's version history head). NULL for system games and rows whose
+    -- code was written before versioning; the service sets it on every code write.
+    "current_game_version_id" "uuid",
     CONSTRAINT "games_age_range_check" CHECK (("target_age_min" <= "target_age_max")),
     CONSTRAINT "games_created_by_check" CHECK (("created_by" = ANY (ARRAY['system'::"text", 'parent'::"text", 'kid'::"text"]))),
     CONSTRAINT "games_duration_check" CHECK ((("estimated_duration_minutes" >= 1) AND ("estimated_duration_minutes" <= 180))),
@@ -202,6 +206,26 @@ CREATE TABLE IF NOT EXISTS "public"."games" (
 
 
 ALTER TABLE "public"."games" OWNER TO "postgres";
+
+
+-- Immutable-ish history of a custom game's code, one row per persisted
+-- iteration. Rows chain backwards via previous_game_version_id (a tree once a
+-- parent restores an old version and keeps editing from there). Agent persists
+-- always append a row; manual editor saves append by default but may decline —
+-- the head row's code_bundle is then updated in place instead.
+-- games.current_game_version_id points at the head row.
+CREATE TABLE IF NOT EXISTS "public"."game_versions" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "game_id" "uuid" NOT NULL,
+    "account_id" "uuid" NOT NULL,
+    "code_bundle" "text" NOT NULL,
+    "previous_game_version_id" "uuid",
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "game_versions_pkey" PRIMARY KEY ("id")
+);
+
+
+ALTER TABLE "public"."game_versions" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."game_sharings" (
@@ -439,6 +463,9 @@ CREATE INDEX "games_system_created_idx" ON "public"."games" USING "btree" ("is_s
 CREATE INDEX "games_tags_gin_idx" ON "public"."games" USING "gin" ("tags");
 
 
+CREATE INDEX "game_versions_game_created_idx" ON "public"."game_versions" USING "btree" ("game_id", "created_at" DESC);
+
+
 CREATE UNIQUE INDEX "game_sharings_game_kid_uniq" ON "public"."game_sharings" USING "btree" ("game_id", "kid_id") WHERE ("kid_id" IS NOT NULL);
 
 
@@ -578,6 +605,22 @@ ALTER TABLE ONLY "public"."games"
     ADD CONSTRAINT "games_source_game_id_fkey" FOREIGN KEY ("source_game_id") REFERENCES "public"."games"("id") ON DELETE SET NULL;
 
 
+ALTER TABLE ONLY "public"."games"
+    ADD CONSTRAINT "games_current_game_version_id_fkey" FOREIGN KEY ("current_game_version_id") REFERENCES "public"."game_versions"("id") ON DELETE SET NULL;
+
+
+ALTER TABLE ONLY "public"."game_versions"
+    ADD CONSTRAINT "game_versions_game_id_fkey" FOREIGN KEY ("game_id") REFERENCES "public"."games"("id") ON DELETE CASCADE;
+
+
+ALTER TABLE ONLY "public"."game_versions"
+    ADD CONSTRAINT "game_versions_account_id_fkey" FOREIGN KEY ("account_id") REFERENCES "public"."accounts"("id") ON DELETE CASCADE;
+
+
+ALTER TABLE ONLY "public"."game_versions"
+    ADD CONSTRAINT "game_versions_previous_game_version_id_fkey" FOREIGN KEY ("previous_game_version_id") REFERENCES "public"."game_versions"("id") ON DELETE SET NULL;
+
+
 ALTER TABLE ONLY "public"."personas"
     ADD CONSTRAINT "personalities_account_id_fkey" FOREIGN KEY ("account_id") REFERENCES "public"."accounts"("id") ON DELETE CASCADE;
 
@@ -668,6 +711,15 @@ CREATE POLICY "Users can update own account" ON "public"."accounts" FOR UPDATE U
 CREATE POLICY "Users can update own custom games" ON "public"."games" FOR UPDATE USING ((("auth"."uid"() = "account_id") AND ("is_system" = false))) WITH CHECK ((("auth"."uid"() = "account_id") AND ("is_system" = false)));
 
 
+CREATE POLICY "Users can view own game versions" ON "public"."game_versions" FOR SELECT USING (("auth"."uid"() = "account_id"));
+
+
+CREATE POLICY "Users can create own game versions" ON "public"."game_versions" FOR INSERT WITH CHECK (("auth"."uid"() = "account_id"));
+
+
+CREATE POLICY "Users can update own game versions" ON "public"."game_versions" FOR UPDATE USING (("auth"."uid"() = "account_id")) WITH CHECK (("auth"."uid"() = "account_id"));
+
+
 CREATE POLICY "Users can update own personas" ON "public"."personas" FOR UPDATE USING (("auth"."uid"() = "account_id"));
 
 
@@ -729,6 +781,9 @@ CREATE POLICY "game_translations_update" ON "public"."game_translations" FOR UPD
 
 
 ALTER TABLE "public"."games" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."game_versions" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."personas" ENABLE ROW LEVEL SECURITY;
@@ -802,6 +857,11 @@ GRANT ALL ON TABLE "public"."game_translations" TO "service_role";
 GRANT ALL ON TABLE "public"."games" TO "anon";
 GRANT ALL ON TABLE "public"."games" TO "authenticated";
 GRANT ALL ON TABLE "public"."games" TO "service_role";
+
+
+GRANT ALL ON TABLE "public"."game_versions" TO "anon";
+GRANT ALL ON TABLE "public"."game_versions" TO "authenticated";
+GRANT ALL ON TABLE "public"."game_versions" TO "service_role";
 
 
 GRANT ALL ON TABLE "public"."personas" TO "anon";

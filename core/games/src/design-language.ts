@@ -116,6 +116,9 @@ Standard motion (use sparingly and purposefully):
   @keyframes wiggle { 0%,100% { transform: rotate(0) } 25% { transform: rotate(-4deg) } 75% { transform: rotate(4deg) } }
   - float: idle hero/mascot elements. pop: new/collected items, reward moments.
   - wiggle (or a short shake): wrong answers — playful, never punishing.
+  - These animations transform-scale their element: never measure an element inside one
+    with getBoundingClientRect() for layout/canvas sizing — use clientWidth/clientHeight
+    (see "Measuring layout at runtime" in the Game Canvas contract).
 
 TYPOGRAPHY:
 - Use a rounded, friendly stack: font-family: ui-rounded, "Comic Sans MS", "Segoe UI", system-ui, sans-serif;

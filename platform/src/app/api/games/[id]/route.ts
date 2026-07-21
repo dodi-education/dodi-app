@@ -10,6 +10,7 @@ import {
   getGame,
   isGameVisibleToKid,
   replaceGameSharings,
+  restoreGameVersion,
   updateCustomGame,
 } from "@/services/games";
 import { getKid } from "@/services/kids";
@@ -41,6 +42,12 @@ const UpdateGameSchema = z.object({
       audienceIds: z.array(z.string().uuid()),
     })
     .optional(),
+  // Version history controls. create_version=false: a code_bundle change
+  // overwrites the current head version instead of appending a new one.
+  // restore_version_id: switch the game to an existing version (exclusive
+  // with code_bundle — a restore never writes new code).
+  create_version: z.boolean().optional(),
+  restore_version_id: z.string().uuid().optional(),
 });
 
 interface RouteContext {
@@ -128,8 +135,23 @@ export async function PATCH(
       audience,
       metadata: rawMetadata,
       success_criteria: rawCriteria,
+      create_version: createVersion,
+      restore_version_id: restoreVersionId,
       ...columnUpdates
     } = parsed.data;
+
+    if (restoreVersionId && columnUpdates.code_bundle) {
+      return NextResponse.json(
+        { error: "restore_version_id cannot be combined with code_bundle" },
+        { status: 400 },
+      );
+    }
+
+    if (restoreVersionId) {
+      const game = await restoreGameVersion(supabase, id, restoreVersionId);
+      return NextResponse.json(game);
+    }
+
     const updates: GameUpdate = { ...columnUpdates };
 
     if (rawMetadata !== undefined) {
@@ -153,7 +175,7 @@ export async function PATCH(
 
     const game =
       Object.keys(updates).length > 0
-        ? await updateCustomGame(supabase, id, updates)
+        ? await updateCustomGame(supabase, id, updates, { createVersion })
         : existing;
 
     if (audience) {

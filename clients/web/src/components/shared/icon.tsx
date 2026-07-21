@@ -27,9 +27,11 @@ import {
   IconEye,
   IconEyeOff,
   IconEyeQuestion,
+  IconFileDiff,
   IconFlask,
   IconHeart,
   IconHeartFilled,
+  IconHistory,
   IconHome,
   IconImageGeneration,
   IconLanguage,
@@ -96,6 +98,7 @@ export type IconName =
   | "copy"
   | "dashboard"
   | "delete"
+  | "diff"
   | "download"
   | "edit"
   | "feature_games"
@@ -108,6 +111,7 @@ export type IconName =
   | "heart"
   | "heart_filled"
   | "hide"
+  | "history"
   | "home"
   | "loading"
   | "lock"
@@ -175,6 +179,7 @@ const ICONS: Record<IconName, ComponentType<TablerIconProps>> = {
   copy: IconCopy,
   dashboard: IconChartBar,
   delete: IconTrash,
+  diff: IconFileDiff,
   download: IconDownload,
   edit: IconPencil,
   feature_games: IconDeviceGamepad2,
@@ -186,6 +191,7 @@ const ICONS: Record<IconName, ComponentType<TablerIconProps>> = {
   globe: IconLanguage,
   heart: IconHeart,
   heart_filled: IconHeartFilled,
+  history: IconHistory,
   hide: IconEyeOff,
   home: IconHome,
   loading: IconLoader2,

@@ -275,6 +275,8 @@ export interface Database {
           agent_transcript_enc: string | null;
           /** Optional 100x100 kid-library preview (system SVG path, or NULL ⇒ icon). */
           preview_image: string | null;
+          /** Head of the game_versions chain (its code_bundle matches). NULL = system game or pre-versioning code. */
+          current_game_version_id: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -302,6 +304,7 @@ export interface Database {
           created_by?: "system" | "parent" | "kid";
           agent_transcript_enc?: string | null;
           preview_image?: string | null;
+          current_game_version_id?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -329,8 +332,37 @@ export interface Database {
           created_by?: "system" | "parent" | "kid";
           agent_transcript_enc?: string | null;
           preview_image?: string | null;
+          current_game_version_id?: string | null;
           created_at?: string;
           updated_at?: string;
+        };
+        Relationships: [];
+      };
+      game_versions: {
+        Row: {
+          id: string;
+          game_id: string;
+          account_id: string;
+          code_bundle: string;
+          /** Backward chain link; NULL = first version of the game. */
+          previous_game_version_id: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          game_id: string;
+          account_id: string;
+          code_bundle: string;
+          previous_game_version_id?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          game_id?: string;
+          account_id?: string;
+          code_bundle?: string;
+          previous_game_version_id?: string | null;
+          created_at?: string;
         };
         Relationships: [];
       };
@@ -1249,6 +1281,10 @@ export type PersonaInsert = Database["public"]["Tables"]["personas"]["Insert"];
 export type PersonaUpdate = Database["public"]["Tables"]["personas"]["Update"];
 export type GameInsert = Database["public"]["Tables"]["games"]["Insert"];
 export type GameUpdate = Database["public"]["Tables"]["games"]["Update"];
+export type GameVersion =
+  Database["public"]["Tables"]["game_versions"]["Row"];
+export type GameVersionInsert =
+  Database["public"]["Tables"]["game_versions"]["Insert"];
 export type GameSharing =
   Database["public"]["Tables"]["game_sharings"]["Row"];
 export type GameSharingInsert =

@@ -4,8 +4,8 @@ import { dodi } from "@/lib/api";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useLocale, useTranslations } from "next-intl";
 
 import { GameStage } from "@/components/games/game-stage";
 import type { GameSandboxHandle } from "@/components/games/game-sandbox";
@@ -80,6 +80,8 @@ export interface StudioGame {
   successDefinition: string;
   progressKind: ProgressKind;
   codeBundle: string;
+  /** Head of the game's version chain (server-managed); null = pre-versioning code. */
+  currentGameVersionId: string | null;
   markdown: string;
   /** Specific kid IDs this game is shared with (empty when family). */
   audienceIds: string[];
@@ -108,6 +110,15 @@ interface ChatMessage {
   text: string;
   /** Attached reference images (downscaled data URLs) on user turns. */
   images?: string[];
+  /** Assistant turns whose build changed the code — anchors Show changes | Revert. */
+  hasCodeChange?: boolean;
+}
+
+/** Lean version-history entry from GET /api/games/[id]/versions (no code). */
+interface GameVersionEntry {
+  id: string;
+  previous_game_version_id: string | null;
+  created_at: string;
 }
 
 const SIDE_MIN = 300;
@@ -131,6 +142,7 @@ function emptyGame(): StudioGame {
     successDefinition: "",
     progressKind: "open",
     codeBundle: "",
+    currentGameVersionId: null,
     markdown: "",
     audienceIds: [],
     // New games default to the whole family; parents narrow this if they want.
@@ -177,6 +189,7 @@ function restoreTranscript(initialGame?: StudioGame): ChatMessage[] {
 
 export function GameStudio({ initialGame }: GameStudioProps) {
   const t = useTranslations("gameStudio");
+  const locale = useLocale();
   const router = useRouter();
   const editing = Boolean(initialGame?.id);
 
@@ -236,6 +249,23 @@ export function GameStudio({ initialGame }: GameStudioProps) {
   // Whether an image model is configured AND its vault key is available — gates
   // the "generate background image" setting. null = still loading.
   const [hasImageProvider, setHasImageProvider] = useState<boolean | null>(null);
+  // Code-tab diff mode — also flipped on by the per-turn "Show changes" link.
+  const [showChanges, setShowChanges] = useState(false);
+  // In-flight state for Revert, and whether the last change is currently
+  // reverted (flips the link label to "Restore"; session-local only).
+  const [reverting, setReverting] = useState(false);
+  const [reverted, setReverted] = useState(false);
+  // Version history (lean entries, newest first) + per-version code cache
+  // (id → code), filled lazily for diff bases.
+  const [versions, setVersions] = useState<GameVersionEntry[]>([]);
+  const [versionCodes, setVersionCodes] = useState<Record<string, string>>({});
+  // The version left behind by the last Revert, so Restore can go forward again.
+  const redoVersionRef = useRef<string | null>(null);
+  // Manual code-edit save dialog ("create a new version" defaults to on).
+  const [saveEditOpen, setSaveEditOpen] = useState(false);
+  const [saveAsNewVersion, setSaveAsNewVersion] = useState(true);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const pendingEditRef = useRef<{ code: string; resolve: (saved: boolean) => void } | null>(null);
   // Destructive "clear history" confirmation dialog.
   const [clearOpen, setClearOpen] = useState(false);
   // Export-to-zip dialog; the conversation (may contain photos) is opt-in.
@@ -268,6 +298,19 @@ export function GameStudio({ initialGame }: GameStudioProps) {
   // The chat is locked until a draft has been persisted (new-game hard gate):
   // the parent fills mandatory settings + saves, which redirects to /[id].
   const locked = !game.id;
+
+  // Pin the thread to the latest turn on resume, after each turn, and when the
+  // chat pane becomes visible (mobile tab switch / draft unlock). Measuring
+  // while hidden yields scrollHeight 0, so skip until the pane is shown.
+  useEffect(() => {
+    if (locked) return;
+    if (vertical && mtab !== "chat") return;
+    const el = threadRef.current;
+    if (!el) return;
+    requestAnimationFrame(() => {
+      el.scrollTop = el.scrollHeight;
+    });
+  }, [messages, thinking, mtab, locked, vertical]);
 
   // Building/editing a game is a complex task that requires an explicitly
   // configured Game generation model. Without one we lock the composer (just
@@ -408,13 +451,14 @@ export function GameStudio({ initialGame }: GameStudioProps) {
 
   // Persist a completed build — game fields + sealed transcript, no provider key
   // (generation already happened in the browser). The studio always has a game id
-  // here (the composer is locked until the draft is saved).
+  // here (the composer is locked until the draft is saved). Returns the updated
+  // row so the caller can adopt the new version-chain head.
   const persistBuild = async (
     result: AgentCodeResult,
     safeCode: string,
     transcript: ChatMessage[],
-  ): Promise<void> => {
-    if (!game.id) return;
+  ): Promise<Game | null> => {
+    if (!game.id) return null;
     const session = useVaultStore.getState().session;
     const agent_transcript_enc = session
       ? session.encryptJson(sealableTranscript(transcript))
@@ -438,6 +482,7 @@ export function GameStudio({ initialGame }: GameStudioProps) {
       }),
     });
     if (!res.ok) throw new Error(await readError(res));
+    return (await res.json()) as Game;
   };
 
   // Download the game as a portable zip, assembled entirely in the browser from
@@ -484,6 +529,192 @@ export function GameStudio({ initialGame }: GameStudioProps) {
   const stop = (): void => {
     abortRef.current?.abort();
   };
+
+  // ----- Version history -------------------------------------------------
+
+  // Refresh the lean version list (after builds / manual saves).
+  const loadVersions = useCallback(async (): Promise<void> => {
+    if (!game.id) return;
+    try {
+      const res = await dodi.request(`/api/games/${game.id}/versions`);
+      if (!res.ok) return;
+      const data = (await res.json()) as { versions: GameVersionEntry[] };
+      setVersions(data.versions);
+    } catch {
+      /* history is non-critical chrome — the studio works without it */
+    }
+  }, [game.id]);
+
+  useEffect(() => {
+    void (async () => {
+      await loadVersions();
+    })();
+  }, [loadVersions]);
+
+  const currentVersion = versions.find((v) => v.id === game.currentGameVersionId) ?? null;
+  const previousVersionId = currentVersion?.previous_game_version_id ?? null;
+
+  // Lazily fetch the diff base (previous version's code) into the cache map;
+  // `previousCode` is then a pure derivation (no sync setState in the effect).
+  useEffect(() => {
+    const gameId = game.id;
+    if (!gameId || !previousVersionId) return;
+    if (versionCodes[previousVersionId] !== undefined) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await dodi.request(`/api/games/${gameId}/versions/${previousVersionId}`);
+        if (!res.ok) return;
+        const row = (await res.json()) as { code_bundle: string };
+        if (!cancelled) {
+          setVersionCodes((m) => ({ ...m, [previousVersionId]: row.code_bundle }));
+        }
+      } catch {
+        /* diff stays unavailable — non-critical chrome */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [game.id, previousVersionId, versionCodes]);
+
+  const previousCode = previousVersionId ? (versionCodes[previousVersionId] ?? null) : null;
+
+  // A previous version exists and differs — enables Show changes / Revert.
+  const canDiff = Boolean(previousCode) && previousCode !== game.codeBundle;
+
+  // "Show changes" chat link: jump to the Code tab with the diff switched on.
+  const openChanges = (): void => {
+    setShowChanges(true);
+    setView("code");
+    if (vertical) setMtab("game");
+  };
+
+  // Switch the game to an existing version: the server copies that version's
+  // code into the game and moves the head pointer — no new version row.
+  const switchToVersion = async (versionId: string): Promise<boolean> => {
+    if (!game.id || reverting || thinking || versionId === game.currentGameVersionId)
+      return false;
+    setReverting(true);
+    setError(null);
+    try {
+      const res = await dodi.request(`/api/games/${game.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ restore_version_id: versionId }),
+      });
+      if (!res.ok) throw new Error(await readError(res));
+      const row = (await res.json()) as Game;
+      setGame((g) => ({
+        ...g,
+        codeBundle: row.code_bundle,
+        currentGameVersionId: row.current_game_version_id,
+      }));
+      router.refresh();
+      return true;
+    } catch (e) {
+      const reason = e instanceof Error && e.message ? e.message : "";
+      setError(reason ? t("saveFailed", { reason }) : t("saveFailedGeneric"));
+      return false;
+    } finally {
+      setReverting(false);
+    }
+  };
+
+  // Revert = step back to the previous version; Restore = forward to the
+  // version the last revert left (session-local, like the old swap toggle).
+  const revertCode = async (): Promise<void> => {
+    if (reverted) {
+      const redo = redoVersionRef.current;
+      if (redo && (await switchToVersion(redo))) {
+        redoVersionRef.current = null;
+        setReverted(false);
+      }
+      return;
+    }
+    if (!previousVersionId) return;
+    const leaving = game.currentGameVersionId;
+    if (await switchToVersion(previousVersionId)) {
+      redoVersionRef.current = leaving;
+      setReverted(true);
+    }
+  };
+
+  // Explicit version pick from the selector — plain switch, no redo memory.
+  const selectVersion = (versionId: string): void => {
+    redoVersionRef.current = null;
+    setReverted(false);
+    void switchToVersion(versionId);
+  };
+
+  // Manual editor save: stash the draft and ask about creating a new version.
+  // The promise resolves once the dialog settles (true = saved, edit mode ends).
+  const handleSaveEdit = (code: string): Promise<boolean> => {
+    if (!game.id) return Promise.resolve(false);
+    return new Promise<boolean>((resolve) => {
+      pendingEditRef.current = { code, resolve };
+      setSaveAsNewVersion(true);
+      setSaveEditOpen(true);
+    });
+  };
+
+  const settleSaveEdit = (saved: boolean): void => {
+    pendingEditRef.current?.resolve(saved);
+    pendingEditRef.current = null;
+    setSaveEditOpen(false);
+  };
+
+  const confirmSaveEdit = async (): Promise<void> => {
+    const pending = pendingEditRef.current;
+    if (!pending || !game.id || savingEdit) return;
+    setSavingEdit(true);
+    setError(null);
+    try {
+      const res = await dodi.request(`/api/games/${game.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code_bundle: pending.code,
+          create_version: saveAsNewVersion,
+        }),
+      });
+      if (!res.ok) throw new Error(await readError(res));
+      const row = (await res.json()) as Game;
+      // Head overwritten in place → refresh its cached code with the saved result.
+      if (!saveAsNewVersion && row.current_game_version_id) {
+        const headId = row.current_game_version_id;
+        setVersionCodes((m) => ({ ...m, [headId]: row.code_bundle }));
+      }
+      setGame((g) => ({
+        ...g,
+        codeBundle: row.code_bundle,
+        currentGameVersionId: row.current_game_version_id,
+      }));
+      redoVersionRef.current = null;
+      setReverted(false);
+      await loadVersions();
+      settleSaveEdit(true);
+      router.refresh();
+    } catch (e) {
+      const reason = e instanceof Error && e.message ? e.message : "";
+      setError(reason ? t("saveFailed", { reason }) : t("saveFailedGeneric"));
+      settleSaveEdit(false);
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  // Selector entries, newest first; the viewer renders the short id itself and
+  // hides the date on narrow screens.
+  const versionOptions = versions.map((v) => ({
+    id: v.id,
+    dateLabel: new Intl.DateTimeFormat(locale, {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(new Date(v.created_at)),
+  }));
+
+  // ----- End version history ---------------------------------------------
 
   // Stage picked/pasted reference images: read → downscale to a bounded JPEG →
   // append (capped). Non-images and unreadable files are skipped silently.
@@ -701,6 +932,11 @@ export function GameStudio({ initialGame }: GameStudioProps) {
       // sanitizes again server-side as defense-in-depth).
       const safeCode = sanitizeGameBundle(finalCode).code;
 
+      // Mirrors the server's previous-version capture in updateCustomGame: a
+      // non-empty pre-build bundle that differs from the result. Anchors the
+      // Show changes | Revert links on this turn's reply.
+      const codeChanged = Boolean(game.codeBundle) && safeCode !== game.codeBundle;
+
       // Record what this generation used (fire-and-forget). The tokens were spent
       // regardless of whether the persist below succeeds, so report it here. We
       // measure each context component's size (never its content) so we can track
@@ -743,7 +979,10 @@ export function GameStudio({ initialGame }: GameStudioProps) {
         : isUpdate
           ? `Updated **${result.title}** — the preview and code are refreshed.`
           : `Here's **${result.title}** — it's live in the preview; flip to Code to see what I wrote.`;
-      const withDodi: ChatMessage[] = [...withUser, { role: "assistant", text: dodiText }];
+      const withDodi: ChatMessage[] = [
+        ...withUser,
+        { role: "assistant", text: dodiText, ...(codeChanged ? { hasCodeChange: true } : {}) },
+      ];
 
       const builtCapabilities = Array.isArray(result.metadata.capabilities)
         ? (result.metadata.capabilities as string[])
@@ -761,12 +1000,21 @@ export function GameStudio({ initialGame }: GameStudioProps) {
         markdown: result.markdown,
         capabilities: builtCapabilities,
       }));
+      if (codeChanged) {
+        setReverted(false);
+        redoVersionRef.current = null;
+      }
       setMessages(withDodi);
       setView("preview");
 
       // Persist the built game + the sealed transcript (no provider key involved).
       try {
-        await persistBuild(result, safeCode, withDodi);
+        const row = await persistBuild(result, safeCode, withDodi);
+        if (row) {
+          // Adopt the server's new version head (an agent persist appends a version).
+          setGame((g) => ({ ...g, currentGameVersionId: row.current_game_version_id }));
+          void loadVersions();
+        }
         router.refresh();
       } catch (saveErr) {
         const reason = saveErr instanceof Error ? saveErr.message : "";
@@ -817,9 +1065,6 @@ export function GameStudio({ initialGame }: GameStudioProps) {
       setThinking(false);
       setStep(null);
       abortRef.current = null;
-      requestAnimationFrame(() => {
-        if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight;
-      });
     }
   }
 
@@ -956,6 +1201,13 @@ export function GameStudio({ initialGame }: GameStudioProps) {
   ];
 
   const statusText = thinking ? (step ? stepLabel(step) : t("working")) : t("designerRole");
+
+  // The turn links attach only to the LAST code-changing reply — the stored
+  // previous version corresponds to exactly that change.
+  const lastChangeIndex = messages.reduce(
+    (last, m, i) => (m.hasCodeChange ? i : last),
+    -1,
+  );
 
   return (
     <div
@@ -1099,8 +1351,23 @@ export function GameStudio({ initialGame }: GameStudioProps) {
               (game.codeBundle ? (
                 <CodeViewer
                   code={game.codeBundle}
+                  previousCode={previousCode}
+                  showChanges={showChanges}
+                  onShowChangesChange={setShowChanges}
+                  versions={versionOptions}
+                  currentVersionId={game.currentGameVersionId}
+                  onSelectVersion={selectVersion}
+                  busy={thinking || reverting}
+                  onSaveEdit={game.id ? handleSaveEdit : undefined}
                   copyLabel={t("copy")}
                   copiedLabel={t("copied")}
+                  showChangesLabel={t("showChanges")}
+                  showChangesUnavailableTitle={t("noPreviousVersion")}
+                  unchangedLabel={(count) => t("unchangedLines", { count })}
+                  editLabel={t("editCode")}
+                  editSaveLabel={t("editCodeSave")}
+                  editCancelLabel={t("editCodeCancel")}
+                  versionSelectorLabel={t("versionSelector")}
                 />
               ) : (
                 <div className="flex min-h-full items-center justify-center p-8">
@@ -1234,6 +1501,26 @@ export function GameStudio({ initialGame }: GameStudioProps) {
                       />
                       <div className="min-w-0 flex-1 text-sm leading-[1.6] text-ink">
                         <RichText text={m.text} />
+                        {i === lastChangeIndex && (canDiff || reverted) && (
+                          <div className="mt-1.5 flex items-center gap-1.5 text-[11.5px] font-medium text-faint">
+                            <button
+                              type="button"
+                              onClick={openChanges}
+                              className="underline-offset-2 transition-colors hover:text-primary hover:underline"
+                            >
+                              {t("showChanges")}
+                            </button>
+                            <span aria-hidden>|</span>
+                            <button
+                              type="button"
+                              onClick={() => void revertCode()}
+                              disabled={reverting || thinking}
+                              className="underline-offset-2 transition-colors hover:text-primary hover:underline disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-faint disabled:hover:no-underline"
+                            >
+                              {reverted ? t("restoreVersion") : t("revertVersion")}
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   ) : (
@@ -1430,6 +1717,38 @@ export function GameStudio({ initialGame }: GameStudioProps) {
           </div>
         </div>
       </div>
+
+      {/* Manual code-edit save — offers to snapshot the change as a new
+          version (default on); declining overwrites the current head. */}
+      <Dialog
+        open={saveEditOpen}
+        onOpenChange={(open) => {
+          if (!open && !savingEdit) settleSaveEdit(false);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("saveEditTitle")}</DialogTitle>
+            <DialogDescription>{t("saveEditDescription")}</DialogDescription>
+          </DialogHeader>
+          <label className="flex w-fit cursor-pointer items-center gap-2.5 text-sm font-medium text-ink-2">
+            <Switch checked={saveAsNewVersion} onCheckedChange={setSaveAsNewVersion} />
+            {t("saveEditNewVersion")}
+          </label>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              disabled={savingEdit}
+              onClick={() => settleSaveEdit(false)}
+            >
+              {t("saveEditCancel")}
+            </Button>
+            <Button disabled={savingEdit} onClick={() => void confirmSaveEdit()}>
+              {t("saveEditConfirm")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Destructive confirm for clearing the conversation history. */}
       <Dialog open={clearOpen} onOpenChange={setClearOpen}>

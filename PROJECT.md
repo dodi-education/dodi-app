@@ -510,9 +510,7 @@ parent-defined goal — and, in future, generate challenges like "Solve 3 math g
 
 ## TODO
 
-- Export / import game.zip
 - Make game code creation progress more transparent (output rough agent loop actions in chat)
-- Scroll to bottom (dodi chat)
 - Implement Venice.ai
 
 

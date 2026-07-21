@@ -67,6 +67,7 @@ export default function EditGameStudioPage() {
         successDefinition: game.success_definition,
         progressKind: coerceProgressKind(game.progress_kind),
         codeBundle: game.code_bundle,
+        currentGameVersionId: game.current_game_version_id,
         markdown: game.markdown,
         audienceIds,
         isFamily: sharing.family,

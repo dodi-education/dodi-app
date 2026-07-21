@@ -6,6 +6,7 @@ import type {
   GameInsert,
   GameSharingInsert,
   GameUpdate,
+  GameVersion,
   Json,
 } from "@dodi/types/database";
 import type { GameMetadata, GameSharingState } from "@dodi/types/games";
@@ -283,13 +284,68 @@ export async function createCustomGame(
     .single();
 
   if (error) throw error;
+  const game = castGame(data);
+
+  // Every custom game starts its version history at creation (agent build,
+  // import, kid voice-create all land here).
+  const version = await insertGameVersion(supabase, game, game.code_bundle, null);
+  return await setCurrentVersion(supabase, game.id, version.id);
+}
+
+/** Append a version row for a game. `previousId` = the chain link (null for the first). */
+async function insertGameVersion(
+  supabase: Client,
+  game: Pick<Game, "id" | "account_id">,
+  codeBundle: string,
+  previousId: string | null,
+): Promise<GameVersion> {
+  if (!game.account_id) {
+    throw new Error("Cannot version a game without an owning account");
+  }
+  const { data, error } = await supabase
+    .from("game_versions")
+    .insert({
+      game_id: game.id,
+      account_id: game.account_id,
+      code_bundle: codeBundle,
+      previous_game_version_id: previousId,
+    })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data as GameVersion;
+}
+
+async function setCurrentVersion(
+  supabase: Client,
+  gameId: string,
+  versionId: string,
+): Promise<Game> {
+  const { data, error } = await supabase
+    .from("games")
+    .update({ current_game_version_id: versionId })
+    .eq("id", gameId)
+    .select("*")
+    .single();
+  if (error) throw error;
   return castGame(data);
+}
+
+export interface UpdateCustomGameOptions {
+  /**
+   * When the update changes code_bundle: append a game_versions row (default).
+   * `false` (manual editor save with "new version" declined) updates the
+   * current head version's code in place instead, so the chain stays truthful
+   * without growing.
+   */
+  createVersion?: boolean;
 }
 
 export async function updateCustomGame(
   supabase: Client,
   gameId: string,
   updates: GameUpdate,
+  options: UpdateCustomGameOptions = {},
 ): Promise<Game> {
   const existing = await getGame(supabase, gameId);
   if (!existing) {
@@ -308,6 +364,29 @@ export async function updateCustomGame(
     nextUpdates.tags = filterToCatalogTags(nextUpdates.tags);
   }
 
+  const codeChanged = Boolean(
+    nextUpdates.code_bundle && nextUpdates.code_bundle !== existing.code_bundle,
+  );
+  if (codeChanged) {
+    const newCode = nextUpdates.code_bundle as string;
+    if (options.createVersion === false && existing.current_game_version_id) {
+      // Overwrite the head version so it keeps matching the game's code.
+      const { error } = await supabase
+        .from("game_versions")
+        .update({ code_bundle: newCode })
+        .eq("id", existing.current_game_version_id);
+      if (error) throw error;
+    } else {
+      const version = await insertGameVersion(
+        supabase,
+        existing,
+        newCode,
+        existing.current_game_version_id,
+      );
+      nextUpdates.current_game_version_id = version.id;
+    }
+  }
+
   const { data, error } = await supabase
     .from("games")
     .update(nextUpdates)
@@ -315,6 +394,79 @@ export async function updateCustomGame(
     .select("*")
     .single();
 
+  if (error) throw error;
+  return castGame(data);
+}
+
+/** Lean version-history entry — everything but the code blob. */
+export interface GameVersionSummary {
+  id: string;
+  previous_game_version_id: string | null;
+  created_at: string;
+}
+
+/** A game's version history, newest first (no code payloads). */
+export async function listGameVersions(
+  supabase: Client,
+  gameId: string,
+): Promise<GameVersionSummary[]> {
+  const { data, error } = await supabase
+    .from("game_versions")
+    .select("id, previous_game_version_id, created_at")
+    .eq("game_id", gameId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as GameVersionSummary[];
+}
+
+/** A single version row incl. its code. Returns null if it doesn't belong to the game. */
+export async function getGameVersion(
+  supabase: Client,
+  gameId: string,
+  versionId: string,
+): Promise<GameVersion | null> {
+  const { data, error } = await supabase
+    .from("game_versions")
+    .select("*")
+    .eq("id", versionId)
+    .eq("game_id", gameId)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as GameVersion | null) ?? null;
+}
+
+/**
+ * Switch a game to an existing version: copy that version's code into
+ * games.code_bundle and point current_game_version_id at it. No new version
+ * row is created — the head just moves (revert = restore the head's previous).
+ */
+export async function restoreGameVersion(
+  supabase: Client,
+  gameId: string,
+  versionId: string,
+): Promise<Game> {
+  const existing = await getGame(supabase, gameId);
+  if (!existing) {
+    throw new Error("Game not found");
+  }
+  if (existing.is_system) {
+    throw new Error("Cannot update system game directly");
+  }
+
+  const version = await getGameVersion(supabase, gameId, versionId);
+  if (!version) {
+    throw new Error("Version not found");
+  }
+
+  const { data, error } = await supabase
+    .from("games")
+    .update({
+      code_bundle: version.code_bundle,
+      current_game_version_id: version.id,
+    })
+    .eq("id", gameId)
+    .select("*")
+    .single();
   if (error) throw error;
   return castGame(data);
 }

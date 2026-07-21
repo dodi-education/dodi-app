@@ -42,4 +42,19 @@ Design the game for ONE fixed canvas — it is the only layout target.
 - Lay out with %, flex, and grid relative to the root so everything fits the ${STAGE.aspectW}:${STAGE.aspectH}
   box with no scrolling and no clipping at any scale.
 - Keep touch targets >= 44x44 px. Avoid fixed pixel heights that assume extra vertical space.
+
+MEASURING LAYOUT AT RUNTIME (canvas sizing, drag math, element placement):
+- To size a <canvas> or compute layout from a container, read clientWidth/clientHeight.
+  NEVER size layout from getBoundingClientRect() — its rect includes active CSS
+  transforms, so measuring an element while it (or an ancestor) plays an entry
+  animation (pop/scale) captures a mid-animation size that is silently wrong.
+- Keep a canvas's CSS size responsive (width/height: 100% of its wrapper); set only the
+  bitmap size in JS (canvas.width = wrap.clientWidth * devicePixelRatio). Never freeze
+  the CSS size with inline style.width/height pixel values — the canvas then stops
+  tracking its container and drawings drift off-center.
+- Recompute canvas bitmaps and cached layout on window "resize" (it fires when the
+  host resizes the game) AND after opening any overlay/panel that contains a canvas.
+- Mapping pointer events to canvas coordinates is the one place getBoundingClientRect()
+  is right (screen position) — but scale by clientWidth / rect.width so coordinates
+  stay correct while a transform animation is running.
 `.trim();
