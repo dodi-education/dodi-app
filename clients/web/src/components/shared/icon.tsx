@@ -23,6 +23,7 @@ import {
   IconCode,
   IconCopy,
   IconDeviceGamepad2,
+  IconDownload,
   IconEye,
   IconEyeOff,
   IconEyeQuestion,
@@ -64,6 +65,7 @@ import {
   IconSwitchVertical,
   IconTextGrammar,
   IconTrash,
+  IconUpload,
   IconUser,
   IconUserPlus,
   IconUsers,
@@ -94,6 +96,7 @@ export type IconName =
   | "copy"
   | "dashboard"
   | "delete"
+  | "download"
   | "edit"
   | "feature_games"
   | "feature_personal"
@@ -127,6 +130,7 @@ export type IconName =
   | "stop"
   | "success"
   | "switch_vertical"
+  | "upload"
   | "user_plus"
   | "agent_sessions"
   | "activities"
@@ -171,6 +175,7 @@ const ICONS: Record<IconName, ComponentType<TablerIconProps>> = {
   copy: IconCopy,
   dashboard: IconChartBar,
   delete: IconTrash,
+  download: IconDownload,
   edit: IconPencil,
   feature_games: IconDeviceGamepad2,
   feature_personal: IconPalette,
@@ -204,6 +209,7 @@ const ICONS: Record<IconName, ComponentType<TablerIconProps>> = {
   stop: IconSquare,
   success: IconCircleCheck,
   switch_vertical: IconSwitchVertical,
+  upload: IconUpload,
   user_plus: IconUserPlus,
   agent_sessions: IconRobot,
   activities: IconLogs,

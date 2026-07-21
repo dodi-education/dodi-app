@@ -510,6 +510,19 @@ parent-defined goal — and, in future, generate challenges like "Solve 3 math g
 
 ## TODO
 
+- Export / import game.zip
+- Make game code creation progress more transparent (output rough agent loop actions in chat)
+- Scroll to bottom (dodi chat)
+- Implement Venice.ai
+
+
+- Game store for parents (dodi Discover)
+ - Allow parents to publish games to dodi Discover
+ - Publication needs to go through specific harness (Filter out harmful/adult content, secret keys, personal infos, ...)
+ - Report inappropriate content system
+
+
+
 - Memory / transcripts (implemented foundation):
 - Add 3 transcript logging tiers: basic, advanced, full and change pricing wording to:
   - Basic: 1 month
@@ -517,9 +530,6 @@ parent-defined goal — and, in future, generate challenges like "Solve 3 math g
   - Full: Unlimited
 
 
-
-- Scroll to bottom (dodi chat)
-- Implement Venice.ai
 - Credit balances
 
 - Check: Prettier is currently broken repo-wide (.prettierrc wants prettier-plugin-tailwindcss, which isn't installed — pre-existing, I formatted my files with equivalent settings)
@@ -545,11 +555,6 @@ parent-defined goal — and, in future, generate challenges like "Solve 3 math g
  - For dodiAI only display numbers pulled from providers (derive voice usage by pulling costs and divide by unit costs)
 
 - Investigate sessionResumption for google voice
-
-- Game library for parents
- - Allow parents to publish to games lib
- - Publication needs to go through specific harness (Filter out harmful/adult content, secret keys, personal infos, ...)
- - Report inappropriate content system
 
 - New system games:
   - Reading: Generate short stories, let kid read the text, then ask questions about the text.

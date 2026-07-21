@@ -26,6 +26,8 @@ import { STAGE } from "@/lib/games/stage";
 import { GAME_TAGS } from "@dodi/games/tags";
 import { sanitizeGameBundle } from "@dodi/games/sanitizer";
 import { injectBackgroundImage } from "@dodi/games/background-image";
+import { buildGameExportFiles, gameExportFileName } from "@dodi/games/export";
+import { downloadBlob, packGameExportZip } from "@/lib/games/game-export-zip";
 import { tagStyle } from "@/components/parent/games/tag-style";
 import { CodeViewer } from "@/components/parent/games/code-viewer";
 import { useTagLabel } from "@/lib/games/tag-label";
@@ -53,6 +55,7 @@ import {
 } from "@/lib/errors/report-error-log";
 import { mapSuccessDefinition } from "@dodi/ai/success-mapping";
 import type { AgentStep } from "@dodi/types/agent-progress";
+import type { Game } from "@dodi/types/database";
 import type { GamePerspective } from "@dodi/types/games";
 import type { AgentCodeResult, AgentTaskRequest } from "@dodi/types/tasks";
 import type { ProgressKind } from "@dodi/games/success";
@@ -235,6 +238,10 @@ export function GameStudio({ initialGame }: GameStudioProps) {
   const [hasImageProvider, setHasImageProvider] = useState<boolean | null>(null);
   // Destructive "clear history" confirmation dialog.
   const [clearOpen, setClearOpen] = useState(false);
+  // Export-to-zip dialog; the conversation (may contain photos) is opt-in.
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportWithTranscript, setExportWithTranscript] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [sideWidth, setSideWidth] = useState(() =>
     readStoredSize("dodi-studio-side-width", SIDE_MIN, SIDE_MAX, SIDE_DEFAULT),
   );
@@ -431,6 +438,37 @@ export function GameStudio({ initialGame }: GameStudioProps) {
       }),
     });
     if (!res.ok) throw new Error(await readError(res));
+  };
+
+  // Download the game as a portable zip, assembled entirely in the browser from
+  // the fresh row (studio state lacks ages/duration) — like the persona export,
+  // the server never sees the archive. The transcript comes from the live thread
+  // (already decrypted; empty when the vault was locked on entry).
+  const exportGame = async (): Promise<void> => {
+    if (!game.id || exporting) return;
+    setExporting(true);
+    setError(null);
+    try {
+      const res = await dodi.request(`/api/games/${game.id}`);
+      if (!res.ok) throw new Error(await readError(res));
+      const row = (await res.json()) as Game;
+      const files = buildGameExportFiles({
+        game: row,
+        transcript:
+          exportWithTranscript && messages.length > 0
+            ? sealableTranscript(messages)
+            : null,
+        appVersion: "dodi web",
+      });
+      downloadBlob(packGameExportZip(files), gameExportFileName(row.title));
+      setExportOpen(false);
+    } catch (e) {
+      setExportOpen(false);
+      const reason = e instanceof Error && e.message ? e.message : "";
+      setError(reason ? t("exportFailed", { reason }) : t("exportFailedGeneric"));
+    } finally {
+      setExporting(false);
+    }
   };
 
   // Clear the conversation — the local thread and the persisted (sealed) copy.
@@ -1078,6 +1116,7 @@ export function GameStudio({ initialGame }: GameStudioProps) {
                 selectFamily={selectFamily}
                 toggleKid={toggleKid}
                 onSave={saveSettings}
+                onExport={game.id ? () => setExportOpen(true) : null}
                 saving={saving}
                 justSaved={justSaved}
                 error={error}
@@ -1409,6 +1448,45 @@ export function GameStudio({ initialGame }: GameStudioProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Export as a portable zip. The dodi conversation is opt-in (default off)
+          because it can carry attached reference photos. */}
+      <Dialog open={exportOpen} onOpenChange={setExportOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("exportTitle")}</DialogTitle>
+            <DialogDescription>{t("exportDescription")}</DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-2">
+            <label className="flex w-fit cursor-pointer items-center gap-2.5 text-sm font-medium text-ink-2">
+              <Switch
+                checked={exportWithTranscript && messages.length > 0}
+                disabled={messages.length === 0}
+                onCheckedChange={setExportWithTranscript}
+              />
+              {t("exportIncludeTranscript")}
+            </label>
+            {messages.length === 0 && (
+              <p className="text-xs text-muted-foreground">
+                {t(
+                  game.agentTranscriptEnc
+                    ? "exportTranscriptLocked"
+                    : "exportTranscriptEmpty",
+                )}
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setExportOpen(false)}>
+              {t("exportCancel")}
+            </Button>
+            <Button onClick={exportGame} disabled={exporting}>
+              <Icon name="download" size={16} />
+              {t("exportConfirm")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -1526,6 +1604,7 @@ function SettingsForm({
   selectFamily,
   toggleKid,
   onSave,
+  onExport,
   saving,
   justSaved,
   error,
@@ -1539,6 +1618,8 @@ function SettingsForm({
   selectFamily: () => void;
   toggleKid: (id: string) => void;
   onSave: () => void;
+  /** Opens the export-to-zip dialog; null until the game is saved. */
+  onExport: (() => void) | null;
   saving: boolean;
   justSaved: boolean;
   error: string | null;
@@ -1736,6 +1817,12 @@ function SettingsForm({
             </>
           )}
         </Button>
+        {onExport && (
+          <Button variant="outline" size="lg" className="w-full" onClick={onExport}>
+            <Icon name="download" size={16} />
+            {t("exportGame")}
+          </Button>
+        )}
       </div>
     </div>
   );

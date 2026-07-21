@@ -11,6 +11,7 @@ import {
   GameStudioList,
   type GameListItem,
 } from "@/components/parent/games/game-studio-list";
+import { GameImportDialog } from "@/components/parent/games/game-import-dialog";
 import { useKids } from "@/hooks/use-kids";
 import { dodi } from "@/lib/api";
 import type { Game } from "@dodi/types/database";
@@ -24,6 +25,7 @@ export default function GameStudioPage() {
 
   const { kids } = useKids();
   const [games, setGames] = useState<AccountGame[] | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -69,6 +71,10 @@ export default function GameStudioPage() {
   return (
     <div>
       <PageActions>
+        <Button variant="outline" onClick={() => setImportOpen(true)}>
+          <Icon name="upload" size={16} />
+          {t("importGame")}
+        </Button>
         <Button asChild>
           <Link href="/parent/game-studio/new">
             <Icon name="sparkles" size={16} />
@@ -76,6 +82,8 @@ export default function GameStudioPage() {
           </Link>
         </Button>
       </PageActions>
+
+      <GameImportDialog open={importOpen} onOpenChange={setImportOpen} />
 
       <Section title={t("yourGames")}>
         {games === null ? (

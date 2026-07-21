@@ -17,6 +17,7 @@ import {
 } from "@/services/games";
 import { UNBUILT_GAME_PLACEHOLDER } from "@dodi/games/placeholder";
 import type { GameMetadata } from "@dodi/types/games";
+import type { SuccessCriteria } from "@dodi/types/success";
 import {
   getTranslationsForGames,
   applyTranslation,
@@ -52,8 +53,15 @@ const CreateGameSchema = z.object({
   markdown: z.string().max(100000).optional(),
   learningGoal: z.string().max(2000).optional(),
   successDefinition: z.string().max(2000).optional(),
+  successCriteria: z.record(z.string(), z.unknown()).optional(),
+  progressKind: z.enum(["goal", "open"]).optional(),
+  targetAgeMin: z.number().int().min(1).max(25).optional(),
+  targetAgeMax: z.number().int().min(1).max(25).optional(),
+  estimatedDurationMinutes: z.number().int().min(1).max(180).optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
   isActive: z.boolean().optional(),
+  // enc:v1: sealed studio conversation transcript (server stays blind).
+  agentTranscriptEnc: z.string().optional(),
   audience: z
     .object({
       isFamily: z.boolean(),
@@ -176,9 +184,15 @@ export async function POST(request: Request): Promise<NextResponse> {
       markdown: data.markdown,
       codeBundle: hasCode ? data.codeBundle! : UNBUILT_GAME_PLACEHOLDER,
       metadata: data.metadata as GameMetadata | undefined,
+      targetAgeMin: data.targetAgeMin,
+      targetAgeMax: data.targetAgeMax,
+      estimatedDurationMinutes: data.estimatedDurationMinutes,
       learningGoal: data.learningGoal ?? "",
       successDefinition: data.successDefinition ?? "",
-      progressKind: data.successDefinition?.trim() ? "goal" : "open",
+      successCriteria: data.successCriteria as SuccessCriteria | undefined,
+      progressKind:
+        data.progressKind ?? (data.successDefinition?.trim() ? "goal" : "open"),
+      agentTranscriptEnc: data.agentTranscriptEnc,
       createdBy: "parent",
       // Real code is playable; an unbuilt placeholder is not (caller may override).
       isActive: data.isActive ?? hasCode,
