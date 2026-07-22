@@ -26,6 +26,7 @@ const DatePreferencesSchema = z.object({
 const NotificationPreferencesSchema = z
   .object({
     friend_approval_email: z.boolean(),
+    publication_outcome_email: z.boolean(),
   })
   .partial();
 

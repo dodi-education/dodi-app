@@ -90,6 +90,8 @@ export async function updateAccountDatePreferences(
  */
 export interface NotificationPreferences {
   friend_approval_email?: boolean;
+  /** Outcome of a dodi Discover publication review (approved/rejected). */
+  publication_outcome_email?: boolean;
 }
 
 /**

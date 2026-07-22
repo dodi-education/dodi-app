@@ -45,7 +45,11 @@ import {
   listPendingPublications,
   rejectPublication,
 } from "./game-publications";
-import { notifyPublicationRejected } from "./publication-notifications";
+import {
+  notifyPublicationRejected,
+  notifyPublisherApproved,
+  notifyPublisherRejected,
+} from "./publication-notifications";
 
 type Client = SupabaseClient<Database>;
 
@@ -275,8 +279,9 @@ export async function processPendingPublications(
 
     try {
       if (verdict.verdict === "approve") {
-        await approvePublication(supabase, claimed.id, "system");
+        const approved = await approvePublication(supabase, claimed.id, "system");
         result.approved += 1;
+        await notifyPublisherApproved(supabase, approved);
       } else {
         const kind = worstRejectionKind(verdict.reasons);
         const publication = await rejectPublication(supabase, claimed.id, {
@@ -285,6 +290,12 @@ export async function processPendingPublications(
         });
         result.rejected += 1;
         await notifyPublicationRejected(
+          supabase,
+          publication,
+          kind,
+          verdict.reasons,
+        );
+        await notifyPublisherRejected(
           supabase,
           publication,
           kind,

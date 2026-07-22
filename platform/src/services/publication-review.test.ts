@@ -111,9 +111,32 @@ function makeDb(tables: Partial<Tables> = {}) {
   });
 }
 
+/** The default account with a deliverable email + language, so the publisher
+ *  notification actually sends (the base fixture omits an address on purpose). */
+function accountsWithEmail(notification_preferences: Row = {}): Row[] {
+  return [
+    {
+      id: ACCOUNT,
+      publication_handle: "fun_games",
+      flagged_for_review_at: null,
+      email: "parent@example.com",
+      language: "en",
+      notification_preferences,
+    },
+  ];
+}
+
+/** The publisher-addressed send among a run's emails (operator + publisher). */
+function publisherSend() {
+  return sendEmailMock.mock.calls
+    .map((c) => c[0])
+    .find((e) => e.to === "parent@example.com");
+}
+
 beforeEach(() => {
   sendEmailMock.mockReset();
   process.env.SYSTEM_NOTIFICATION_EMAIL = "ops@example.com";
+  process.env.NEXT_PUBLIC_APP_URL = "https://app.dodi.app";
   setAgentEnv(); // a valid, enabled config by default
 });
 
@@ -207,7 +230,8 @@ describe("processPendingPublications", () => {
     expect(db.tables.games[0].approved_by).toBe("system");
     expect(db.tables.games[0].review_attempts).toBe(1);
     expect(db.tables.game_publication_requests[0].outcome).toBe("approved");
-    // No email on approval — only submits and rejections notify the operator.
+    // Approval sends no operator email, and this fixture's account has no
+    // address on file, so the publisher notification is skipped too.
     expect(sendEmailMock).not.toHaveBeenCalled();
   });
 
@@ -247,6 +271,60 @@ describe("processPendingPublications", () => {
 
     expect(db.tables.games[0].rejection_kind).toBe("hard");
     expect(db.tables.accounts[0].flagged_for_review_at).toBeTruthy();
+  });
+
+  it("emails the publisher when their submission is approved", async () => {
+    const db = makeDb({ accounts: accountsWithEmail() });
+    await processPendingPublications(db.client, {
+      providerFactory: stubFactory(async () => ({
+        verdict: "approve",
+        reasons: [],
+      })),
+    });
+    // Approval has no operator email, so the only send is the publisher's.
+    expect(sendEmailMock).toHaveBeenCalledTimes(1);
+    expect(publisherSend().react.props.outcome).toBe("approved");
+  });
+
+  it("emails both the operator and the publisher on a soft rejection", async () => {
+    const db = makeDb({ accounts: accountsWithEmail() });
+    await processPendingPublications(db.client, {
+      providerFactory: stubFactory(async () => ({
+        verdict: "reject",
+        reasons: [{ code: "soft_quality_below_bar", note: "broken" }],
+      })),
+    });
+    const recipients = sendEmailMock.mock.calls.map((c) => c[0].to).sort();
+    expect(recipients).toEqual(["ops@example.com", "parent@example.com"]);
+    expect(publisherSend().react.props.outcome).toBe("soft");
+    expect(publisherSend().react.props.reasons).toEqual([
+      { code: "soft_quality_below_bar", note: "broken" },
+    ]);
+  });
+
+  it("tells the publisher nothing about why on a hard rejection", async () => {
+    const db = makeDb({ accounts: accountsWithEmail() });
+    await processPendingPublications(db.client, {
+      providerFactory: stubFactory(async () => ({
+        verdict: "reject",
+        reasons: [{ code: "hard_child_safety", note: "asks for a phone number" }],
+      })),
+    });
+    expect(publisherSend().react.props.outcome).toBe("hard");
+    expect(publisherSend().react.props.reasons).toEqual([]);
+  });
+
+  it("honours the publisher's opt-out of outcome email", async () => {
+    const db = makeDb({
+      accounts: accountsWithEmail({ publication_outcome_email: false }),
+    });
+    await processPendingPublications(db.client, {
+      providerFactory: stubFactory(async () => ({
+        verdict: "approve",
+        reasons: [],
+      })),
+    });
+    expect(publisherSend()).toBeUndefined();
   });
 
   it("a provider error burns an attempt and leaves the item pending", async () => {

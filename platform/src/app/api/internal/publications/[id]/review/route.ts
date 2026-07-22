@@ -4,6 +4,7 @@ import { z } from "zod/v4";
 import { serverErrorResponse } from "@/lib/error-logs";
 import { isInternalAuthorized } from "@/lib/internal-auth";
 import { serviceClient } from "@/lib/supabase";
+import { notifyPublisherApproved } from "@/services/publication-notifications";
 import {
   PublicationError,
   approvePublication,
@@ -42,11 +43,15 @@ export async function POST(
   }
 
   try {
+    const supabase = serviceClient();
     const publication = await approvePublication(
-      serviceClient(),
+      supabase,
       id,
       parsed.data.approvedBy,
     );
+    // Same outcome as the automated worker: let the publisher know their game
+    // is live. Fire-and-forget — never throws, never blocks the response body.
+    await notifyPublisherApproved(supabase, publication);
     return NextResponse.json({ publication });
   } catch (error) {
     if (error instanceof PublicationError) {

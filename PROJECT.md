@@ -444,35 +444,9 @@ parent-defined goal — and, in future, generate challenges like "Solve 3 math g
 - Make game code creation progress more transparent (output rough agent loop actions in chat)
 - Implement Venice.ai
 
+- Notify game publisher about publication review outcome
 
 - Game store for parents (dodi Discover)
- - [x] Publication state machine: submitting forks a plaintext copy of the game
-   (`games.publication_requested_at` / `published_at` / `approved_by` /
-   `published_by_account_id`), leaving the parent's E2EE original untouched.
-   Public author byline = `accounts.publication_handle`.
- - [x] The review harness (the "security agent"): `services/publication-review.ts`,
-   run by a cron-triggered worker (`GET|POST /api/internal/publications/process`, auth =
-   `x-ops-secret` or Vercel `CRON_SECRET` bearer; `platform/vercel.json` crons).
-   Provider/model/key come from three server-only env vars
-   (`SECURITY_AGENT_PROVIDER|MODEL|KEY` — all unset ⇒ harness disabled; set all
-   three to enable). Fail-closed: any agent/parse
-   error leaves the item pending; 3 attempts, then it parks for the operator.
-   Operator emails to `SYSTEM_NOTIFICATION_EMAIL` on submit + rejection.
- - [x] Rejection type (hard|soft) + reasons: registry in
-   `@dodi/protocol/publication-review` (4 hard + 6 soft codes, each with an
-   agent note as the plain-text reason). hard ⇒ the source game can never be
-   resubmitted (enforced via the `game_publication_requests` log, which outlives
-   withdraw) + `accounts.flagged_for_review_at`; the hard-rejected COPY is
-   retained as moderation evidence (immune to withdraw and source-game
-   deletion; erased only with the account). soft ⇒ reasons shown in the
-   publish dialog, parent fixes and resubmits.
- - [x] Monthly quota: `accounts.monthly_game_publication_limit` (default 3),
-   every submit counts (each triggers a paid AI review), UTC calendar month.
- - [x] Discover browse UI (parent studio, under "Your games"; served via
-   `serviceClient()` with an explicit column projection, so publisher
-   `account_id`/`kid_id` never leak). NO install: a family shares the published
-   row with its kids via `game_sharings` (play-in-place, plays aggregate on the
-   single published row); Remix creates a private re-sealed copy.
  - [ ] Admin approval UI (`approved_by = 'admin'`)
  - [ ] Report inappropriate content system
  - [ ] Review the preview image too (vision pass) — v1 reviews text + code only

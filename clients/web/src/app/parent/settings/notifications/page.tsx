@@ -41,19 +41,18 @@ export default function NotificationsSettingsPage() {
 
   // Opt-out: absent/undefined reads as on.
   const friendApproval = prefs?.friend_approval_email !== false;
+  const publicationOutcome = prefs?.publication_outcome_email !== false;
 
-  async function toggleFriendApproval(next: boolean) {
+  async function saveToggle(patch: NotificationPreferences) {
     setError(null);
     setSaving(true);
     const previous = prefs ?? {};
-    setPrefs({ ...previous, friend_approval_email: next }); // optimistic
+    setPrefs({ ...previous, ...patch }); // optimistic
     try {
       const res = await dodi.request("/api/account", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          notificationPreferences: { friend_approval_email: next },
-        }),
+        body: JSON.stringify({ notificationPreferences: patch }),
       });
       if (!res.ok) throw new Error("save_failed");
     } catch {
@@ -79,8 +78,25 @@ export default function NotificationsSettingsPage() {
             id="notify-friend-approval"
             checked={friendApproval}
             disabled={!loaded || saving}
-            onCheckedChange={toggleFriendApproval}
+            onCheckedChange={(next) =>
+              saveToggle({ friend_approval_email: next })
+            }
             aria-label={t("notifyFriendApproval")}
+          />
+        </FieldRow>
+        <FieldRow
+          label={t("notifyPublicationOutcome")}
+          hint={t("notifyPublicationOutcomeHint")}
+          htmlFor="notify-publication-outcome"
+        >
+          <Switch
+            id="notify-publication-outcome"
+            checked={publicationOutcome}
+            disabled={!loaded || saving}
+            onCheckedChange={(next) =>
+              saveToggle({ publication_outcome_email: next })
+            }
+            aria-label={t("notifyPublicationOutcome")}
           />
         </FieldRow>
       </Section>

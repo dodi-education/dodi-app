@@ -14,6 +14,7 @@ import type { Account } from "@dodi/types/database";
  *  to send transactional email. Stored in accounts.notification_preferences. */
 export interface NotificationPreferences {
   friend_approval_email?: boolean;
+  publication_outcome_email?: boolean;
 }
 
 interface AccountState {

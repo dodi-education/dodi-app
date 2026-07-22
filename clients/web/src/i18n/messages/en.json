@@ -177,6 +177,8 @@
     "notificationsEmailDescription": "Choose which emails dodi sends you.",
     "notifyFriendApproval": "Friend request approvals",
     "notifyFriendApprovalHint": "Email me when one of my children has a friend request waiting for my approval.",
+    "notifyPublicationOutcome": "Game publication results",
+    "notifyPublicationOutcomeHint": "Email me when a game I submitted to dodi Discover has been reviewed.",
     "notificationsSaveFailed": "Couldn't save. Please try again.",
     "aiConfigTitle": "AI Provider Configuration",
     "aiConfigDescription": "Configure AI providers to give dodi a voice and enable game creation.",
