@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ThinkingProvider } from "@dodi/ai/thinking-providers/factory";
 
@@ -51,12 +51,23 @@ function pendingPublication(overrides: Row = {}): Row {
   };
 }
 
-function configRows(): Row[] {
-  return [
-    { key: "security_agent_provider", value: "anthropic" },
-    { key: "security_agent_model", value: "claude-sonnet-4-6" },
-    { key: "security_agent_key", value: "sk-ant-test" },
-  ];
+/** The security agent now reads its config from the environment, not the DB. */
+const AGENT_ENV = {
+  SECURITY_AGENT_PROVIDER: "anthropic",
+  SECURITY_AGENT_MODEL: "claude-sonnet-4-6",
+  SECURITY_AGENT_KEY: "sk-ant-test",
+} as const;
+
+function setAgentEnv(
+  overrides: Partial<Record<keyof typeof AGENT_ENV, string>> = {},
+) {
+  for (const [key, value] of Object.entries({ ...AGENT_ENV, ...overrides })) {
+    process.env[key] = value;
+  }
+}
+
+function clearAgentEnv() {
+  for (const key of Object.keys(AGENT_ENV)) delete process.env[key];
 }
 
 /** A provider factory whose generateJson returns (or throws) per call. */
@@ -71,7 +82,6 @@ function stubFactory(generateJson: () => Promise<Record<string, unknown>>) {
 }
 
 type Tables = {
-  platform_config: Row[];
   games: Row[];
   accounts: Row[];
   game_publication_requests: Row[];
@@ -79,7 +89,6 @@ type Tables = {
 
 function makeDb(tables: Partial<Tables> = {}) {
   return fakeDb<Tables>({
-    platform_config: configRows(),
     games: [pendingPublication()],
     accounts: [
       {
@@ -105,66 +114,78 @@ function makeDb(tables: Partial<Tables> = {}) {
 beforeEach(() => {
   sendEmailMock.mockReset();
   process.env.SYSTEM_NOTIFICATION_EMAIL = "ops@example.com";
+  setAgentEnv(); // a valid, enabled config by default
+});
+
+afterEach(() => {
+  clearAgentEnv();
 });
 
 describe("loadReviewAgentConfig", () => {
-  it("returns the config when all three rows are valid", async () => {
-    const db = makeDb();
-    await expect(loadReviewAgentConfig(db.client)).resolves.toEqual({
+  it("returns the config when all three vars are valid", () => {
+    setAgentEnv();
+    expect(loadReviewAgentConfig()).toEqual({
       provider: "anthropic",
       model: "claude-sonnet-4-6",
       apiKey: "sk-ant-test",
     });
   });
 
-  it("returns null (disabled) when no rows exist", async () => {
-    const db = makeDb({ platform_config: [] });
-    await expect(loadReviewAgentConfig(db.client)).resolves.toBeNull();
-  });
-
-  it("returns null (disabled) for the blank-seeded rows the migration creates", async () => {
-    const db = makeDb({
-      platform_config: [
-        { key: "security_agent_provider", value: "" },
-        { key: "security_agent_model", value: "" },
-        { key: "security_agent_key", value: "" },
-      ],
+  it("trims surrounding whitespace on each var", () => {
+    setAgentEnv({
+      SECURITY_AGENT_PROVIDER: " anthropic ",
+      SECURITY_AGENT_KEY: "sk-ant-test\n",
     });
-    await expect(loadReviewAgentConfig(db.client)).resolves.toBeNull();
-  });
-
-  it("a partially blank config is misconfigured, not disabled — but still null", async () => {
-    const db = makeDb({
-      platform_config: [
-        { key: "security_agent_provider", value: "anthropic" },
-        { key: "security_agent_model", value: "claude-sonnet-4-6" },
-        { key: "security_agent_key", value: "" },
-      ],
+    expect(loadReviewAgentConfig()).toEqual({
+      provider: "anthropic",
+      model: "claude-sonnet-4-6",
+      apiKey: "sk-ant-test",
     });
-    await expect(loadReviewAgentConfig(db.client)).resolves.toBeNull();
   });
 
-  it("returns null for an unknown provider", async () => {
-    const db = makeDb();
-    db.tables.platform_config[0].value = "openai";
-    await expect(loadReviewAgentConfig(db.client)).resolves.toBeNull();
+  it("returns null (disabled) when the vars are unset", () => {
+    clearAgentEnv();
+    expect(loadReviewAgentConfig()).toBeNull();
   });
 
-  it("returns null for a model without the thinking capability", async () => {
-    const db = makeDb();
-    db.tables.platform_config[1].value = "gemini-3.1-flash-image";
-    await expect(loadReviewAgentConfig(db.client)).resolves.toBeNull();
+  it("returns null (disabled) when all three vars are blank", () => {
+    setAgentEnv({
+      SECURITY_AGENT_PROVIDER: "",
+      SECURITY_AGENT_MODEL: "",
+      SECURITY_AGENT_KEY: "",
+    });
+    expect(loadReviewAgentConfig()).toBeNull();
   });
 
-  it("returns null when a row is missing", async () => {
-    const db = makeDb({ platform_config: configRows().slice(0, 2) });
-    await expect(loadReviewAgentConfig(db.client)).resolves.toBeNull();
+  it("a partially set config is misconfigured, not disabled — but still null", () => {
+    setAgentEnv({ SECURITY_AGENT_KEY: "" });
+    expect(loadReviewAgentConfig()).toBeNull();
+  });
+
+  it("returns null for an unknown provider", () => {
+    setAgentEnv({ SECURITY_AGENT_PROVIDER: "openai" });
+    expect(loadReviewAgentConfig()).toBeNull();
+  });
+
+  it("returns null for a model without the thinking capability", () => {
+    setAgentEnv({
+      SECURITY_AGENT_PROVIDER: "gemini",
+      SECURITY_AGENT_MODEL: "gemini-3.1-flash-image",
+    });
+    expect(loadReviewAgentConfig()).toBeNull();
+  });
+
+  it("returns null when a var is missing", () => {
+    setAgentEnv();
+    delete process.env.SECURITY_AGENT_KEY;
+    expect(loadReviewAgentConfig()).toBeNull();
   });
 });
 
 describe("processPendingPublications", () => {
   it("reports disabled and touches nothing without config", async () => {
-    const db = makeDb({ platform_config: [] });
+    clearAgentEnv();
+    const db = makeDb();
     const result = await processPendingPublications(db.client, {
       providerFactory: stubFactory(async () => ({ verdict: "approve" })),
     });

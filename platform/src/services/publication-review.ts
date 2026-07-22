@@ -4,14 +4,14 @@
  *
  * Runs server-side against the PLAINTEXT publication copy (the one place the
  * server may read game content) using a dodi-owned provider key configured in
- * `platform_config` — a parent's BYOK key cannot review on dodi's behalf.
- * Config lives in three service-role-only rows:
+ * the environment — a parent's BYOK key cannot review on dodi's behalf. Config
+ * lives in three server-only env vars:
  *
- *   security_agent_provider  '"anthropic"'   (an AI_PROVIDERS id)
- *   security_agent_model     '"claude-…"'    (a "thinking"-capable model)
- *   security_agent_key       '"sk-…"'        (the provider API key)
+ *   SECURITY_AGENT_PROVIDER  anthropic      (an AI_PROVIDERS id)
+ *   SECURITY_AGENT_MODEL     claude-…       (a "thinking"-capable model)
+ *   SECURITY_AGENT_KEY       sk-…           (the provider API key)
  *
- * Absence of any row means the harness is DISABLED — submissions queue up and
+ * Absence of any var means the harness is DISABLED — submissions queue up and
  * wait. Every failure direction is fail-closed: a provider error, a context
  * overflow or a malformed verdict burns one attempt and leaves the item
  * pending; nothing is ever auto-approved on error. After MAX_REVIEW_ATTEMPTS
@@ -55,12 +55,6 @@ export const MAX_REVIEW_ATTEMPTS = 3;
 /** Items per worker run — bounds one cron invocation's AI spend and runtime. */
 const REVIEW_BATCH_LIMIT = 5;
 
-const CONFIG_KEYS = [
-  "security_agent_provider",
-  "security_agent_model",
-  "security_agent_key",
-] as const;
-
 export interface ReviewAgentConfig {
   provider: AIProviderId;
   model: string;
@@ -72,31 +66,19 @@ function castGame(row: unknown): Game {
 }
 
 /**
- * Read the security-agent config. Returns null when the harness is disabled
- * (rows absent or all blank — the migration seeds them as "" for the operator
- * to fill in) or misconfigured (partially/invalidly set — logged, since that
- * is an operator mistake rather than a choice).
+ * Read the security-agent config from the environment. Returns null when the
+ * harness is disabled (all three vars unset or blank — the default) or
+ * misconfigured (partially set, or an unknown provider / non-thinking model —
+ * logged, since that is an operator mistake rather than a choice).
  */
-export async function loadReviewAgentConfig(
-  supabase: Client,
-): Promise<ReviewAgentConfig | null> {
-  const { data, error } = await supabase
-    .from("platform_config")
-    .select("key, value")
-    .in("key", [...CONFIG_KEYS]);
-  if (error) throw error;
+export function loadReviewAgentConfig(): ReviewAgentConfig | null {
+  const provider = process.env.SECURITY_AGENT_PROVIDER?.trim() ?? "";
+  const model = process.env.SECURITY_AGENT_MODEL?.trim() ?? "";
+  const apiKey = process.env.SECURITY_AGENT_KEY?.trim() ?? "";
 
-  const values = new Map<string, unknown>(
-    (data ?? []).map((row) => [row.key, row.value]),
-  );
-
-  const provider = values.get("security_agent_provider");
-  const model = values.get("security_agent_model");
-  const apiKey = values.get("security_agent_key");
-  // Absent row and blank seed both mean "not set". All three unset = the
-  // harness is deliberately disabled — stay quiet.
-  const unset = (v: unknown): boolean => v === undefined || v === "";
-  if (unset(provider) && unset(model) && unset(apiKey)) return null;
+  // Unset and blank both mean "not set". All three unset = the harness is
+  // deliberately disabled — stay quiet.
+  if (!provider && !model && !apiKey) return null;
 
   const invalid = (why: string): null => {
     logServerError(
@@ -106,15 +88,8 @@ export async function loadReviewAgentConfig(
     return null;
   };
 
-  if (
-    typeof provider !== "string" ||
-    typeof model !== "string" ||
-    typeof apiKey !== "string" ||
-    !provider ||
-    !model ||
-    !apiKey
-  ) {
-    return invalid("all three security_agent_* rows must hold JSON strings");
+  if (!provider || !model || !apiKey) {
+    return invalid("all three SECURITY_AGENT_* vars must be set");
   }
   const definition = getProviderDefinition(provider as AIProviderId);
   if (!definition) return invalid(`unknown provider "${provider}"`);
@@ -247,7 +222,7 @@ export async function processPendingPublications(
     errors: 0,
   };
 
-  const config = await loadReviewAgentConfig(supabase);
+  const config = loadReviewAgentConfig();
   if (!config) {
     result.disabled = true;
     return result;

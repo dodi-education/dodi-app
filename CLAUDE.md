@@ -321,10 +321,11 @@ BEFORE_USER_CREATED_HOOK_SECRET=      # Supabase auth-hook secret "v1,whsec_…"
 OPS_SECRET=                           # ops↔platform m2m secret, sent as x-ops-secret; gates all server-to-server ops endpoints (today: publication queue/stamp/process; later the dodi-com/ops console). Server only; unset ⇒ they refuse
 CRON_SECRET=                          # Vercel Cron auth ("Authorization: Bearer …") for GET /api/internal/publications/process — the review-worker trigger (server only)
 SYSTEM_NOTIFICATION_EMAIL=            # Operator inbox for publication notifications (request created / rejected); unset ⇒ skipped with a warning
-# The security agent itself (provider/model/key) is configured in the
-# platform_config table (service-role only), NOT env: the three KV rows
-# security_agent_provider|model|key are seeded blank (= disabled) by migration
-# 20260722140000 — set their jsonb string values in the dashboard to enable.
+# The security agent (publication review) — dodi's own AI, never a parent's key. All
+# three must be set to enable the harness; any unset ⇒ disabled (submissions queue).
+SECURITY_AGENT_PROVIDER=             # Provider id from the @dodi/ai registry (gemini|anthropic|xai); server only
+SECURITY_AGENT_MODEL=                # A "thinking"-capable model id of that provider (e.g. claude-sonnet-4-6); server only
+SECURITY_AGENT_KEY=                  # The provider API key; server only
 RESEND_API_KEY=                       # Resend key: Supabase SMTP + app-level email via the SDK (server only)
 EMAIL_FROM=                           # App-level email sender on a Resend-verified domain (server only; prod verifies mail.dodi.app, dev dev-mail.dodi.app; default "dodi <team@mail.dodi.app>")
 ```

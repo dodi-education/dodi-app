@@ -453,10 +453,9 @@ parent-defined goal — and, in future, generate challenges like "Solve 3 math g
  - [x] The review harness (the "security agent"): `services/publication-review.ts`,
    run by a cron-triggered worker (`GET|POST /api/internal/publications/process`, auth =
    `x-ops-secret` or Vercel `CRON_SECRET` bearer; `platform/vercel.json` crons).
-   Provider/model/key come from three service-role-only `platform_config` rows
-   (`security_agent_provider|model|key`, seeded blank by migration
-   20260722140000 — blank ⇒ harness disabled; set the jsonb string values to
-   enable). Fail-closed: any agent/parse
+   Provider/model/key come from three server-only env vars
+   (`SECURITY_AGENT_PROVIDER|MODEL|KEY` — all unset ⇒ harness disabled; set all
+   three to enable). Fail-closed: any agent/parse
    error leaves the item pending; 3 attempts, then it parks for the operator.
    Operator emails to `SYSTEM_NOTIFICATION_EMAIL` on submit + rejection.
  - [x] Rejection type (hard|soft) + reasons: registry in
