@@ -2,8 +2,8 @@
  * Portable game archive — build/parse the files of a `.dodi-game.zip`.
  *
  * Pure + zip-agnostic: this module maps between a game row and a named file
- * map (`manifest.json`, `game.html`, `assets/background.*`, `game.md`,
- * `transcript.json`); the zip packing/unpacking itself lives with the client
+ * map (`manifest.json`, `game.html`, `assets/background.*`, `assets/preview.*`,
+ * `game.md`, `transcript.json`); the zip packing/unpacking itself lives with the client
  * (fflate), keeping core free of the dependency. The archive is designed for
  * cross-instance import, so no ids travel in it and `parseGameExportFiles`
  * treats its input as hostile: strict zod validation, per-file size caps, and
@@ -36,12 +36,17 @@ export const GAME_EXPORT_TRANSCRIPT_FILE = "transcript.json";
 export const GAME_EXPORT_FILE_SUFFIX = ".dodi-game.zip";
 
 const BACKGROUND_FILE_RE = /^assets\/background\.(png|jpe?g|webp|gif|svg|avif)$/;
+// The 100×100 list preview is always a sandbox capture, so raster-only — no
+// svg (scriptable) and no gif (never produced by a canvas capture).
+const PREVIEW_FILE_RE = /^assets\/preview\.(png|jpe?g|webp)$/;
+const PREVIEW_MIME_RE = /^image\/(png|jpeg|webp)$/;
 
 /** Hostile-input budgets for the archive (enforced by the zip layer + parse). */
 export const GAME_EXPORT_ZIP_MAX_BYTES = 10 * 1024 * 1024;
 export const GAME_EXPORT_ENTRY_MAX_BYTES = 8 * 1024 * 1024;
 export const GAME_EXPORT_TOTAL_MAX_BYTES = 24 * 1024 * 1024;
 export const GAME_EXPORT_MANIFEST_MAX_BYTES = 256 * 1024;
+export const GAME_EXPORT_PREVIEW_MAX_BYTES = 512 * 1024;
 
 const MARKDOWN_MAX_CHARS = 100_000;
 const SUCCESS_CRITERIA_MAX_CHARS = 20_000;
@@ -53,7 +58,8 @@ export function isGameExportEntryPath(path: string): boolean {
     path === GAME_EXPORT_CODE_FILE ||
     path === GAME_EXPORT_MARKDOWN_FILE ||
     path === GAME_EXPORT_TRANSCRIPT_FILE ||
-    BACKGROUND_FILE_RE.test(path)
+    BACKGROUND_FILE_RE.test(path) ||
+    PREVIEW_FILE_RE.test(path)
   );
 }
 
@@ -112,6 +118,13 @@ export const GameExportManifestSchema = z
         mimeType: z.string().regex(/^image\/[a-z+.-]+$/).max(40),
       })
       .nullable(),
+    // Optional (not nullable) so archives from before previews stay valid.
+    preview: z
+      .object({
+        file: z.string().regex(PREVIEW_FILE_RE),
+        mimeType: z.string().regex(PREVIEW_MIME_RE).max(40),
+      })
+      .optional(),
     hasTranscript: z.boolean().optional(),
   })
   .superRefine((val, ctx) => {
@@ -210,6 +223,7 @@ export type ExportableGame = Pick<
   | "code_bundle"
   | "markdown"
   | "metadata"
+  | "preview_image"
 >;
 
 export interface BuildGameExportInput {
@@ -246,6 +260,23 @@ export function buildGameExportFiles(input: BuildGameExportInput): GameExportFil
     }
   }
 
+  // The 100×100 list preview travels like the background: bytes under assets/,
+  // declared in the manifest. Non-raster or undecodable values are dropped —
+  // the importing side regenerates a preview on the next build or save.
+  let preview: GameExportManifest["preview"];
+  let previewBytes: Uint8Array | null = null;
+  if (game.preview_image) {
+    const decoded = dataUrlToBytes(game.preview_image);
+    const extension =
+      decoded && PREVIEW_MIME_RE.test(decoded.mimeType)
+        ? extensionForMimeType(decoded.mimeType)
+        : null;
+    if (decoded && extension) {
+      preview = { file: `assets/preview.${extension}`, mimeType: decoded.mimeType };
+      previewBytes = decoded.bytes;
+    }
+  }
+
   const transcript =
     input.transcript == null ? null : ExportTranscriptSchema.parse(input.transcript);
 
@@ -268,6 +299,7 @@ export function buildGameExportFiles(input: BuildGameExportInput): GameExportFil
     estimatedDurationMinutes: game.estimated_duration_minutes,
     metadata: game.metadata && typeof game.metadata === "object" ? game.metadata : {},
     background,
+    ...(preview ? { preview } : {}),
     ...(transcript ? { hasTranscript: true } : {}),
   });
 
@@ -276,6 +308,7 @@ export function buildGameExportFiles(input: BuildGameExportInput): GameExportFil
     [GAME_EXPORT_CODE_FILE]: textEncoder.encode(codeHtml),
   };
   if (background && backgroundBytes) files[background.file] = backgroundBytes;
+  if (preview && previewBytes) files[preview.file] = previewBytes;
   if (game.markdown.trim()) {
     files[GAME_EXPORT_MARKDOWN_FILE] = textEncoder.encode(game.markdown);
   }
@@ -325,6 +358,8 @@ export interface ParsedGameExport {
   unbuilt: boolean;
   /** For a non-executing preview only; never persisted separately. */
   backgroundDataUrl: string | null;
+  /** 100×100 list thumbnail — re-sealed and persisted as `preview_image`. */
+  previewImageDataUrl: string | null;
   droppedTags: string[];
   warnings: string[];
 }
@@ -402,9 +437,25 @@ export function parseGameExportFiles(files: GameExportFileMap): ParsedGameExport
     }
   }
   const strayAsset = Object.keys(files).find(
-    (path) => BACKGROUND_FILE_RE.test(path) && path !== manifest.background?.file,
+    (path) =>
+      (BACKGROUND_FILE_RE.test(path) && path !== manifest.background?.file) ||
+      (PREVIEW_FILE_RE.test(path) && path !== manifest.preview?.file),
   );
   if (strayAsset) warnings.push(`Ignored unexpected asset ${strayAsset}`);
+
+  // Preview thumbnail (non-critical): anything off-contract degrades to a
+  // warning — a game imports fine without its list picture.
+  let previewImageDataUrl: string | null = null;
+  if (!unbuilt && manifest.preview) {
+    const previewBytes = files[manifest.preview.file];
+    if (!previewBytes) {
+      warnings.push(`Preview image ignored — the archive is missing ${manifest.preview.file}`);
+    } else if (previewBytes.byteLength > GAME_EXPORT_PREVIEW_MAX_BYTES) {
+      warnings.push("Preview image ignored — it exceeds the size limit");
+    } else {
+      previewImageDataUrl = bytesToDataUrl(manifest.preview.mimeType, previewBytes);
+    }
+  }
 
   if (!unbuilt) {
     // Same gates as the studio: stored-size cap + blocked patterns on the final
@@ -471,6 +522,7 @@ export function parseGameExportFiles(files: GameExportFileMap): ParsedGameExport
     transcript,
     unbuilt,
     backgroundDataUrl,
+    previewImageDataUrl,
     droppedTags,
     warnings,
   };

@@ -42,6 +42,46 @@ export interface GameSharingState {
 }
 
 /**
+ * A published game as dodi Discover lists it. Built server-side from an
+ * explicit column projection — the projection IS the privacy boundary: the
+ * publisher's `account_id`/`kid_id`/`published_by_account_id` never appear;
+ * the only author field is the public `publication_handle` byline.
+ */
+export interface DiscoverGameSummary {
+  id: string;
+  title: string;
+  description: string;
+  tags: string[];
+  target_age_min: number;
+  target_age_max: number;
+  estimated_duration_minutes: number;
+  progress_kind: ProgressKind;
+  preview_image: string | null;
+  published_at: string;
+  publication_handle: string | null;
+  /**
+   * Total plays across ALL families. Discover is play-in-place, so every
+   * family's plays aggregate on this single published row.
+   */
+  plays: number;
+  /** How many families have made their own copy (remixed) this game. */
+  copies: number;
+  /** The CALLER's own sharing state for this game ("Added" = any entry). */
+  sharing: GameSharingState;
+}
+
+/** Full plaintext content of a published game — the copy (remix) source. */
+export interface DiscoverGameDetail
+  extends Omit<DiscoverGameSummary, "sharing" | "plays" | "copies"> {
+  code_bundle: string;
+  markdown: string;
+  learning_goal: string;
+  success_definition: string;
+  success_criteria: Json;
+  metadata: Json;
+}
+
+/**
  * Which kind of picture `generate_drawing` produces for a game:
  * - `picture` — a plain, kid-friendly 2D line drawing of the subject (Drawing game)
  * - `mandala` — a symmetrical mandala / zentangle coloring sheet (Mandala game)

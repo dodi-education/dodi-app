@@ -4,9 +4,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@dodi/types/database";
 import { serverErrorResponse } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
+import { serviceClient } from "@/lib/supabase";
 import {
   addFavorite,
-  getGame,
+  getPlayableGame,
   isGameVisibleToKid,
   removeFavorite,
 } from "@/services/games";
@@ -35,8 +36,9 @@ async function authorizeFavorite(
   if (!kid || kid.account_id !== accountId) {
     return NextResponse.json({ error: "Kid not found" }, { status: 404 });
   }
-  const game = await getGame(supabase, gameId);
-  if (!game || !(await isGameVisibleToKid(supabase, game, kidId))) {
+  // Service-role fallback so a shared published Discover row can be favorited.
+  const game = await getPlayableGame(supabase, serviceClient(), gameId);
+  if (!game || !(await isGameVisibleToKid(supabase, game, kidId, accountId))) {
     return NextResponse.json({ error: "Game not found" }, { status: 404 });
   }
   return null;

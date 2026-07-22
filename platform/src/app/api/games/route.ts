@@ -3,6 +3,7 @@ import { z } from "zod/v4";
 
 import { logServerError, serverErrorResponse } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
+import { serviceClient } from "@/lib/supabase";
 import { createLogger } from "@/logger";
 import { getKid } from "@/services/kids";
 
@@ -49,6 +50,8 @@ function describeError(e: unknown): string {
  */
 const CreateGameSchema = z.object({
   kidId: z.string().uuid(),
+  /** Remix lineage: the published Discover game this was copied from. */
+  sourceGameId: z.string().uuid().optional(),
   codeBundle: z.string().min(1).max(1_000_000),
   title: z.string().trim().min(1).max(2_000),
   description: z.string().max(20_000).optional(),
@@ -60,6 +63,7 @@ const CreateGameSchema = z.object({
     .union([z.string().max(50_000), z.record(z.string(), z.unknown())])
     .optional(),
   progressKind: z.enum(["goal", "open"]).optional(),
+  previewImage: z.string().max(2_000_000).optional(),
   targetAgeMin: z.number().int().min(1).max(25).optional(),
   targetAgeMax: z.number().int().min(1).max(25).optional(),
   estimatedDurationMinutes: z.number().int().min(1).max(180).optional(),
@@ -118,7 +122,13 @@ export async function GET(request: Request): Promise<NextResponse> {
   }
 
   try {
-    const games = await listGames(supabase, { kidId, includeSystem, tags });
+    // The service client lets the kid library include published Discover rows
+    // this family shared (they belong to other accounts, hidden by RLS).
+    const games = await listGames(
+      supabase,
+      { kidId, includeSystem, tags, accountId },
+      kidId ? serviceClient() : undefined,
+    );
 
     const translations = await getTranslationsForGames(
       supabase,
@@ -176,6 +186,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     const created = await createCustomGame(supabase, {
       accountId: accountId,
       kidId,
+      sourceGameId: data.sourceGameId,
       title: data.title,
       description: data.description,
       tags: data.tags,
@@ -189,6 +200,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       successDefinition: data.successDefinition ?? "",
       successCriteria: data.successCriteria as SuccessCriteria | undefined,
       progressKind: data.progressKind ?? "open",
+      previewImage: data.previewImage,
       agentTranscriptEnc: data.agentTranscriptEnc,
       createdBy: "parent",
       isActive: data.isActive ?? false,

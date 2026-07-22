@@ -3,7 +3,8 @@ import { z } from "zod/v4";
 
 import { serverErrorResponse } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
-import { getGame } from "@/services/games";
+import { serviceClient } from "@/lib/supabase";
+import { getPlayableGame } from "@/services/games";
 import { getKid } from "@/services/kids";
 import { logActivity } from "@/services/activities";
 
@@ -48,7 +49,9 @@ export async function POST(
       return NextResponse.json({ error: "Kid not found" }, { status: 404 });
     }
 
-    const game = await getGame(supabase, id);
+    // Service-role fallback: play events on a shared published Discover row
+    // must resolve the game even though RLS hides it from this account.
+    const game = await getPlayableGame(supabase, serviceClient(), id);
     if (!game) {
       return NextResponse.json({ error: "Game not found" }, { status: 404 });
     }

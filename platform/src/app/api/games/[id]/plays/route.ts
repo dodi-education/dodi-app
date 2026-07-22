@@ -3,7 +3,8 @@ import { z } from "zod/v4";
 
 import { serverErrorResponse } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
-import { getGame, isGameVisibleToKid } from "@/services/games";
+import { serviceClient } from "@/lib/supabase";
+import { getPlayableGame, isGameVisibleToKid } from "@/services/games";
 import { getKid } from "@/services/kids";
 import { startPlay } from "@/services/game-plays";
 import type { ProgressKind } from "@dodi/types/success";
@@ -43,13 +44,16 @@ export async function POST(
       return NextResponse.json({ error: "Kid not found" }, { status: 404 });
     }
 
-    const game = await getGame(supabase, id);
+    // Published Discover rows belong to other accounts (RLS-hidden), hence the
+    // service-role fallback; the play row itself is written with THIS family's
+    // ids, so plays on a published game aggregate on its single row.
+    const game = await getPlayableGame(supabase, serviceClient(), id);
     if (!game) {
       return NextResponse.json({ error: "Game not found" }, { status: 404 });
     }
 
     // Inactive / unshared games are not playable outside the parent studio.
-    if (!(await isGameVisibleToKid(supabase, game, kid.id))) {
+    if (!(await isGameVisibleToKid(supabase, game, kid.id, accountId))) {
       return NextResponse.json({ error: "Game not available" }, { status: 403 });
     }
 

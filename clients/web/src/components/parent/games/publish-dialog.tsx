@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Icon } from "@/components/shared/icon";
+import { AgeRange, isValidAgeRange } from "@/components/parent/games/age-range";
 import { dodi } from "@/lib/api";
 import { useAccountStore } from "@/stores/account-store";
 import { useGameStore } from "@/stores/game-store";
@@ -83,6 +84,11 @@ export function PublishDialog({ open, gameId, built, onClose }: PublishDialogPro
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [handle, setHandle] = useState("");
+  // Recommended age, pre-filled from the source game and editable here — a last
+  // chance to get it right, since it's crucial for a successful publication. On
+  // submit these are saved to the game and the public copy inherits them.
+  const [ageMin, setAgeMin] = useState(4);
+  const [ageMax, setAgeMax] = useState(12);
 
   useEffect(() => {
     if (open) void loadAccount();
@@ -93,12 +99,23 @@ export function PublishDialog({ open, gameId, built, onClose }: PublishDialogPro
   useEffect(() => {
     if (!open || !gameId) return;
     let cancelled = false;
-    dodi
-      .request(`/api/games/${gameId}/publication`)
-      .then((r) => (r.ok ? r.json() : { publication: null }))
-      .then((d: { publication: Game | null }) => {
+    Promise.all([
+      dodi
+        .request(`/api/games/${gameId}/publication`)
+        .then((r) => (r.ok ? r.json() : { publication: null }))
+        .catch(() => ({ publication: null as Game | null })),
+      // target_age_* are plaintext columns, so the raw row suffices to pre-fill
+      // the range — no vault decrypt needed.
+      dodi
+        .request(`/api/games/${gameId}`)
+        .then((r) => (r.ok ? (r.json() as Promise<Game>) : null))
+        .catch(() => null),
+    ])
+      .then(([pub, game]: [{ publication: Game | null }, Game | null]) => {
         if (cancelled) return;
-        setPublication(d.publication ?? null);
+        setPublication(pub.publication ?? null);
+        if (typeof game?.target_age_min === "number") setAgeMin(game.target_age_min);
+        if (typeof game?.target_age_max === "number") setAgeMax(game.target_age_max);
         setError(null);
         setHandle("");
         setLoadedFor(gameId);
@@ -149,6 +166,20 @@ export function PublishDialog({ open, gameId, built, onClose }: PublishDialogPro
         useAccountStore.getState().patchLocal({ publication_handle: normalized });
       }
 
+      // Persist the (possibly edited) recommended age onto the source game
+      // first. The public copy inherits plaintext facets from the source row
+      // server-side (like tags and duration), so this is how the values travel
+      // with the submission — and it keeps the game's own settings in step.
+      const ageRes = await dodi.request(`/api/games/${gameId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ target_age_min: ageMin, target_age_max: ageMax }),
+      });
+      if (!ageRes.ok) throw new Error(t("publishFailedGeneric"));
+      useGameStore
+        .getState()
+        .patchLocal(gameId, { target_age_min: ageMin, target_age_max: ageMax });
+
       // Decrypt here and send plaintext: this is the disclosure the parent just
       // consented to. `loadOne` returns the decrypted row from the vault cache.
       const game = await useGameStore.getState().loadOne(gameId, undefined, true);
@@ -176,7 +207,7 @@ export function PublishDialog({ open, gameId, built, onClose }: PublishDialogPro
     } finally {
       setBusy(false);
     }
-  }, [gameId, normalized, storedHandle, t]);
+  }, [gameId, normalized, storedHandle, ageMin, ageMax, t]);
 
   const withdraw = useCallback(async () => {
     if (!gameId) return;
@@ -196,7 +227,10 @@ export function PublishDialog({ open, gameId, built, onClose }: PublishDialogPro
   }, [gameId, t]);
 
   const canSubmit =
-    built && !busy && (storedHandle !== null || (!!normalized && !handleProblem));
+    built &&
+    !busy &&
+    isValidAgeRange(ageMin, ageMax) &&
+    (storedHandle !== null || (!!normalized && !handleProblem));
   // A hard rejection is permanent — the platform refuses a resubmit anyway, so
   // don't offer one. Soft rejection keeps the button as the "fix and resubmit".
   const canResubmit = state !== "rejected";
@@ -272,6 +306,30 @@ export function PublishDialog({ open, gameId, built, onClose }: PublishDialogPro
           </ul>
         )}
 
+        {loaded && built && canResubmit && (
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-ink-2">
+              {t("recommendedAge")}
+            </label>
+            <AgeRange
+              min={ageMin}
+              max={ageMax}
+              onMinChange={setAgeMin}
+              onMaxChange={setAgeMax}
+              minLabel={t("ageMinLabel")}
+              maxLabel={t("ageMaxLabel")}
+              disabled={busy}
+            />
+            <p className="text-[11px] text-faint">
+              {isValidAgeRange(ageMin, ageMax) ? (
+                t("publishRecommendedAgeHint")
+              ) : (
+                <span className="text-danger">{t("ageRangeInvalid")}</span>
+              )}
+            </p>
+          </div>
+        )}
+
         {state === "none" && !storedHandle && (
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-ink-2">
@@ -307,7 +365,9 @@ export function PublishDialog({ open, gameId, built, onClose }: PublishDialogPro
         )}
 
         <DialogFooter>
-          {state !== "none" && (
+          {/* Hard-rejected submissions are retained server-side as moderation
+              evidence — withdraw would be a silent no-op, so it isn't offered. */}
+          {state !== "none" && state !== "rejected" && (
             <Button variant="outline" onClick={withdraw} disabled={busy}>
               {t("publishWithdraw")}
             </Button>

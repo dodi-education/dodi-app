@@ -19,9 +19,7 @@ describe("buildCrumbs", () => {
     expect(buildCrumbs("/parent/activities", t)).toEqual([
       { label: "nav.activities" },
     ]);
-    expect(buildCrumbs("/parent/usage", t)).toEqual([
-      { label: "nav.usage" },
-    ]);
+    expect(buildCrumbs("/parent/usage", t)).toEqual([{ label: "nav.usage" }]);
     expect(buildCrumbs("/parent/snapshots", t)).toEqual([
       { label: "nav.parentSnapshots" },
     ]);
@@ -76,19 +74,37 @@ describe("buildCrumbs", () => {
     ]);
   });
 
-  it("prefers the live leaf override for game-studio, else a fallback", () => {
+  it("roots the studio at the games list and prefers the live leaf override", () => {
     expect(buildCrumbs("/parent/game-studio/new", t)).toEqual([
-      { label: "nav.gameStudio", href: "/parent/game-studio" },
+      { label: "nav.gameStudio", href: "/parent/games" },
       { label: "gameStudio.addGame" },
     ]);
     expect(buildCrumbs("/parent/game-studio/gid", t)).toEqual([
-      { label: "nav.gameStudio", href: "/parent/game-studio" },
+      { label: "nav.gameStudio", href: "/parent/games" },
       { label: "gameStudio.editing" },
     ]);
     expect(
-      buildCrumbs("/parent/game-studio/gid", t, { leafOverride: "My counting game" }),
+      buildCrumbs("/parent/game-studio/gid", t, {
+        leafOverride: "My counting game",
+      }),
     ).toEqual([
-      { label: "nav.gameStudio", href: "/parent/game-studio" },
+      { label: "nav.gameStudio", href: "/parent/games" },
+      { label: "My counting game" },
+    ]);
+  });
+
+  it("maps the games list and the published-game preview under /parent/games", () => {
+    expect(buildCrumbs("/parent/games", t)).toEqual([
+      { label: "nav.gameStudio", href: "/parent/games" },
+    ]);
+    expect(buildCrumbs("/parent/games/gid", t)).toEqual([
+      { label: "nav.gameStudio", href: "/parent/games" },
+      { label: "gameStudio.preview" },
+    ]);
+    expect(
+      buildCrumbs("/parent/games/gid", t, { leafOverride: "My counting game" }),
+    ).toEqual([
+      { label: "nav.gameStudio", href: "/parent/games" },
       { label: "My counting game" },
     ]);
   });

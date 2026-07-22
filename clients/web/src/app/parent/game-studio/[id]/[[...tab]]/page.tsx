@@ -80,6 +80,8 @@ export default function EditGameStudioPage() {
         learningGoal: game.learning_goal,
         successDefinition: game.success_definition,
         progressKind: coerceProgressKind(game.progress_kind),
+        targetAgeMin: game.target_age_min,
+        targetAgeMax: game.target_age_max,
         codeBundle: game.code_bundle,
         currentGameVersionId: game.current_game_version_id,
         markdown: game.markdown,
@@ -91,6 +93,7 @@ export default function EditGameStudioPage() {
         perspective: metadata.perspective ?? null,
         generateBackgroundImage: Boolean(metadata.generateBackgroundImage),
         capabilities: metadata.capabilities ?? [],
+        previewImage: game.preview_image,
         // Sealed prior conversation — the studio unseals it to resume editing.
         agentTranscriptEnc: game.agent_transcript_enc,
       });

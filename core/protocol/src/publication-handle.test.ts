@@ -9,7 +9,7 @@ import {
 
 describe("publication handle", () => {
   it("accepts lowercase letters, digits and underscores", () => {
-    for (const handle of ["fun_games", "abc", "a_1", "x".repeat(30), "game_lab_7"]) {
+    for (const handle of ["fun_games", "abc", "a_1", "x".repeat(15), "game_lab_7"]) {
       expect(isValidPublicationHandle(handle)).toBe(true);
     }
   });
@@ -22,7 +22,7 @@ describe("publication handle", () => {
       "fun@games",
       "FunGames",
       "ab",
-      "x".repeat(31),
+      "x".repeat(16),
       "",
     ]) {
       expect(isValidPublicationHandle(handle)).toBe(false);
@@ -48,8 +48,9 @@ describe("publication handle", () => {
     );
   });
 
+  // The DB constraint is the other half of this rule; if one moves, both must.
   it("keeps the regex in step with the DB CHECK constraint", () => {
-    expect(PUBLICATION_HANDLE_RE.source).toBe("^[a-z0-9_]{3,30}$");
+    expect(PUBLICATION_HANDLE_RE.source).toBe("^[a-z0-9_]{3,15}$");
   });
 
   it("returns null for a valid handle", () => {

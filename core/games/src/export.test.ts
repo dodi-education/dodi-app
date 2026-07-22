@@ -20,6 +20,7 @@ import { BACKGROUND_IMAGE_PLACEHOLDER } from "./background-image";
 import { UNBUILT_GAME_PLACEHOLDER } from "./placeholder";
 
 const BG_DATA_URL = `data:image/png;base64,${btoa("fake-png-bytes")}`;
+const PREVIEW_DATA_URL = `data:image/jpeg;base64,${btoa("fake-jpeg-bytes")}`;
 
 // Minimal bridge-compliant bundle (mirrors agent-validator.test.ts) with the
 // background style block carrying an inline data URL, as stored bundles do.
@@ -48,6 +49,7 @@ function gameRow(overrides: Partial<ExportableGame> = {}): ExportableGame {
     code_bundle: builtBundle(),
     markdown: "# Space Count\nA counting game.",
     metadata: { capabilities: [], drawingStyle: "picture", perspective: "side" },
+    preview_image: null,
     ...overrides,
   };
 }
@@ -126,6 +128,24 @@ describe("buildGameExportFiles", () => {
     expect(manifest.exportedAt).toBe("2026-07-20T12:00:00.000Z");
     expect(manifest.app).toBe("dodi-web test");
   });
+
+  it("carries the preview image as an asset + manifest entry", () => {
+    const files = buildGameExportFiles({ game: gameRow({ preview_image: PREVIEW_DATA_URL }) });
+    expect(isGameExportEntryPath("assets/preview.jpg")).toBe(true);
+    expect(new TextDecoder().decode(files["assets/preview.jpg"])).toBe("fake-jpeg-bytes");
+    expect(manifestOf(files).preview).toEqual({
+      file: "assets/preview.jpg",
+      mimeType: "image/jpeg",
+    });
+  });
+
+  it("drops a non-raster preview instead of exporting it", () => {
+    const files = buildGameExportFiles({
+      game: gameRow({ preview_image: "data:image/svg+xml;base64,QUJD" }),
+    });
+    expect(manifestOf(files).preview).toBeUndefined();
+    expect(Object.keys(files).some((f) => f.startsWith("assets/preview"))).toBe(false);
+  });
 });
 
 describe("round-trip", () => {
@@ -172,6 +192,27 @@ describe("round-trip", () => {
     const parsed = parseGameExportFiles(buildGameExportFiles({ game }));
     expect(parsed.unbuilt).toBe(true);
     expect(parsed.codeBundle).toBe("");
+  });
+
+  it("round-trips the preview image", () => {
+    const files = buildGameExportFiles({ game: gameRow({ preview_image: PREVIEW_DATA_URL }) });
+    const parsed = parseGameExportFiles(files);
+    expect(parsed.previewImageDataUrl).toBe(PREVIEW_DATA_URL);
+    expect(parsed.warnings).toEqual([]);
+  });
+
+  it("parses archives from before previews with a null thumbnail", () => {
+    const parsed = parseGameExportFiles(buildGameExportFiles({ game: gameRow() }));
+    expect(parsed.previewImageDataUrl).toBeNull();
+    expect(parsed.warnings).toEqual([]);
+  });
+
+  it("degrades a missing preview asset to a warning, not a failed import", () => {
+    const files = buildGameExportFiles({ game: gameRow({ preview_image: PREVIEW_DATA_URL }) });
+    delete files["assets/preview.jpg"];
+    const parsed = parseGameExportFiles(files);
+    expect(parsed.previewImageDataUrl).toBeNull();
+    expect(parsed.warnings.some((w) => w.includes("assets/preview.jpg"))).toBe(true);
   });
 });
 

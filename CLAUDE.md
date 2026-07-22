@@ -199,6 +199,13 @@ sealed client-side, as is `game_versions.code_bundle`. Consequences:
   (`source_game_id` → the original) so the parent's game and its version history stay
   sealed. Publication rows are written only via `serviceClient()` — RLS forbids users
   writing them. See `services/game-publications.ts`.
+- **Discover is play-in-place**: other families never copy a published game to play
+  it — they point `game_sharings` rows (their own `account_id`) at the single
+  published row, so plays aggregate on it. RLS stays closed for non-owners; every
+  cross-account read goes through `services/discover.ts` (serviceClient + explicit
+  projection — publisher `account_id`/`kid_id`/`published_by_account_id` never
+  leak; the byline is `publication_handle` only). Copying happens only via Remix
+  (re-sealed under the remixing family's vault, `source_game_id` = the published row).
 
 ### Game Sandboxing
 - All AI-generated game code runs in a sandboxed iframe:
@@ -311,7 +318,13 @@ NEXT_PUBLIC_APP_URL=                  # App URL (for OAuth redirects, QR codes)
 REGISTRATION_MODE=                    # open | invite | closed (unset ⇒ open); server-only
 ERROR_LOGS=                      # Error telemetry persisted to error_logs: all | client | server | none, or comma list (unset ⇒ all); server-only
 BEFORE_USER_CREATED_HOOK_SECRET=      # Supabase auth-hook secret "v1,whsec_…" (server only)
-PUBLICATION_REVIEW_SECRET=            # Shared secret for the dodi Discover review endpoints, sent as x-review-secret (server only; unset ⇒ they refuse)
+OPS_SECRET=                           # ops↔platform m2m secret, sent as x-ops-secret; gates all server-to-server ops endpoints (today: publication queue/stamp/process; later the dodi-com/ops console). Server only; unset ⇒ they refuse
+CRON_SECRET=                          # Vercel Cron auth ("Authorization: Bearer …") for GET /api/internal/publications/process — the review-worker trigger (server only)
+SYSTEM_NOTIFICATION_EMAIL=            # Operator inbox for publication notifications (request created / rejected); unset ⇒ skipped with a warning
+# The security agent itself (provider/model/key) is configured in the
+# platform_config table (service-role only), NOT env: the three KV rows
+# security_agent_provider|model|key are seeded blank (= disabled) by migration
+# 20260722140000 — set their jsonb string values in the dashboard to enable.
 RESEND_API_KEY=                       # Resend key: Supabase SMTP + app-level email via the SDK (server only)
 EMAIL_FROM=                           # App-level email sender on a Resend-verified domain (server only; prod verifies mail.dodi.app, dev dev-mail.dodi.app; default "dodi <team@mail.dodi.app>")
 ```

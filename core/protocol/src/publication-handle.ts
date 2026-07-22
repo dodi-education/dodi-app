@@ -15,10 +15,10 @@
  */
 
 /** Must match the `accounts_publication_handle_format_check` CHECK constraint. */
-export const PUBLICATION_HANDLE_RE = /^[a-z0-9_]{3,30}$/;
+export const PUBLICATION_HANDLE_RE = /^[a-z0-9_]{3,15}$/;
 
 export const PUBLICATION_HANDLE_MIN_LENGTH = 3;
-export const PUBLICATION_HANDLE_MAX_LENGTH = 30;
+export const PUBLICATION_HANDLE_MAX_LENGTH = 15;
 
 /**
  * Handles that would let a listing impersonate dodi itself or a staff account.

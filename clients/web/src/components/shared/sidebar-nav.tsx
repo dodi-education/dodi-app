@@ -11,11 +11,21 @@ interface NavItem {
   href: string;
   label: string;
   icon: IconName;
+  /** Extra path prefixes that also mark this item active — for sibling routes
+   *  the destination links out to (e.g. the games list → the game studio). */
+  aliases?: string[];
 }
 
 interface NavGroup {
   label: string;
   items: NavItem[];
+}
+
+/** True when the current path falls under a nav item (its href or an alias). */
+function navItemActive(item: NavItem, pathname: string): boolean {
+  return [item.href, ...(item.aliases ?? [])].some((prefix) =>
+    pathname.startsWith(prefix),
+  );
 }
 
 export function useNavGroups(): NavGroup[] {
@@ -29,9 +39,12 @@ export function useNavGroups(): NavGroup[] {
         { href: "/parent/kids", label: t("kids"), icon: "kids" },
         { href: "/parent/personas", label: t("personas"), icon: "personas" },
         {
-          href: "/parent/game-studio",
+          href: "/parent/games",
           label: t("gameStudio"),
           icon: "games",
+          // Creating/editing a game lives under /parent/game-studio; keep the
+          // Games item active there too.
+          aliases: ["/parent/game-studio"],
         },
         {
           href: "/parent/snapshots",
@@ -65,7 +78,7 @@ export function useCurrentNavLabel(): string | null {
   const groups = useNavGroups();
   if (pathname.startsWith("/parent/settings")) return t("settings");
   for (const group of groups) {
-    const match = group.items.find((item) => pathname.startsWith(item.href));
+    const match = group.items.find((item) => navItemActive(item, pathname));
     if (match) return match.label;
   }
   return null;
@@ -88,7 +101,7 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
             {group.label}
           </div>
           {group.items.map((item) => {
-            const isActive = pathname.startsWith(item.href);
+            const isActive = navItemActive(item, pathname);
             return (
               <Link
                 key={item.href}

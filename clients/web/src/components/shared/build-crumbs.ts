@@ -53,7 +53,8 @@ export function buildCrumbs(
           href: `/parent/kids/${id}`,
           isKidCrumb: true,
         });
-        if (seg[2] === "memory") crumbs.push({ label: t("breadcrumbs.memory") });
+        if (seg[2] === "memory")
+          crumbs.push({ label: t("breadcrumbs.memory") });
       }
       return crumbs;
     }
@@ -68,14 +69,22 @@ export function buildCrumbs(
       return crumbs;
     }
 
+    // The games list lives at /parent/games; creating or editing a game opens
+    // the studio at /parent/game-studio/{id}, and previewing a published game
+    // sits at /parent/games/{id}. All share the "Games" root crumb.
+    case "games":
     case "game-studio": {
       const crumbs: Crumb[] = [
-        { label: t("nav.gameStudio"), href: "/parent/game-studio" },
+        { label: t("nav.gameStudio"), href: "/parent/games" },
       ];
       const id = seg[1];
       if (id) {
         const fallback =
-          id === "new" ? t("gameStudio.addGame") : t("gameStudio.editing");
+          section === "games"
+            ? t("gameStudio.preview")
+            : id === "new"
+              ? t("gameStudio.addGame")
+              : t("gameStudio.editing");
         crumbs.push({ label: opts.leafOverride || fallback });
       }
       return crumbs;

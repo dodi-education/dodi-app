@@ -3,10 +3,12 @@ import { z } from "zod/v4";
 
 import { serverErrorResponse } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
+import { serviceClient } from "@/lib/supabase";
 import type { GameUpdate, Json } from "@dodi/types/database";
 import {
   deleteCustomGame,
   getGame,
+  getPlayableGame,
   isGameVisibleToKid,
   replaceGameSharings,
   restoreGameVersion,
@@ -77,7 +79,12 @@ export async function GET(
   let locale = searchParams.get("locale") ?? "en";
 
   try {
-    const game = await getGame(supabase, id);
+    // Kid reads may target a published Discover row this family shared — those
+    // belong to other accounts (RLS-hidden), so the kid path resolves through
+    // the sanitized service-role fallback. Parent reads stay RLS-only.
+    const game = kidId
+      ? await getPlayableGame(supabase, serviceClient(), id)
+      : await getGame(supabase, id);
     if (!game) {
       return NextResponse.json({ error: "Game not found" }, { status: 404 });
     }
@@ -90,7 +97,7 @@ export async function GET(
         return NextResponse.json({ error: "Game not found" }, { status: 404 });
       }
       locale = kid.language;
-      if (!(await isGameVisibleToKid(supabase, game, kidId))) {
+      if (!(await isGameVisibleToKid(supabase, game, kidId, accountId))) {
         return NextResponse.json({ error: "Game not found" }, { status: 404 });
       }
     }

@@ -12,6 +12,7 @@ import {
   submitPublication,
   withdrawPublication,
 } from "@/services/game-publications";
+import { notifyPublicationSubmitted } from "@/services/publication-notifications";
 
 /**
  * The publication copy of `[id]` — submit it for review, read its status, or
@@ -82,7 +83,8 @@ export async function POST(
   }
 
   try {
-    const publication = await submitPublication(serviceClient(), {
+    const service = serviceClient();
+    const publication = await submitPublication(service, {
       sourceGameId: id,
       accountId,
       content: {
@@ -90,6 +92,8 @@ export async function POST(
         successCriteria: parsed.data.successCriteria as Json,
       },
     });
+    // Operator heads-up; fire-and-forget (never affects the response).
+    void notifyPublicationSubmitted(service, publication);
     return NextResponse.json({ publication }, { status: 201 });
   } catch (error) {
     if (error instanceof PublicationError) {

@@ -1,5 +1,11 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
-  "ignoreCommand": "npx turbo-ignore @dodi/platform"
+  "ignoreCommand": "npx turbo-ignore @dodi/platform",
+  "crons": [
+    {
+      "path": "/api/internal/publications/process",
+      "schedule": "0 * * * *"
+    }
+  ]
 }

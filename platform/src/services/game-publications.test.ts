@@ -1,137 +1,18 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import type { Database, Game } from "@dodi/types/database";
+import type { Game } from "@dodi/types/database";
+
+import { type Row, fakeDb } from "../test-support/fake-supabase";
 
 import {
   PublicationError,
   approvePublication,
   getPublication,
   listPendingPublications,
+  rejectPublication,
   submitPublication,
   withdrawPublication,
 } from "./game-publications";
-
-/**
- * In-memory stand-in for the two tables the publication flow touches, with just
- * enough of the PostgREST builder to run the real service unmodified: eq /
- * not-is-null filters, insert/update/delete, and the single/maybeSingle
- * terminals. Awaiting the builder itself (what `delete()` does) also works.
- */
-type Row = Record<string, unknown>;
-
-interface Filter {
-  column: string;
-  value: unknown;
-  negated: boolean;
-}
-
-class FakeQuery implements PromiseLike<{ data: unknown; error: unknown }> {
-  private filters: Filter[] = [];
-  private op: "select" | "insert" | "update" | "delete" = "select";
-  private payload: Row | null = null;
-  private orderBy: string | null = null;
-  private limitTo: number | null = null;
-
-  constructor(private rows: Row[]) {}
-
-  select(): this {
-    return this;
-  }
-  insert(payload: Row): this {
-    this.op = "insert";
-    this.payload = payload;
-    return this;
-  }
-  update(payload: Row): this {
-    this.op = "update";
-    this.payload = payload;
-    return this;
-  }
-  delete(): this {
-    this.op = "delete";
-    return this;
-  }
-  eq(column: string, value: unknown): this {
-    this.filters.push({ column, value, negated: false });
-    return this;
-  }
-  is(column: string, value: unknown): this {
-    this.filters.push({ column, value, negated: false });
-    return this;
-  }
-  not(column: string, _op: string, value: unknown): this {
-    this.filters.push({ column, value, negated: true });
-    return this;
-  }
-  order(column: string): this {
-    this.orderBy = column;
-    return this;
-  }
-  limit(n: number): this {
-    this.limitTo = n;
-    return this;
-  }
-
-  private matches(row: Row): boolean {
-    return this.filters.every(({ column, value, negated }) =>
-      negated ? row[column] !== value : row[column] === value,
-    );
-  }
-
-  private run(): Row[] {
-    if (this.op === "insert") {
-      const row = { id: `pub-${this.rows.length + 1}`, ...this.payload };
-      this.rows.push(row);
-      return [row];
-    }
-    const hit = this.rows.filter((r) => this.matches(r));
-    if (this.op === "update") {
-      hit.forEach((r) => Object.assign(r, this.payload));
-    }
-    if (this.op === "delete") {
-      hit.forEach((r) => this.rows.splice(this.rows.indexOf(r), 1));
-    }
-    if (this.orderBy) {
-      hit.sort((a, b) =>
-        String(a[this.orderBy!]).localeCompare(String(b[this.orderBy!])),
-      );
-    }
-    return this.limitTo === null ? hit : hit.slice(0, this.limitTo);
-  }
-
-  async single(): Promise<{ data: unknown; error: unknown }> {
-    const hit = this.run();
-    if (hit.length !== 1) {
-      return { data: null, error: { code: "PGRST116", message: "no rows" } };
-    }
-    return { data: hit[0], error: null };
-  }
-
-  async maybeSingle(): Promise<{ data: unknown; error: unknown }> {
-    const hit = this.run();
-    return { data: hit[0] ?? null, error: null };
-  }
-
-  then<R1, R2 = never>(
-    onfulfilled?:
-      | ((v: { data: unknown; error: unknown }) => R1 | PromiseLike<R1>)
-      | null,
-    onrejected?: ((reason: unknown) => R2 | PromiseLike<R2>) | null,
-  ): PromiseLike<R1 | R2> {
-    return Promise.resolve({ data: this.run(), error: null }).then(
-      onfulfilled,
-      onrejected,
-    );
-  }
-}
-
-function fakeDb(tables: { games: Row[]; accounts: Row[] }) {
-  const client = {
-    from: (table: "games" | "accounts") => new FakeQuery(tables[table]),
-  } as unknown as SupabaseClient<Database>;
-  return { client, tables };
-}
 
 const ACCOUNT = "acc-1";
 const SOURCE_ID = "game-1";
@@ -166,12 +47,26 @@ function sourceGame(overrides: Row = {}): Row {
   };
 }
 
-let db: ReturnType<typeof fakeDb>;
+let db: ReturnType<
+  typeof fakeDb<{
+    games: Row[];
+    accounts: Row[];
+    game_publication_requests: Row[];
+  }>
+>;
 
 beforeEach(() => {
   db = fakeDb({
     games: [sourceGame()],
-    accounts: [{ id: ACCOUNT, publication_handle: "fun_games" }],
+    accounts: [
+      {
+        id: ACCOUNT,
+        publication_handle: "fun_games",
+        monthly_game_publication_limit: 3,
+        flagged_for_review_at: null,
+      },
+    ],
+    game_publication_requests: [],
   });
 });
 
@@ -281,6 +176,231 @@ describe("submitPublication", () => {
   });
 });
 
+describe("submitPublication quota", () => {
+  it("logs one request row per submit", async () => {
+    await submitPublication(db.client, {
+      sourceGameId: SOURCE_ID,
+      accountId: ACCOUNT,
+      content: CONTENT,
+    });
+    expect(db.tables.game_publication_requests).toHaveLength(1);
+    expect(db.tables.game_publication_requests[0]).toMatchObject({
+      account_id: ACCOUNT,
+      source_game_id: SOURCE_ID,
+    });
+  });
+
+  it("refuses the submit that would exceed the monthly limit", async () => {
+    const thisMonth = new Date().toISOString();
+    db.tables.game_publication_requests.push(
+      { id: "r1", account_id: ACCOUNT, requested_at: thisMonth },
+      { id: "r2", account_id: ACCOUNT, requested_at: thisMonth },
+      { id: "r3", account_id: ACCOUNT, requested_at: thisMonth },
+    );
+    await expect(
+      submitPublication(db.client, {
+        sourceGameId: SOURCE_ID,
+        accountId: ACCOUNT,
+        content: CONTENT,
+      }),
+    ).rejects.toMatchObject({
+      message: "publication_limit_reached",
+      status: 403,
+    });
+    expect(db.tables.games).toHaveLength(1);
+  });
+
+  it("does not count previous months or other accounts", async () => {
+    db.tables.game_publication_requests.push(
+      { id: "r1", account_id: ACCOUNT, requested_at: "2020-01-05T00:00:00Z" },
+      { id: "r2", account_id: ACCOUNT, requested_at: "2020-01-06T00:00:00Z" },
+      { id: "r3", account_id: ACCOUNT, requested_at: "2020-01-07T00:00:00Z" },
+      {
+        id: "r4",
+        account_id: "someone-else",
+        requested_at: new Date().toISOString(),
+      },
+    );
+    await expect(
+      submitPublication(db.client, {
+        sourceGameId: SOURCE_ID,
+        accountId: ACCOUNT,
+        content: CONTENT,
+      }),
+    ).resolves.toBeTruthy();
+  });
+
+  it("honors a per-account limit override", async () => {
+    db.tables.accounts[0].monthly_game_publication_limit = 0;
+    await expect(
+      submitPublication(db.client, {
+        sourceGameId: SOURCE_ID,
+        accountId: ACCOUNT,
+        content: CONTENT,
+      }),
+    ).rejects.toMatchObject({ message: "publication_limit_reached" });
+  });
+});
+
+describe("hard-rejection block", () => {
+  async function submitAndHardReject(): Promise<void> {
+    await submitPublication(db.client, {
+      sourceGameId: SOURCE_ID,
+      accountId: ACCOUNT,
+      content: CONTENT,
+    });
+    await rejectPublication(db.client, db.tables.games[1].id as string, {
+      kind: "hard",
+      reasons: [{ code: "hard_forbidden_content", note: "nope" }],
+    });
+  }
+
+  it("refuses to resubmit a hard-rejected source game", async () => {
+    await submitAndHardReject();
+    await expect(
+      submitPublication(db.client, {
+        sourceGameId: SOURCE_ID,
+        accountId: ACCOUNT,
+        content: CONTENT,
+      }),
+    ).rejects.toMatchObject({
+      message: "publication_hard_rejected",
+      status: 403,
+    });
+  });
+
+  it("withdraw neither deletes a hard-rejected copy nor lifts the block", async () => {
+    await submitAndHardReject();
+    await withdrawPublication(db.client, SOURCE_ID, ACCOUNT);
+    // The copy survives as moderation evidence…
+    expect(db.tables.games).toHaveLength(2);
+    expect(db.tables.games[1].rejection_kind).toBe("hard");
+    // …and the block holds regardless (the log is the durable authority).
+    await expect(
+      submitPublication(db.client, {
+        sourceGameId: SOURCE_ID,
+        accountId: ACCOUNT,
+        content: CONTENT,
+      }),
+    ).rejects.toMatchObject({ message: "publication_hard_rejected" });
+  });
+
+  it("withdraw still deletes pending and soft-rejected copies", async () => {
+    await submitPublication(db.client, {
+      sourceGameId: SOURCE_ID,
+      accountId: ACCOUNT,
+      content: CONTENT,
+    });
+    await rejectPublication(db.client, db.tables.games[1].id as string, {
+      kind: "soft",
+      reasons: [{ code: "soft_quality_below_bar", note: "broken" }],
+    });
+    await withdrawPublication(db.client, SOURCE_ID, ACCOUNT);
+    expect(db.tables.games).toHaveLength(1);
+  });
+
+  it("a soft rejection does not block resubmission", async () => {
+    await submitPublication(db.client, {
+      sourceGameId: SOURCE_ID,
+      accountId: ACCOUNT,
+      content: CONTENT,
+    });
+    await rejectPublication(db.client, db.tables.games[1].id as string, {
+      kind: "soft",
+      reasons: [{ code: "soft_quality_below_bar", note: "broken" }],
+    });
+
+    const again = (await submitPublication(db.client, {
+      sourceGameId: SOURCE_ID,
+      accountId: ACCOUNT,
+      content: CONTENT,
+    })) as unknown as Row;
+    // The resubmit re-enters review clean.
+    expect(again.rejected_at).toBeNull();
+    expect(again.rejection_kind).toBeNull();
+    expect(again.rejection_reasons).toBeNull();
+    expect(again.review_attempts).toBe(0);
+  });
+});
+
+describe("rejectPublication", () => {
+  async function submitted(): Promise<string> {
+    await submitPublication(db.client, {
+      sourceGameId: SOURCE_ID,
+      accountId: ACCOUNT,
+      content: CONTENT,
+    });
+    return db.tables.games[1].id as string;
+  }
+
+  it("stamps the rejection on the copy and the open log row", async () => {
+    const id = await submitted();
+    const rejected = await rejectPublication(db.client, id, {
+      kind: "soft",
+      reasons: [{ code: "soft_contains_personal_information", note: "a name" }],
+    });
+
+    expect(rejected.rejected_at).toBeTruthy();
+    expect(rejected.rejection_kind).toBe("soft");
+    expect(db.tables.game_publication_requests[0]).toMatchObject({
+      outcome: "rejected",
+      rejection_kind: "soft",
+    });
+    expect(db.tables.game_publication_requests[0].decided_at).toBeTruthy();
+  });
+
+  it("soft rejection does NOT flag the account", async () => {
+    const id = await submitted();
+    await rejectPublication(db.client, id, {
+      kind: "soft",
+      reasons: [{ code: "soft_quality_below_bar", note: "" }],
+    });
+    expect(db.tables.accounts[0].flagged_for_review_at).toBeNull();
+  });
+
+  it("hard rejection flags the account exactly once", async () => {
+    const id = await submitted();
+    await rejectPublication(db.client, id, {
+      kind: "hard",
+      reasons: [{ code: "hard_child_safety", note: "" }],
+    });
+    const flaggedAt = db.tables.accounts[0].flagged_for_review_at;
+    expect(flaggedAt).toBeTruthy();
+
+    // A later hard rejection keeps the original timestamp.
+    db.tables.games[1].rejected_at = null;
+    db.tables.games[1].rejection_kind = null;
+    db.tables.games[1].published_at = null;
+    await rejectPublication(db.client, id, {
+      kind: "hard",
+      reasons: [{ code: "hard_forbidden_content", note: "" }],
+    });
+    expect(db.tables.accounts[0].flagged_for_review_at).toBe(flaggedAt);
+  });
+
+  it("404s when the copy was withdrawn mid-review", async () => {
+    const id = await submitted();
+    await withdrawPublication(db.client, SOURCE_ID, ACCOUNT);
+    await expect(
+      rejectPublication(db.client, id, {
+        kind: "soft",
+        reasons: [{ code: "soft_quality_below_bar", note: "" }],
+      }),
+    ).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("404s for an already-published copy (reject can't unpublish)", async () => {
+    const id = await submitted();
+    await approvePublication(db.client, id, "system");
+    await expect(
+      rejectPublication(db.client, id, {
+        kind: "soft",
+        reasons: [{ code: "soft_quality_below_bar", note: "" }],
+      }),
+    ).rejects.toMatchObject({ status: 404 });
+  });
+});
+
 describe("withdrawPublication", () => {
   it("deletes the copy and leaves the source alone", async () => {
     await submitPublication(db.client, {
@@ -310,6 +430,28 @@ describe("approvePublication", () => {
     const approved = await approvePublication(db.client, id, "admin");
     expect(approved.published_at).toBeTruthy();
     expect(approved.approved_by).toBe("admin");
+    // The open request-log row is decided too.
+    expect(db.tables.game_publication_requests[0]).toMatchObject({
+      outcome: "approved",
+    });
+  });
+
+  it("an admin approval supersedes a rejection", async () => {
+    await submitPublication(db.client, {
+      sourceGameId: SOURCE_ID,
+      accountId: ACCOUNT,
+      content: CONTENT,
+    });
+    const id = db.tables.games[1].id as string;
+    await rejectPublication(db.client, id, {
+      kind: "soft",
+      reasons: [{ code: "soft_quality_below_bar", note: "" }],
+    });
+
+    const approved = await approvePublication(db.client, id, "admin");
+    expect(approved.published_at).toBeTruthy();
+    expect(approved.rejected_at).toBeNull();
+    expect(approved.rejection_kind).toBeNull();
   });
 
   it("404s for an id that was never submitted", async () => {
@@ -339,6 +481,32 @@ describe("listPendingPublications", () => {
   it("never includes ordinary private games", async () => {
     const pending = (await listPendingPublications(db.client)) as unknown as Row[];
     expect(pending).toHaveLength(0);
+  });
+
+  it("excludes rejected submissions — they wait on the parent, not the queue", async () => {
+    await submitPublication(db.client, {
+      sourceGameId: SOURCE_ID,
+      accountId: ACCOUNT,
+      content: CONTENT,
+    });
+    await rejectPublication(db.client, db.tables.games[1].id as string, {
+      kind: "soft",
+      reasons: [{ code: "soft_quality_below_bar", note: "" }],
+    });
+    expect(await listPendingPublications(db.client)).toHaveLength(0);
+  });
+
+  it("respects maxAttempts, leaving exhausted items to the operator view", async () => {
+    await submitPublication(db.client, {
+      sourceGameId: SOURCE_ID,
+      accountId: ACCOUNT,
+      content: CONTENT,
+    });
+    db.tables.games[1].review_attempts = 3;
+
+    expect(await listPendingPublications(db.client, 50, 3)).toHaveLength(0);
+    // The unfiltered default (the operator endpoint) still sees it.
+    expect(await listPendingPublications(db.client)).toHaveLength(1);
   });
 });
 

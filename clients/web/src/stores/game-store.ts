@@ -24,7 +24,10 @@ import {
   encryptGameFields,
 } from "@dodi/vault/game-crypto";
 import type { Game, GameVersion } from "@dodi/types/database";
-import type { GameSharingState } from "@dodi/types/games";
+import type {
+  DiscoverGameSummary,
+  GameSharingState,
+} from "@dodi/types/games";
 
 import { awaitSession } from "./await-session";
 
@@ -46,8 +49,20 @@ interface GameStoreState {
    * different value and must not collide with it.
    */
   byId: Record<string, Game>;
+  /** dodi Discover catalog page(s), PLAINTEXT by design — no decryption. */
+  discover: DiscoverGameSummary[] | null;
+  /** Keyset cursor for the next Discover page; null = no more pages. */
+  discoverCursor: string | null;
   loadForKid: (kidId: string, force?: boolean) => Promise<LibraryGame[]>;
   loadAccount: (force?: boolean) => Promise<AccountGame[]>;
+  loadDiscover: (force?: boolean) => Promise<DiscoverGameSummary[]>;
+  /** Fetch and append the next Discover page (no-op when exhausted). */
+  loadMoreDiscover: () => Promise<void>;
+  /**
+   * Adopt a new sharing state for a Discover game and drop the kid libraries
+   * (their contents just changed with the audience).
+   */
+  patchDiscoverSharing: (id: string, sharing: GameSharingState) => void;
   loadOne: (
     id: string,
     kidId?: string,
@@ -78,11 +93,19 @@ function scopeKey(id: string, kidId?: string): string {
 const kidInFlight = new Map<string, Promise<LibraryGame[]>>();
 let accountInFlight: Promise<AccountGame[]> | null = null;
 const oneInFlight = new Map<string, Promise<Game | null>>();
+let discoverInFlight: Promise<DiscoverGameSummary[]> | null = null;
+
+interface DiscoverPage {
+  games: DiscoverGameSummary[];
+  nextCursor: string | null;
+}
 
 export const useGameStore = create<GameStoreState>((set, get) => ({
   byKid: {},
   account: null,
   byId: {},
+  discover: null,
+  discoverCursor: null,
 
   loadForKid: async (kidId, force = false) => {
     const cached = get().byKid[kidId];
@@ -183,6 +206,56 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
     }
   },
 
+  loadDiscover: async (force = false) => {
+    const cached = get().discover;
+    if (cached && !force) return cached;
+    if (discoverInFlight && !force) return discoverInFlight;
+
+    discoverInFlight = (async () => {
+      const res = await dodi.request("/api/discover/games");
+      if (!res.ok) throw new Error("Failed to load Discover games");
+      const page = (await res.json()) as DiscoverPage;
+      set({ discover: page.games, discoverCursor: page.nextCursor });
+      return page.games;
+    })();
+
+    try {
+      return await discoverInFlight;
+    } finally {
+      discoverInFlight = null;
+    }
+  },
+
+  loadMoreDiscover: async () => {
+    const cursor = get().discoverCursor;
+    if (!cursor) return;
+    const res = await dodi.request(
+      `/api/discover/games?cursor=${encodeURIComponent(cursor)}`,
+    );
+    if (!res.ok) throw new Error("Failed to load Discover games");
+    const page = (await res.json()) as DiscoverPage;
+    set((state) => {
+      // Keyset pages can overlap when something published mid-scroll; dedupe.
+      const seen = new Set((state.discover ?? []).map((g) => g.id));
+      return {
+        discover: [
+          ...(state.discover ?? []),
+          ...page.games.filter((g) => !seen.has(g.id)),
+        ],
+        discoverCursor: page.nextCursor,
+      };
+    });
+  },
+
+  patchDiscoverSharing: (id, sharing) =>
+    set((state) => ({
+      discover:
+        state.discover?.map((g) => (g.id === id ? { ...g, sharing } : g)) ??
+        state.discover,
+      // The audience changed, so the kid libraries changed — refetch lazily.
+      byKid: {},
+    })),
+
   put: (game) => {
     // Seed the unscoped entry (the studio's read) so a first write also
     // populates the cache, then fold the row into every other copy.
@@ -211,7 +284,14 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
       ),
     })),
 
-  invalidate: () => set({ byKid: {}, account: null, byId: {} }),
+  invalidate: () =>
+    set({
+      byKid: {},
+      account: null,
+      byId: {},
+      discover: null,
+      discoverCursor: null,
+    }),
 }));
 
 /**

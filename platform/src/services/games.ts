@@ -28,6 +28,8 @@ import type { GameMetadata, GameSharingState } from "@dodi/types/games";
 import type { ProgressKind, SuccessCriteria } from "@dodi/types/success";
 import { GAME_TAG_IDS } from "@dodi/games/tags";
 
+import { getPublishedGame, getPublishedGamesByIds } from "./discover";
+
 type Client = SupabaseClient<Database>;
 
 const CATALOG_TAGS = new Set<string>(GAME_TAG_IDS);
@@ -55,6 +57,12 @@ export interface ListGamesOptions {
   kidId?: string;
   includeSystem?: boolean;
   tags?: string[];
+  /**
+   * Scopes sharing lookups to this account. Redundant under an RLS user client
+   * but REQUIRED under a service client (device auth), where an unscoped
+   * sharing query would see every family's rows.
+   */
+  accountId?: string;
 }
 
 export interface CreateCustomGameInput {
@@ -78,6 +86,8 @@ export interface CreateCustomGameInput {
   successDefinition?: string;
   successCriteria?: SuccessCriteria;
   progressKind?: ProgressKind;
+  /** 100×100 list preview (sealed for private games — import/remix carry one). */
+  previewImage?: string | null;
   /** enc:v1: sealed studio conversation transcript (server-blind). */
   agentTranscriptEnc?: string | null;
 }
@@ -102,24 +112,39 @@ export type SharingMap = Map<string, { family: boolean; kidIds: Set<string> }>;
  * visible; custom games must be active AND either owned by the kid or
  * shared with it (family-wide or specifically). Inactive custom games are
  * hidden from kids regardless of sharing — they live only in the parent studio.
+ *
+ * Published Discover rows (another family's plaintext catalog entries) are a
+ * third case: visible iff THIS family shared them with the kid — `is_active`
+ * is irrelevant, a catalog listing is never a library entry by itself.
  */
 export function isVisibleToKid(
-  game: Pick<Game, "id" | "is_system" | "is_active" | "kid_id">,
+  game: Pick<Game, "id" | "is_system" | "is_active" | "kid_id" | "published_at">,
   kidId: string,
   sharings: SharingMap,
 ): boolean {
   if (game.is_system) return true;
+  if (game.published_at) {
+    const share = sharings.get(game.id);
+    return !!share && (share.family || share.kidIds.has(kidId));
+  }
   if (!game.is_active) return false;
   if (game.kid_id === kidId) return true;
   const share = sharings.get(game.id);
   return !!share && (share.family || share.kidIds.has(kidId));
 }
 
-/** Fetch all sharing rows for the current account and index them by game id. */
-async function loadSharingMap(supabase: Client): Promise<SharingMap> {
-  const { data, error } = await supabase
-    .from("game_sharings")
-    .select("game_id, kid_id");
+/**
+ * Fetch the sharing rows for the current account and index them by game id.
+ * `accountId` scopes the query under a service client; an RLS user client
+ * already limits rows to the caller's account.
+ */
+async function loadSharingMap(
+  supabase: Client,
+  accountId?: string,
+): Promise<SharingMap> {
+  let query = supabase.from("game_sharings").select("game_id, kid_id");
+  if (accountId) query = query.eq("account_id", accountId);
+  const { data, error } = await query;
   if (error) throw error;
 
   const map: SharingMap = new Map();
@@ -141,8 +166,14 @@ async function loadSharingMap(supabase: Client): Promise<SharingMap> {
 export async function listGames(
   supabase: Client,
   options: ListGamesOptions,
+  /**
+   * Service-role client for fetching PUBLISHED Discover rows the family shared
+   * (they belong to other accounts, so RLS hides them from `supabase`). Omit
+   * it to skip the Discover merge (e.g. the parent studio list).
+   */
+  service?: Client,
 ): Promise<Game[]> {
-  const { kidId, includeSystem = true, tags } = options;
+  const { kidId, includeSystem = true, tags, accountId } = options;
 
   let query = supabase
     .from("games")
@@ -170,8 +201,18 @@ export async function listGames(
 
   // Sharing rows are only needed when filtering for a specific kid.
   const sharings: SharingMap = kidId
-    ? await loadSharingMap(supabase)
+    ? await loadSharingMap(supabase, accountId)
     : new Map();
+
+  // Shared game ids that are not in the RLS-visible set are Discover rows this
+  // family added — fetch them (sanitized) through the service client.
+  if (kidId && service && sharings.size > 0) {
+    const baseIds = new Set(base.map((game) => game.id));
+    const discoverIds = [...sharings.keys()].filter((id) => !baseIds.has(id));
+    if (discoverIds.length > 0) {
+      base.push(...(await getPublishedGamesByIds(service, discoverIds)));
+    }
+  }
 
   return base.filter((game) => {
     if (kidId && !isVisibleToKid(game, kidId, sharings))
@@ -249,6 +290,7 @@ export async function createCustomGame(
     success_definition: input.successDefinition ?? "",
     success_criteria: (input.successCriteria ?? {}) as unknown as Json,
     progress_kind: input.progressKind ?? "open",
+    preview_image: input.previewImage ?? null,
     agent_transcript_enc: input.agentTranscriptEnc ?? null,
   };
 
@@ -462,11 +504,14 @@ export async function deleteCustomGame(
   // Withdraw any pending/live publication first. The FK is ON DELETE SET NULL,
   // so leaving it would orphan a plaintext public copy with no way back to its
   // owner — and deleting the original is a clear signal to unpublish.
+  // HARD-rejected copies are retained as moderation evidence (see
+  // withdrawPublication) — they survive with source_game_id nulled by the FK.
   const { error: publicationError } = await supabase
     .from("games")
     .delete()
     .eq("source_game_id", gameId)
-    .not("publication_requested_at", "is", null);
+    .not("publication_requested_at", "is", null)
+    .or("rejection_kind.is.null,rejection_kind.neq.hard");
   if (publicationError) throw publicationError;
 
   // Autosave slots die with their game (manual snapshots are self-contained
@@ -498,10 +543,15 @@ export async function replaceGameSharings(
   accountId: string,
   sharing: GameSharingState,
 ): Promise<void> {
+  // Scoped by account: several families hold sharing rows for the same
+  // PUBLISHED game, and replacing one family's audience must not touch the
+  // others' (RLS enforces this for user clients; the filter covers service
+  // clients too).
   const { error: deleteError } = await supabase
     .from("game_sharings")
     .delete()
-    .eq("game_id", gameId);
+    .eq("game_id", gameId)
+    .eq("account_id", accountId);
   if (deleteError) throw deleteError;
 
   const rows: GameSharingInsert[] = sharing.family
@@ -568,25 +618,49 @@ export async function getGameSharing(
   return { family, kidIds };
 }
 
-/** Single-game visibility check (kid deep-link / play gate). */
+/**
+ * Single-game visibility check (kid deep-link / play gate). `accountId` scopes
+ * the sharing lookup to the kid's family — essential for published Discover
+ * rows, where several families may hold sharing rows for the same game.
+ */
 export async function isGameVisibleToKid(
   supabase: Client,
-  game: Pick<Game, "id" | "is_system" | "is_active" | "kid_id">,
+  game: Pick<Game, "id" | "is_system" | "is_active" | "kid_id" | "published_at">,
   kidId: string,
+  accountId: string,
 ): Promise<boolean> {
   if (game.is_system) return true;
-  if (!game.is_active) return false;
-  if (game.kid_id === kidId) return true;
+  if (!game.published_at) {
+    if (!game.is_active) return false;
+    if (game.kid_id === kidId) return true;
+  }
 
   const { data, error } = await supabase
     .from("game_sharings")
     .select("kid_id")
-    .eq("game_id", game.id);
+    .eq("game_id", game.id)
+    .eq("account_id", accountId);
   if (error) throw error;
 
   return (data ?? []).some(
     (row) => row.kid_id === null || row.kid_id === kidId,
   );
+}
+
+/**
+ * The game a kid may load for play: the family's own (or a system) row via the
+ * caller's RLS client, else — when the id points at a published Discover row —
+ * the sanitized public shape via the service client. Callers still gate with
+ * {@link isGameVisibleToKid}; this only resolves the row.
+ */
+export async function getPlayableGame(
+  supabase: Client,
+  service: Client,
+  gameId: string,
+): Promise<Game | null> {
+  const own = await getGame(supabase, gameId);
+  if (own) return own;
+  return await getPublishedGame(service, gameId);
 }
 
 /** Game ids the given kid has favorited (RLS scopes to the current account). */

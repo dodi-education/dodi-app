@@ -35,8 +35,12 @@ export interface Database {
           max_storage_mb_per_kid: number;
           memory_tier: "basic" | "advanced" | "full";
           // Deliberately PUBLIC author byline for dodi Discover (like kids.social_id).
-          // Lowercase [a-z0-9_], 3-30 chars, unique. Null until the first publish.
+          // Lowercase [a-z0-9_], 3-15 chars, unique. Null until the first publish.
           publication_handle: string | null;
+          /** Max publication submissions per UTC calendar month (every submit counts). */
+          monthly_game_publication_limit: number;
+          /** Stamped once when any submission is hard-rejected; never auto-cleared. */
+          flagged_for_review_at: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -56,6 +60,8 @@ export interface Database {
           max_storage_mb_per_kid?: number;
           memory_tier?: "basic" | "advanced" | "full";
           publication_handle?: string | null;
+          monthly_game_publication_limit?: number;
+          flagged_for_review_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -75,6 +81,8 @@ export interface Database {
           max_storage_mb_per_kid?: number;
           memory_tier?: "basic" | "advanced" | "full";
           publication_handle?: string | null;
+          monthly_game_publication_limit?: number;
+          flagged_for_review_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -293,6 +301,14 @@ export interface Database {
           approved_by: "system" | "admin" | null;
           /** Authorship (SET NULL), as opposed to account_id which is ownership (CASCADE). */
           published_by_account_id: string | null;
+          /** Stamped by the review pass on rejection; cleared on resubmit. */
+          rejected_at: string | null;
+          /** hard = permanent (source can never be resubmitted); soft = demand changes. */
+          rejection_kind: "hard" | "soft" | null;
+          /** Array of {code, note} — codes from @dodi/protocol/publication-review. */
+          rejection_reasons: Json | null;
+          /** Review attempts consumed; doubles as the worker's optimistic claim token. */
+          review_attempts: number;
           created_at: string;
           updated_at: string;
         };
@@ -325,6 +341,10 @@ export interface Database {
           published_at?: string | null;
           approved_by?: "system" | "admin" | null;
           published_by_account_id?: string | null;
+          rejected_at?: string | null;
+          rejection_kind?: "hard" | "soft" | null;
+          rejection_reasons?: Json | null;
+          review_attempts?: number;
           created_at?: string;
           updated_at?: string;
         };
@@ -357,6 +377,10 @@ export interface Database {
           published_at?: string | null;
           approved_by?: "system" | "admin" | null;
           published_by_account_id?: string | null;
+          rejected_at?: string | null;
+          rejection_kind?: "hard" | "soft" | null;
+          rejection_reasons?: Json | null;
+          review_attempts?: number;
           created_at?: string;
           updated_at?: string;
         };
@@ -436,6 +460,46 @@ export interface Database {
           metrics?: Json;
           created_at?: string;
           updated_at?: string;
+        };
+        Relationships: [];
+      };
+      game_publication_requests: {
+        Row: {
+          id: string;
+          account_id: string;
+          /** The private E2EE source game (SET NULL — the log outlives the game). */
+          source_game_id: string | null;
+          /** The plaintext publication copy (SET NULL — survives withdraw). */
+          publication_game_id: string | null;
+          requested_at: string;
+          /** NULL while undecided (pending review or withdrawn before a verdict). */
+          outcome: "approved" | "rejected" | null;
+          rejection_kind: "hard" | "soft" | null;
+          /** Array of {code, note} — codes from @dodi/protocol/publication-review. */
+          rejection_reasons: Json | null;
+          decided_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          account_id: string;
+          source_game_id?: string | null;
+          publication_game_id?: string | null;
+          requested_at?: string;
+          outcome?: "approved" | "rejected" | null;
+          rejection_kind?: "hard" | "soft" | null;
+          rejection_reasons?: Json | null;
+          decided_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          account_id?: string;
+          source_game_id?: string | null;
+          publication_game_id?: string | null;
+          requested_at?: string;
+          outcome?: "approved" | "rejected" | null;
+          rejection_kind?: "hard" | "soft" | null;
+          rejection_reasons?: Json | null;
+          decided_at?: string | null;
         };
         Relationships: [];
       };
@@ -1148,6 +1212,15 @@ export interface Database {
           rate_limited: boolean;
         }[];
       };
+      // Per-game play & copy counts for a set of published games, in one round
+      // trip. plays = game_plays on the row (play-in-place aggregates every
+      // family's plays there); copies = private remixes pointing back via
+      // source_game_id. Reads across families — service role only. Powers the
+      // Discover catalog stat line (services/discover getGameStats).
+      discover_game_stats: {
+        Args: { p_game_ids: string[] };
+        Returns: { game_id: string; plays: number; copies: number }[];
+      };
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
@@ -1330,3 +1403,9 @@ export type GameFavoriteInsert =
   Database["public"]["Tables"]["game_favorites"]["Insert"];
 export type GameTranslation =
   Database["public"]["Tables"]["game_translations"]["Row"];
+export type GamePublicationRequest =
+  Database["public"]["Tables"]["game_publication_requests"]["Row"];
+export type GamePublicationRequestInsert =
+  Database["public"]["Tables"]["game_publication_requests"]["Insert"];
+export type GamePublicationRequestUpdate =
+  Database["public"]["Tables"]["game_publication_requests"]["Update"];

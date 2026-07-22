@@ -35,6 +35,7 @@ import {
   IconHistory,
   IconHome,
   IconImageGeneration,
+  IconInfoCircle,
   IconLanguage,
   IconLoader2,
   IconLock,
@@ -73,6 +74,7 @@ import {
   IconUserPlus,
   IconUsers,
   IconVolume,
+  IconWorldUp,
   IconX,
   type IconProps as TablerIconProps,
 } from "@tabler/icons-react";
@@ -115,6 +117,7 @@ export type IconName =
   | "hide"
   | "history"
   | "home"
+  | "info"
   | "loading"
   | "lock"
   | "logout"
@@ -143,6 +146,7 @@ export type IconName =
   | "event_logs"
   | "usage"
   | "volume"
+  | "world_up"
   // Game-tag icons — Tabler slugs (see @dodi/games/tags); "philosophy" is custom.
   | "abc"
   | "123"
@@ -197,6 +201,7 @@ const ICONS: Record<IconName, ComponentType<TablerIconProps>> = {
   history: IconHistory,
   hide: IconEyeOff,
   home: IconHome,
+  info: IconInfoCircle,
   loading: IconLoader2,
   lock: IconLock,
   logout: IconLogout,
@@ -225,6 +230,7 @@ const ICONS: Record<IconName, ComponentType<TablerIconProps>> = {
   event_logs: IconLogs,
   usage: IconReceipt2,
   volume: IconVolume,
+  world_up: IconWorldUp,
   // Game-tag icons (see @dodi/games/tags).
   abc: IconAbc,
   "123": IconNumber123,
@@ -245,7 +251,10 @@ const ICONS: Record<IconName, ComponentType<TablerIconProps>> = {
   "photo-ai": IconPhotoAi,
 };
 
-export interface IconProps extends Omit<TablerIconProps, "size" | "stroke" | "aria-hidden"> {
+export interface IconProps extends Omit<
+  TablerIconProps,
+  "size" | "stroke" | "aria-hidden"
+> {
   name: IconName;
   size?: number;
   stroke?: number;

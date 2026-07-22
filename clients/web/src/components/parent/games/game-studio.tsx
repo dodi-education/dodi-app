@@ -25,16 +25,19 @@ import {
 import { STAGE } from "@/lib/games/stage";
 import { GAME_TAGS } from "@dodi/games/tags";
 import { sanitizeGameBundle } from "@dodi/games/sanitizer";
-import { UNBUILT_GAME_PLACEHOLDER } from "@dodi/games/placeholder";
+import { UNBUILT_GAME_PLACEHOLDER, isUnbuiltBundle } from "@dodi/games/placeholder";
 import { injectBackgroundImage } from "@dodi/games/background-image";
-import { buildGameExportFiles, gameExportFileName } from "@dodi/games/export";
-import { downloadBlob, packGameExportZip } from "@/lib/games/game-export-zip";
 import { tagStyle } from "@/components/parent/games/tag-style";
 import { CodeViewer } from "@/components/parent/games/code-viewer";
-import { PublishCard } from "@/components/parent/games/publish-card";
+import { AgeRange, isValidAgeRange } from "@/components/parent/games/age-range";
 import { useTagLabel } from "@/lib/games/tag-label";
 import { cn } from "@/lib/utils";
-import { capImages, downscaleDataUrl, fileToDataUrl } from "@/lib/games/thumbnail";
+import {
+  capImages,
+  downscaleDataUrl,
+  fileToDataUrl,
+  squareThumbnailDataUrl,
+} from "@/lib/games/thumbnail";
 import { useKids } from "@/hooks/use-kids";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { useNavigationGuard } from "@/hooks/use-navigation-guard";
@@ -65,7 +68,7 @@ import {
 import { mapSuccessDefinition } from "@dodi/ai/success-mapping";
 import type { AgentStep } from "@dodi/types/agent-progress";
 import type { Game, GameVersion, Json } from "@dodi/types/database";
-import type { GamePerspective } from "@dodi/types/games";
+import type { GamePerspective, GameToParentMessage } from "@dodi/types/games";
 import type { AgentCodeResult, AgentTaskRequest } from "@dodi/types/tasks";
 import type { ProgressKind } from "@dodi/games/success";
 
@@ -88,6 +91,9 @@ export interface StudioGame {
   learningGoal: string;
   successDefinition: string;
   progressKind: ProgressKind;
+  /** Recommended player age range — a plaintext facet shown on dodi Discover. */
+  targetAgeMin: number;
+  targetAgeMax: number;
   codeBundle: string;
   /** Head of the game's version chain (server-managed); null = pre-versioning code. */
   currentGameVersionId: string | null;
@@ -106,6 +112,8 @@ export interface StudioGame {
   generateBackgroundImage: boolean;
   /** Standard commands the built game implements (metadata.capabilities). */
   capabilities: string[];
+  /** 100×100 JPEG data URL shown in game lists (E2EE at rest; null = none yet). */
+  previewImage: string | null;
   /** enc:v1: sealed prior studio conversation, restored on re-entry. */
   agentTranscriptEnc?: string | null;
 }
@@ -151,6 +159,11 @@ const COMPOSER_DEFAULT = 150;
 const MAX_ATTACHMENTS = 3;
 /** Sealed-transcript guard: only this many trailing messages keep their images. */
 const TRANSCRIPT_IMAGE_MESSAGES = 6;
+/** Game-list preview capture: square edge, boot wait cap and first-frames settle. */
+const PREVIEW_IMAGE_SIZE = 100;
+const PREVIEW_READY_POLL_MS = 250;
+const PREVIEW_READY_MAX_POLLS = 20; // ×250ms — up to 5s for the game to boot
+const PREVIEW_SETTLE_MS = 800;
 
 function emptyGame(): StudioGame {
   return {
@@ -161,6 +174,9 @@ function emptyGame(): StudioGame {
     learningGoal: "",
     successDefinition: "",
     progressKind: "open",
+    // Match the server's default recommended range for new games (games.ts).
+    targetAgeMin: 4,
+    targetAgeMax: 12,
     codeBundle: "",
     currentGameVersionId: null,
     markdown: "",
@@ -172,6 +188,7 @@ function emptyGame(): StudioGame {
     perspective: null,
     generateBackgroundImage: false,
     capabilities: [],
+    previewImage: null,
   };
 }
 
@@ -294,6 +311,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     title?: boolean;
     learningGoal?: boolean;
     audience?: boolean;
+    age?: boolean;
   }>({});
   const [justSaved, setJustSaved] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -325,10 +343,6 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
   const pendingEditRef = useRef<{ code: string; resolve: (saved: boolean) => void } | null>(null);
   // Destructive "clear history" confirmation dialog.
   const [clearOpen, setClearOpen] = useState(false);
-  // Export-to-zip dialog; the conversation (may contain photos) is opt-in.
-  const [exportOpen, setExportOpen] = useState(false);
-  const [exportWithTranscript, setExportWithTranscript] = useState(false);
-  const [exporting, setExporting] = useState(false);
   const [sideWidth, setSideWidth] = useState(() =>
     readStoredSize("dodi-studio-side-width", SIDE_MIN, SIDE_MAX, SIDE_DEFAULT),
   );
@@ -347,6 +361,9 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
   const threadRef = useRef<HTMLDivElement | null>(null);
   // Handle into the always-mounted preview sandbox (edit-time screenshots).
   const sandboxRef = useRef<GameSandboxHandle | null>(null);
+  // Whether the sandbox's CURRENT code has reported game:ready — the list
+  // preview capture waits for it rather than shooting a blank boot screen.
+  const sandboxReadyRef = useRef(false);
   const sideWidthRef = useRef(sideWidth);
   const composerHeightRef = useRef(composerHeight);
   // The in-flight build's abort handle — drives Stop + navigation guards.
@@ -452,6 +469,9 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     if (key === "title" || key === "learningGoal") {
       setInvalid((v) => ({ ...v, [key]: false }));
     }
+    if (key === "targetAgeMin" || key === "targetAgeMax") {
+      setInvalid((v) => ({ ...v, age: false }));
+    }
   };
 
   // ── "Who can play" selection ───────────────────────────────────────────
@@ -547,35 +567,59 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     return saved;
   };
 
-  // Download the game as a portable zip, assembled entirely in the browser from
-  // the fresh row (studio state lacks ages/duration) — like the persona export,
-  // the server never sees the archive. The transcript comes from the live thread
-  // (already decrypted; empty when the vault was locked on entry).
-  const exportGame = async (): Promise<void> => {
-    if (!game.id || exporting) return;
-    setExporting(true);
-    setError(null);
+  // ----- Game-list preview image -----------------------------------------
+
+  // New code → the sandbox reloads and must report ready again before a capture.
+  useEffect(() => {
+    sandboxReadyRef.current = false;
+  }, [game.codeBundle]);
+
+  const handleSandboxMessage = useCallback((message: GameToParentMessage) => {
+    if (message.type === "game:ready") sandboxReadyRef.current = true;
+  }, []);
+
+  // Capture the running game as the 100×100 list preview: wait (bounded) for
+  // the game to boot plus a settle beat for its first frames, snapshot the live
+  // sandbox, then center-crop to the square that keeps as much of the surface
+  // as fits. Resolves null whenever nothing usable could be captured.
+  const capturePreviewImage = async (capabilities: string[]): Promise<string | null> => {
+    for (let poll = 0; poll < PREVIEW_READY_MAX_POLLS; poll++) {
+      await new Promise((resolve) => setTimeout(resolve, PREVIEW_READY_POLL_MS));
+      if (sandboxReadyRef.current) break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, PREVIEW_SETTLE_MS));
+    const raw = await sandboxRef.current
+      ?.requestSnapshot({ preferGameCapture: capabilities.includes("get_snapshot") })
+      .catch(() => null);
+    return raw ? squareThumbnailDataUrl(raw, PREVIEW_IMAGE_SIZE) : null;
+  };
+
+  // Refresh the sealed preview_image after a build, or backfill it on saves of
+  // games that predate previews. Fire-and-forget best effort: a failed capture
+  // never disturbs the save that triggered it — the next one simply retries.
+  const refreshPreviewImage = async (
+    gameId: string,
+    capabilities: string[],
+  ): Promise<void> => {
     try {
-      const row = await useGameStore.getState().loadOne(game.id, undefined, true);
-      if (!row) throw new Error(t("exportFailedGeneric"));
-      const files = buildGameExportFiles({
-        game: row,
-        transcript:
-          exportWithTranscript && messages.length > 0
-            ? sealableTranscript(messages)
-            : null,
-        appVersion: "dodi web",
+      const preview = await capturePreviewImage(capabilities);
+      if (!preview) return;
+      const sealed = await sealGameFields({ preview_image: preview });
+      const res = await dodi.request(`/api/games/${gameId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ preview_image: sealed.preview_image }),
       });
-      downloadBlob(packGameExportZip(files), gameExportFileName(row.title));
-      setExportOpen(false);
-    } catch (e) {
-      setExportOpen(false);
-      const reason = e instanceof Error && e.message ? e.message : "";
-      setError(reason ? t("exportFailed", { reason }) : t("exportFailedGeneric"));
-    } finally {
-      setExporting(false);
+      if (!res.ok) return;
+      setGame((g) => (g.id === gameId ? { ...g, previewImage: preview } : g));
+      useGameStore.getState().patchLocal(gameId, { preview_image: preview });
+    } catch {
+      /* best effort — lists fall back to the tag tile */
     }
   };
+
+  // Export and publish live in the game list's actions menu, not here — both act
+  // on the persisted row, so they don't need the studio's live state.
 
   // Clear the conversation — the local thread and the persisted (sealed) copy.
   const clearHistory = (): void => {
@@ -672,6 +716,10 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
         codeBundle: row.code_bundle,
         currentGameVersionId: row.current_game_version_id,
       }));
+      // The restored version is the game's look now — refresh the list preview.
+      if (!isUnbuiltBundle(row.code_bundle)) {
+        void refreshPreviewImage(row.id, game.capabilities);
+      }
       router.refresh();
       return true;
     } catch (e) {
@@ -761,6 +809,10 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
       setReverted(false);
       await loadVersions();
       settleSaveEdit(true);
+      // Hand-edited code changes the game's look — refresh the list preview.
+      if (!isUnbuiltBundle(row.code_bundle)) {
+        void refreshPreviewImage(row.id, game.capabilities);
+      }
       router.refresh();
     } catch (e) {
       const reason = e instanceof Error && e.message ? e.message : "";
@@ -1081,6 +1133,8 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
           // Adopt the server's new version head (an agent persist appends a version).
           setGame((g) => ({ ...g, currentGameVersionId: row.current_game_version_id }));
           void loadVersions();
+          // Every build refreshes the list preview — the game's look just changed.
+          void refreshPreviewImage(row.id, builtCapabilities);
         }
         router.refresh();
       } catch (saveErr) {
@@ -1145,8 +1199,9 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
       title: !game.id && !game.title.trim(),
       learningGoal: !game.learningGoal.trim(),
       audience: !primaryKidId,
+      age: !isValidAgeRange(game.targetAgeMin, game.targetAgeMax),
     };
-    if (nextInvalid.title || nextInvalid.learningGoal || nextInvalid.audience) {
+    if (nextInvalid.title || nextInvalid.learningGoal || nextInvalid.audience || nextInvalid.age) {
       setInvalid(nextInvalid);
       setView("settings");
       return;
@@ -1192,6 +1247,8 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
           body: JSON.stringify({
             ...sealed,
             tags: game.tags,
+            target_age_min: game.targetAgeMin,
+            target_age_max: game.targetAgeMax,
             ...(mappedCriteria
               ? { progress_kind: mappedCriteria.progress_kind }
               : {}),
@@ -1208,6 +1265,10 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
         useGameStore
           .getState()
           .put(await decryptGameResponse((await res.json()) as Game));
+        // Settings saves backfill a missing preview for games that predate them.
+        if (game.built && !game.previewImage) {
+          void refreshPreviewImage(game.id, game.capabilities);
+        }
       } else {
         // Persist a new game straight from settings (no build required). With no
         // code yet we seal the placeholder ourselves — the server can't write
@@ -1226,6 +1287,8 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
             kidId: primaryKidId,
             ...sealed,
             tags: game.tags,
+            targetAgeMin: game.targetAgeMin,
+            targetAgeMax: game.targetAgeMax,
             progressKind: game.successDefinition.trim() ? "goal" : "open",
             // Playable only once real code exists; an unbuilt draft is not.
             isActive: Boolean(game.codeBundle),
@@ -1431,6 +1494,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
                   codeBundle={game.codeBundle}
                   reserved={STAGE.reservedStudio}
                   sandboxRef={sandboxRef}
+                  onMessage={handleSandboxMessage}
                 />
               </div>
             )}
@@ -1475,7 +1539,6 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
                 selectFamily={selectFamily}
                 toggleKid={toggleKid}
                 onSave={saveSettings}
-                onExport={game.id ? () => setExportOpen(true) : null}
                 saving={saving}
                 justSaved={justSaved}
                 error={error}
@@ -1860,44 +1923,6 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
         </DialogContent>
       </Dialog>
 
-      {/* Export as a portable zip. The dodi conversation is opt-in (default off)
-          because it can carry attached reference photos. */}
-      <Dialog open={exportOpen} onOpenChange={setExportOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t("exportTitle")}</DialogTitle>
-            <DialogDescription>{t("exportDescription")}</DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col gap-2">
-            <label className="flex w-fit cursor-pointer items-center gap-2.5 text-sm font-medium text-ink-2">
-              <Switch
-                checked={exportWithTranscript && messages.length > 0}
-                disabled={messages.length === 0}
-                onCheckedChange={setExportWithTranscript}
-              />
-              {t("exportIncludeTranscript")}
-            </label>
-            {messages.length === 0 && (
-              <p className="text-xs text-muted-foreground">
-                {t(
-                  game.agentTranscriptEnc
-                    ? "exportTranscriptLocked"
-                    : "exportTranscriptEmpty",
-                )}
-              </p>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setExportOpen(false)}>
-              {t("exportCancel")}
-            </Button>
-            <Button onClick={exportGame} disabled={exporting}>
-              <Icon name="download" size={16} />
-              {t("exportConfirm")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
@@ -2015,7 +2040,6 @@ function SettingsForm({
   selectFamily,
   toggleKid,
   onSave,
-  onExport,
   saving,
   justSaved,
   error,
@@ -2024,13 +2048,11 @@ function SettingsForm({
 }: {
   game: StudioGame;
   kids: KidOption[];
-  invalid: { title?: boolean; learningGoal?: boolean; audience?: boolean };
+  invalid: { title?: boolean; learningGoal?: boolean; audience?: boolean; age?: boolean };
   setField: <K extends keyof StudioGame>(key: K, value: StudioGame[K]) => void;
   selectFamily: () => void;
   toggleKid: (id: string) => void;
   onSave: () => void;
-  /** Opens the export-to-zip dialog; null until the game is saved. */
-  onExport: (() => void) | null;
   saving: boolean;
   justSaved: boolean;
   error: string | null;
@@ -2137,6 +2159,23 @@ function SettingsForm({
         </div>
       </Field>
 
+      <Field
+        label={t("recommendedAge")}
+        hint={invalid.age ? undefined : t("recommendedAgeHint")}
+      >
+        <AgeRange
+          min={game.targetAgeMin}
+          max={game.targetAgeMax}
+          onMinChange={(v) => setField("targetAgeMin", v)}
+          onMaxChange={(v) => setField("targetAgeMax", v)}
+          minLabel={t("ageMinLabel")}
+          maxLabel={t("ageMaxLabel")}
+        />
+        {invalid.age && (
+          <p className="text-[11px] font-medium text-danger">{t("ageRangeInvalid")}</p>
+        )}
+      </Field>
+
       <Field label={t("perspectiveLabel")} hint={t("perspectiveHint")}>
         <div className="flex flex-wrap gap-2" role="radiogroup" aria-label={t("perspectiveLabel")}>
           {(
@@ -2228,15 +2267,7 @@ function SettingsForm({
             </>
           )}
         </Button>
-        {onExport && (
-          <Button variant="outline" size="lg" className="w-full" onClick={onExport}>
-            <Icon name="download" size={16} />
-            {t("exportGame")}
-          </Button>
-        )}
       </div>
-
-      {game.id && <PublishCard gameId={game.id} built={game.built} />}
     </div>
   );
 }

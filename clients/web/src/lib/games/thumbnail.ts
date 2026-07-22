@@ -1,8 +1,9 @@
 /**
  * Browser-side raster utilities: downscale a capture/upload into a bounded JPEG
  * data URL. Used for snapshot-gallery thumbnails (tiny, keeps every gallery
- * decrypt cheap), studio reference-image attachments, and edit-time screenshots
- * (bounded before they hit provider requests + the sealed transcript).
+ * decrypt cheap), studio reference-image attachments, edit-time screenshots
+ * (bounded before they hit provider requests + the sealed transcript), and the
+ * square 100×100 game-list preview (`preview_image`).
  */
 
 function loadImage(dataUrl: string): Promise<HTMLImageElement> {
@@ -41,6 +42,46 @@ export async function downscaleDataUrl(
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, width, height);
     ctx.drawImage(img, 0, 0, width, height);
+    return canvas.toDataURL("image/jpeg", quality);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Center-crop the largest square out of a capture and downscale it to a
+ * `size`×`size` JPEG data URL — the game-list preview shape. The square crop
+ * keeps as much of the game surface as fits from a centered point of view
+ * (the 4:5 stage loses only its top/bottom edges).
+ */
+export async function squareThumbnailDataUrl(
+  dataUrl: string,
+  size: number,
+  quality = 0.8,
+): Promise<string | null> {
+  try {
+    const img = await loadImage(dataUrl);
+    const side = Math.min(img.width, img.height);
+    if (side < 1) return null;
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    // JPEG has no alpha — transparent captures need a white base.
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, size, size);
+    ctx.drawImage(
+      img,
+      (img.width - side) / 2,
+      (img.height - side) / 2,
+      side,
+      side,
+      0,
+      0,
+      size,
+      size,
+    );
     return canvas.toDataURL("image/jpeg", quality);
   } catch {
     return null;

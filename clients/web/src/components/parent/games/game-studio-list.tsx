@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
@@ -21,6 +22,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { GameExportDialog } from "@/components/parent/games/game-export-dialog";
+import { PublishDialog } from "@/components/parent/games/publish-dialog";
 import { tagStyle } from "@/components/parent/games/tag-style";
 import { useTagLabel } from "@/lib/games/tag-label";
 
@@ -35,6 +38,10 @@ export interface GameListItem {
   isFamily: boolean;
   /** Decrypted names of the specific kids this game is shared with. */
   kidNames: string[];
+  /** Dodi has written real code (not the unbuilt placeholder) — publishable. */
+  built: boolean;
+  /** Decrypted 100×100 list preview; null falls back to the tag tile. */
+  previewImage: string | null;
 }
 
 type EditedKey = "editedToday" | "editedDaysAgo" | "editedWeeksAgo";
@@ -53,6 +60,25 @@ interface GameStudioListProps {
 }
 
 /**
+ * Dialog state that keeps its subject through the close animation. Driving a
+ * dialog straight off `target !== null` makes the content flip to its empty
+ * state for the 200ms it spends fading out.
+ */
+function useDialogTarget<T>() {
+  const [target, setTarget] = useState<T | null>(null);
+  const [open, setOpen] = useState(false);
+  return {
+    target,
+    open,
+    show: (next: T) => {
+      setTarget(next);
+      setOpen(true);
+    },
+    hide: () => setOpen(false),
+  };
+}
+
+/**
  * Renders the studio's game list. Builds now run inside the studio tab itself
  * (client-side), so there is no cross-page "building" state to track here.
  *
@@ -64,19 +90,24 @@ export function GameStudioList({ items, onDelete }: GameStudioListProps) {
   const t = useTranslations("gameStudio");
   const tagLabel = useTagLabel();
 
-  // Deleting a game also drops its version history and autosaves, so it is
-  // confirmed rather than done straight from the menu.
-  const [pendingDelete, setPendingDelete] = useState<GameListItem | null>(null);
+  // One instance of each dialog serves the whole list, aimed at whichever game's
+  // menu opened it. Deleting also drops the version history and autosaves, so it
+  // is confirmed rather than done straight from the menu.
+  const deleteDialog = useDialogTarget<GameListItem>();
+  const exportDialog = useDialogTarget<GameListItem>();
+  const publishDialog = useDialogTarget<GameListItem>();
+
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function confirmDelete(): Promise<void> {
-    if (!pendingDelete || deleting) return;
+    const target = deleteDialog.target;
+    if (!target || deleting) return;
     setDeleting(true);
     setError(null);
     try {
-      await onDelete(pendingDelete.id);
-      setPendingDelete(null);
+      await onDelete(target.id);
+      deleteDialog.hide();
     } catch (e) {
       setError(e instanceof Error && e.message ? e.message : t("deleteFailedGeneric"));
     } finally {
@@ -94,20 +125,31 @@ export function GameStudioList({ items, onDelete }: GameStudioListProps) {
         return (
           <div
             key={g.id}
-            className="flex items-center gap-3 border-b border-border px-1 py-3 last:border-0"
+            className="flex items-center gap-3 border-b border-border py-3 pl-3 pr-1 last:border-0"
           >
             {/* Everything except the actions menu is the link, so the audience
                 badges stay part of the click target as they were before. */}
             <Link
               href={href}
-              className="group flex min-w-0 flex-1 items-center gap-3 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-primary-soft-2"
+              className="group flex min-w-0 flex-1 items-start gap-3 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-primary-soft-2"
             >
-              <div
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
-                style={{ background: s.bg, color: s.fg }}
-              >
-                <Icon name={s.icon} size={19} />
-              </div>
+              {g.previewImage ? (
+                <Image
+                  src={g.previewImage}
+                  alt=""
+                  width={60}
+                  height={60}
+                  unoptimized
+                  className="h-15 w-15 shrink-0 rounded-xl object-cover"
+                />
+              ) : (
+                <div
+                  className="flex h-15 w-15 shrink-0 items-center justify-center rounded-xl"
+                  style={{ background: s.bg, color: s.fg }}
+                >
+                  <Icon name={s.icon} size={28} />
+                </div>
+              )}
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <span className="truncate text-sm font-semibold text-ink-1 transition-colors group-hover:text-primary">
@@ -131,32 +173,32 @@ export function GameStudioList({ items, onDelete }: GameStudioListProps) {
                       {t("inactive")}
                     </span>
                   )}
+                  {g.isFamily ? (
+                    <span
+                      className="hidden shrink-0 items-center gap-1 rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-semibold text-primary sm:inline-flex"
+                      title={t("family")}
+                    >
+                      <Icon name="friends" size={11} />
+                      {t("family")}
+                    </span>
+                  ) : g.kidNames.length > 0 ? (
+                    <span className="hidden shrink-0 items-center -space-x-1.5 sm:flex">
+                      {g.kidNames.slice(0, 3).map((name, i) => (
+                        <span
+                          key={i}
+                          className="flex h-5 w-5 items-center justify-center rounded-full border-2 border-card bg-primary-soft text-[10px] font-bold text-primary"
+                          title={name}
+                        >
+                          {name.charAt(0).toUpperCase()}
+                        </span>
+                      ))}
+                    </span>
+                  ) : null}
                 </div>
                 <div className="mt-0.5 truncate text-xs text-muted-foreground">
                   {t(e.key, e.values)}
                 </div>
               </div>
-              {g.isFamily ? (
-                <span
-                  className="hidden shrink-0 items-center gap-1 rounded-full bg-primary-soft px-2.5 py-1 text-[11px] font-semibold text-primary sm:inline-flex"
-                  title={t("family")}
-                >
-                  <Icon name="friends" size={12} />
-                  {t("family")}
-                </span>
-              ) : g.kidNames.length > 0 ? (
-                <span className="hidden shrink-0 items-center -space-x-1.5 sm:flex">
-                  {g.kidNames.slice(0, 3).map((name, i) => (
-                    <span
-                      key={i}
-                      className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-card bg-primary-soft text-xs font-bold text-primary"
-                      title={name}
-                    >
-                      {name.charAt(0).toUpperCase()}
-                    </span>
-                  ))}
-                </span>
-              ) : null}
             </Link>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -177,12 +219,20 @@ export function GameStudioList({ items, onDelete }: GameStudioListProps) {
                     {t("edit")}
                   </Link>
                 </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => exportDialog.show(g)}>
+                  <Icon name="download" size={15} />
+                  {t("export")}
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => publishDialog.show(g)}>
+                  <Icon name="world_up" size={15} />
+                  {t("publish")}
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   variant="destructive"
                   onSelect={() => {
                     setError(null);
-                    setPendingDelete(g);
+                    deleteDialog.show(g);
                   }}
                 >
                   <Icon name="delete" size={15} />
@@ -194,17 +244,30 @@ export function GameStudioList({ items, onDelete }: GameStudioListProps) {
         );
       })}
 
+      <GameExportDialog
+        open={exportDialog.open}
+        gameId={exportDialog.target?.id ?? null}
+        onClose={exportDialog.hide}
+      />
+
+      <PublishDialog
+        open={publishDialog.open}
+        gameId={publishDialog.target?.id ?? null}
+        built={publishDialog.target?.built ?? false}
+        onClose={publishDialog.hide}
+      />
+
       <Dialog
-        open={pendingDelete !== null}
+        open={deleteDialog.open}
         onOpenChange={(open) => {
-          if (!open && !deleting) setPendingDelete(null);
+          if (!open && !deleting) deleteDialog.hide();
         }}
       >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{t("deleteTitle")}</DialogTitle>
             <DialogDescription>
-              {t("deleteDescription", { title: pendingDelete?.title ?? "" })}
+              {t("deleteDescription", { title: deleteDialog.target?.title ?? "" })}
             </DialogDescription>
           </DialogHeader>
           {error && (
@@ -213,11 +276,7 @@ export function GameStudioList({ items, onDelete }: GameStudioListProps) {
             </div>
           )}
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setPendingDelete(null)}
-              disabled={deleting}
-            >
+            <Button variant="outline" onClick={deleteDialog.hide} disabled={deleting}>
               {t("deleteCancel")}
             </Button>
             <Button variant="destructive" onClick={confirmDelete} disabled={deleting}>

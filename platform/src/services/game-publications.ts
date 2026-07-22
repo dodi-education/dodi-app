@@ -26,6 +26,10 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import type {
+  PublicationRejectionReason,
+  RejectionKind,
+} from "@dodi/protocol";
 import type { Database, Game, GameInsert, Json } from "@dodi/types/database";
 import { sanitizeGameBundle } from "../game-sanitizer";
 
@@ -57,6 +61,14 @@ export class PublicationError extends Error {
 
 function castGame(row: unknown): Game {
   return row as Game;
+}
+
+/** Start of the current UTC calendar month — the quota window boundary. */
+function monthStartUtcIso(): string {
+  const now = new Date();
+  return new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
+  ).toISOString();
 }
 
 /** The publication copy of a source game, or null when it was never submitted. */
@@ -111,7 +123,7 @@ export async function submitPublication(
 
   const { data: account, error: accountError } = await supabase
     .from("accounts")
-    .select("publication_handle")
+    .select("publication_handle, monthly_game_publication_limit")
     .eq("id", accountId)
     .single();
   if (accountError) throw accountError;
@@ -120,6 +132,33 @@ export async function submitPublication(
       "Choose a publication handle before publishing",
       409,
     );
+  }
+
+  // A hard rejection is permanent for this source game. The check reads the
+  // request log, not the copy row — withdraw deletes the copy, and deleting
+  // must not lift the block.
+  const { count: hardCount, error: hardError } = await supabase
+    .from("game_publication_requests")
+    .select("id", { count: "exact", head: true })
+    .eq("source_game_id", sourceGameId)
+    .eq("rejection_kind", "hard");
+  if (hardError) throw hardError;
+  if ((hardCount ?? 0) > 0) {
+    throw new PublicationError("publication_hard_rejected", 403);
+  }
+
+  // Monthly quota: EVERY submit counts (each one triggers a paid AI review),
+  // including resubmits after a soft rejection. Count-then-insert can overrun
+  // by one under concurrent submits; accepted — the worst case is one extra
+  // review, not worth a DB function.
+  const { count: usedCount, error: usedError } = await supabase
+    .from("game_publication_requests")
+    .select("id", { count: "exact", head: true })
+    .eq("account_id", accountId)
+    .gte("requested_at", monthStartUtcIso());
+  if (usedError) throw usedError;
+  if ((usedCount ?? 0) >= account.monthly_game_publication_limit) {
+    throw new PublicationError("publication_limit_reached", 403);
   }
 
   // The one place the server CAN check the bundle, because this copy is
@@ -155,6 +194,11 @@ export async function submitPublication(
     publication_requested_at: new Date().toISOString(),
     published_at: null,
     approved_by: null,
+    // A resubmit re-enters the review queue clean.
+    rejected_at: null,
+    rejection_kind: null,
+    rejection_reasons: null,
+    review_attempts: 0,
   };
 
   const existing = await getPublication(supabase, sourceGameId, accountId);
@@ -164,10 +208,28 @@ export async function submitPublication(
 
   const { data, error } = await query.select("*").single();
   if (error) throw error;
-  return castGame(data);
+  const publication = castGame(data);
+
+  const { error: logError } = await supabase
+    .from("game_publication_requests")
+    .insert({
+      account_id: accountId,
+      source_game_id: sourceGameId,
+      publication_game_id: publication.id,
+    });
+  if (logError) throw logError;
+
+  return publication;
 }
 
-/** Withdraw a submission (pending or live). Idempotent. */
+/**
+ * Withdraw a submission (pending, live, or soft-rejected). Idempotent.
+ *
+ * HARD-rejected copies are deliberately NOT deleted: they are the evidence a
+ * moderator reviews when looking at a flagged account, and withdrawing must
+ * not launder them. Nothing about them is public (a hard rejection never went
+ * live), and full account deletion still removes them via the FK CASCADE.
+ */
 export async function withdrawPublication(
   supabase: Client,
   sourceGameId: string,
@@ -178,7 +240,9 @@ export async function withdrawPublication(
     .delete()
     .eq("source_game_id", sourceGameId)
     .eq("account_id", accountId)
-    .not("publication_requested_at", "is", null);
+    .not("publication_requested_at", "is", null)
+    // NULL-safe "not hard-rejected": a bare neq would skip NULL rows.
+    .or("rejection_kind.is.null,rejection_kind.neq.hard");
   if (error) throw error;
 }
 
@@ -193,28 +257,114 @@ export async function approvePublication(
 ): Promise<Game> {
   const { data, error } = await supabase
     .from("games")
-    .update({ published_at: new Date().toISOString(), approved_by: approvedBy })
+    .update({
+      published_at: new Date().toISOString(),
+      approved_by: approvedBy,
+      // An admin can approve over a rejection; the verdict is superseded.
+      rejected_at: null,
+      rejection_kind: null,
+      rejection_reasons: null,
+    })
     .eq("id", publicationId)
     .not("publication_requested_at", "is", null)
     .select("*")
     .maybeSingle();
   if (error) throw error;
   if (!data) throw new PublicationError("Publication not found", 404);
+
+  const { error: logError } = await supabase
+    .from("game_publication_requests")
+    .update({ outcome: "approved", decided_at: new Date().toISOString() })
+    .eq("publication_game_id", publicationId)
+    .is("outcome", null);
+  if (logError) throw logError;
+
   return castGame(data);
 }
 
-/** Submissions awaiting review, oldest first (the review queue). */
+/**
+ * Stamp a submission as rejected. Hard rejections additionally flag the
+ * account for review and — via the request log, which outlives the copy row —
+ * permanently block resubmission of the source game.
+ */
+export async function rejectPublication(
+  supabase: Client,
+  publicationId: string,
+  rejection: { kind: RejectionKind; reasons: PublicationRejectionReason[] },
+): Promise<Game> {
+  const reasonsJson = rejection.reasons as unknown as Json;
+  const { data, error } = await supabase
+    .from("games")
+    .update({
+      rejected_at: new Date().toISOString(),
+      rejection_kind: rejection.kind,
+      rejection_reasons: reasonsJson,
+    })
+    .eq("id", publicationId)
+    .not("publication_requested_at", "is", null)
+    .is("published_at", null)
+    .select("*")
+    .maybeSingle();
+  if (error) throw error;
+  // Withdrawn (or already published) between claim and verdict: nothing to
+  // stamp — the caller treats the 404 as a harmless skip.
+  if (!data) throw new PublicationError("Publication not found", 404);
+  const publication = castGame(data);
+
+  const { error: logError } = await supabase
+    .from("game_publication_requests")
+    .update({
+      outcome: "rejected",
+      rejection_kind: rejection.kind,
+      rejection_reasons: reasonsJson,
+      decided_at: new Date().toISOString(),
+    })
+    .eq("publication_game_id", publicationId)
+    .is("outcome", null);
+  if (logError) throw logError;
+
+  if (rejection.kind === "hard" && publication.account_id) {
+    const { data: accountRow, error: accountError } = await supabase
+      .from("accounts")
+      .select("flagged_for_review_at")
+      .eq("id", publication.account_id)
+      .single();
+    if (accountError) throw accountError;
+    if (!accountRow.flagged_for_review_at) {
+      const { error: flagError } = await supabase
+        .from("accounts")
+        .update({ flagged_for_review_at: new Date().toISOString() })
+        .eq("id", publication.account_id);
+      if (flagError) throw flagError;
+    }
+  }
+
+  return publication;
+}
+
+/**
+ * Submissions awaiting review, oldest first (the review queue). Rejected rows
+ * are parked, not pending — they wait for the parent (soft) or forever (hard).
+ * `maxAttempts` lets the worker skip items whose review budget is exhausted
+ * while the operator endpoint keeps seeing them.
+ */
 export async function listPendingPublications(
   supabase: Client,
   limit = 50,
+  maxAttempts?: number,
 ): Promise<Game[]> {
-  const { data, error } = await supabase
+  let query = supabase
     .from("games")
     .select("*")
     .not("publication_requested_at", "is", null)
     .is("published_at", null)
+    .is("rejected_at", null)
     .order("publication_requested_at", { ascending: true })
     .limit(limit);
+  if (maxAttempts !== undefined) {
+    query = query.lt("review_attempts", maxAttempts);
+  }
+  const { data, error } = await query;
   if (error) throw error;
   return (data ?? []).map(castGame);
 }

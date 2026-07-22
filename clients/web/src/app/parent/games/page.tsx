@@ -11,13 +11,20 @@ import {
   GameStudioList,
   type GameListItem,
 } from "@/components/parent/games/game-studio-list";
+import { DiscoverList } from "@/components/parent/games/discover-list";
 import { GameImportDialog } from "@/components/parent/games/game-import-dialog";
 import { useAccountGames } from "@/hooks/use-games";
 import { useKids } from "@/hooks/use-kids";
 import { dodi } from "@/lib/api";
 import { useGameStore } from "@/stores/game-store";
+import { isUnbuiltBundle } from "@dodi/games/placeholder";
 
-export default function GameStudioPage() {
+/**
+ * The games list — "Your games" plus dodi Discover — at `/parent/games`.
+ * Creating and editing still open the full Game Studio at
+ * `/parent/game-studio/{id}`; only the list itself lives here.
+ */
+export default function ParentGamesPage() {
   const t = useTranslations("gameStudio");
 
   const { kids } = useKids();
@@ -64,6 +71,9 @@ export default function GameStudioPage() {
         isActive: g.is_active,
         isFamily: share.family,
         kidNames,
+        // Readable only because the store decrypted the bundle for us.
+        built: !isUnbuiltBundle(g.code_bundle),
+        previewImage: g.preview_image,
       };
     });
   }, [games, kids]);
@@ -97,6 +107,10 @@ export default function GameStudioPage() {
         ) : (
           <GameStudioList items={items} onDelete={deleteGame} />
         )}
+      </Section>
+
+      <Section title={t("discoverTitle")} desc={t("discoverSubtitle")}>
+        <DiscoverList />
       </Section>
     </div>
   );

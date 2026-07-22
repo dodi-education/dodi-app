@@ -133,6 +133,7 @@ export function GameImportDialog({ open, onOpenChange }: GameImportDialogProps) 
         successCriteria: Object.keys(manifest.successCriteria).length
           ? (manifest.successCriteria as unknown as Json)
           : undefined,
+        previewImage: parsed.previewImageDataUrl || undefined,
       });
       const res = await dodi.request("/api/games", {
         method: "POST",
@@ -169,6 +170,8 @@ export function GameImportDialog({ open, onOpenChange }: GameImportDialogProps) 
   }
 
   const manifest = parsed?.manifest ?? null;
+  // Card thumbnail: the archive's list preview, else its background image.
+  const thumb = parsed ? (parsed.previewImageDataUrl ?? parsed.backgroundDataUrl) : null;
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -206,9 +209,9 @@ export function GameImportDialog({ open, onOpenChange }: GameImportDialogProps) 
           <div className="flex flex-col gap-4">
             {/* Non-executing preview — the game code is never rendered here. */}
             <div className="flex gap-3 rounded-xl border border-border bg-card p-3">
-              {parsed.backgroundDataUrl && (
+              {thumb && (
                 <Image
-                  src={parsed.backgroundDataUrl}
+                  src={thumb}
                   alt=""
                   width={72}
                   height={72}
