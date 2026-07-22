@@ -38,6 +38,7 @@ import {
   fileToDataUrl,
   squareThumbnailDataUrl,
 } from "@/lib/games/thumbnail";
+import { gameDebug, gameDebugWarn } from "@dodi/games/debug";
 import { useKids } from "@/hooks/use-kids";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { useNavigationGuard } from "@/hooks/use-navigation-guard";
@@ -364,6 +365,11 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
   // Whether the sandbox's CURRENT code has reported game:ready — the list
   // preview capture waits for it rather than shooting a blank boot screen.
   const sandboxReadyRef = useRef(false);
+  // True while refreshPreviewImage captures the list preview (wait-for-ready +
+  // settle + snapshot ≈ several seconds). Drives the stage overlay so the user
+  // knows to wait rather than leaving before the thumbnail lands (leaving
+  // unmounts the sandbox and aborts the capture).
+  const [capturingPreview, setCapturingPreview] = useState(false);
   const sideWidthRef = useRef(sideWidth);
   const composerHeightRef = useRef(composerHeight);
   // The in-flight build's abort handle — drives Stop + navigation guards.
@@ -587,34 +593,65 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
       await new Promise((resolve) => setTimeout(resolve, PREVIEW_READY_POLL_MS));
       if (sandboxReadyRef.current) break;
     }
+    if (!sandboxReadyRef.current) {
+      gameDebugWarn(
+        "preview",
+        `no game:ready after ${PREVIEW_READY_MAX_POLLS * PREVIEW_READY_POLL_MS}ms — capturing anyway`,
+      );
+    }
     await new Promise((resolve) => setTimeout(resolve, PREVIEW_SETTLE_MS));
     const raw = await sandboxRef.current
       ?.requestSnapshot({ preferGameCapture: capabilities.includes("get_snapshot") })
       .catch(() => null);
-    return raw ? squareThumbnailDataUrl(raw, PREVIEW_IMAGE_SIZE) : null;
+    if (!raw) {
+      gameDebugWarn(
+        "preview",
+        sandboxRef.current
+          ? "sandbox returned no snapshot"
+          : "sandbox unmounted mid-capture (sandboxRef is null)",
+      );
+      return null;
+    }
+    const square = await squareThumbnailDataUrl(raw, PREVIEW_IMAGE_SIZE);
+    if (!square) gameDebugWarn("preview", "downscale to square thumbnail failed");
+    return square;
   };
 
   // Refresh the sealed preview_image after a build, or backfill it on saves of
   // games that predate previews. Fire-and-forget best effort: a failed capture
   // never disturbs the save that triggered it — the next one simply retries.
+  // Callers that follow up with router.refresh() MUST chain it on this promise:
+  // the studio keeps the tab URL in step via history.replaceState, so a refresh
+  // reconciles that URL as a NEW [[...tab]] segment and remounts the whole
+  // studio — killing an in-flight capture (dead sandboxRef ⇒ null preview) and
+  // the "Generating preview…" overlay with it.
   const refreshPreviewImage = async (
     gameId: string,
     capabilities: string[],
   ): Promise<void> => {
+    setCapturingPreview(true);
+    gameDebug("preview", `list-preview capture started for game ${gameId}`);
     try {
       const preview = await capturePreviewImage(capabilities);
-      if (!preview) return;
+      if (!preview) return; // capturePreviewImage already warned with the reason
       const sealed = await sealGameFields({ preview_image: preview });
       const res = await dodi.request(`/api/games/${gameId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ preview_image: sealed.preview_image }),
       });
-      if (!res.ok) return;
+      if (!res.ok) {
+        gameDebugWarn("preview", `preview PATCH failed with status ${res.status}`);
+        return;
+      }
+      gameDebug("preview", "list preview captured and saved");
       setGame((g) => (g.id === gameId ? { ...g, previewImage: preview } : g));
       useGameStore.getState().patchLocal(gameId, { preview_image: preview });
-    } catch {
+    } catch (e) {
       /* best effort — lists fall back to the tag tile */
+      gameDebugWarn("preview", "list-preview capture failed", e);
+    } finally {
+      setCapturingPreview(false);
     }
   };
 
@@ -716,11 +753,13 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
         codeBundle: row.code_bundle,
         currentGameVersionId: row.current_game_version_id,
       }));
-      // The restored version is the game's look now — refresh the list preview.
+      // The restored version is the game's look now — refresh the list preview
+      // (route refresh chained after the capture, see refreshPreviewImage).
       if (!isUnbuiltBundle(row.code_bundle)) {
-        void refreshPreviewImage(row.id, game.capabilities);
+        void refreshPreviewImage(row.id, game.capabilities).then(() => router.refresh());
+      } else {
+        router.refresh();
       }
-      router.refresh();
       return true;
     } catch (e) {
       const reason = e instanceof Error && e.message ? e.message : "";
@@ -809,11 +848,13 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
       setReverted(false);
       await loadVersions();
       settleSaveEdit(true);
-      // Hand-edited code changes the game's look — refresh the list preview.
+      // Hand-edited code changes the game's look — refresh the list preview
+      // (route refresh chained after the capture, see refreshPreviewImage).
       if (!isUnbuiltBundle(row.code_bundle)) {
-        void refreshPreviewImage(row.id, game.capabilities);
+        void refreshPreviewImage(row.id, game.capabilities).then(() => router.refresh());
+      } else {
+        router.refresh();
       }
-      router.refresh();
     } catch (e) {
       const reason = e instanceof Error && e.message ? e.message : "";
       setError(reason ? t("saveFailed", { reason }) : t("saveFailedGeneric"));
@@ -1133,10 +1174,12 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
           // Adopt the server's new version head (an agent persist appends a version).
           setGame((g) => ({ ...g, currentGameVersionId: row.current_game_version_id }));
           void loadVersions();
-          // Every build refreshes the list preview — the game's look just changed.
-          void refreshPreviewImage(row.id, builtCapabilities);
+          // Every build refreshes the list preview — the game's look just changed
+          // (route refresh chained after the capture, see refreshPreviewImage).
+          void refreshPreviewImage(row.id, builtCapabilities).then(() => router.refresh());
+        } else {
+          router.refresh();
         }
-        router.refresh();
       } catch (saveErr) {
         const reason = saveErr instanceof Error ? saveErr.message : "";
         setError(reason ? t("saveFailed", { reason }) : t("saveFailedGeneric"));
@@ -1209,6 +1252,9 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     setInvalid({});
     setError(null);
     setSaving(true);
+    // Whether this save also backfills a missing list preview — decided up front
+    // because the tail's router.refresh() must yield to the capture when it runs.
+    const backfillPreview = Boolean(game.id) && game.built && !game.previewImage;
     try {
       if (game.id) {
         // Map the success definition to structured criteria IN THE BROWSER (the
@@ -1265,9 +1311,10 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
         useGameStore
           .getState()
           .put(await decryptGameResponse((await res.json()) as Game));
-        // Settings saves backfill a missing preview for games that predate them.
-        if (game.built && !game.previewImage) {
-          void refreshPreviewImage(game.id, game.capabilities);
+        // Settings saves backfill a missing preview for games that predate them
+        // (route refresh chained after the capture, see refreshPreviewImage).
+        if (backfillPreview) {
+          void refreshPreviewImage(game.id, game.capabilities).then(() => router.refresh());
         }
       } else {
         // Persist a new game straight from settings (no build required). With no
@@ -1308,7 +1355,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
         return;
       }
       setJustSaved(true);
-      router.refresh();
+      if (!backfillPreview) router.refresh();
       setTimeout(() => setJustSaved(false), 2200);
     } catch (e) {
       const reason = e instanceof Error && e.message ? e.message : "";
@@ -1474,6 +1521,22 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
           </div>
 
           <div className="relative min-h-0 min-w-0 flex-1 overflow-y-auto">
+            {/* Preview capture runs for a few seconds after every save/build and
+                is fire-and-forget; without this the list thumbnail just lands
+                late and the save looks like it did nothing. The scrim lives in
+                the parent (outside the sandbox iframe) so it is never captured. */}
+            {capturingPreview && (
+              <div
+                className="absolute inset-0 z-20 flex items-center justify-center bg-background/70 backdrop-blur-sm"
+                role="status"
+                aria-live="polite"
+              >
+                <div className="flex items-center gap-2.5 rounded-full border border-border bg-card px-4 py-2 text-sm font-medium text-muted-foreground shadow-sm">
+                  <Icon name="loading" className="h-4 w-4 animate-spin" />
+                  {t("generatingPreview")}
+                </div>
+              </div>
+            )}
             {/* The stage stays mounted whenever code exists (hidden by CSS on the
                 other tabs) so the sandbox can serve edit-time screenshot capture
                 without a reload — hiding instead of unmounting keeps layout alive

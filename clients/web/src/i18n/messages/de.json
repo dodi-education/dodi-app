@@ -536,6 +536,7 @@
     "saveFailed": "Spiel konnte nicht gespeichert werden: {reason}",
     "saveFailedGeneric": "Spiel konnte nicht gespeichert werden. Bitte versuche es erneut.",
     "previewEmpty": "Deine Spielvorschau erscheint hier, sobald dodi sie gebaut hat.",
+    "generatingPreview": "Vorschau wird erstellt…",
     "codeEmpty": "Der generierte Spielcode erscheint hier.",
     "gameName": "Spielname",
     "gameNamePlaceholder": "z. B. Apfelgarten",

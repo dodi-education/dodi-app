@@ -536,6 +536,7 @@
     "saveFailed": "Couldn't save the game: {reason}",
     "saveFailedGeneric": "Couldn't save the game. Please try again.",
     "previewEmpty": "Your game preview will appear here once dodi builds it.",
+    "generatingPreview": "Generating preview…",
     "codeEmpty": "The generated game code will appear here.",
     "gameName": "Game name",
     "gameNamePlaceholder": "e.g. Apple Orchard",
