@@ -72,6 +72,7 @@ import {
   IconUpload,
   IconUser,
   IconUserPlus,
+  IconUserShare,
   IconUsers,
   IconVolume,
   IconWorldUp,
@@ -141,6 +142,7 @@ export type IconName =
   | "switch_vertical"
   | "upload"
   | "user_plus"
+  | "user_share"
   | "agent_sessions"
   | "activities"
   | "event_logs"
@@ -225,6 +227,7 @@ const ICONS: Record<IconName, ComponentType<TablerIconProps>> = {
   switch_vertical: IconSwitchVertical,
   upload: IconUpload,
   user_plus: IconUserPlus,
+  user_share: IconUserShare,
   agent_sessions: IconRobot,
   activities: IconLogs,
   event_logs: IconLogs,

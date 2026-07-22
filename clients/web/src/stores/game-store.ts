@@ -34,8 +34,16 @@ import { awaitSession } from "./await-session";
 /** A game as delivered to the kid library — carries the per-kid favorite flag. */
 export type LibraryGame = Game & { is_favorite: boolean };
 
-/** A game as delivered to the parent studio list — carries its sharing state. */
-export type AccountGame = Game & { sharing: GameSharingState };
+/**
+ * A game as delivered to the parent studio list — carries its sharing state and
+ * play/copy counts (same aggregate as Discover: plays on this row, copies =
+ * private remixes with `source_game_id` pointing here).
+ */
+export type AccountGame = Game & {
+  sharing: GameSharingState;
+  plays: number;
+  copies: number;
+};
 
 interface GameStoreState {
   /** Kid library, keyed by kid id (a kid sees system + owned + shared games). */
@@ -156,6 +164,8 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
       const decrypted = rows.map((row) => ({
         ...decryptGame(session, row),
         sharing: row.sharing ?? { family: false, kidIds: [] },
+        plays: row.plays ?? 0,
+        copies: row.copies ?? 0,
       }));
 
       set((state) => ({

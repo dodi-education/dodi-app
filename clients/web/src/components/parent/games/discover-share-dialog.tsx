@@ -1,13 +1,16 @@
 "use client";
 
 /**
- * "Share with kids" for a published Discover game — play-in-place: it writes
- * THIS family's game_sharings rows pointing at the single published row (no
- * copy), so the game appears in the chosen kids' libraries and every family's
- * plays aggregate on one row.
+ * "Share with kids" — pick family or specific kids for a game's audience.
  *
- * Extracted from `discover-list.tsx` so the Discover list and the parent
- * preview page (`/parent/games/[id]`) share one implementation.
+ * Two backends, one UI:
+ * - `discover` (default): play-in-place on a published row via
+ *   `PUT /api/discover/games/:id/sharing`. No copy is made; plays aggregate
+ *   on the single published game.
+ * - `studio`: private owned game via `PATCH /api/games/:id` with `audience`.
+ *   Kids see it through the normal library visibility rules.
+ *
+ * Used by both list menus and the Discover preview page.
  */
 import { useState } from "react";
 import { useTranslations } from "next-intl";
@@ -26,34 +29,36 @@ import { dodi } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useKids } from "@/hooks/use-kids";
 import { useGameStore } from "@/stores/game-store";
-import type { DiscoverGameSummary, GameSharingState } from "@dodi/types/games";
+import type { GameSharingState } from "@dodi/types/games";
 
-/**
- * The published-game fields the share dialog actually needs — a subset of the
- * Discover summary. The preview page reconstructs this from a game detail (which
- * carries no `plays`/`copies`), so the dialog must not require them.
- */
-export type ShareableGame = Pick<
-  DiscoverGameSummary,
-  "id" | "title" | "sharing"
->;
+/** Fields the share dialog needs — works for Discover summaries and studio rows. */
+export type ShareableGame = {
+  id: string;
+  title: string;
+  sharing: GameSharingState;
+};
 
-/** Pick which of this family's kids can play the published game (in place). */
+export type ShareDialogVariant = "discover" | "studio";
+
+/** Pick which of this family's kids can play the game. */
 export function DiscoverShareDialog({
   open,
   game,
   onClose,
   onSaved,
+  variant = "discover",
 }: {
   open: boolean;
   game: ShareableGame | null;
   onClose: () => void;
   /**
-   * Fired with the saved audience after a successful PUT (in addition to the
+   * Fired with the saved audience after a successful save (in addition to the
    * store patch), so a caller holding its own copy of the sharing state — e.g.
    * the preview page — can keep it in sync.
    */
   onSaved?: (sharing: GameSharingState) => void;
+  /** Which backend owns this game's sharing rows. */
+  variant?: ShareDialogVariant;
 }) {
   const t = useTranslations("gameStudio");
   const { kids } = useKids();
@@ -84,14 +89,33 @@ export function DiscoverShareDialog({
     setBusy(true);
     setError(null);
     try {
-      const res = await dodi.request(`/api/discover/games/${game.id}/sharing`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isFamily, audienceIds }),
-      });
-      if (!res.ok) throw new Error();
-      const { sharing } = (await res.json()) as { sharing: GameSharingState };
-      useGameStore.getState().patchDiscoverSharing(game.id, sharing);
+      let sharing: GameSharingState;
+      if (variant === "studio") {
+        const res = await dodi.request(`/api/games/${game.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            audience: { isFamily, audienceIds },
+          }),
+        });
+        if (!res.ok) throw new Error();
+        sharing = {
+          family: isFamily,
+          kidIds: isFamily ? [] : audienceIds,
+        };
+        useGameStore.getState().patchLocal(game.id, { sharing });
+        // Audience changed — kid libraries must refetch on next visit.
+        useGameStore.setState({ byKid: {} });
+      } else {
+        const res = await dodi.request(`/api/discover/games/${game.id}/sharing`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ isFamily, audienceIds }),
+        });
+        if (!res.ok) throw new Error();
+        ({ sharing } = (await res.json()) as { sharing: GameSharingState });
+        useGameStore.getState().patchDiscoverSharing(game.id, sharing);
+      }
       onSaved?.(sharing);
       onClose();
     } catch {
@@ -100,6 +124,9 @@ export function DiscoverShareDialog({
       setBusy(false);
     }
   }
+
+  const descriptionKey =
+    variant === "studio" ? "studioShareDescription" : "discoverShareDescription";
 
   return (
     <Dialog
@@ -112,7 +139,7 @@ export function DiscoverShareDialog({
         <DialogHeader>
           <DialogTitle>{t("discoverShareTitle")}</DialogTitle>
           <DialogDescription>
-            {t("discoverShareDescription", { title: game?.title ?? "" })}
+            {t(descriptionKey, { title: game?.title ?? "" })}
           </DialogDescription>
         </DialogHeader>
 
@@ -155,7 +182,7 @@ export function DiscoverShareDialog({
             {t("importCancel")}
           </Button>
           <Button onClick={() => void save()} disabled={busy}>
-            <Icon name="share" size={15} />
+            <Icon name="user_share" size={15} />
             {t("discoverShareConfirm")}
           </Button>
         </DialogFooter>

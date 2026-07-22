@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 
@@ -22,10 +23,19 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  DiscoverShareDialog,
+  type ShareableGame,
+} from "@/components/parent/games/discover-share-dialog";
 import { GameExportDialog } from "@/components/parent/games/game-export-dialog";
 import { PublishDialog } from "@/components/parent/games/publish-dialog";
 import { tagStyle } from "@/components/parent/games/tag-style";
+import { useKids } from "@/hooks/use-kids";
+import { dodi } from "@/lib/api";
 import { useTagLabel } from "@/lib/games/tag-label";
+import { sealGameCreateFields, useGameStore } from "@/stores/game-store";
+import type { Json } from "@dodi/types/database";
+import type { GameSharingState } from "@dodi/types/games";
 
 export interface GameListItem {
   id: string;
@@ -38,10 +48,16 @@ export interface GameListItem {
   isFamily: boolean;
   /** Decrypted names of the specific kids this game is shared with. */
   kidNames: string[];
+  /** Current sharing state — seeds the "Share with kids" dialog. */
+  sharing: GameSharingState;
   /** Dodi has written real code (not the unbuilt placeholder) — publishable. */
   built: boolean;
   /** Decrypted 100×100 list preview; null falls back to the tag tile. */
   previewImage: string | null;
+  /** Times this game has been played (this row's game_plays). */
+  plays: number;
+  /** Private remixes pointing back at this game via source_game_id. */
+  copies: number;
 }
 
 type EditedKey = "editedToday" | "editedDaysAgo" | "editedWeeksAgo";
@@ -94,6 +110,8 @@ export function GameStudioList({ items, onDelete }: GameStudioListProps) {
   // menu opened it. Deleting also drops the version history and autosaves, so it
   // is confirmed rather than done straight from the menu.
   const deleteDialog = useDialogTarget<GameListItem>();
+  const shareDialog = useDialogTarget<GameListItem>();
+  const copyDialog = useDialogTarget<GameListItem>();
   const exportDialog = useDialogTarget<GameListItem>();
   const publishDialog = useDialogTarget<GameListItem>();
 
@@ -114,6 +132,14 @@ export function GameStudioList({ items, onDelete }: GameStudioListProps) {
       setDeleting(false);
     }
   }
+
+  const shareTarget: ShareableGame | null = shareDialog.target
+    ? {
+        id: shareDialog.target.id,
+        title: shareDialog.target.title,
+        sharing: shareDialog.target.sharing,
+      }
+    : null;
 
   return (
     <>
@@ -155,14 +181,6 @@ export function GameStudioList({ items, onDelete }: GameStudioListProps) {
                   <span className="truncate text-sm font-semibold text-ink-1 transition-colors group-hover:text-primary">
                     {g.title}
                   </span>
-                  {primaryTag && (
-                    <span
-                      className="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold"
-                      style={{ background: s.bg, color: s.fg }}
-                    >
-                      {tagLabel(primaryTag)}
-                    </span>
-                  )}
                   {g.isActive ? (
                     <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-semibold text-primary">
                       <span className="h-[7px] w-[7px] rounded-full bg-primary" />
@@ -198,6 +216,39 @@ export function GameStudioList({ items, onDelete }: GameStudioListProps) {
                 <div className="mt-0.5 truncate text-xs text-muted-foreground">
                   {t(e.key, e.values)}
                 </div>
+                {/* Plays/copies + all tags — mirrors Discover's third row. */}
+                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-medium text-muted-foreground">
+                  <span
+                    className="inline-flex items-center gap-1"
+                    aria-label={t("discoverPlaysLabel", { count: g.plays })}
+                    title={t("discoverPlaysLabel", { count: g.plays })}
+                  >
+                    <Icon name="games" size={13} />
+                    {g.plays}
+                  </span>
+                  <span
+                    className="inline-flex items-center gap-1"
+                    aria-label={t("discoverCopiesLabel", { count: g.copies })}
+                    title={t("discoverCopiesLabel", { count: g.copies })}
+                  >
+                    <Icon name="copy" size={13} />
+                    {g.copies}
+                  </span>
+                  {g.tags.map((raw) => {
+                    const tag = raw.trim().toLowerCase();
+                    if (!tag) return null;
+                    const ts = tagStyle(tag);
+                    return (
+                      <span
+                        key={tag}
+                        className="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold"
+                        style={{ background: ts.bg, color: ts.fg }}
+                      >
+                        {tagLabel(tag)}
+                      </span>
+                    );
+                  })}
+                </div>
               </div>
             </Link>
             <DropdownMenu>
@@ -218,6 +269,14 @@ export function GameStudioList({ items, onDelete }: GameStudioListProps) {
                     <Icon name="edit" size={15} />
                     {t("edit")}
                   </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => shareDialog.show(g)}>
+                  <Icon name="user_share" size={15} />
+                  {t("discoverShare")}
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => copyDialog.show(g)}>
+                  <Icon name="copy" size={15} />
+                  {t("discoverRemix")}
                 </DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => exportDialog.show(g)}>
                   <Icon name="download" size={15} />
@@ -243,6 +302,19 @@ export function GameStudioList({ items, onDelete }: GameStudioListProps) {
           </div>
         );
       })}
+
+      <DiscoverShareDialog
+        open={shareDialog.open}
+        game={shareTarget}
+        onClose={shareDialog.hide}
+        variant="studio"
+      />
+
+      <StudioCopyDialog
+        open={copyDialog.open}
+        game={copyDialog.target}
+        onClose={copyDialog.hide}
+      />
 
       <GameExportDialog
         open={exportDialog.open}
@@ -287,5 +359,125 @@ export function GameStudioList({ items, onDelete }: GameStudioListProps) {
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+/**
+ * Create a private, editable copy of an owned studio game. Loads the decrypted
+ * row, re-seals content under the vault, and POSTs a new inactive game (same
+ * path as Discover remix / import).
+ */
+function StudioCopyDialog({
+  open,
+  game,
+  onClose,
+}: {
+  open: boolean;
+  game: GameListItem | null;
+  onClose: () => void;
+}) {
+  const t = useTranslations("gameStudio");
+  const router = useRouter();
+  const { kids } = useKids();
+  const primaryKidId = kids?.[0]?.id ?? null;
+
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [prevOpen, setPrevOpen] = useState(false);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
+    if (open) setError(null);
+  }
+
+  async function createCopy(): Promise<void> {
+    if (!game || !primaryKidId || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const row = await useGameStore.getState().loadOne(game.id, undefined, true);
+      if (!row) throw new Error();
+
+      const sealed = await sealGameCreateFields({
+        title: row.title,
+        description: row.description || undefined,
+        markdown: row.markdown || undefined,
+        codeBundle: row.code_bundle,
+        learningGoal: row.learning_goal || undefined,
+        successDefinition: row.success_definition || undefined,
+        successCriteria:
+          row.success_criteria &&
+          typeof row.success_criteria === "object" &&
+          Object.keys(row.success_criteria).length
+            ? (row.success_criteria as Json)
+            : undefined,
+        previewImage: row.preview_image || undefined,
+      });
+      const res = await dodi.request("/api/games", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kidId: primaryKidId,
+          sourceGameId: game.id,
+          ...sealed,
+          tags: row.tags,
+          progressKind: row.progress_kind,
+          targetAgeMin: row.target_age_min,
+          targetAgeMax: row.target_age_max,
+          estimatedDurationMinutes: row.estimated_duration_minutes,
+          metadata: row.metadata ?? {},
+          // A copy starts inactive — parent reviews before kids see it.
+          isActive: false,
+        }),
+      });
+      if (!res.ok) throw new Error();
+      const created = (await res.json()) as { id: string };
+      useGameStore.getState().invalidate();
+      onClose();
+      router.push(`/parent/game-studio/${created.id}`);
+    } catch {
+      setError(t("discoverFailedGeneric"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next && !busy) onClose();
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{t("discoverRemixTitle")}</DialogTitle>
+          <DialogDescription>
+            {t("discoverRemixDescription", { title: game?.title ?? "" })}
+          </DialogDescription>
+        </DialogHeader>
+
+        {!primaryKidId && (
+          <div className="rounded-lg bg-danger-soft px-3 py-2 text-xs font-medium text-danger">
+            {t("discoverRemixNeedsKid")}
+          </div>
+        )}
+        {error && (
+          <div className="rounded-lg bg-danger-soft px-3 py-2 text-xs font-medium text-danger">
+            {error}
+          </div>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={busy}>
+            {t("importCancel")}
+          </Button>
+          <Button onClick={() => void createCopy()} disabled={!primaryKidId || busy}>
+            <Icon name="copy" size={15} />
+            {t("discoverRemixConfirm")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

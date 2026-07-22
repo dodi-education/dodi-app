@@ -71,9 +71,12 @@ export default function ParentGamesPage() {
         isActive: g.is_active,
         isFamily: share.family,
         kidNames,
+        sharing: share,
         // Readable only because the store decrypted the bundle for us.
         built: !isUnbuiltBundle(g.code_bundle),
         previewImage: g.preview_image,
+        plays: g.plays,
+        copies: g.copies,
       };
     });
   }, [games, kids]);

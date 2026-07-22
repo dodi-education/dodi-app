@@ -16,6 +16,7 @@ import {
   listGames,
   replaceGameSharings,
 } from "@/services/games";
+import { getGameStats } from "@/services/discover";
 import type { GameMetadata } from "@dodi/types/games";
 import type { SuccessCriteria } from "@dodi/types/success";
 import {
@@ -93,17 +94,28 @@ export async function GET(request: Request): Promise<NextResponse> {
   const tags = searchParams.getAll("tag").filter(Boolean);
 
   // Parent studio view: all custom games for the account, each annotated with
-  // its sharing state. Canonical titles (no per-kid translation).
+  // its sharing state and play/copy counts. Canonical titles (no per-kid
+  // translation). Stats reuse the Discover aggregate (service-role): plays on
+  // this row, copies = private remixes pointing back via source_game_id.
   if (scope === "account") {
     try {
       const [games, sharingByGame] = await Promise.all([
         listAccountGames(supabase, accountId),
         getAccountSharingByGame(supabase, accountId),
       ]);
-      const withSharing = games.map((game) => ({
-        ...game,
-        sharing: sharingByGame[game.id] ?? { family: false, kidIds: [] },
-      }));
+      const statsByGame = await getGameStats(
+        serviceClient(),
+        games.map((game) => game.id),
+      );
+      const withSharing = games.map((game) => {
+        const stats = statsByGame.get(game.id);
+        return {
+          ...game,
+          sharing: sharingByGame[game.id] ?? { family: false, kidIds: [] },
+          plays: stats?.plays ?? 0,
+          copies: stats?.copies ?? 0,
+        };
+      });
       return NextResponse.json(withSharing);
     } catch (error) {
       return serverErrorResponse(error, "Failed to fetch games", "api/games#GET", {

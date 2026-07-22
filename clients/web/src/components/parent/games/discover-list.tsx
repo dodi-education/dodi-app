@@ -36,6 +36,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { DiscoverShareDialog } from "@/components/parent/games/discover-share-dialog";
+import { GameExportDialog } from "@/components/parent/games/game-export-dialog";
 import { tagStyle } from "@/components/parent/games/tag-style";
 import { useTagLabel } from "@/lib/games/tag-label";
 import { dodi } from "@/lib/api";
@@ -88,6 +89,29 @@ export function DiscoverList() {
 
   const shareDialog = useDialogTarget<DiscoverGameSummary>();
   const remixDialog = useDialogTarget<DiscoverGameSummary>();
+  const exportDialog = useDialogTarget<DiscoverGameSummary>();
+  /** Game id currently clearing its share (disables its trash button). */
+  const [removingId, setRemovingId] = useState<string | null>(null);
+
+  async function removeShare(game: DiscoverGameSummary): Promise<void> {
+    if (removingId) return;
+    setRemovingId(game.id);
+    try {
+      const res = await dodi.request(`/api/discover/games/${game.id}/sharing`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isFamily: false, audienceIds: [] }),
+      });
+      if (!res.ok) throw new Error();
+      useGameStore
+        .getState()
+        .patchDiscoverSharing(game.id, { family: false, kidIds: [] });
+    } catch {
+      setError(t("discoverFailedGeneric"));
+    } finally {
+      setRemovingId(null);
+    }
+  }
 
   if (games === null) {
     return (
@@ -142,14 +166,6 @@ export function DiscoverList() {
                   <span className="truncate text-sm font-semibold text-ink-1">
                     {g.title}
                   </span>
-                  {primaryTag && (
-                    <span
-                      className="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold"
-                      style={{ background: s.bg, color: s.fg }}
-                    >
-                      {tagLabel(primaryTag)}
-                    </span>
-                  )}
                   {isAdded(g.sharing) && (
                     <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-semibold text-primary">
                       <Icon name="check" size={11} strokeWidth={3} />
@@ -173,10 +189,9 @@ export function DiscoverList() {
                     minutes: g.estimated_duration_minutes,
                   })}
                 </div>
-                {/* Popularity: total plays across every family (play-in-place
-                  aggregates on the one published row) and how often it's been
-                  copied. Icon is decorative; the label carries the meaning. */}
-                <div className="mt-1 flex items-center gap-3 text-[11px] font-medium text-muted-foreground">
+                {/* Popularity + all tags. Icon is decorative; the label carries
+                  the meaning. Tags sit here so the meta line stays scannable. */}
+                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-medium text-muted-foreground">
                   <span
                     className="inline-flex items-center gap-1"
                     aria-label={t("discoverPlaysLabel", { count: g.plays })}
@@ -193,9 +208,49 @@ export function DiscoverList() {
                     <Icon name="copy" size={13} />
                     {g.copies}
                   </span>
+                  {g.tags.map((raw) => {
+                    const tag = raw.trim().toLowerCase();
+                    if (!tag) return null;
+                    const ts = tagStyle(tag);
+                    return (
+                      <span
+                        key={tag}
+                        className="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold"
+                        style={{ background: ts.bg, color: ts.fg }}
+                      >
+                        {tagLabel(tag)}
+                      </span>
+                    );
+                  })}
                 </div>
               </div>
             </button>
+            {/* Share is the primary Discover action. Once shared, the blue
+                add button becomes a red trash that clears this family's
+                audience (play-in-place unshare — no copy to delete). */}
+            {isAdded(g.sharing) ? (
+              <button
+                type="button"
+                disabled={removingId === g.id}
+                onClick={() => void removeShare(g)}
+                aria-label={t("discoverUnshare")}
+                title={t("discoverUnshare")}
+                className="flex size-9 shrink-0 items-center justify-center rounded-md bg-danger text-white transition-colors outline-none hover:bg-danger/90 focus-visible:ring-2 focus-visible:ring-danger/40 disabled:pointer-events-none disabled:opacity-50"
+              >
+                <Icon name="delete" size={18} />
+              </button>
+            ) : (
+              <Button
+                type="button"
+                size="icon"
+                onClick={() => shareDialog.show(g)}
+                aria-label={t("discoverShare")}
+                title={t("discoverShare")}
+                className="shrink-0"
+              >
+                <Icon name="user_share" size={18} />
+              </Button>
+            )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
@@ -213,13 +268,13 @@ export function DiscoverList() {
                   <Icon name="show" size={15} />
                   {t("preview")}
                 </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => shareDialog.show(g)}>
-                  <Icon name="share" size={15} />
-                  {t("discoverShare")}
-                </DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => remixDialog.show(g)}>
                   <Icon name="copy" size={15} />
                   {t("discoverRemix")}
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => exportDialog.show(g)}>
+                  <Icon name="download" size={15} />
+                  {t("export")}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -256,6 +311,12 @@ export function DiscoverList() {
         open={remixDialog.open}
         game={remixDialog.target}
         onClose={remixDialog.hide}
+      />
+      <GameExportDialog
+        open={exportDialog.open}
+        gameId={exportDialog.target?.id ?? null}
+        onClose={exportDialog.hide}
+        source="discover"
       />
     </>
   );

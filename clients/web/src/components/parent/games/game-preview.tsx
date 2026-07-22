@@ -104,7 +104,7 @@ export function GamePreview({
               </span>
             )}
             <Button size="sm" onClick={() => setShareOpen(true)}>
-              <Icon name="share" size={15} />
+              <Icon name="user_share" size={15} />
               {t("discoverShare")}
             </Button>
           </div>
