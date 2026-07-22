@@ -86,8 +86,8 @@ export default function EditKidPage() {
   const [birthdate, setBirthdate] = useState("");
   const [language, setLanguage] = useState<string>("en");
   const [activePersonaId, setActivePersonaId] = useState<string | null>(null);
-  const [canInitiate, setCanInitiate] = useState(false);
-  const [canBeAdded, setCanBeAdded] = useState(false);
+  const [canInitiate, setCanInitiate] = useState(true);
+  const [canBeAdded, setCanBeAdded] = useState(true);
   const [incomingApproval, setIncomingApproval] = useState(true);
   const [outgoingApproval, setOutgoingApproval] = useState(false);
   const [pinEnabled, setPinEnabled] = useState(false);
@@ -134,8 +134,8 @@ export default function EditKidPage() {
         setBirthdate(data.birthdate ?? "");
         setLanguage(data.language ?? "en");
         setActivePersonaId(data.active_persona?.id ?? null);
-        setCanInitiate(data.can_add_friends ?? false);
-        setCanBeAdded(data.can_be_added_as_friend ?? false);
+        setCanInitiate(data.can_add_friends ?? true);
+        setCanBeAdded(data.can_be_added_as_friend ?? true);
         setIncomingApproval(
           data.incoming_friend_requests_require_parent_approval ?? true,
         );
