@@ -46,9 +46,10 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
 
   // Entitlement gate: cap kid profiles at the account's copied max_kids.
+  // max_kids NULL = unlimited (every plan today), so only enforce a numeric cap.
   const account = await getAccount(supabase, accountId);
   const existingKids = await listKids(supabase, accountId);
-  if (account && existingKids.length >= account.max_kids) {
+  if (account && account.max_kids != null && existingKids.length >= account.max_kids) {
     return NextResponse.json(
       { error: "kid_limit_reached", limit: account.max_kids },
       { status: 409 },

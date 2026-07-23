@@ -30,7 +30,8 @@ export interface Database {
           subscribed_plan: string;
           // Entitlements copied from the plan; enforcement reads THESE columns so a
           // single account's caps can be raised without inventing a new plan.
-          max_kids: number;
+          // max_kids NULL = unlimited (every plan today); a number caps this account.
+          max_kids: number | null;
           max_custom_personas: number;
           max_storage_mb_per_kid: number;
           memory_tier: "basic" | "advanced" | "full";
@@ -55,7 +56,7 @@ export interface Database {
           notification_preferences?: Json;
           language?: string;
           subscribed_plan?: string;
-          max_kids?: number;
+          max_kids?: number | null;
           max_custom_personas?: number;
           max_storage_mb_per_kid?: number;
           memory_tier?: "basic" | "advanced" | "full";
@@ -76,7 +77,7 @@ export interface Database {
           notification_preferences?: Json;
           language?: string;
           subscribed_plan?: string;
-          max_kids?: number;
+          max_kids?: number | null;
           max_custom_personas?: number;
           max_storage_mb_per_kid?: number;
           memory_tier?: "basic" | "advanced" | "full";
@@ -1090,7 +1091,7 @@ export interface Database {
           sort_order: number;
           price_eur_month: number;
           is_active: boolean;
-          max_kids: number;
+          max_kids: number | null;
           max_custom_personas: number;
           max_storage_mb_per_kid: number;
           memory_tier: "basic" | "advanced" | "full";
@@ -1104,7 +1105,7 @@ export interface Database {
           sort_order?: number;
           price_eur_month?: number;
           is_active?: boolean;
-          max_kids: number;
+          max_kids: number | null;
           max_custom_personas: number;
           max_storage_mb_per_kid: number;
           memory_tier: "basic" | "advanced" | "full";
@@ -1118,7 +1119,7 @@ export interface Database {
           sort_order?: number;
           price_eur_month?: number;
           is_active?: boolean;
-          max_kids?: number;
+          max_kids?: number | null;
           max_custom_personas?: number;
           max_storage_mb_per_kid?: number;
           memory_tier?: "basic" | "advanced" | "full";
