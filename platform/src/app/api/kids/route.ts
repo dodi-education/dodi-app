@@ -4,6 +4,7 @@ import { z } from "zod/v4";
 import { logServerError, serverErrorResponse } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
 import { getAccount } from "@/services/accounts";
+import { shareSystemGamesWithKid } from "@/services/games";
 import { createKid, listKids } from "@/services/kids";
 import { generateSocialId } from "@dodi/crypto/social-id";
 
@@ -67,6 +68,14 @@ export async function POST(request: Request): Promise<NextResponse> {
         birthdate: result.data.birthdate ?? null,
         language: result.data.language,
       });
+      // Default-on: the dodi-published system games start shared with every
+      // new kid; the parent removes the share in Discover like for any other
+      // game. Best-effort — the profile exists either way.
+      try {
+        await shareSystemGamesWithKid(supabase, accountId, kid.id);
+      } catch (error) {
+        logServerError("api/kids#POST", error, { accountId });
+      }
       return NextResponse.json(kid, { status: 201 });
     } catch (error) {
       const message =

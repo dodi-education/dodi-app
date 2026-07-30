@@ -444,10 +444,10 @@ parent-defined goal — and, in future, generate challenges like "Solve 3 math g
 ## TODO
 
 
-- Add system games to dodi Discover and allow parents to add/remove them for kids
 - Create public page for published games
  - Allow to embedd games.
  - Soft registration locks (Snapshot, Remix, etc.)
+ - SEO optimized game lists for landing sub-pages (static generation) with links to app
 
 - Optimize game-state update as every push costs 0.004 USD with grok voice
 
@@ -456,8 +456,6 @@ parent-defined goal — and, in future, generate challenges like "Solve 3 math g
 
 - Account Export/import:parent can download their encrypted data and restore it on a
    self-hosted instance, continuing with the same vault via `nsec`. This also makes us automatically GDPR compliant in the EU.
-
-- Notify game publisher about publication review outcome
 
 - Game store for parents (dodi Discover)
  - [ ] Admin approval UI (`approved_by = 'admin'`)

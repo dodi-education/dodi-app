@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { locales, type Locale } from "@/i18n/config";
 import { encryptKidFields } from "@dodi/vault";
+import { useGameStore } from "@/stores/game-store";
 import { useKidStore } from "@/stores/kid-store";
 import { useVaultStore } from "@/stores/vault-store";
 
@@ -76,6 +77,9 @@ export default function NewKidPage() {
     }
 
     useKidStore.getState().invalidate();
+    // The server auto-shared the system games with the new kid — drop the game
+    // caches so Discover's "Added" badges and the kid libraries refetch.
+    useGameStore.getState().invalidate();
     router.push("/parent/kids");
     router.refresh();
   }

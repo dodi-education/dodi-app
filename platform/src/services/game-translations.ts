@@ -54,10 +54,9 @@ export async function getTranslationsForGames(
   return map;
 }
 
-export function applyTranslation(
-  game: Game,
-  translation?: GameTranslation | null,
-): Game {
+export function applyTranslation<
+  T extends Pick<Game, "title" | "description">,
+>(game: T, translation?: GameTranslation | null): T {
   if (!translation) return game;
   return {
     ...game,

@@ -17,7 +17,7 @@
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 
 import { Icon } from "@/components/shared/icon";
 import { Button } from "@/components/ui/button";
@@ -70,6 +70,7 @@ function isAdded(sharing: GameSharingState): boolean {
 
 export function DiscoverList() {
   const t = useTranslations("gameStudio");
+  const locale = useLocale();
   const tagLabel = useTagLabel();
   const router = useRouter();
 
@@ -78,14 +79,15 @@ export function DiscoverList() {
   const [error, setError] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
 
+  // loadDiscover no-ops when the cache already matches this locale, so the
+  // effect re-firing on `games` (e.g. after invalidate()) stays loop-free.
   useEffect(() => {
-    if (games !== null) return;
     useGameStore
       .getState()
-      .loadDiscover()
+      .loadDiscover(locale)
       .then(() => setError(null))
       .catch(() => setError(t("discoverFailedGeneric")));
-  }, [games, t]);
+  }, [games, locale, t]);
 
   const shareDialog = useDialogTarget<DiscoverGameSummary>();
   const remixDialog = useDialogTarget<DiscoverGameSummary>();
@@ -174,12 +176,17 @@ export function DiscoverList() {
                   )}
                 </div>
                 <div className="mt-0.5 truncate text-xs text-muted-foreground">
-                  {g.publication_handle && (
+                  {g.is_system ? (
+                    <>
+                      {t("discoverByDodi")}
+                      {" · "}
+                    </>
+                  ) : g.publication_handle ? (
                     <>
                       {t("discoverBy", { handle: g.publication_handle })}
                       {" · "}
                     </>
-                  )}
+                  ) : null}
                   {t("discoverAges", {
                     min: g.target_age_min,
                     max: g.target_age_max,
@@ -337,6 +344,7 @@ function DiscoverRemixDialog({
   onClose: () => void;
 }) {
   const t = useTranslations("gameStudio");
+  const locale = useLocale();
   const router = useRouter();
   const { kids } = useKids();
   const primaryKidId = kids?.[0]?.id ?? null;
@@ -356,7 +364,9 @@ function DiscoverRemixDialog({
     setBusy(true);
     setError(null);
     try {
-      const detailRes = await dodi.request(`/api/discover/games/${game.id}`);
+      const detailRes = await dodi.request(
+        `/api/discover/games/${game.id}?locale=${encodeURIComponent(locale)}`,
+      );
       if (!detailRes.ok) throw new Error();
       const detail = (await detailRes.json()) as DiscoverGameDetail;
 

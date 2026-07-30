@@ -61,9 +61,14 @@ interface GameStoreState {
   discover: DiscoverGameSummary[] | null;
   /** Keyset cursor for the next Discover page; null = no more pages. */
   discoverCursor: string | null;
+  /** Locale the Discover pages were fetched for (system-game translations). */
+  discoverLocale: string;
   loadForKid: (kidId: string, force?: boolean) => Promise<LibraryGame[]>;
   loadAccount: (force?: boolean) => Promise<AccountGame[]>;
-  loadDiscover: (force?: boolean) => Promise<DiscoverGameSummary[]>;
+  loadDiscover: (
+    locale: string,
+    force?: boolean,
+  ) => Promise<DiscoverGameSummary[]>;
   /** Fetch and append the next Discover page (no-op when exhausted). */
   loadMoreDiscover: () => Promise<void>;
   /**
@@ -114,6 +119,7 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
   byId: {},
   discover: null,
   discoverCursor: null,
+  discoverLocale: "en",
 
   loadForKid: async (kidId, force = false) => {
     const cached = get().byKid[kidId];
@@ -216,16 +222,23 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
     }
   },
 
-  loadDiscover: async (force = false) => {
+  loadDiscover: async (locale, force = false) => {
     const cached = get().discover;
-    if (cached && !force) return cached;
+    // A locale switch invalidates the cache — the system games are localized.
+    if (cached && !force && get().discoverLocale === locale) return cached;
     if (discoverInFlight && !force) return discoverInFlight;
 
     discoverInFlight = (async () => {
-      const res = await dodi.request("/api/discover/games");
+      const res = await dodi.request(
+        `/api/discover/games?locale=${encodeURIComponent(locale)}`,
+      );
       if (!res.ok) throw new Error("Failed to load Discover games");
       const page = (await res.json()) as DiscoverPage;
-      set({ discover: page.games, discoverCursor: page.nextCursor });
+      set({
+        discover: page.games,
+        discoverCursor: page.nextCursor,
+        discoverLocale: locale,
+      });
       return page.games;
     })();
 
@@ -237,10 +250,10 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
   },
 
   loadMoreDiscover: async () => {
-    const cursor = get().discoverCursor;
+    const { discoverCursor: cursor, discoverLocale: locale } = get();
     if (!cursor) return;
     const res = await dodi.request(
-      `/api/discover/games?cursor=${encodeURIComponent(cursor)}`,
+      `/api/discover/games?cursor=${encodeURIComponent(cursor)}&locale=${encodeURIComponent(locale)}`,
     );
     if (!res.ok) throw new Error("Failed to load Discover games");
     const page = (await res.json()) as DiscoverPage;

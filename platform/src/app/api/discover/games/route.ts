@@ -11,6 +11,10 @@ import {
   getGameStats,
   listPublishedGames,
 } from "@/services/discover";
+import {
+  applyTranslation,
+  getTranslationsForGames,
+} from "@/services/game-translations";
 
 /**
  * The dodi Discover catalog: published games, newest first, keyset-paginated.
@@ -21,6 +25,8 @@ import {
 const QuerySchema = z.object({
   cursor: z.iso.datetime({ offset: true }).optional(),
   limit: z.coerce.number().int().min(1).max(DISCOVER_MAX_PAGE_SIZE).optional(),
+  /** Viewer locale — localizes the system games (the only translated rows). */
+  locale: z.string().min(2).max(5).optional(),
 });
 
 export async function GET(request: Request): Promise<NextResponse> {
@@ -32,6 +38,7 @@ export async function GET(request: Request): Promise<NextResponse> {
   const parsed = QuerySchema.safeParse({
     cursor: searchParams.get("cursor") ?? undefined,
     limit: searchParams.get("limit") ?? undefined,
+    locale: searchParams.get("locale") ?? undefined,
   });
   if (!parsed.success) {
     return NextResponse.json(
@@ -68,10 +75,18 @@ export async function GET(request: Request): Promise<NextResponse> {
     // Cross-family play & copy counts for the page (service-role aggregate).
     const statsByGame = await getGameStats(service, gameIds);
 
+    // Per-locale title/description overrides exist only for the plaintext
+    // system games; parent publications stay in the language they were written.
+    const translations = await getTranslationsForGames(
+      supabase,
+      gameIds,
+      parsed.data.locale ?? "en",
+    );
+
     const games: DiscoverGameSummary[] = rows.map((row) => {
       const stats = statsByGame.get(row.id);
       return {
-        ...row,
+        ...applyTranslation(row, translations.get(row.id)),
         plays: stats?.plays ?? 0,
         copies: stats?.copies ?? 0,
         sharing: sharingByGame.get(row.id) ?? { family: false, kidIds: [] },

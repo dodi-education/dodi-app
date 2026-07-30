@@ -10,7 +10,6 @@ const OTHER_KID = "kid-2";
 function game(overrides: Partial<VisGame> = {}): VisGame {
   return {
     id: "game-1",
-    is_system: false,
     is_active: true,
     kid_id: null,
     published_at: null,
@@ -35,9 +34,19 @@ function sharingMap(
 }
 
 describe("isVisibleToKid", () => {
-  it("always shows system games, regardless of active/sharing", () => {
-    const g = game({ is_system: true, is_active: false });
-    expect(isVisibleToKid(g, KID, new Map())).toBe(true);
+  // System games are dodi-published Discover rows: published_at is stamped, no
+  // is_system special case — they share-gate exactly like the published rows
+  // below (a fresh kid gets them via shareSystemGamesWithKid, not by fiat).
+  it("share-gates system games like any published row", () => {
+    const g = game({
+      id: "system-1",
+      is_active: false,
+      published_at: "2026-02-28T19:47:16Z",
+    });
+    expect(isVisibleToKid(g, KID, new Map())).toBe(false);
+    expect(isVisibleToKid(g, KID, sharingMap(g.id, { kidIds: [KID] }))).toBe(true);
+    expect(isVisibleToKid(g, OTHER_KID, sharingMap(g.id, { kidIds: [KID] }))).toBe(false);
+    expect(isVisibleToKid(g, KID, sharingMap(g.id, { family: true }))).toBe(true);
   });
 
   it("hides an inactive custom game from kids — even with a family share", () => {

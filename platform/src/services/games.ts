@@ -108,21 +108,22 @@ export function getGameMetadata(game: Pick<Game, "metadata">): GameMetadata {
 export type SharingMap = Map<string, { family: boolean; kidIds: Set<string> }>;
 
 /**
- * Whether a game is visible to a given kid. System games are always
- * visible; custom games must be active AND either owned by the kid or
- * shared with it (family-wide or specifically). Inactive custom games are
- * hidden from kids regardless of sharing — they live only in the parent studio.
+ * Whether a game is visible to a given kid. Custom games must be active AND
+ * either owned by the kid or shared with it (family-wide or specifically).
+ * Inactive custom games are hidden from kids regardless of sharing — they live
+ * only in the parent studio.
  *
- * Published Discover rows (another family's plaintext catalog entries) are a
- * third case: visible iff THIS family shared them with the kid — `is_active`
- * is irrelevant, a catalog listing is never a library entry by itself.
+ * Published Discover rows — another family's plaintext catalog entries, and
+ * the system games dodi publishes itself — are a second case: visible iff THIS
+ * family shared them with the kid. `is_active` is irrelevant, a catalog
+ * listing is never a library entry by itself. (New kids get the system games
+ * auto-shared on creation — see {@link shareSystemGamesWithKid}.)
  */
 export function isVisibleToKid(
-  game: Pick<Game, "id" | "is_system" | "is_active" | "kid_id" | "published_at">,
+  game: Pick<Game, "id" | "is_active" | "kid_id" | "published_at">,
   kidId: string,
   sharings: SharingMap,
 ): boolean {
-  if (game.is_system) return true;
   if (game.published_at) {
     const share = sharings.get(game.id);
     return !!share && (share.family || share.kidIds.has(kidId));
@@ -186,7 +187,9 @@ export async function listGames(
   if (kidId) {
     // RLS already limits custom rows to this account; fetch account + system
     // games and apply audience visibility (owner / shared / family) in JS so
-    // games shared with this kid by another kid are included.
+    // games shared with this kid by another kid are included. System rows are
+    // dodi-published catalog entries and share-gate like any Discover row —
+    // they merely ride along here because the SELECT policy exposes them.
     if (!includeSystem) {
       query = query.eq("is_system", false);
     }
@@ -571,6 +574,54 @@ export async function replaceGameSharings(
 }
 
 /**
+ * Default-on system games: share every dodi-published system game with a newly
+ * created kid (one per-kid row each), so a fresh profile starts with the
+ * official games in its library. Games already covering the kid — via a
+ * family-wide row or an existing per-kid row — are skipped, so the call is
+ * idempotent. From here on the rows are ordinary Discover sharings the parent
+ * can remove.
+ */
+export async function shareSystemGamesWithKid(
+  supabase: Client,
+  accountId: string,
+  kidId: string,
+): Promise<void> {
+  const { data: systemGames, error } = await supabase
+    .from("games")
+    .select("id")
+    .eq("is_system", true);
+  if (error) throw error;
+  const gameIds = (systemGames ?? []).map((row) => row.id);
+  if (gameIds.length === 0) return;
+
+  const { data: existing, error: sharingsError } = await supabase
+    .from("game_sharings")
+    .select("game_id, kid_id")
+    .eq("account_id", accountId)
+    .in("game_id", gameIds);
+  if (sharingsError) throw sharingsError;
+
+  const covered = new Set(
+    (existing ?? [])
+      .filter((row) => row.kid_id === null || row.kid_id === kidId)
+      .map((row) => row.game_id),
+  );
+  const rows: GameSharingInsert[] = gameIds
+    .filter((id) => !covered.has(id))
+    .map((gameId) => ({
+      game_id: gameId,
+      account_id: accountId,
+      kid_id: kidId,
+    }));
+  if (rows.length === 0) return;
+
+  const { error: insertError } = await supabase
+    .from("game_sharings")
+    .insert(rows);
+  if (insertError) throw insertError;
+}
+
+/**
  * Read the normalized sharing state for every game in an account, keyed by game
  * id (for the parent studio list). Games with no sharing rows are absent from
  * the map — the caller defaults them to "shared with nobody".
@@ -625,11 +676,10 @@ export async function getGameSharing(
  */
 export async function isGameVisibleToKid(
   supabase: Client,
-  game: Pick<Game, "id" | "is_system" | "is_active" | "kid_id" | "published_at">,
+  game: Pick<Game, "id" | "is_active" | "kid_id" | "published_at">,
   kidId: string,
   accountId: string,
 ): Promise<boolean> {
-  if (game.is_system) return true;
   if (!game.published_at) {
     if (!game.is_active) return false;
     if (game.kid_id === kidId) return true;

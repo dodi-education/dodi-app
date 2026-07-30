@@ -2,6 +2,7 @@
 
 import { notFound, useParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useLocale } from "next-intl";
 
 import { GamePreview } from "@/components/parent/games/game-preview";
 import { dodi } from "@/lib/api";
@@ -17,6 +18,7 @@ import type { DiscoverGameDetail, GameSharingState } from "@dodi/types/games";
 export default function ParentGamePreviewPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
+  const locale = useLocale();
 
   const [data, setData] = useState<{
     detail: DiscoverGameDetail;
@@ -27,8 +29,11 @@ export default function ParentGamePreviewPage() {
   useEffect(() => {
     let cancelled = false;
     async function load() {
+      // locale localizes the system games (the only translated Discover rows).
       const [detailRes, sharingRes] = await Promise.all([
-        dodi.request(`/api/discover/games/${id}`),
+        dodi.request(
+          `/api/discover/games/${id}?locale=${encodeURIComponent(locale)}`,
+        ),
         dodi.request(`/api/discover/games/${id}/sharing`),
       ]);
       if (cancelled) return;
@@ -51,7 +56,7 @@ export default function ParentGamePreviewPage() {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, locale]);
 
   if (missing) notFound();
   if (!data) return null;

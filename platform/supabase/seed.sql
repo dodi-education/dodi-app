@@ -821,6 +821,13 @@ INSERT INTO public.game_translations (id, game_id, locale, title, description, c
 UPDATE public.games SET preview_image = '/images/game-previews/drawing.svg' WHERE system_key = 'drawing-basic';
 UPDATE public.games SET preview_image = '/images/game-previews/mandala.svg' WHERE system_key = 'mandala-basic';
 
+-- System games are dodi-published Discover rows (20260730200000 migration):
+-- listed in the parent catalog, playable by a kid only via the family's
+-- game_sharings rows. Staggered published_at keeps the keyset cursor unique
+-- (both rows share created_at — the mandala bundle is copied from drawing).
+UPDATE public.games SET published_at = created_at + interval '1 second', approved_by = 'system' WHERE system_key = 'drawing-basic';
+UPDATE public.games SET published_at = created_at + interval '2 seconds', approved_by = 'system' WHERE system_key = 'mandala-basic';
+
 -- Dev invite code (for local testing of REGISTRATION_MODE=invite). Reusable while active.
 INSERT INTO public.invite_codes (code, is_active, note) VALUES ('DODI-BETA', true, 'Seeded dev invite code')
 ON CONFLICT DO NOTHING;

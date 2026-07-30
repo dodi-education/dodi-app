@@ -86,6 +86,27 @@ describe("listPublishedGames", () => {
     expect(rows.map((r) => r.id)).toEqual(["pub-1"]);
   });
 
+  it("lists dodi's system rows like any publication — flagged, no byline", async () => {
+    db.tables.games.push(
+      publishedRow({
+        id: "sys-1",
+        is_system: true,
+        system_key: "drawing-basic",
+        account_id: null,
+        kid_id: null,
+        published_by_account_id: null,
+        publication_requested_at: null,
+        approved_by: "system",
+        published_at: "2026-07-11T10:00:00Z",
+        author: null,
+      }),
+    );
+    const rows = await listPublishedGames(db.client);
+    expect(rows.map((r) => r.id)).toEqual(["sys-1", "pub-2", "pub-1"]);
+    expect(rows[0].is_system).toBe(true);
+    expect(rows[0].publication_handle).toBeNull();
+  });
+
   it("never exposes publisher ids in the summary shape", async () => {
     const rows = await listPublishedGames(db.client);
     for (const row of rows as unknown as Row[]) {

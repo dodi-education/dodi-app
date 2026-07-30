@@ -49,6 +49,8 @@ export interface GameSharingState {
  */
 export interface DiscoverGameSummary {
   id: string;
+  /** dodi's own system game — published by dodi itself, so no author handle. */
+  is_system: boolean;
   title: string;
   description: string;
   tags: string[];

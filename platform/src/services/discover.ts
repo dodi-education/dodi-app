@@ -13,6 +13,11 @@
  * game_sharings (see services/games), so plays aggregate on the single
  * published row. Copying happens only through Remix, which re-seals the
  * plaintext detail under the remixing family's own vault.
+ *
+ * The system games are dodi's own published rows (is_system = true,
+ * approved_by = 'system') and flow through here like any other publication;
+ * they have no author account, so their byline is null and the client renders
+ * "dodi" instead.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -29,7 +34,7 @@ type Client = SupabaseClient<Database>;
 const BYLINE_EMBED =
   "author:accounts!games_published_by_account_id_fkey(publication_handle)";
 
-const SUMMARY_COLUMNS = `id, title, description, tags, target_age_min, target_age_max, estimated_duration_minutes, progress_kind, preview_image, published_at, ${BYLINE_EMBED}`;
+const SUMMARY_COLUMNS = `id, is_system, title, description, tags, target_age_min, target_age_max, estimated_duration_minutes, progress_kind, preview_image, published_at, ${BYLINE_EMBED}`;
 
 const DETAIL_COLUMNS = `${SUMMARY_COLUMNS}, code_bundle, markdown, learning_goal, success_definition, success_criteria, metadata`;
 
@@ -56,6 +61,7 @@ export type DiscoverGameSummaryRow = Omit<
 function toSummary(row: Record<string, unknown> & BylineRow): DiscoverGameSummaryRow {
   return {
     id: row.id as string,
+    is_system: row.is_system as boolean,
     title: row.title as string,
     description: row.description as string,
     tags: row.tags as string[],
