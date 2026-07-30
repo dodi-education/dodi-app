@@ -33,12 +33,7 @@ import {
   wrapKeyForDevice,
   wrapKeyWithPassword,
 } from "./keys";
-import {
-  deriveVaultMasterKeyFromPhrase,
-  generateBackupPhrase,
-  isValidBackupPhrase,
-  normalizeBackupPhrase,
-} from "./mnemonic";
+import { deriveVaultMasterKeyFromNsec, generateNsec } from "./nsec";
 
 // Fast Argon2id params for tests (NOT production strength).
 const TEST_ARGON2: Argon2Params = { t: 2, m: 8192, p: 1, dkLen: 32 };
@@ -172,66 +167,16 @@ describe("ML-DSA-65 signatures", () => {
   });
 });
 
-describe("wallet-style backup phrase (BIP-39)", () => {
-  it("generates a valid, unique 12-word phrase", () => {
-    const phrase = generateBackupPhrase();
-    expect(phrase.split(" ")).toHaveLength(12);
-    expect(isValidBackupPhrase(phrase)).toBe(true);
-    expect(generateBackupPhrase()).not.toBe(generateBackupPhrase());
-  });
-
-  it("validates checksum and rejects garbage", () => {
-    expect(isValidBackupPhrase("abandon abandon abandon")).toBe(false);
-    expect(isValidBackupPhrase("not real bip39 words at all here please")).toBe(false);
-  });
-
-  it("normalizes case and whitespace", () => {
-    const phrase = generateBackupPhrase();
-    const messy = "  " + phrase.toUpperCase().replace(/ /g, "   ") + "  ";
-    expect(normalizeBackupPhrase(messy)).toBe(phrase);
-    expect(isValidBackupPhrase(messy)).toBe(true);
-  });
-
-  it("derives a deterministic VMK from the phrase (wallet root)", () => {
-    const phrase = generateBackupPhrase();
-    const a = deriveVaultMasterKeyFromPhrase(phrase);
-    const b = deriveVaultMasterKeyFromPhrase(phrase);
-    expect(a).toHaveLength(32);
-    expect(constantTimeEqual(a, b)).toBe(true);
-  });
-
-  it("messy input recovers the same VMK", () => {
-    const phrase = generateBackupPhrase();
-    const messy = "  " + phrase.toUpperCase() + " ";
-    expect(
-      constantTimeEqual(
-        deriveVaultMasterKeyFromPhrase(messy),
-        deriveVaultMasterKeyFromPhrase(phrase),
-      ),
-    ).toBe(true);
-  });
-
-  it("different phrases derive different VMKs", () => {
-    const a = deriveVaultMasterKeyFromPhrase(generateBackupPhrase());
-    const b = deriveVaultMasterKeyFromPhrase(generateBackupPhrase());
-    expect(constantTimeEqual(a, b)).toBe(false);
-  });
-
-  it("throws on an invalid phrase", () => {
-    expect(() => deriveVaultMasterKeyFromPhrase("abandon abandon abandon")).toThrow();
-  });
-});
-
 describe("VMK wrapping (convenience unlock paths)", () => {
   it("wraps to a device ML-KEM key and unwraps", () => {
-    const vmk = deriveVaultMasterKeyFromPhrase(generateBackupPhrase());
+    const vmk = deriveVaultMasterKeyFromNsec(generateNsec());
     const device = generateKemKeyPair();
     const wrapped = wrapKeyForDevice(device.publicKey, vmk);
     expect(constantTimeEqual(unwrapKeyWithDevice(device.secretKey, wrapped), vmk)).toBe(true);
   });
 
   it("a different device cannot unwrap", () => {
-    const vmk = deriveVaultMasterKeyFromPhrase(generateBackupPhrase());
+    const vmk = deriveVaultMasterKeyFromNsec(generateNsec());
     const device = generateKemKeyPair();
     const attacker = generateKemKeyPair();
     const wrapped = wrapKeyForDevice(device.publicKey, vmk);
@@ -239,7 +184,7 @@ describe("VMK wrapping (convenience unlock paths)", () => {
   });
 
   it("wraps with a password and unwraps; wrong password fails", async () => {
-    const vmk = deriveVaultMasterKeyFromPhrase(generateBackupPhrase());
+    const vmk = deriveVaultMasterKeyFromNsec(generateNsec());
     const wrapped = await wrapKeyWithPassword("correct horse", vmk, TEST_ARGON2);
     expect(
       constantTimeEqual(await unwrapKeyWithPassword("correct horse", wrapped), vmk),
@@ -248,24 +193,24 @@ describe("VMK wrapping (convenience unlock paths)", () => {
   });
 
   it("password change re-wraps the SAME vmk (fixes the lockout)", async () => {
-    const vmk = deriveVaultMasterKeyFromPhrase(generateBackupPhrase());
+    const vmk = deriveVaultMasterKeyFromNsec(generateNsec());
     const wrapped = await wrapKeyWithPassword("old-pw", vmk, TEST_ARGON2);
     const rewrapped = await rewrapKeyWithNewPassword("old-pw", wrapped, "new-pw", TEST_ARGON2);
     expect(constantTimeEqual(await unwrapKeyWithPassword("new-pw", rewrapped), vmk)).toBe(true);
     await expect(unwrapKeyWithPassword("old-pw", rewrapped)).rejects.toThrow();
   });
 
-  it("phrase, password, and device all recover one identical vmk", async () => {
-    const phrase = generateBackupPhrase();
-    const vmk = deriveVaultMasterKeyFromPhrase(phrase);
+  it("nsec, password, and device all recover one identical vmk", async () => {
+    const nsec = generateNsec();
+    const vmk = deriveVaultMasterKeyFromNsec(nsec);
     const device = generateKemKeyPair();
-    const viaPhrase = deriveVaultMasterKeyFromPhrase(phrase);
+    const viaNsec = deriveVaultMasterKeyFromNsec(nsec);
     const viaPassword = await unwrapKeyWithPassword(
       "pw",
       await wrapKeyWithPassword("pw", vmk, TEST_ARGON2),
     );
     const viaDevice = unwrapKeyWithDevice(device.secretKey, wrapKeyForDevice(device.publicKey, vmk));
-    expect(constantTimeEqual(viaPhrase, vmk)).toBe(true);
+    expect(constantTimeEqual(viaNsec, vmk)).toBe(true);
     expect(constantTimeEqual(viaPassword, vmk)).toBe(true);
     expect(constantTimeEqual(viaDevice, vmk)).toBe(true);
   });

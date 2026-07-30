@@ -8,5 +8,5 @@ export * from "./encoding";
 export * from "./primitives";
 export * from "./record";
 export * from "./keys";
-export * from "./mnemonic";
+export * from "./nsec";
 export * from "./social-id";

@@ -443,24 +443,19 @@ parent-defined goal — and, in future, generate challenges like "Solve 3 math g
 
 ## TODO
 
-- Change api.dodi.app to platform.dodi.app
+
+- Add system games to dodi Discover and allow parents to add/remove them for kids
 - Create public page for published games
  - Allow to embedd games.
  - Soft registration locks (Snapshot, Remix, etc.)
 
-- ~~Optimize game-state update as every push costs 0.004 USD with grok voice~~
-  Done: while deaf no pushes happen at all; on (re)activation exactly one delta
-  against what the socket already knows is pushed (`transitionToActive`).
-- ~~Investigate grok voice billing (deaf mode)~~ Confirmed: xAI bills a socket
-  for its whole open lifetime once audio has ever crossed it (docs claim
-  audio-minutes only). Fixed by the warm-socket pool
-  (`clients/web/src/lib/ai/voice-socket-pool.ts`): a two-socket pipeline
-  (active + silenced-from-birth standby, free), deafening closes the tainted
-  active socket and warms a replacement, activation promotes the standby —
-  cost ≈ active talk time only.
+- Optimize game-state update as every push costs 0.004 USD with grok voice
 
 - Make game code creation progress more transparent (output rough agent loop actions in chat)
 - Implement Venice.ai
+
+- Account Export/import:parent can download their encrypted data and restore it on a
+   self-hosted instance, continuing with the same vault via `nsec`. This also makes us automatically GDPR compliant in the EU.
 
 - Notify game publisher about publication review outcome
 

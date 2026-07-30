@@ -88,9 +88,7 @@ export default function LoginPage() {
       router.push(created ? "/vault-setup" : "/parent/dashboard");
       router.refresh();
     } catch {
-      setError(
-        "Signed in, but we couldn't unlock your encrypted data. If you recently changed your password, you'll need your recovery phrase.",
-      );
+      setError(t("unlockAfterLoginFailed"));
       setLoading(false);
     }
   }

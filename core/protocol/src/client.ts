@@ -20,6 +20,18 @@ export interface DodiClientOptions {
   fetch?: typeof fetch;
 }
 
+/**
+ * The npub in a vault-keys save is already bound to another account (or this
+ * account is bound to a different npub). Retrying the same save cannot succeed
+ * — callers must surface it, not loop.
+ */
+export class NpubConflictError extends Error {
+  constructor() {
+    super("This Nostr key is already linked to another account");
+    this.name = "NpubConflictError";
+  }
+}
+
 async function toError(res: Response, action: string): Promise<Error> {
   let detail = "";
   try {
@@ -68,12 +80,16 @@ export class DodiClient {
     return data.vaultKeys ?? null;
   }
 
-  async putVaultKeys(keys: StoredVaultKeys): Promise<void> {
+  async putVaultKeys(
+    keys: StoredVaultKeys,
+    opts?: { npub?: string },
+  ): Promise<void> {
     const res = await this.request("/api/vault/keys", {
       method: "PUT",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(keys),
+      body: JSON.stringify(opts?.npub ? { ...keys, npub: opts.npub } : keys),
     });
+    if (res.status === 409) throw new NpubConflictError();
     if (!res.ok) throw await toError(res, "save vault keys");
   }
 }

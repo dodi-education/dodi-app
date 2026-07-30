@@ -3,17 +3,21 @@
  * coordinates device keys, the wrapped-key endpoint, and the crypto layer.
  *
  * Flow:
- *  - register  → bootstrap(password): create vault, store wraps, show phrase
+ *  - register  → bootstrap(password): create vault, store wraps, show nsec
  *  - login     → unlockOrBootstrap(password)
  *  - app load  → unlockSilently(): device key unwraps the VMK with no prompt
- *  - new device→ unlockWithPassword / unlockWithPhrase (then self-registers)
+ *  - new device→ unlockWithPassword / unlockWithNsec (then self-registers)
  */
 import { create } from "zustand";
 
 // Side effect: in the browser, route Argon2id through a Web Worker so key
 // derivation during unlock/wrap never blocks the UI thread.
 import "@/lib/argon2-worker";
-import { deriveVaultMasterKeyFromPhrase, toBase64Url } from "@dodi/crypto";
+import {
+  deriveVaultMasterKeyFromNsec,
+  nsecToNpubHex,
+  toBase64Url,
+} from "@dodi/crypto";
 import {
   type DeviceRegistration,
   type StoredDevice,
@@ -26,8 +30,8 @@ import {
   removeDeviceFromVault,
   setVaultPassword,
   unlockVaultWithDevice,
+  unlockVaultWithNsec,
   unlockVaultWithPassword,
-  unlockVaultWithPhrase,
 } from "@dodi/vault";
 import { clearParentUnlocked, markParentUnlocked } from "@/lib/parent-lock";
 import {
@@ -43,43 +47,43 @@ export type VaultStatus =
 interface VaultStoreState {
   status: VaultStatus;
   session: VaultSession | null;
-  /** Set after bootstrap; shown once on the backup-phrase screen, then cleared. */
-  pendingBackupPhrase: string | null;
+  /** Set after bootstrap; shown once on the account-key screen, then cleared. */
+  pendingNsec: string | null;
   /**
    * In-memory only (NEVER persisted): the vault built at registration, awaiting
    * the emailed OTP. `finalizeVault` persists it once the code establishes a
    * session; retained across a failed save so a retry needs no re-verify.
    */
-  pendingVault: { storedKeys: StoredVaultKeys; backupPhrase: string } | null;
+  pendingVault: { storedKeys: StoredVaultKeys; nsec: string } | null;
   error: string | null;
 
-  bootstrap: (password: string) => Promise<string>;
+  bootstrap: (password: string, importedNsec?: string) => Promise<void>;
   /**
    * Register (email-OTP) split of bootstrap: build the vault in memory from the
    * password and seal it locally — NO server write, NO session. The caller drops
    * the password immediately after this resolves.
    */
-  createLocalVault: (password: string) => Promise<void>;
+  createLocalVault: (password: string, importedNsec?: string) => Promise<void>;
   /**
    * After the OTP code establishes a session: persist the sealed vault, activate
-   * the session, and reveal the recovery phrase. Retry-safe on a failed save.
+   * the session, and reveal the nsec account key. Retry-safe on a failed save.
    */
   finalizeVault: () => Promise<void>;
   /** Drop the pending local vault + sealed blob (e.g. "use a different email"). */
   discardLocalVault: () => Promise<void>;
   unlockOrBootstrap: (password: string) => Promise<{ created: boolean }>;
   unlockWithPassword: (password: string) => Promise<void>;
-  unlockWithPhrase: (phrase: string) => Promise<void>;
+  unlockWithNsec: (nsec: string) => Promise<void>;
   unlockSilently: () => Promise<boolean>;
   /**
-   * Cold forgot-password reset: verify the recovery phrase, re-wrap the vault
+   * Cold forgot-password reset: verify the nsec account key, re-wrap the vault
    * under the new password, and unlock this device. `onVerified` runs AFTER the
-   * phrase checks out but BEFORE the vault is re-wrapped — the caller uses it to
-   * update the Supabase auth password, so a wrong phrase never mutates auth and
+   * nsec checks out but BEFORE the vault is re-wrapped — the caller uses it to
+   * update the Supabase auth password, so a wrong nsec never mutates auth and
    * the two stay in sync.
    */
-  resetPasswordWithPhrase: (
-    phrase: string,
+  resetPasswordWithNsec: (
+    nsec: string,
     newPassword: string,
     onVerified: () => Promise<void>,
   ) => Promise<void>;
@@ -96,7 +100,7 @@ interface VaultStoreState {
   addDevice: (device: DeviceRegistration) => Promise<void>;
   /** Revoke a device's vault access: drop its wrap and persist (no VMK needed). */
   removeDevice: (deviceId: string) => Promise<void>;
-  acknowledgeBackupPhrase: () => void;
+  acknowledgeNsec: () => void;
   lock: () => void;
 }
 
@@ -115,10 +119,14 @@ function deviceRegistration(device: StoredDevice) {
 async function ensureDeviceRegistered(
   keys: StoredVaultKeys,
   vmk: Uint8Array,
+  opts?: { npub?: string },
 ): Promise<void> {
   const device = await loadDevice();
   if (keys.deviceWraps.some((d) => d.deviceId === device.deviceId)) return;
-  await saveVaultKeys(addDeviceToVault(keys, vmk, deviceRegistration(device)));
+  await saveVaultKeys(
+    addDeviceToVault(keys, vmk, deviceRegistration(device)),
+    opts,
+  );
 }
 
 export const useVaultStore = create<VaultStoreState>((set, get) => {
@@ -149,26 +157,26 @@ export const useVaultStore = create<VaultStoreState>((set, get) => {
   return {
     status: "idle",
     session: null,
-    pendingBackupPhrase: null,
+    pendingNsec: null,
     pendingVault: null,
     error: null,
 
-    bootstrap: async (password) => {
+    bootstrap: async (password, importedNsec) => {
       set({ status: "working", error: null });
       try {
         const device = await loadDevice();
-        const { backupPhrase, vmk, storedKeys } = await createAccountVault({
+        const { nsec, npubHex, vmk, storedKeys } = await createAccountVault({
           password,
           device: deviceRegistration(device),
+          importedNsec,
         });
-        await saveVaultKeys(storedKeys);
+        await saveVaultKeys(storedKeys, { npub: npubHex });
         set({
           session: new VaultSession(vmk),
-          pendingBackupPhrase: backupPhrase,
+          pendingNsec: nsec,
           status: "unlocked",
         });
         markParentUnlocked();
-        return backupPhrase;
       } catch (error) {
         const message =
           error instanceof Error ? error.message : "Vault setup failed";
@@ -177,18 +185,19 @@ export const useVaultStore = create<VaultStoreState>((set, get) => {
       }
     },
 
-    createLocalVault: async (password) => {
+    createLocalVault: async (password, importedNsec) => {
       // Build the vault in memory and seal it for the OTP window. No server write
       // (there's no session yet) and no status change (the user is still on the
       // public /register page, outside VaultGate). The device key is created here
       // and wrapped into storedKeys, so silent unlock works after finalize. The
-      // seal holds only the one-way passwordWrap + phrase, never the plaintext.
+      // seal holds only the one-way passwordWrap + nsec, never the password.
       const device = await loadDevice();
-      const { backupPhrase, storedKeys } = await createAccountVault({
+      const { nsec, storedKeys } = await createAccountVault({
         password,
         device: deviceRegistration(device),
+        importedNsec,
       });
-      await stashSealedSecret(JSON.stringify({ storedKeys, backupPhrase }));
+      await stashSealedSecret(JSON.stringify({ storedKeys, nsec }));
     },
 
     finalizeVault: async () => {
@@ -202,18 +211,20 @@ export const useVaultStore = create<VaultStoreState>((set, get) => {
           if (!raw) throw new Error("registration-seal-missing");
           data = JSON.parse(raw) as {
             storedKeys: StoredVaultKeys;
-            backupPhrase: string;
+            nsec: string;
           };
           set({ pendingVault: data });
         }
-        await saveVaultKeys(data.storedKeys);
-        // Reproduces the exact VMK createAccountVault sealed under (phrase → VMK is
-        // deterministic); cheap (BIP39 seed), and avoids repeating Argon2id.
-        const vmk = deriveVaultMasterKeyFromPhrase(data.backupPhrase);
+        await saveVaultKeys(data.storedKeys, {
+          npub: nsecToNpubHex(data.nsec),
+        });
+        // Reproduces the exact VMK createAccountVault sealed under (nsec → VMK
+        // is deterministic and cheap), avoiding a repeat of Argon2id.
+        const vmk = deriveVaultMasterKeyFromNsec(data.nsec);
         await clearSealedSecret();
         set({
           session: new VaultSession(vmk),
-          pendingBackupPhrase: data.backupPhrase,
+          pendingNsec: data.nsec,
           status: "unlocked",
           pendingVault: null,
         });
@@ -260,7 +271,7 @@ export const useVaultStore = create<VaultStoreState>((set, get) => {
       }
     },
 
-    unlockWithPhrase: async (phrase) => {
+    unlockWithNsec: async (nsec) => {
       set({ status: "working", error: null });
       try {
         const keys = await fetchVaultKeys();
@@ -268,12 +279,15 @@ export const useVaultStore = create<VaultStoreState>((set, get) => {
           set({ status: "needs-setup" });
           throw new Error("No vault to unlock");
         }
-        const vmk = unlockVaultWithPhrase(keys, phrase);
+        const vmk = unlockVaultWithNsec(keys, nsec);
         // Background for the same reason as the password path: registration
-        // only serves the next visit's silent unlock.
-        void ensureDeviceRegistered(keys, vmk).catch(() => {});
+        // only serves the next visit's silent unlock. The npub rides along as a
+        // set-once bind (no-op when already bound; heals pre-npub accounts).
+        void ensureDeviceRegistered(keys, vmk, {
+          npub: nsecToNpubHex(nsec),
+        }).catch(() => {});
         set({ session: new VaultSession(vmk), status: "unlocked" });
-        // Strong-auth (password/phrase) ⇒ open the parent area for this session.
+        // Strong-auth (password/nsec) ⇒ open the parent area for this session.
         markParentUnlocked();
       } catch (error) {
         const message =
@@ -312,7 +326,7 @@ export const useVaultStore = create<VaultStoreState>((set, get) => {
       }
     },
 
-    resetPasswordWithPhrase: async (phrase, newPassword, onVerified) => {
+    resetPasswordWithNsec: async (nsec, newPassword, onVerified) => {
       set({ status: "working", error: null });
       try {
         const keys = await fetchVaultKeys();
@@ -323,12 +337,14 @@ export const useVaultStore = create<VaultStoreState>((set, get) => {
           set({ status: "needs-setup" });
           return;
         }
-        // Verify the phrase (throws on a wrong-but-valid phrase) BEFORE touching
+        // Verify the nsec (throws on a wrong-but-valid nsec) BEFORE touching
         // the auth password, so the two never diverge on a typo.
-        const vmk = unlockVaultWithPhrase(keys, phrase);
+        const vmk = unlockVaultWithNsec(keys, nsec);
         await onVerified();
         const updated = await setVaultPassword(keys, vmk, newPassword);
-        await saveVaultKeys(updated);
+        // Set-once npub bind rides along: a no-op on a bound account, and it
+        // self-heals accounts whose bootstrap predates the npub column.
+        await saveVaultKeys(updated, { npub: nsecToNpubHex(nsec) });
         await ensureDeviceRegistered(updated, vmk);
         set({ session: new VaultSession(vmk), status: "unlocked" });
         markParentUnlocked();
@@ -365,7 +381,7 @@ export const useVaultStore = create<VaultStoreState>((set, get) => {
       await saveVaultKeys(removeDeviceFromVault(keys, deviceId));
     },
 
-    acknowledgeBackupPhrase: () => set({ pendingBackupPhrase: null }),
+    acknowledgeNsec: () => set({ pendingNsec: null }),
 
     lock: () => {
       get().session?.lock();

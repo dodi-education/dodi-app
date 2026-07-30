@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { isValidBackupPhrase } from "@dodi/crypto";
+import { isValidNsec } from "@dodi/crypto";
 import { createClient } from "@/lib/supabase/client";
 import { fetchVaultKeys } from "@/lib/vault-client";
 import { useVaultStore } from "@/stores/vault-store";
@@ -27,9 +27,9 @@ import { useVaultStore } from "@/stores/vault-store";
  * established a Supabase session, so they can set a new auth password here.
  *
  * Because data is end-to-end encrypted and the old password is unknown, the
- * vault must be re-encrypted under the new password using the 12-word recovery
- * phrase. This page keeps the Supabase auth password and the vault wrap in sync;
- * the phrase is verified before either is changed.
+ * vault must be re-encrypted under the new password using the nsec account key.
+ * This page keeps the Supabase auth password and the vault wrap in sync; the
+ * nsec is verified before either is changed.
  */
 export default function UpdatePasswordPage() {
   const t = useTranslations("auth");
@@ -39,7 +39,7 @@ export default function UpdatePasswordPage() {
   const [hasVault, setHasVault] = useState<boolean | null>(null);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [phrase, setPhrase] = useState("");
+  const [nsec, setNsec] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -61,8 +61,8 @@ export default function UpdatePasswordPage() {
       setError(t("passwordTooShort"));
       return;
     }
-    if (hasVault && !isValidBackupPhrase(phrase)) {
-      setError(t("invalidPhrase"));
+    if (hasVault && !isValidNsec(nsec)) {
+      setError(t("invalidAccountKey"));
       return;
     }
 
@@ -76,11 +76,11 @@ export default function UpdatePasswordPage() {
       };
 
       if (hasVault) {
-        // Verifies the phrase, updates the auth password, then re-wraps the
-        // vault — all-or-nothing on the phrase check.
+        // Verifies the nsec, updates the auth password, then re-wraps the
+        // vault — all-or-nothing on the nsec check.
         await useVaultStore
           .getState()
-          .resetPasswordWithPhrase(phrase, password, updateAuthPassword);
+          .resetPasswordWithNsec(nsec, password, updateAuthPassword);
       } else {
         await updateAuthPassword();
       }
@@ -100,7 +100,7 @@ export default function UpdatePasswordPage() {
         <CardDescription>
           {hasVault === false
             ? t("updatePasswordDescription")
-            : t("updatePasswordWithPhraseHint")}
+            : t("updatePasswordWithNsecHint")}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -129,15 +129,16 @@ export default function UpdatePasswordPage() {
           </div>
           {hasVault && (
             <div className="flex flex-col gap-2">
-              <Label htmlFor="phrase">{t("recoveryPhrase")}</Label>
-              <textarea
-                id="phrase"
-                value={phrase}
-                onChange={(e) => setPhrase(e.target.value)}
+              <Label htmlFor="nsec">{t("accountKey")}</Label>
+              <Input
+                id="nsec"
+                value={nsec}
+                onChange={(e) => setNsec(e.target.value)}
                 required
-                rows={3}
-                placeholder={t("recoveryPhrasePlaceholder")}
-                className="min-h-[80px] w-full rounded-md border border-input bg-card px-3 py-2 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary-soft-2"
+                autoComplete="off"
+                spellCheck={false}
+                placeholder={t("accountKeyPlaceholder")}
+                className="font-mono"
               />
             </div>
           )}

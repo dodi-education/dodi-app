@@ -59,7 +59,7 @@ export class VaultSession {
   /**
    * Re-wrap the in-memory VMK under a new password (device-session reset): the
    * user is on a trusted, already-unlocked device and wants a new password
-   * without the old one or the recovery phrase. The raw VMK never leaves the
+   * without the old one or the nsec account key. The raw VMK never leaves the
    * session — only the resulting wrap does.
    */
   rewrapPassword(

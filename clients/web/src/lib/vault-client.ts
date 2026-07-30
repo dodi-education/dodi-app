@@ -10,6 +10,9 @@ export function fetchVaultKeys(): Promise<StoredVaultKeys | null> {
   return dodi.getVaultKeys();
 }
 
-export function saveVaultKeys(keys: StoredVaultKeys): Promise<void> {
-  return dodi.putVaultKeys(keys);
+export function saveVaultKeys(
+  keys: StoredVaultKeys,
+  opts?: { npub?: string },
+): Promise<void> {
+  return dodi.putVaultKeys(keys, opts);
 }

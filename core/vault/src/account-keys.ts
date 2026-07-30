@@ -8,10 +8,12 @@
 import {
   type Argon2Params,
   decryptField,
-  deriveVaultMasterKeyFromPhrase,
+  deriveVaultMasterKeyFromNsec,
   encryptField,
   fromBase64Url,
-  generateBackupPhrase,
+  generateNsec,
+  normalizeNsec,
+  nsecToNpubHex,
   rewrapKeyWithNewPassword,
   unwrapKeyWithDevice,
   unwrapKeyWithPassword,
@@ -21,7 +23,7 @@ import {
 
 import type { StoredVaultKeys } from "./types";
 
-/** Sealed under the VMK to let phrase recovery verify the derived key. */
+/** Sealed under the VMK to let nsec recovery verify the derived key. */
 const VMK_CHECK_PLAINTEXT = "dodi/vault-check/v1";
 
 export interface DeviceRegistration {
@@ -31,8 +33,10 @@ export interface DeviceRegistration {
 }
 
 export interface CreatedVault {
-  /** Show ONCE at setup, then discard — the deterministic root. */
-  backupPhrase: string;
+  /** Show ONCE at setup, then discard — the deterministic root (bech32 nsec1…). */
+  nsec: string;
+  /** The matching public key as lowercase hex — persisted on the account. */
+  npubHex: string;
   /** In-memory key for the session (never persisted in plaintext). */
   vmk: Uint8Array;
   /** Wrapped blobs to persist server-side. */
@@ -40,16 +44,21 @@ export interface CreatedVault {
 }
 
 /**
- * Bootstrap a brand-new account vault: generate the backup phrase, derive the
- * VMK, and wrap it for the password + this device.
+ * Bootstrap a brand-new account vault: generate (or import) the nsec, derive
+ * the VMK, and wrap it for the password + this device.
  */
 export async function createAccountVault(params: {
   password: string;
   device: DeviceRegistration;
   argon2Params?: Argon2Params;
+  /** "I already have a Nostr key": bech32 or hex, normalized internally. */
+  importedNsec?: string;
 }): Promise<CreatedVault> {
-  const backupPhrase = generateBackupPhrase();
-  const vmk = deriveVaultMasterKeyFromPhrase(backupPhrase);
+  const nsec = params.importedNsec
+    ? normalizeNsec(params.importedNsec)
+    : generateNsec();
+  const npubHex = nsecToNpubHex(nsec);
+  const vmk = deriveVaultMasterKeyFromNsec(nsec);
   const storedKeys: StoredVaultKeys = {
     passwordWrap: await wrapKeyWithPassword(params.password, vmk, params.argon2Params),
     deviceWraps: [
@@ -64,7 +73,7 @@ export async function createAccountVault(params: {
     ],
     vmkCheck: encryptField(vmk, VMK_CHECK_PLAINTEXT),
   };
-  return { backupPhrase, vmk, storedKeys };
+  return { nsec, npubHex, vmk, storedKeys };
 }
 
 /** Unlock with the account password (new device, or explicit re-auth). */
@@ -92,15 +101,15 @@ export function unlockVaultWithDevice(
 }
 
 /**
- * Recover with the wallet-style backup phrase (forgot password / new device).
- * Verifies the derived VMK against `vmkCheck` so a wrong-but-valid phrase is
+ * Recover with the nsec account key (forgot password / new device).
+ * Verifies the derived VMK against `vmkCheck` so a wrong-but-valid nsec is
  * rejected immediately rather than silently producing an unusable key.
  */
-export function unlockVaultWithPhrase(
+export function unlockVaultWithNsec(
   storedKeys: StoredVaultKeys,
-  phrase: string,
+  nsec: string,
 ): Uint8Array {
-  const vmk = deriveVaultMasterKeyFromPhrase(phrase);
+  const vmk = deriveVaultMasterKeyFromNsec(nsec);
   let matches = false;
   try {
     matches = decryptField(vmk, storedKeys.vmkCheck) === VMK_CHECK_PLAINTEXT;
@@ -108,7 +117,7 @@ export function unlockVaultWithPhrase(
     matches = false;
   }
   if (!matches) {
-    throw new Error("Incorrect backup phrase");
+    throw new Error("Incorrect account key");
   }
   return vmk;
 }
@@ -165,7 +174,7 @@ export async function changeVaultPassword(
 /**
  * Set/replace the password wrap from an already-unwrapped VMK — the
  * device-session reset path. The caller has the VMK in memory (e.g. the vault
- * was silently unlocked via this device's key, or just derived from the phrase),
+ * was silently unlocked via this device's key, or just derived from the nsec),
  * so no old password is required. Only the password wrap rotates; device wraps
  * and the VMK itself are untouched.
  */
@@ -182,17 +191,17 @@ export async function setVaultPassword(
 }
 
 /**
- * Forgot-password reset: prove ownership via the backup phrase, set a new
- * password. The phrase is verified against `vmkCheck` (via `unlockVaultWithPhrase`)
- * BEFORE re-wrapping, so a wrong-but-valid BIP-39 phrase is rejected rather than
+ * Forgot-password reset: prove ownership via the nsec account key, set a new
+ * password. The nsec is verified against `vmkCheck` (via `unlockVaultWithNsec`)
+ * BEFORE re-wrapping, so a wrong-but-valid nsec is rejected rather than
  * silently sealing the new password around a foreign VMK.
  */
-export async function resetVaultPasswordWithPhrase(
+export async function resetVaultPasswordWithNsec(
   storedKeys: StoredVaultKeys,
-  phrase: string,
+  nsec: string,
   newPassword: string,
   argon2Params?: Argon2Params,
 ): Promise<StoredVaultKeys> {
-  const vmk = unlockVaultWithPhrase(storedKeys, phrase);
+  const vmk = unlockVaultWithNsec(storedKeys, nsec);
   return setVaultPassword(storedKeys, vmk, newPassword, argon2Params);
 }

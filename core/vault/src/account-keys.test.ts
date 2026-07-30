@@ -4,6 +4,7 @@ import {
   type Argon2Params,
   constantTimeEqual,
   generateKemKeyPair,
+  nsecToNpubHex,
   toBase64Url,
 } from "@dodi/crypto";
 
@@ -13,11 +14,11 @@ import {
   changeVaultPassword,
   createAccountVault,
   removeDeviceFromVault,
-  resetVaultPasswordWithPhrase,
+  resetVaultPasswordWithNsec,
   setVaultPassword,
   unlockVaultWithDevice,
+  unlockVaultWithNsec,
   unlockVaultWithPassword,
-  unlockVaultWithPhrase,
 } from "./account-keys";
 
 const TEST_ARGON2: Argon2Params = { t: 2, m: 8192, p: 1, dkLen: 32 };
@@ -41,12 +42,32 @@ async function bootstrap(password = "parent-pw") {
 }
 
 describe("account vault bootstrap", () => {
-  it("creates a valid phrase, vmk, and stored wraps", async () => {
+  it("creates a valid nsec, npub, vmk, and stored wraps", async () => {
     const { vault } = await bootstrap();
-    expect(vault.backupPhrase.split(" ")).toHaveLength(12);
+    expect(vault.nsec.startsWith("nsec1")).toBe(true);
+    expect(vault.npubHex).toMatch(/^[0-9a-f]{64}$/);
     expect(vault.vmk).toHaveLength(32);
     expect(vault.storedKeys.passwordWrap).not.toBeNull();
     expect(vault.storedKeys.deviceWraps).toHaveLength(1);
+  });
+
+  it("imports an existing nsec (bech32 or hex) and normalizes it", async () => {
+    const { vault: source } = await bootstrap();
+    const asHex = nsecToNpubHex(source.nsec); // sanity: derived npub is stable
+    for (const importedNsec of [source.nsec, source.nsec.toUpperCase()]) {
+      const vault = await createAccountVault({
+        password: "other-pw",
+        device: newDevice("d-import").reg,
+        argon2Params: TEST_ARGON2,
+        importedNsec,
+      });
+      expect(vault.nsec).toBe(source.nsec);
+      expect(vault.npubHex).toBe(asHex);
+      // Same root → same VMK: the imported key unlocks the new vault.
+      expect(
+        constantTimeEqual(unlockVaultWithNsec(vault.storedKeys, source.nsec), source.vmk),
+      ).toBe(true);
+    }
   });
 });
 
@@ -79,26 +100,26 @@ describe("vault unlock paths recover the same VMK", () => {
     expect(() => unlockVaultWithDevice(vault.storedKeys, "ghost", other.secretKey)).toThrow();
   });
 
-  it("backup phrase recovery", async () => {
+  it("nsec recovery", async () => {
     const { vault } = await bootstrap();
     expect(
       constantTimeEqual(
-        unlockVaultWithPhrase(vault.storedKeys, vault.backupPhrase),
+        unlockVaultWithNsec(vault.storedKeys, vault.nsec),
         vault.vmk,
       ),
     ).toBe(true);
   });
 
-  it("a wrong (but valid) phrase is rejected via vmkCheck", async () => {
+  it("a wrong (but valid) nsec is rejected via vmkCheck", async () => {
     const { vault } = await bootstrap();
-    const otherPhrase = (
+    const otherNsec = (
       await createAccountVault({
         password: "x",
         device: newDevice("d2").reg,
         argon2Params: TEST_ARGON2,
       })
-    ).backupPhrase;
-    expect(() => unlockVaultWithPhrase(vault.storedKeys, otherPhrase)).toThrow();
+    ).nsec;
+    expect(() => unlockVaultWithNsec(vault.storedKeys, otherNsec)).toThrow();
   });
 });
 
@@ -138,11 +159,11 @@ describe("password change & reset keep the same VMK", () => {
     await expect(unlockVaultWithPassword(updated, "old-pw")).rejects.toThrow();
   });
 
-  it("reset via phrase: new password unlocks the same vmk", async () => {
+  it("reset via nsec: new password unlocks the same vmk", async () => {
     const { vault } = await bootstrap("forgotten");
-    const updated = await resetVaultPasswordWithPhrase(
+    const updated = await resetVaultPasswordWithNsec(
       vault.storedKeys,
-      vault.backupPhrase,
+      vault.nsec,
       "fresh-pw",
       TEST_ARGON2,
     );
@@ -152,19 +173,19 @@ describe("password change & reset keep the same VMK", () => {
     // existing device wrap still works (VMK is unchanged)
   });
 
-  it("reset via phrase rejects a wrong (but valid) phrase via vmkCheck", async () => {
-    // A wrong-but-checksum-valid phrase must NOT silently re-wrap the password
-    // around a foreign VMK (which would corrupt access). It must throw.
+  it("reset via nsec rejects a wrong (but valid) nsec via vmkCheck", async () => {
+    // A wrong-but-valid nsec must NOT silently re-wrap the password around a
+    // foreign VMK (which would corrupt access). It must throw.
     const { vault } = await bootstrap("forgotten");
-    const foreignPhrase = (
+    const foreignNsec = (
       await createAccountVault({
         password: "x",
         device: newDevice("d2").reg,
         argon2Params: TEST_ARGON2,
       })
-    ).backupPhrase;
+    ).nsec;
     await expect(
-      resetVaultPasswordWithPhrase(vault.storedKeys, foreignPhrase, "fresh-pw", TEST_ARGON2),
+      resetVaultPasswordWithNsec(vault.storedKeys, foreignNsec, "fresh-pw", TEST_ARGON2),
     ).rejects.toThrow();
   });
 });

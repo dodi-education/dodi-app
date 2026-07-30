@@ -14,7 +14,7 @@ import { useVaultStore } from "@/stores/vault-store";
  * Change-password form for a signed-in parent whose vault is already unlocked
  * (the parent layout's VaultGate guarantees this). It updates the Supabase auth
  * password and re-wraps the vault under it in one step — no old password or
- * recovery phrase needed, since the in-memory VMK proves vault access.
+ * nsec needed, since the in-memory VMK proves vault access.
  */
 export function ChangePassword() {
   const t = useTranslations("settings");

@@ -1,19 +1,19 @@
 /**
  * Vault key hierarchy (wallet-style).
  *
- * The 12-word BIP-39 **backup phrase is the deterministic root** (see
- * `mnemonic.ts`): it derives the account's Vault Master Key (VMK), which (via
- * derived sub-keys) encrypts all personal records. Entering the phrase always
- * reproduces the same VMK, so recovery needs no server-side blob.
+ * The Nostr **nsec account key is the deterministic root** (see `nsec.ts`): it
+ * derives the account's Vault Master Key (VMK), which (via derived sub-keys)
+ * encrypts all personal records. Entering the nsec always reproduces the same
+ * VMK, so recovery needs no server-side blob.
  *
  * For daily convenience the VMK is ALSO wrapped and stored server-side as
- * opaque blobs, so users don't retype the phrase every session/device:
+ * opaque blobs, so users don't retype the nsec every session/device:
  *   1. to each authorized device's ML-KEM public key (multi-device / companion)
  *   2. by an Argon2id key derived from the account password (password unlock)
  *
- * These are conveniences, NOT independent roots — the phrase remains the single
+ * These are conveniences, NOT independent roots — the nsec remains the single
  * source of truth and the only recovery path. A password *change* re-wraps the
- * same VMK (no data loss — the fix for the original lockout). Lose the phrase
+ * same VMK (no data loss — the fix for the original lockout). Lose the nsec
  * AND the password AND all devices → data is unrecoverable (provider-blind).
  *
  * All wrapped blobs are JSON-serializable (base64url strings) for storage.
@@ -41,8 +41,8 @@ import {
 
 /**
  * Generate a random 32-byte symmetric key. For an *account* VMK, derive it from
- * the backup phrase instead (`deriveVaultMasterKeyFromPhrase`); this helper is
- * for ephemeral/per-record keys and tests.
+ * the nsec instead (`deriveVaultMasterKeyFromNsec`); this helper is for
+ * ephemeral/per-record keys and tests.
  */
 export function generateVaultMasterKey(): Uint8Array {
   return generateSymmetricKey();

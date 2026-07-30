@@ -79,8 +79,8 @@ export interface VaultStore {
  * The account's Vault Master Key, wrapped for daily-use convenience and stored
  * server-side as opaque blobs. The server cannot derive the VMK from any of
  * these without the password or a device secret key. Recovery itself needs NO
- * stored blob — the wallet-style backup phrase deterministically reproduces the
- * VMK (see `deriveVaultMasterKeyFromPhrase`).
+ * stored blob — the nsec account key deterministically reproduces the VMK
+ * (see `deriveVaultMasterKeyFromNsec`).
  */
 export interface StoredVaultKeys {
   /** One entry per authorized device/companion (ML-KEM-wrapped VMK). */
@@ -93,9 +93,9 @@ export interface StoredVaultKeys {
   /** VMK wrapped by the Argon2id password key (null until a password is set). */
   passwordWrap: PasswordWrappedKey | null;
   /**
-   * A known constant sealed under the VMK. Lets backup-phrase recovery verify
-   * the derived key is correct *before* trusting it — a wrong-but-valid BIP-39
-   * phrase derives a different VMK that would otherwise fail silently later.
+   * A known constant sealed under the VMK. Lets nsec recovery verify the
+   * derived key is correct *before* trusting it — a wrong-but-valid nsec
+   * derives a different VMK that would otherwise fail silently later.
    * (Password/device unlock self-verify via the AEAD auth tag.)
    */
   vmkCheck: string;

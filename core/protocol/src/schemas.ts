@@ -42,6 +42,18 @@ export const StoredVaultKeysSchema = z.object({
   vmkCheck: z.string().min(1),
 });
 
+/** Canonical stored form of a Nostr public key: x-only pubkey, lowercase hex. */
+export const NPUB_HEX_RE = /^[0-9a-f]{64}$/;
+
+/**
+ * PUT /api/vault/keys body: the wrapped-keys blob, plus (at bootstrap) the
+ * account's npub for a set-once bind. Deliberately NO nsec field — the secret
+ * never travels; the server strips npub off before persisting the blob.
+ */
+export const PutVaultKeysBodySchema = StoredVaultKeysSchema.extend({
+  npub: z.string().regex(NPUB_HEX_RE).optional(),
+});
+
 /** Opaque sealed envelope for the device mailbox — server validates structure only. */
 export const SealedEnvelopeSchema = z.object({
   v: z.literal(1),

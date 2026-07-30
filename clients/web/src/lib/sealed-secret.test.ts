@@ -7,10 +7,10 @@ import {
   stashSealedSecret,
 } from "./sealed-secret";
 
-// Representative registration payload: the vault wraps + the phrase to display.
-// `passwordWrap.salt` and the phrase words are the sensitive substrings that must
-// never appear in the ciphertext at rest.
-const PHRASE = "alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima";
+// Representative registration payload: the vault wraps + the nsec to display.
+// `passwordWrap.salt` and the nsec are the sensitive substrings that must never
+// appear in the ciphertext at rest.
+const NSEC = "nsec1vl029mgpspedva04g90vltkh6fvh240zqtv9k0t9af8935ke9laqsnlfe5";
 const PASSWORD_SALT = "c2FsdC1iYXNlNjR1cmwtdmFsdWU";
 const BLOB = JSON.stringify({
   storedKeys: {
@@ -26,7 +26,7 @@ const BLOB = JSON.stringify({
     },
     vmkCheck: "enc:v1:abc",
   },
-  backupPhrase: PHRASE,
+  nsec: NSEC,
 });
 
 describe("sealed secret", () => {
@@ -44,7 +44,7 @@ describe("sealed secret", () => {
     expect(await consumeSealedSecret(store)).toBeNull();
   });
 
-  it("never persists plaintext (no phrase word, no salt), under a non-extractable key", async () => {
+  it("never persists plaintext (no nsec, no salt), under a non-extractable key", async () => {
     const store = createInMemoryCredentialStore();
     await stashSealedSecret(BLOB, store);
 
@@ -52,7 +52,7 @@ describe("sealed secret", () => {
     expect(record).not.toBeNull();
     expect(record!.key.extractable).toBe(false);
     const bytes = new TextDecoder().decode(new Uint8Array(record!.ciphertext));
-    expect(bytes).not.toContain("alpha");
+    expect(bytes).not.toContain(NSEC);
     expect(bytes).not.toContain(PASSWORD_SALT);
   });
 

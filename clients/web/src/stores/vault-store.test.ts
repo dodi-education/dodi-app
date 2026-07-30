@@ -1,7 +1,7 @@
 /**
  * Register (email-OTP) split of the vault bootstrap: `createLocalVault` must build
  * + seal the vault WITHOUT any server write, and `finalizeVault` must persist it
- * once, activate the session, reveal the phrase, and stay retry-safe on a failed
+ * once, activate the session, reveal the nsec, and stay retry-safe on a failed
  * save. The crypto itself is covered in core/vault; here we mock it and assert the
  * store's orchestration + the "never persist before confirm" invariant.
  */
@@ -39,13 +39,17 @@ vi.mock("@/lib/parent-lock", () => ({
   clearParentUnlocked: vi.fn(),
 }));
 
+const MOCK_NSEC = "nsec1mockmockmockmockmockmockmockmockmockmock";
+const MOCK_NPUB_HEX = "ab".repeat(32);
+
 vi.mock("@dodi/vault", () => ({
   VaultSession: class {
     constructor(public vmk: Uint8Array) {}
     lock() {}
   },
   createAccountVault: vi.fn(({ device }: { device: { deviceId: string } }) => ({
-    backupPhrase: "alpha bravo charlie",
+    nsec: "nsec1mockmockmockmockmockmockmockmockmockmock",
+    npubHex: "ab".repeat(32),
     vmk: new Uint8Array([1, 2, 3]),
     storedKeys: {
       deviceWraps: [{ deviceId: device.deviceId }],
@@ -63,12 +67,13 @@ vi.mock("@dodi/vault", () => ({
   setVaultPassword: vi.fn(),
   unlockVaultWithDevice: vi.fn(),
   unlockVaultWithPassword: vi.fn(),
-  unlockVaultWithPhrase: vi.fn(),
+  unlockVaultWithNsec: vi.fn(),
 }));
 
 vi.mock("@dodi/crypto", () => ({
   toBase64Url: vi.fn(() => "b64url"),
-  deriveVaultMasterKeyFromPhrase: vi.fn(() => new Uint8Array([7, 7, 7])),
+  deriveVaultMasterKeyFromNsec: vi.fn(() => new Uint8Array([7, 7, 7])),
+  nsecToNpubHex: vi.fn(() => "ab".repeat(32)),
   // Imported by @/lib/argon2-worker (a vault-store side effect); registration
   // itself is skipped in the node environment (no `window`).
   setArgon2idExecutor: vi.fn(),
@@ -87,7 +92,7 @@ beforeEach(() => {
   useVaultStore.setState({
     status: "idle",
     session: null,
-    pendingBackupPhrase: null,
+    pendingNsec: null,
     pendingVault: null,
     error: null,
   });
@@ -100,24 +105,40 @@ describe("vault-store register split", () => {
     expect(saveVaultKeysMock).not.toHaveBeenCalled();
     expect(sealedRef.current).toBeTruthy();
     const parsed = JSON.parse(sealedRef.current!);
-    expect(parsed.backupPhrase).toBe("alpha bravo charlie");
+    expect(parsed.nsec).toBe(MOCK_NSEC);
     expect(parsed.storedKeys.passwordWrap).toBeTruthy();
     // No session, no status flip while still on public /register.
     expect(useVaultStore.getState().session).toBeNull();
     expect(useVaultStore.getState().status).toBe("idle");
   });
 
-  it("finalizeVault persists once, activates the session, reveals the phrase", async () => {
+  it("finalizeVault persists once (with the npub bind), activates the session, reveals the nsec", async () => {
     await useVaultStore.getState().createLocalVault("hunter2-password");
     await useVaultStore.getState().finalizeVault();
 
     expect(saveVaultKeysMock).toHaveBeenCalledTimes(1);
+    expect(saveVaultKeysMock).toHaveBeenCalledWith(
+      expect.objectContaining({ vmkCheck: "enc:v1:x" }),
+      { npub: MOCK_NPUB_HEX },
+    );
     const s = useVaultStore.getState();
     expect(s.status).toBe("unlocked");
-    expect(s.pendingBackupPhrase).toBe("alpha bravo charlie");
+    expect(s.pendingNsec).toBe(MOCK_NSEC);
     expect(s.session).not.toBeNull();
     expect(s.pendingVault).toBeNull();
     expect(sealedRef.current).toBeNull(); // seal cleared after success
+  });
+
+  it("bootstrap saves the keys with the npub bind and reveals the nsec", async () => {
+    await useVaultStore.getState().bootstrap("hunter2-password");
+
+    expect(saveVaultKeysMock).toHaveBeenCalledWith(
+      expect.objectContaining({ vmkCheck: "enc:v1:x" }),
+      { npub: MOCK_NPUB_HEX },
+    );
+    const s = useVaultStore.getState();
+    expect(s.status).toBe("unlocked");
+    expect(s.pendingNsec).toBe(MOCK_NSEC);
   });
 
   it("retries via pendingVault when saveVaultKeys fails, without re-consuming the seal", async () => {
@@ -144,7 +165,7 @@ describe("vault-store register split", () => {
   it("discardLocalVault clears the seal and the pending vault", async () => {
     await useVaultStore.getState().createLocalVault("hunter2-password");
     useVaultStore.setState({
-      pendingVault: { storedKeys: {} as never, backupPhrase: "x" },
+      pendingVault: { storedKeys: {} as never, nsec: "x" },
     });
 
     await useVaultStore.getState().discardLocalVault();

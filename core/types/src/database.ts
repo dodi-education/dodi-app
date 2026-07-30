@@ -42,6 +42,9 @@ export interface Database {
           monthly_game_publication_limit: number;
           /** Stamped once when any submission is hard-rejected; never auto-cleared. */
           flagged_for_review_at: string | null;
+          // Nostr public key of the vault root (x-only pubkey, lowercase hex;
+          // UI shows bech32 npub1…). Set once at vault bootstrap, unique.
+          npub: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -63,6 +66,7 @@ export interface Database {
           publication_handle?: string | null;
           monthly_game_publication_limit?: number;
           flagged_for_review_at?: string | null;
+          npub?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -84,6 +88,7 @@ export interface Database {
           publication_handle?: string | null;
           monthly_game_publication_limit?: number;
           flagged_for_review_at?: string | null;
+          npub?: string | null;
           created_at?: string;
           updated_at?: string;
         };

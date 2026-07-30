@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -17,16 +18,17 @@ import { useVaultStore } from "@/stores/vault-store";
 
 /**
  * Shown by the VaultGate when silent device-unlock fails: a new device that
- * needs the password (or recovery phrase), or an account with no vault yet.
+ * needs the password (or the nsec account key), or an account with no vault yet.
  */
 export function VaultUnlockPrompt() {
+  const t = useTranslations("vault");
   const router = useRouter();
   const status = useVaultStore((s) => s.status);
   const needsSetup = status === "needs-setup";
 
-  const [mode, setMode] = useState<"password" | "phrase">("password");
+  const [mode, setMode] = useState<"password" | "nsec">("password");
   const [password, setPassword] = useState("");
-  const [phrase, setPhrase] = useState("");
+  const [nsec, setNsec] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -43,10 +45,10 @@ export function VaultUnlockPrompt() {
       if (mode === "password") {
         await useVaultStore.getState().unlockWithPassword(password);
       } else {
-        await useVaultStore.getState().unlockWithPhrase(phrase);
+        await useVaultStore.getState().unlockWithNsec(nsec);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't unlock the vault");
+      setError(err instanceof Error ? err.message : t("unlockFailed"));
       setBusy(false);
     }
   }
@@ -56,21 +58,21 @@ export function VaultUnlockPrompt() {
       <Card>
         <CardHeader>
           <CardTitle>
-            {needsSetup ? "Set up your secure vault" : "Unlock your data"}
+            {needsSetup ? t("setupTitle") : t("unlockTitle")}
           </CardTitle>
           <CardDescription>
             {needsSetup
-              ? "Choose a password to encrypt your family's data on this device."
+              ? t("setupDescription")
               : mode === "password"
-                ? "Enter your password to decrypt your data on this device."
-                : "Enter your 12-word recovery phrase to restore access."}
+                ? t("unlockPasswordDescription")
+                : t("unlockNsecDescription")}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             {needsSetup || mode === "password" ? (
               <div className="flex flex-col gap-2">
-                <Label htmlFor="vault-password">Password</Label>
+                <Label htmlFor="vault-password">{t("passwordLabel")}</Label>
                 <Input
                   id="vault-password"
                   type="password"
@@ -82,35 +84,40 @@ export function VaultUnlockPrompt() {
               </div>
             ) : (
               <div className="flex flex-col gap-2">
-                <Label htmlFor="vault-phrase">Recovery phrase</Label>
-                <textarea
-                  id="vault-phrase"
-                  value={phrase}
-                  onChange={(e) => setPhrase(e.target.value)}
+                <Label htmlFor="vault-nsec">{t("nsecLabel")}</Label>
+                <Input
+                  id="vault-nsec"
+                  value={nsec}
+                  onChange={(e) => setNsec(e.target.value)}
                   required
-                  rows={3}
-                  placeholder="twelve words separated by spaces"
-                  className="min-h-[80px] w-full rounded-md border border-input bg-card px-3 py-2 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary-soft-2"
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder={t("nsecPlaceholder")}
+                  className="font-mono"
                 />
               </div>
             )}
             {error && <p className="text-sm text-destructive">{error}</p>}
             <Button type="submit" disabled={busy} className="w-full">
-              {busy ? "Unlocking…" : needsSetup ? "Create vault" : "Unlock"}
+              {busy
+                ? t("unlocking")
+                : needsSetup
+                  ? t("createVault")
+                  : t("unlock")}
             </Button>
           </form>
           {!needsSetup && (
             <button
               type="button"
               onClick={() => {
-                setMode(mode === "password" ? "phrase" : "password");
+                setMode(mode === "password" ? "nsec" : "password");
                 setError(null);
               }}
               className="mt-3 w-full text-center text-sm text-muted-foreground hover:underline"
             >
               {mode === "password"
-                ? "Forgot password? Use recovery phrase"
-                : "Use password instead"}
+                ? t("forgotPasswordUseKey")
+                : t("usePasswordInstead")}
             </button>
           )}
         </CardContent>

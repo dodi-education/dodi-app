@@ -151,6 +151,32 @@ export async function setAccountPublicationHandle(
 }
 
 /**
+ * Set-once npub bind at vault bootstrap: succeeds when the account's npub is
+ * unset or already equal (idempotent re-save), fails when the npub belongs to
+ * another account (unique violation) or this account is already bound to a
+ * different npub (zero rows matched). The caller sends only the PUBLIC key —
+ * the nsec never reaches the server.
+ */
+export async function claimAccountNpub(
+  supabase: Client,
+  accountId: string,
+  npub: string,
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("accounts")
+    .update({ npub } as AccountUpdate)
+    .eq("id", accountId)
+    // npub is regex-validated lowercase hex, so it is safe inside the filter.
+    .or(`npub.is.null,npub.eq.${npub}`)
+    .select("id");
+
+  // 23505 = unique_violation → the npub is bound to another account.
+  if (error && error.code === "23505") return false;
+  if (error) throw error;
+  return (data?.length ?? 0) > 0;
+}
+
+/**
  * Whether a handle is free. Needs the service-role client: RLS scopes account
  * reads to the caller, and a "taken?" answer must span every account. Returns
  * only a boolean — never a browsable list, same contract as friend lookup.

@@ -17,6 +17,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PinInput } from "@/components/ui/pin-input";
+import { isValidNsec } from "@dodi/crypto";
+import { NpubConflictError } from "@dodi/protocol/client";
 import { dodi } from "@/lib/api";
 import { createClient } from "@/lib/supabase/client";
 import { useVaultStore } from "@/stores/vault-store";
@@ -35,6 +37,8 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [inviteCode, setInviteCode] = useState("");
+  // Advanced: bring an existing Nostr key as the account key (empty = generate).
+  const [importedNsec, setImportedNsec] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -103,6 +107,10 @@ export default function RegisterPage() {
       setError(t("inviteRequired"));
       return;
     }
+    if (importedNsec.trim() && !isValidNsec(importedNsec)) {
+      setError(t("invalidAccountKey"));
+      return;
+    }
 
     setLoading(true);
 
@@ -129,10 +137,16 @@ export default function RegisterPage() {
     // Confirmation disabled → we have a session; bootstrap the E2EE vault now.
     if (data.session) {
       try {
-        await useVaultStore.getState().bootstrap(password);
+        await useVaultStore
+          .getState()
+          .bootstrap(password, importedNsec.trim() || undefined);
       } catch (err) {
         console.error("[register] vault bootstrap failed", err);
-        setError(t("vaultSetupFailed"));
+        setError(
+          err instanceof NpubConflictError
+            ? t("nsecTaken")
+            : t("vaultSetupFailed"),
+        );
         setLoading(false);
         return;
       }
@@ -146,7 +160,9 @@ export default function RegisterPage() {
     // the uniform response for ANY email (new, unconfirmed, or already-registered)
     // — never branch on identities, which would leak account existence.
     try {
-      await useVaultStore.getState().createLocalVault(password);
+      await useVaultStore
+        .getState()
+        .createLocalVault(password, importedNsec.trim() || undefined);
     } catch (err) {
       console.error("[register] local vault creation failed", err);
       setError(t("vaultSetupFailed"));
@@ -168,7 +184,16 @@ export default function RegisterPage() {
       router.push("/vault-setup");
       router.refresh();
       // Navigation unmounts this page; leave `verifying` set.
-    } catch {
+    } catch (err) {
+      if (err instanceof NpubConflictError) {
+        // The imported Nostr key belongs to another account — retrying the
+        // persist can never succeed, so skip the retry loop and leave "use a
+        // different email" as the way out.
+        await useVaultStore.getState().discardLocalVault();
+        setOtpError(t("nsecTaken"));
+        setVerifying(false);
+        return;
+      }
       setFinalizeError(true);
       setOtpError(t("vaultSetupFailed"));
       setVerifying(false);
@@ -401,6 +426,26 @@ export default function RegisterPage() {
               required
             />
           </div>
+          <details className="text-sm">
+            <summary className="cursor-pointer text-muted-foreground hover:underline">
+              {t("importNsecToggle")}
+            </summary>
+            <div className="mt-3 flex flex-col gap-2">
+              <Label htmlFor="imported-nsec">{t("importNsecLabel")}</Label>
+              <Input
+                id="imported-nsec"
+                value={importedNsec}
+                onChange={(e) => setImportedNsec(e.target.value)}
+                autoComplete="off"
+                spellCheck={false}
+                placeholder={t("accountKeyPlaceholder")}
+                className="font-mono"
+              />
+              <p className="text-xs text-muted-foreground">
+                {t("importNsecHint")}
+              </p>
+            </div>
+          </details>
           {error && <p className="text-sm text-destructive">{error}</p>}
           <Button type="submit" disabled={loading} className="w-full">
             {loading ? t("creatingAccount") : t("createAccount")}

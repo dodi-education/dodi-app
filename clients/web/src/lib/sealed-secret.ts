@@ -4,10 +4,10 @@
  * in plaintext.
  *
  * Used by registration: after `signUp` (email confirmation pending) the client
- * builds the E2EE vault in memory and seals `{ storedKeys, backupPhrase }` here,
- * then zeroes the password. When the user enters the emailed OTP code — in the
- * SAME tab — the sealed blob is consumed to persist the vault and reveal the
- * recovery phrase, with no password re-entry. The caller owns JSON; this module
+ * builds the E2EE vault in memory and seals `{ storedKeys, nsec }` here, then
+ * zeroes the password. When the user enters the emailed OTP code — in the SAME
+ * tab — the sealed blob is consumed to persist the vault and reveal the nsec
+ * account key, with no password re-entry. The caller owns JSON; this module
  * only deals in strings so it stays domain-free.
  *
  * Security posture: the secret is NEVER written in plaintext. It is sealed with a
