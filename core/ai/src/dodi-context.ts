@@ -211,13 +211,6 @@ function buildGameSharedInstruction(input: GameContextInput): string {
     lines.push(...buildBirthdaySectionLight(input.childName));
   }
 
-  lines.push(
-    "",
-    "## Live Game State (initial snapshot — may be stale)",
-    "During the session, [GAME STATE UPDATE] messages contain the CURRENT state and supersede this section.",
-    JSON.stringify(input.gameState ?? {}, null, 2),
-  );
-
   return lines.join("\n");
 }
 
@@ -266,12 +259,11 @@ export function buildGameVoiceContext(
   const systemInstruction = [
     shared,
     "",
-    "## Voice Game Interaction",
+    "## Game State at Session Start",
+    "This is the game state as of the START of this session. It goes STALE as the child plays — it is NOT kept up to date.",
+    JSON.stringify(input.gameState ?? {}, null, 2),
     "",
-    "### State Update Protocol",
-    "During this session you will receive [GAME STATE UPDATE #N] messages.",
-    "These contain the CURRENT game state and ALWAYS supersede the initial \"Live Game State\" above and all previous updates (lower #N).",
-    "When asked about game state (scores, items, counts, progress), ONLY use the most recent [GAME STATE UPDATE] message.",
+    "## Voice Game Interaction",
     "",
     "You can use these tools:",
     ...toolListLines,
@@ -282,14 +274,14 @@ export function buildGameVoiceContext(
     "- For multi-step actions, call the appropriate tools multiple times in the same turn.",
     "- Pass arguments exactly as each tool defines them.",
     "- Only skip tool calls if the child is purely chatting and NOT requesting any game action.",
+    "- Game command tool responses include the game state AFTER the command ran — use it to react (e.g. whether the answer was correct, what the new score is).",
     "",
-    "Using read_game_state:",
-    "- The [GAME STATE UPDATE] text does NOT tell you what a drawing or creation LOOKS like. For ANY question about what the child drew, made, built, or created (e.g. 'What did I draw?', 'Can you guess what this is?'), you MUST call read_game_state — it actually looks at the picture. Do NOT answer such questions from the state text alone.",
-    "- Call this when the child asks about what they've created or when you need to understand rich game state",
-    "- IMPORTANT: Before calling this tool, briefly tell the child you're checking (e.g., 'Let me take a look!', 'Hmm, let me see...')",
-    "- The analysis takes a few seconds — your spoken acknowledgment fills the silence",
-    "- The tool will return an analysis — use it directly in your spoken response to the child",
-    "- Speak the answer naturally and concisely in the child's language",
+    "Knowing the game state:",
+    "- The \"Game State at Session Start\" section above goes stale. NEVER answer questions about scores, items, counts, progress, or the current task from it — call `read_game_state` first and answer from the returned state.",
+    "- `read_game_state` is instant and silent: no need to announce it, just call it and answer.",
+    "- `read_game_state` returns structured data only — it can NOT tell you what a drawing or creation LOOKS like. For ANY question about what the child drew, made, built, or created (e.g. 'What did I draw?', 'Can you guess what this is?'), you MUST call `analyze_game_state` — it actually looks at the picture. Do NOT answer such questions from state data alone.",
+    "- `analyze_game_state` takes a few seconds — BEFORE calling it, briefly tell the child you're checking (e.g., 'Let me take a look!', 'Hmm, let me see...'); your spoken acknowledgment fills the silence. Use its returned analysis directly in your spoken response.",
+    "- Speak answers naturally and concisely in the child's language",
     "",
     ...buildSnapshotSection(input),
     "Speech rules:",
@@ -340,6 +332,9 @@ export function buildGameTextContext(
 
   const systemInstruction = [
     shared,
+    "",
+    "## Current Game State",
+    JSON.stringify(input.gameState ?? {}, null, 2),
     "",
     standardCommandsDoc(input.capabilities ?? []),
     ...buildSnapshotCommandsDoc(input),

@@ -20,10 +20,13 @@ describe("buildGameVoiceContext tool registration", () => {
   it("empty capabilities → only meta tools, never execute_game_command", () => {
     const names = buildGameVoiceContext({ ...base, capabilities: [] }).tools.map((t) => t.name);
     expect(names).toContain("read_game_state");
+    expect(names).toContain("analyze_game_state");
     expect(names).toContain("launch_game");
     expect(names).not.toContain("execute_game_command");
     expect(
-      names.filter((n) => !["read_game_state", "launch_game"].includes(n)),
+      names.filter(
+        (n) => !["read_game_state", "analyze_game_state", "launch_game"].includes(n),
+      ),
     ).toHaveLength(0);
   });
 
@@ -33,7 +36,13 @@ describe("buildGameVoiceContext tool registration", () => {
       capabilities: ["submit_answer", "next_task"],
     }).tools.map((t) => t.name);
     expect(names).toEqual(
-      expect.arrayContaining(["submit_answer", "next_task", "read_game_state", "launch_game"]),
+      expect.arrayContaining([
+        "submit_answer",
+        "next_task",
+        "read_game_state",
+        "analyze_game_state",
+        "launch_game",
+      ]),
     );
     expect(names).not.toContain("generate_drawing");
     expect(names).not.toContain("execute_game_command");

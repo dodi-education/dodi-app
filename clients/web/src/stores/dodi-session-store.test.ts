@@ -593,7 +593,7 @@ describe("dodi session store — generate_drawing deferral", () => {
     expect(response).toMatchObject({ ok: true, status: "done" });
   });
 
-  it("forwards a first-class bridge command and answers immediately", async () => {
+  it("forwards a first-class bridge command and defers the answer until the game's state event", async () => {
     const runCommands = vi.fn();
     useDodiSessionStore.getState().setOnRunCommands(runCommands);
     await connectGame(PID);
@@ -609,13 +609,43 @@ describe("dodi session store — generate_drawing deferral", () => {
     expect(runCommands).toHaveBeenCalledWith([
       { type: "set_drawing_color", payload: { color: "#e53935" } },
     ]);
-    // …and echoes the real tool name back to Gemini.
+    // …and holds the response open until the command's state event lands, so
+    // the model observes the outcome (score, correctness) in the response.
+    expect(sendToolResponseSpy).not.toHaveBeenCalled();
+
+    useDodiSessionStore.getState().updateGameState({ activeColor: "#e53935" });
+
     expect(sendToolResponseSpy).toHaveBeenCalledTimes(1);
-    expect(sendToolResponseSpy.mock.calls[0][1]).toBe("set_drawing_color");
+    const [id, name, response] = sendToolResponseSpy.mock.calls[0] as [
+      string,
+      string,
+      Record<string, unknown>,
+    ];
+    expect(id).toBe("call-color");
+    expect(name).toBe("set_drawing_color");
+    expect(response).toMatchObject({ ok: true, state: { activeColor: "#e53935" } });
+    // The state traveled in the tool response — never as a context push.
+    expect(sendContextSpy).not.toHaveBeenCalled();
+  });
+
+  it("answers a bridge command with a plain ok when the game emits no state event", async () => {
+    useDodiSessionStore.getState().setOnRunCommands(vi.fn());
+    await connectGame(PID);
+
+    fire({ type: "toolCall", id: "call-n", name: "next_task", args: {} });
+    expect(sendToolResponseSpy).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(sendToolResponseSpy).toHaveBeenCalledTimes(1);
+    expect(sendToolResponseSpy.mock.calls[0][1]).toBe("next_task");
     expect(sendToolResponseSpy.mock.calls[0][2]).toMatchObject({
       ok: true,
-      command: "set_drawing_color",
+      command: "next_task",
     });
+
+    // A state event arriving after the timeout must not double-answer.
+    useDodiSessionStore.getState().updateGameState({ task: 2 });
+    expect(sendToolResponseSpy).toHaveBeenCalledTimes(1);
   });
 
   it("rejects an unknown tool name", async () => {
@@ -693,7 +723,22 @@ describe("dodi session store — generate_drawing deferral", () => {
     expect(response).toMatchObject({ ok: true, message: "Saved as My castle." });
   });
 
-  it("read_game_state analyzes in-browser with the vault key (no server call) and returns it", async () => {
+  it("read_game_state answers instantly with the host-buffered current state (no AI call)", async () => {
+    useDodiSessionStore.getState().setOnRunCommands(vi.fn());
+    await connectGame(PID);
+
+    // The game pushed a state change to the host in the meantime.
+    useDodiSessionStore.getState().updateGameState({ score: 7 });
+
+    fire({ type: "toolCall", id: "call-s", name: "read_game_state", args: {} });
+
+    expect(resolveThinkingSpy).not.toHaveBeenCalled();
+    expect(analyzeSpy).not.toHaveBeenCalled();
+    const toolResp = sendToolResponseSpy.mock.calls.find((c) => c[1] === "read_game_state");
+    expect(toolResp![2]).toMatchObject({ ok: true, state: { score: 7 } });
+  });
+
+  it("analyze_game_state analyzes in-browser with the vault key (no server call) and returns it", async () => {
     useDodiSessionStore.getState().setOnRunCommands(vi.fn());
     resolveThinkingSpy.mockResolvedValue({
       provider: "gemini",
@@ -706,7 +751,7 @@ describe("dodi session store — generate_drawing deferral", () => {
     });
     await connectGame(PID);
 
-    fire({ type: "toolCall", id: "call-r", name: "read_game_state", args: { question: "What did I draw?" } });
+    fire({ type: "toolCall", id: "call-r", name: "analyze_game_state", args: { question: "What did I draw?" } });
     await flush();
 
     // The whole analysis runs client-side: the vault key goes straight to the
@@ -720,20 +765,20 @@ describe("dodi session store — generate_drawing deferral", () => {
       question: "What did I draw?",
     });
 
-    const toolResp = sendToolResponseSpy.mock.calls.find((c) => c[1] === "read_game_state");
+    const toolResp = sendToolResponseSpy.mock.calls.find((c) => c[1] === "analyze_game_state");
     expect(toolResp![2]).toMatchObject({ ok: true, analysis: "You drew a lovely heart!" });
   });
 
-  it("read_game_state fails gracefully (no analysis call) when no thinking model is configured", async () => {
+  it("analyze_game_state fails gracefully (no analysis call) when no thinking model is configured", async () => {
     useDodiSessionStore.getState().setOnRunCommands(vi.fn());
     resolveThinkingSpy.mockResolvedValue(null);
     await connectGame(PID);
 
-    fire({ type: "toolCall", id: "call-r2", name: "read_game_state", args: { question: "What is this?" } });
+    fire({ type: "toolCall", id: "call-r2", name: "analyze_game_state", args: { question: "What is this?" } });
     await flush();
 
     expect(analyzeSpy).not.toHaveBeenCalled();
-    const toolResp = sendToolResponseSpy.mock.calls.find((c) => c[1] === "read_game_state");
+    const toolResp = sendToolResponseSpy.mock.calls.find((c) => c[1] === "analyze_game_state");
     expect(toolResp![2]).toMatchObject({ ok: false });
   });
 });
@@ -791,7 +836,7 @@ describe("dodi session store — AI activity (thinking) tracking", () => {
     expect(selectDodiActivityKind(state())).toBe("image"); // image wins when both active
   });
 
-  it("shows the thinking state while read_game_state analysis is in flight, then clears it", async () => {
+  it("shows the thinking state while analyze_game_state analysis is in flight, then clears it", async () => {
     useDodiSessionStore.getState().setOnRunCommands(vi.fn());
     resolveThinkingSpy.mockResolvedValue({
       provider: "gemini",
@@ -821,7 +866,7 @@ describe("dodi session store — AI activity (thinking) tracking", () => {
     fire({ type: "setupComplete" });
     await flush();
 
-    fire({ type: "toolCall", id: "call-a", name: "read_game_state", args: { question: "What did I draw?" } });
+    fire({ type: "toolCall", id: "call-a", name: "analyze_game_state", args: { question: "What did I draw?" } });
     await flush();
 
     // Provider call is parked → the companion is "thinking" the whole time.
@@ -842,7 +887,7 @@ describe("dodi session store — AI activity (thinking) tracking", () => {
 // never-audio standbys, closes the tainted active socket on deafen, and
 // promotes a standby on (re)activation. Pinned here: the store-level wiring —
 // pool lifecycle across connect/deactivate/activate/endSession, the persisted
-// deaf $0 path, catch-up game-state pushes, recap replay, fast recovery, and
+// deaf $0 path, host-buffered game state, recap replay, fast recovery, and
 // usage attribution. Pool internals live in voice-socket-pool.test.ts.
 // ---------------------------------------------------------------------------
 
@@ -1011,7 +1056,7 @@ describe("dodi session store — xai warm-socket pool", () => {
     expect(state().state).toBe("disconnected");
   });
 
-  it("pushes exactly one game-state delta on activation after changes while deaf", async () => {
+  it("never pushes game state — changes while deaf stay host-buffered for read_game_state", async () => {
     useDodiSessionStore.setState({
       state: "disconnected",
       context: {
@@ -1028,44 +1073,23 @@ describe("dodi session store — xai warm-socket pool", () => {
     sendContextSpy.mockClear();
 
     state().deactivate();
-    // The game keeps running while Dodi is deaf — nothing is pushed (there is
-    // no socket to push to), the store just buffers the latest state.
+    // The game keeps running while Dodi is deaf — the store just buffers the
+    // latest state on the host.
     state().updateGameState({ score: 5 });
     expect(sendContextSpy).not.toHaveBeenCalled();
 
     await state().activate();
     await flush();
 
-    const statePushes = sendContextSpy.mock.calls.filter((c) =>
-      String(c[0]).includes("[GAME STATE UPDATE"),
-    );
-    expect(statePushes).toHaveLength(1);
-    expect(String(statePushes[0][0])).toContain('"score":5');
-  });
-
-  it("skips the catch-up push when the game state never changed while deaf", async () => {
-    useDodiSessionStore.setState({
-      state: "disconnected",
-      context: {
-        type: "game",
-        gameId: "g1",
-        markdown: "",
-        codeBundle: "",
-        gameState: { score: 0 },
-        capabilities: [],
-      },
-    });
-    await connectPooled(PID);
-    sendContextSpy.mockClear();
-
-    state().deactivate();
-    await state().activate();
-    await flush();
-
-    // The fresh socket's config already embeds { score: 0 } — no delta to push.
+    // No catch-up push on the promoted socket — state is never pushed at all…
     expect(
       sendContextSpy.mock.calls.filter((c) => String(c[0]).includes("[GAME STATE UPDATE")),
     ).toHaveLength(0);
+
+    // …the model reads the host-buffered current state on demand instead.
+    clients()[1].handler({ type: "toolCall", id: "call-r", name: "read_game_state", args: {} });
+    const toolResp = sendToolResponseSpy.mock.calls.find((c) => c[1] === "read_game_state");
+    expect(toolResp![2]).toMatchObject({ ok: true, state: { score: 5 } });
   });
 
   it("replays a conversation recap on the fresh socket after a deaf cycle", async () => {

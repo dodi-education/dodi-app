@@ -29,7 +29,7 @@ describe("standard toolbox registry", () => {
 
   it("meta tools are registered + voice-exposed", () => {
     expect(META_TOOL_NAMES).toEqual(
-      expect.arrayContaining(["read_game_state", "launch_game"]),
+      expect.arrayContaining(["read_game_state", "analyze_game_state", "launch_game"]),
     );
     for (const n of META_TOOL_NAMES) {
       expect(REGISTRY_TOOL_NAMES.has(n)).toBe(true);
@@ -43,6 +43,7 @@ describe("standard toolbox registry", () => {
 
   it("declarable names exclude meta + set_generated_image, include get_snapshot/generate_drawing", () => {
     expect(DECLARABLE_CAPABILITY_NAMES).not.toContain("read_game_state");
+    expect(DECLARABLE_CAPABILITY_NAMES).not.toContain("analyze_game_state");
     expect(DECLARABLE_CAPABILITY_NAMES).not.toContain("launch_game");
     expect(DECLARABLE_CAPABILITY_NAMES).not.toContain("set_generated_image");
     expect(DECLARABLE_CAPABILITY_NAMES).toContain("get_snapshot");

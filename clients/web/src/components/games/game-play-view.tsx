@@ -222,7 +222,7 @@ export function GamePlayView({
   );
 
   const handleCommandResult = useCallback((state: Record<string, unknown>) => {
-    updateGameState(state, true);
+    updateGameState(state);
     ingestDodiState(state);
     scheduleAutosaveRef.current();
   }, [updateGameState, ingestDodiState]);
@@ -318,7 +318,7 @@ export function GamePlayView({
     [t, beginAiActivity, endAiActivity, drawingStyle],
   );
 
-  // Request a canvas snapshot from the sandbox (used by read_game_state and
+  // Request a canvas snapshot from the sandbox (used by analyze_game_state and
   // as the gallery thumbnail when saving a snapshot)
   const requestSnapshot = useCallback((): Promise<string | null> => {
     return new Promise<string | null>((resolve) => {

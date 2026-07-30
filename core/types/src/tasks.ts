@@ -8,7 +8,7 @@ import type { GamePerspective } from "./games";
 import type { ProgressKind, SuccessCriteria } from "./success";
 import type { TokenUsage } from "./usage";
 
-export type AgentTaskType = "generate_game" | "update_game" | "read_game_state";
+export type AgentTaskType = "generate_game" | "update_game";
 
 // ---------------------------------------------------------------------------
 // Request payloads
@@ -43,14 +43,6 @@ export interface UpdateGamePayload {
   screenshot?: string;
 }
 
-export interface ReadGameStatePayload {
-  gameState: Record<string, unknown>;
-  question: string;
-  gameMarkdown?: string;
-  gameCodeBundle?: string;
-  snapshot?: string;
-}
-
 export interface AgentTaskRequest {
   kidId: string;
   taskType: AgentTaskType;
@@ -65,7 +57,7 @@ export interface AgentTaskRequest {
      */
     learningContext?: string;
   };
-  payload: GenerateGamePayload | UpdateGamePayload | ReadGameStatePayload;
+  payload: GenerateGamePayload | UpdateGamePayload;
 }
 
 // ---------------------------------------------------------------------------
@@ -105,10 +97,3 @@ export interface AgentCodeResult {
   /** Set when the game was generated but could not be saved (surfaced to the user). */
   saveError?: string;
 }
-
-export interface AgentAnalysisResult {
-  taskType: "read_game_state";
-  analysis: string;
-}
-
-export type AgentTaskResult = AgentCodeResult | AgentAnalysisResult;

@@ -108,7 +108,7 @@ export interface DodiSessionState {
 
   // Game command callback
   onRunCommands: ((commands: GameCommand[]) => void) | null;
-  // Game snapshot callback (for read_game_state vision analysis)
+  // Game snapshot callback (for analyze_game_state vision analysis)
   onRequestSnapshot: (() => Promise<string | null>) | null;
 
   // Ref-counted active in-game AI provider work by category. Drives the
@@ -148,7 +148,7 @@ export interface DodiSessionState {
   // ?process-memory trigger), without waiting for a day change.
   processMemoryNow: (kidId: string) => void;
   sendTextMessage: (message: string, gameId?: string) => Promise<void>;
-  updateGameState: (state: Record<string, unknown>, immediate?: boolean) => void;
+  updateGameState: (state: Record<string, unknown>) => void;
   setOnRunCommands: (handler: ((commands: GameCommand[]) => void) | null) => void;
   setOnRequestSnapshot: (handler: (() => Promise<string | null>) | null) => void;
 }
@@ -220,12 +220,6 @@ let sessionStartDeaf = false;
 // Game voice state refs
 let turnBuffer = "";
 let gameAssistanceTurns = 0;
-let lastSentGameState = "";
-// Pooled strategy: the game-state snapshot embedded in the pool's config —
-// what every warm standby already "knows". A freshly acquired socket resets
-// lastSentGameState to this baseline so activation pushes exactly the delta.
-let poolBaselineGameState = "";
-let stateDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 // The provider/model of the current voice session, set whenever a config is
 // built (connect / setContext). Drives usage attribution.
@@ -281,9 +275,6 @@ function voiceMeterStop(keepalive = false): void {
     { keepalive },
   );
 }
-let stateSequenceNumber = 0;
-let pendingGameState: string | null = null;
-
 // Deferred client tool call (generate_drawing, save_snapshot, share_snapshot):
 // hold the tool response until the app-side work lands so the voice model stays
 // silent (a pending function call yields no audio) instead of looping filler.
@@ -292,10 +283,18 @@ let pendingGameState: string | null = null;
 // one call is pending at a time — a newer call supersedes the old one.
 let pendingClientCall: { id: string; name: string } | null = null;
 let clientCallTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
-// After a client call resolves, briefly suppress interrupting [GAME STATE
-// UPDATE] pushes so a trailing state result (e.g. set_generated_image) doesn't
-// cut off Dodi's spoken completion line.
-let suppressStateSendUntilTs = 0;
+
+// Deferred BRIDGE tool calls (submit_answer, next_task, …): the response is
+// held until the first game-state event after the command lands, so the model
+// observes the command's outcome (was the answer correct?) in the tool
+// response itself — game state is never pushed unprompted. FIFO because games
+// emit one state event per executed command; a per-entry timeout answers a
+// plain ok as a safety net for games that emit nothing.
+let pendingBridgeCalls: Array<{
+  id: string;
+  name: string;
+  timer: ReturnType<typeof setTimeout>;
+}> = [];
 
 // Turn tracking (debugging)
 let turnNumber = 0;
@@ -309,7 +308,6 @@ let contextGeneration = 0;
 // ---------------------------------------------------------------------------
 
 const MAX_MESSAGES = 40;
-const STATE_DEBOUNCE_MS = 500;
 // How long to hold each client tool call open before giving up (so dropped/
 // hung app-side work can't freeze the voice turn). Image generation is the slow
 // one — the Live API tolerates silent holds ≥12s (verified); snapshot save/share
@@ -320,9 +318,10 @@ const CLIENT_CALL_TIMEOUT_MS: Record<string, number> = {
   share_snapshot: 20000,
 };
 const CLIENT_CALL_TIMEOUT_FALLBACK_MS = 15000;
-// Quiet window after a client call resolves, during which game-state updates
-// refresh local context but skip the interrupting context push (see updateGameState).
-const CLIENT_CALL_COMPLETION_QUIET_MS = 2500;
+// How long to hold a bridge tool response open waiting for the game's state
+// event. Bridge commands run synchronously in the sandbox, so the state event
+// normally lands well under a second.
+const BRIDGE_CALL_TIMEOUT_MS = 2000;
 const INACTIVITY_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 // Minimum gap between fast recoveries (pooled strategy): an active socket that
 // keeps dying is a systematic failure — stop promoting standbys into it.
@@ -473,13 +472,6 @@ function handlePageHide(): void {
 // Resource cleanup
 // ---------------------------------------------------------------------------
 
-function clearStateDebounce(): void {
-  if (stateDebounceTimer) {
-    clearTimeout(stateDebounceTimer);
-    stateDebounceTimer = null;
-  }
-}
-
 function clearClientCallTimeout(): void {
   if (clientCallTimeoutTimer) {
     clearTimeout(clientCallTimeoutTimer);
@@ -487,17 +479,9 @@ function clearClientCallTimeout(): void {
   }
 }
 
-function flushPendingState(): void {
-  if (!stateDebounceTimer || !pendingGameState || !client) return;
-  clearStateDebounce();
-  if (pendingGameState === lastSentGameState) return;
-  lastSentGameState = pendingGameState;
-  stateSequenceNumber++;
-  gameDebug("voice", `Flushing pending state #${stateSequenceNumber} (${pendingGameState.length} chars)`);
-  client.sendContext(
-    `[GAME STATE UPDATE #${stateSequenceNumber}]\nThis is the CURRENT game state. Previous updates are outdated.\n${pendingGameState}`,
-  );
-  pendingGameState = null;
+function clearPendingBridgeCalls(): void {
+  for (const call of pendingBridgeCalls) clearTimeout(call.timer);
+  pendingBridgeCalls = [];
 }
 
 function cleanup(): void {
@@ -519,19 +503,15 @@ function cleanup(): void {
   pool?.destroy();
   pool = null;
 
-  clearStateDebounce();
+  clearPendingBridgeCalls();
   clearClientCallTimeout();
   pendingClientCall = null;
-  suppressStateSendUntilTs = 0;
   clearInactivityTimer();
   stopInteractionListeners();
   turnNumber = 0;
   turnAudioChunks = 0;
   turnBuffer = "";
   gameAssistanceTurns = 0;
-  lastSentGameState = "";
-  poolBaselineGameState = "";
-  stateSequenceNumber = 0;
 }
 
 function resetFlowFlags(): void {
@@ -636,26 +616,8 @@ function transitionToActive(
     }
   }
 
-  // Catch the socket up on game state it hasn't seen: changes while deaf are
-  // never pushed (there is nothing to push to), and a pooled socket only knows
-  // the snapshot embedded in its config — one delta lands here instead.
-  const ctx = get().context;
-  if (ctx.type === "game") {
-    const stateJson = JSON.stringify(ctx.gameState);
-    if (stateJson !== lastSentGameState) {
-      lastSentGameState = stateJson;
-      pendingGameState = null;
-      clearStateDebounce();
-      stateSequenceNumber++;
-      gameDebug(
-        "voice",
-        `Sending activation game state update #${stateSequenceNumber} (${stateJson.length} chars)`,
-      );
-      client.sendContext(
-        `[GAME STATE UPDATE #${stateSequenceNumber}]\nThis is the CURRENT game state. Previous updates are outdated.\n${stateJson}`,
-      );
-    }
-  }
+  // No game-state catch-up: state is never pushed to the model — it reads the
+  // host-buffered current state on demand via read_game_state.
 
   resetInactivityTimer();
   startInteractionListeners();
@@ -678,8 +640,7 @@ function transitionToDeaf(
   // it stops the clock; a warm standby takes its place on the next activation.
   if (sessionStrategy === "pooled" && client) {
     flushRound();
-    clearStateDebounce();
-    pendingGameState = null;
+    clearPendingBridgeCalls();
     clearClientCallTimeout();
     pendingClientCall = null;
     if (pool) {
@@ -688,9 +649,6 @@ function transitionToDeaf(
       client.disconnect();
     }
     client = null;
-    // The next acquired socket starts from its config-embedded knowledge only.
-    lastSentGameState = poolBaselineGameState;
-    stateSequenceNumber = 0;
     turnBuffer = "";
   }
 
@@ -846,16 +804,13 @@ function tryFastRecovery(
   recorder = null;
   streamer?.stop();
   flushRound();
-  clearStateDebounce();
-  pendingGameState = null;
+  clearPendingBridgeCalls();
   clearClientCallTimeout();
   pendingClientCall = null;
   if (client) {
     pool.retire(client);
     client = null;
   }
-  lastSentGameState = poolBaselineGameState;
-  stateSequenceNumber = 0;
   turnBuffer = "";
   set({ dodiSpeaking: false });
 
@@ -1011,9 +966,6 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
       "voice",
       `resolveClientCommand ${call.name} ok=${result.ok} → sending deferred response; playback backlog=${streamer?.backlogSeconds().toFixed(1)}s`,
     );
-    // Give the completion line a clean runway: a trailing state result (e.g.
-    // set_generated_image) would otherwise push an interrupting [GAME STATE UPDATE].
-    suppressStateSendUntilTs = Date.now() + CLIENT_CALL_COMPLETION_QUIET_MS;
     if (result.ok) {
       client?.sendToolResponse(call.id, call.name, {
         ok: true,
@@ -1066,9 +1018,8 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
       }
       client = null;
     }
-    clearStateDebounce();
+    clearPendingBridgeCalls();
     turnBuffer = "";
-    lastSentGameState = "";
 
     // Clear game-specific chat messages when entering a new game or leaving game
     set({
@@ -1113,10 +1064,6 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
       }
 
       if (newStrategy === "pooled") {
-        // Warm standbys will carry the new config-embedded game state.
-        poolBaselineGameState =
-          newContext.type === "game" ? JSON.stringify(newContext.gameState) : "";
-        lastSentGameState = poolBaselineGameState;
         if (pool && sessionStrategy === "pooled" && !pool.hasFatalError) {
           // Re-instruct the existing warm standbys in place — one JSON frame
           // per socket, no reconnect.
@@ -1257,10 +1204,6 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
       streamer = new AudioStreamer();
 
       if (sessionStrategy === "pooled") {
-        // Warm standbys already carry the config-embedded game state.
-        poolBaselineGameState =
-          currentContext.type === "game" ? JSON.stringify(currentContext.gameState) : "";
-        lastSentGameState = poolBaselineGameState;
         lastFastRecoveryAt = 0;
         const newPool: VoiceSocketPool = new VoiceSocketPool({
           config,
@@ -1463,52 +1406,23 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
     }
   },
 
-  updateGameState: (state: Record<string, unknown>, immediate?: boolean) => {
+  updateGameState: (state: Record<string, unknown>) => {
     const current = get();
     if (current.context.type !== "game") return;
 
-    // Update context with new game state
+    // The host buffers the current game state; the voice model is never pushed
+    // to — it fetches on demand via read_game_state / analyze_game_state.
     set({
       context: { ...current.context, gameState: state },
     });
 
-    // Debounced sendContext for voice sessions
-    if (!client || current.state !== "active") return;
-
-    const stateJson = JSON.stringify(state);
-    if (stateJson === lastSentGameState) return;
-
-    // A drawing just landed: keep local context fresh but skip the interrupting
-    // [GAME STATE UPDATE] push for a moment so the set_generated_image result
-    // doesn't cut off Dodi's spoken "your picture is ready!" line.
-    if (Date.now() < suppressStateSendUntilTs) {
-      lastSentGameState = stateJson;
-      clearStateDebounce();
-      pendingGameState = null;
-      return;
-    }
-
-    const sendStateUpdate = () => {
-      lastSentGameState = stateJson;
-      pendingGameState = null;
-      stateSequenceNumber++;
-      const label = immediate ? "immediate" : "debounced";
-      gameDebug("voice", `Sending ${label} game state update #${stateSequenceNumber} (${stateJson.length} chars)`);
-      client?.sendContext(
-        `[GAME STATE UPDATE #${stateSequenceNumber}]\nThis is the CURRENT game state. Previous updates are outdated.\n${stateJson}`,
-      );
-    };
-
-    clearStateDebounce();
-
-    if (immediate) {
-      sendStateUpdate();
-    } else {
-      pendingGameState = stateJson;
-      stateDebounceTimer = setTimeout(() => {
-        sendStateUpdate();
-        stateDebounceTimer = null;
-      }, STATE_DEBOUNCE_MS);
+    // A bridge tool call is waiting for its outcome: the first state event
+    // after the command is its observation — answer with the updated state.
+    const pending = pendingBridgeCalls.shift();
+    if (pending) {
+      clearTimeout(pending.timer);
+      gameDebug("voice", `Resolving deferred ${pending.name} with post-command state`);
+      client?.sendToolResponse(pending.id, pending.name, { ok: true, state });
     }
   },
 }));
@@ -1579,7 +1493,6 @@ function createEventHandler(
       case "inputTranscription":
         if (!greetingSent) return;
         resetInactivityTimer();
-        flushPendingState();
         // A new kid run (role switch) counts as one "asking Dodi" turn while a
         // game is open — counted per round, not per streamed fragment.
         if (isGameContext && roundRole !== "kid") {
@@ -1595,7 +1508,6 @@ function createEventHandler(
         break;
 
       case "toolCall":
-        flushPendingState();
         gameDebug("voice", `Tool call: ${event.name}(${JSON.stringify(event.args)})`);
 
         if (event.name === "launch_game") {
@@ -1674,17 +1586,49 @@ function createEventHandler(
               clientCallTimeoutTimer = null;
             }, CLIENT_CALL_TIMEOUT_MS[event.name] ?? CLIENT_CALL_TIMEOUT_FALLBACK_MS);
           } else {
-            // Plain bridge command → respond immediately.
-            client?.sendToolResponse(event.id, event.name, {
-              ok: true,
-              command: event.name,
-            });
+            // Bridge command → DEFER the response until the game's next state
+            // event, so the model observes the command's outcome (was the
+            // answer correct?) in the tool response itself. Resolved FIFO in
+            // updateGameState; the timeout is the safety net for games that
+            // emit no state event.
+            const callId = event.id;
+            const callName = event.name;
+            const timer = setTimeout(() => {
+              const idx = pendingBridgeCalls.findIndex((c) => c.id === callId);
+              if (idx === -1) return;
+              pendingBridgeCalls.splice(idx, 1);
+              gameDebugWarn(
+                "voice",
+                `${callName} produced no state event — sending plain ok`,
+              );
+              client?.sendToolResponse(callId, callName, {
+                ok: true,
+                command: callName,
+              });
+            }, BRIDGE_CALL_TIMEOUT_MS);
+            pendingBridgeCalls.push({ id: callId, name: callName, timer });
           }
         } else if (event.name === "read_game_state" && isGameContext) {
+          // Instant host answer: the current structured state the game last
+          // pushed to the host — no AI call, no snapshot.
+          const ctx = get().context;
+          if (ctx.type !== "game") {
+            client?.sendToolResponse(event.id, event.name, {
+              ok: false,
+              error: "Not in a game context",
+            });
+            return;
+          }
+          gameDebug("voice", "read_game_state → returning current state");
+          client?.sendToolResponse(event.id, event.name, {
+            ok: true,
+            state: ctx.gameState,
+          });
+        } else if (event.name === "analyze_game_state" && isGameContext) {
           // Offload complex state analysis to the thinking model
           const question = typeof event.args.question === "string" ? event.args.question : "What is the current game state?";
 
-          gameDebug("voice", `read_game_state: "${question}"`);
+          gameDebug("voice", `analyze_game_state: "${question}"`);
 
           const ctx = get().context;
           if (ctx.type !== "game") {
@@ -1723,7 +1667,7 @@ function createEventHandler(
                     ? await snapshotHandler().catch(() => null)
                     : null;
                 if (snapshot) {
-                  gameDebug("voice", `read_game_state: got snapshot (${snapshot.length} chars)`);
+                  gameDebug("voice", `analyze_game_state: got snapshot (${snapshot.length} chars)`);
                 }
 
                 const kid = await useKidStore.getState().loadOne(kidId);
@@ -1749,14 +1693,14 @@ function createEventHandler(
                 model: thinking.model,
                 usage,
               });
-              gameDebug("voice", `read_game_state result: "${analysis.slice(0, 200)}"`);
+              gameDebug("voice", `analyze_game_state result: "${analysis.slice(0, 200)}"`);
               client?.sendToolResponse(event.id, event.name, {
                 ok: true,
                 analysis,
               });
             } catch (err) {
               const errMsg = err instanceof Error ? err.message : "Analysis failed";
-              gameDebugWarn("voice", `read_game_state failed: ${errMsg}`);
+              gameDebugWarn("voice", `analyze_game_state failed: ${errMsg}`);
               client?.sendToolResponse(event.id, event.name, {
                 ok: false,
                 error: `Analysis failed: ${errMsg}. Respond based on what you know from the game state.`,
@@ -1809,7 +1753,6 @@ function createEventHandler(
         if (!greetingSent) return;
         set({ dodiSpeaking: false });
         streamer?.stop();
-        flushPendingState();
         break;
 
       case "error": {

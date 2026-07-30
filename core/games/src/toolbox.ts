@@ -20,8 +20,8 @@ import type { GeminiLiveToolDeclaration } from "@dodi/types/gemini-live";
  * How the dispatcher routes a tool call:
  * - `bridge`   — forward `{type:name, payload:args}` to the game sandbox
  * - `client`   — intercepted in the app before the sandbox (generate_drawing)
- * - `server`   — meta: offloaded to the server analysis agent (read_game_state)
- * - `host`     — meta: app navigation (launch_game)
+ * - `server`   — meta: offloaded to the in-browser thinking model (analyze_game_state)
+ * - `host`     — meta: answered by the host app (launch_game, read_game_state)
  * - `internal` — app↔game bridge command, NEVER a voice tool (get_snapshot, …)
  */
 export type ToolHandlerKind = "bridge" | "client" | "server" | "host" | "internal";
@@ -57,15 +57,29 @@ export const STANDARD_TOOLS: StandardTool[] = [
   // ── Meta tools (always registered in game context; not game-implemented) ──
   {
     name: "read_game_state",
+    kind: "host",
+    voiceExposed: true,
+    meta: true,
+    declarable: false,
+    description:
+      "Read the CURRENT structured game state as JSON — instant, no analysis. Use for factual " +
+      "questions about the game: score, progress, the current question or task, items, settings. " +
+      "Returns the raw state for you to interpret. Does NOT see visuals — for what a drawing or " +
+      "creation looks like, use analyze_game_state instead.",
+    parameters: { type: "object", properties: {} },
+    implementationNote: "Host tool — do not implement.",
+  },
+  {
+    name: "analyze_game_state",
     kind: "server",
     voiceExposed: true,
     meta: true,
     declarable: false,
     description:
-      "Analyze the current game state (with a screenshot of the game when available). " +
+      "Deeply analyze the current game state (with a screenshot of the game when available). " +
       "Use when the child asks about what they've created, drawn, or built, or when you need " +
       "to understand complex state to give helpful feedback. E.g. 'What did I draw?', " +
-      "'How am I doing?', 'What does my painting look like?'.",
+      "'How am I doing?', 'What does my painting look like?'. Takes a few seconds.",
     parameters: {
       type: "object",
       properties: {
@@ -74,7 +88,7 @@ export const STANDARD_TOOLS: StandardTool[] = [
       required: ["question"],
     },
     implementationNote:
-      "Host/agent tool — do not implement. To make read_game_state see your visual surface, " +
+      "Host/agent tool — do not implement. To make analyze_game_state see your visual surface, " +
       "implement get_snapshot and declare it in capabilities.",
   },
   {
@@ -316,7 +330,7 @@ export const STANDARD_TOOLS: StandardTool[] = [
     implementationNote:
       "On get_snapshot, capture a PNG of your main canvas/visual surface and post " +
       "game:event { event: 'snapshot', snapshot: <dataURL> }. Declare 'get_snapshot' if your " +
-      "game has a visual surface so Dodi can 'see' it via read_game_state.",
+      "game has a visual surface so Dodi can 'see' it via analyze_game_state.",
   },
   {
     name: "set_generated_image",

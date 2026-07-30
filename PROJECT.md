@@ -408,7 +408,7 @@ The MVP focuses on delivering a functional, delightful core experience:
 
 ## Future Roadmap
 
-- **Nostr foundation + account export**: `nsec` vault root, `npub` on accounts, encrypted export/import for self-host — see [NOSTR_PROJECT.md](./NOSTR_PROJECT.md)
+- **Nostr foundation + account export**: `nsec` vault root, `npub` on accounts, encrypted export/import for self-host
 - **Native apps**: Port to iOS/Android via React Native or Capacitor
 - **Managed AI**: Offer built-in AI so parents don't need API keys
 - **Game marketplace (dodi Discover)**: Kids share and discover games from the community (later: optional Nostr discovery bus)
@@ -443,6 +443,10 @@ parent-defined goal — and, in future, generate challenges like "Solve 3 math g
 
 ## TODO
 
+- Allow offline game play
+- Translate landing routes (e.g. /ueber-uns, /kostenlose-lernspiele-fuer-kinder)
+- SEO optimized game lists for landing sub-pages (static generation) with links to app
+- Soft registration locks (Snapshot, Remix, etc.)
 
 - Create public page for published games
  - Allow to embedd games.
