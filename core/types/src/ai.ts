@@ -1,4 +1,7 @@
-export type AIProviderId = "gemini" | "openai" | "anthropic" | "xai";
+// "dodi" is the managed dodi AI meta-provider: selectable in config like any
+// provider, but resolvers map it to a real provider + a dodi-minted key before
+// any adapter runs (see clients/web resolve-dodi-ai). It never has a vault key.
+export type AIProviderId = "gemini" | "openai" | "anthropic" | "xai" | "dodi";
 
 export interface AIProviderDefinition {
   id: AIProviderId;
@@ -10,8 +13,32 @@ export interface AIProviderDefinition {
   // Can drive the game-coding agent's tool-use loop (runGameAgent). Today only
   // Anthropic; the Game generation picker filters providers on this flag.
   supportsAgentic: boolean;
+  /** Managed by dodi (keys minted server-side, no BYOK key entry). */
+  isManaged?: boolean;
   models: AIModel[];
   voices: AIVoice[];
+}
+
+/**
+ * The model sentinel stored in `AccountModelConfig` when a dodi AI category
+ * follows dodi's recommendation: resolved against the platform_config
+ * `dodi_ai_defaults` row at call time, so improving a default upgrades every
+ * non-customized account without touching user configs.
+ */
+export const DODI_DEFAULT_MODEL = "default";
+
+/** One category's platform-configured dodi AI default (platform_config `dodi_ai_defaults`). */
+export interface DodiAICategoryDefault {
+  provider: Exclude<AIProviderId, "dodi">;
+  model: string;
+  voice?: string;
+}
+
+export interface DodiAIDefaults {
+  voice: DodiAICategoryDefault;
+  thinking: DodiAICategoryDefault;
+  game: DodiAICategoryDefault;
+  image: DodiAICategoryDefault;
 }
 
 export interface AIModel {

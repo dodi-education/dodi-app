@@ -16,9 +16,9 @@ import {
   isTodayBirthday,
 } from "@dodi/ai/dodi-context";
 import { decryptPersona } from "@dodi/vault";
+import { resolveExecution } from "@/lib/ai/resolve-dodi-ai";
 import { useGameStore } from "@/stores/game-store";
 import { useKidStore } from "@/stores/kid-store";
-import { useProvidersStore } from "@/stores/providers-store";
 import { useVaultStore } from "@/stores/vault-store";
 import type { AccountModelConfig } from "@dodi/types/ai";
 import type { Kid, Persona } from "@dodi/types/database";
@@ -82,12 +82,32 @@ async function getModelConfig(): Promise<AccountModelConfig> {
   return cfg;
 }
 
-async function getVoiceKey(config: AccountModelConfig): Promise<string> {
-  const store = useProvidersStore.getState();
-  if (!store.providers) await store.load();
-  const key = useProvidersStore.getState().getKey(config.voiceProvider);
-  if (!key) throw new Error(`No API key configured for ${config.voiceProvider}`);
-  return key;
+/**
+ * Voice provider/model/voice/key, with "dodi" mapped to its real upstream and
+ * the "default" model sentinel resolved (resolve-dodi-ai). The returned
+ * provider is always a real one — createVoiceClient never sees "dodi".
+ */
+async function resolveVoice(config: AccountModelConfig): Promise<{
+  provider: Exclude<AccountModelConfig["voiceProvider"], "dodi">;
+  model: string;
+  voiceName: string;
+  apiKey: string;
+}> {
+  const resolved = await resolveExecution({
+    provider: config.voiceProvider,
+    category: "voice",
+    model: config.voiceModel,
+    voiceName: config.voiceName,
+  });
+  if (!resolved) {
+    throw new Error(`No API key configured for ${config.voiceProvider}`);
+  }
+  return {
+    provider: resolved.provider,
+    model: resolved.model,
+    voiceName: resolved.voiceName ?? config.voiceName,
+    apiKey: resolved.apiKey,
+  };
 }
 
 /** Active persona (or the global default), with its soul decrypted. */
@@ -127,7 +147,7 @@ export async function buildHomeVoiceConfig(
   if (!kid) throw new Error("Kid not found");
 
   const config = await getModelConfig();
-  const apiKey = await getVoiceKey(config);
+  const voice = await resolveVoice(config);
   const persona = await getActivePersona(kid.active_persona?.id ?? null);
   const gameCatalog = await getGameCatalog(kidId);
 
@@ -142,10 +162,10 @@ export async function buildHomeVoiceConfig(
   });
 
   return {
-    provider: config.voiceProvider,
-    apiKey,
-    model: config.voiceModel,
-    voiceName: config.voiceName,
+    provider: voice.provider,
+    apiKey: voice.apiKey,
+    model: voice.model,
+    voiceName: voice.voiceName,
     systemInstruction,
     ...(tools.length > 0 ? { tools } : {}),
     language: kid.language,
@@ -202,7 +222,7 @@ export async function buildGameVoiceConfig(
   if (!kid) throw new Error("Kid not found");
 
   const config = await getModelConfig();
-  const apiKey = await getVoiceKey(config);
+  const voice = await resolveVoice(config);
   const persona = await getActivePersona(kid.active_persona?.id ?? null);
   const info = await resolveGameInfo(ctx, kidId);
   const friendNames = info.capabilities.includes("save_state")
@@ -226,10 +246,10 @@ export async function buildGameVoiceConfig(
   });
 
   return {
-    provider: config.voiceProvider,
-    apiKey,
-    model: config.voiceModel,
-    voiceName: config.voiceName,
+    provider: voice.provider,
+    apiKey: voice.apiKey,
+    model: voice.model,
+    voiceName: voice.voiceName,
     systemInstruction,
     ...(tools.length > 0 ? { tools } : {}),
     language: kid.language,

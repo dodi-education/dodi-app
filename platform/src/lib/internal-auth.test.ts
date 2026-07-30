@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { isInternalAuthorized } from "./internal-auth";
 
-const BASE = "https://api.dodi.app";
+const BASE = "https://platform.dodi.app";
 
 function req(path: string, headers: Record<string, string> = {}): Request {
   return new Request(`${BASE}${path}`, { headers });
@@ -27,7 +27,7 @@ describe("isInternalAuthorized", () => {
     for (const path of [
       "/api/internal/publications",
       "/api/internal/publications/abc/review",
-      "/api/internal/publications/process",
+      "/api/internal/jobs/review-publications",
       "/api/internal/future-endpoint",
     ]) {
       expect(isInternalAuthorized(req(path, { "x-ops-secret": "ops" }))).toBe(true);
@@ -47,7 +47,7 @@ describe("isInternalAuthorized", () => {
     process.env.CRON_SECRET = "cron";
     const headers = { authorization: "Bearer cron" };
     expect(
-      isInternalAuthorized(req("/api/internal/publications/process", headers)),
+      isInternalAuthorized(req("/api/internal/jobs/review-publications", headers)),
     ).toBe(true);
     // A leaked cron secret must not open the rest of the internal surface.
     expect(isInternalAuthorized(req("/api/internal/publications", headers))).toBe(false);
@@ -61,7 +61,7 @@ describe("isInternalAuthorized", () => {
     process.env.CRON_SECRET = "cron";
     expect(
       isInternalAuthorized(
-        req("/api/internal/publications/process", {
+        req("/api/internal/jobs/review-publications", {
           "x-ops-secret": "cron",
           authorization: "Bearer ops",
         }),

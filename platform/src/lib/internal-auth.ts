@@ -19,7 +19,7 @@
 import { constantTimeEqual, utf8ToBytes } from "@dodi/crypto";
 
 /** Internal paths Vercel Cron may trigger with its bearer convention. */
-const CRON_PATHS = new Set(["/api/internal/publications/process"]);
+const CRON_PATHS = new Set(["/api/internal/jobs/review-publications"]);
 
 function matches(provided: string, expected: string | undefined): boolean {
   if (!expected) return false;

@@ -44,7 +44,7 @@ export interface EmailShellProps {
 export function EmailShell({ preview, appUrl, locale, footer, children }: EmailShellProps) {
   const c = layoutCopy(locale);
   const origin = appUrl.replace(/\/+$/, "");
-  // Logo is served by the platform (api.dodi.app), not the web app; links point
+  // Logo is served by the platform (platform.dodi.app), not the web app; links point
   // at the web app (app.dodi.app).
   const logoUrl = `${emailAssetBaseUrl()}/dodi-logo.png`;
   const settingsUrl = `${origin}/parent/settings/notifications`;

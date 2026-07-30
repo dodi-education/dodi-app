@@ -5,6 +5,13 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Select,
   SelectContent,
@@ -16,8 +23,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Icon } from "@/components/shared/icon";
-import { Section } from "@/components/parent/section";
+import { PageActions, Section } from "@/components/parent/section";
 import { DotSep, Row, RowMain, RowMeta, RowTitle } from "@/components/parent/rows";
+import { SnapshotExportDialog } from "@/components/parent/snapshots/snapshot-export-dialog";
+import { SnapshotImportDialog } from "@/components/parent/snapshots/snapshot-import-dialog";
 import { useDateFormat } from "@/components/providers/date-format-provider";
 import { useKids } from "@/hooks/use-kids";
 import {
@@ -67,11 +76,17 @@ export default function ParentSnapshotsPage() {
 
   const { kids: kidList } = useKids();
   const kids = kidList ?? [];
-  const { snapshots, friendKids, loading, error } = useAccountSnapshots();
+  const { snapshots, friendKids, loading, error, reload } = useAccountSnapshots();
 
   const [filterKid, setFilterKid] = useState<string>("all");
   const [filterType, setFilterType] = useState<SnapshotTypeFilter>("all");
   const [filterUsage, setFilterUsage] = useState<SnapshotUsageFilter>("all");
+
+  const [importOpen, setImportOpen] = useState(false);
+  // The export target stays set while the dialog animates closed, so the
+  // content doesn't blank out (game-studio-list pattern).
+  const [exportTarget, setExportTarget] = useState<AccountSnapshot | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
 
   // Siblings can be friends, so an own kid id may also appear on the friend
   // side of rows — resolve which section the selected id came from.
@@ -110,6 +125,24 @@ export default function ParentSnapshotsPage() {
 
   return (
     <div>
+      <PageActions>
+        <Button variant="outline" onClick={() => setImportOpen(true)}>
+          <Icon name="upload" size={16} />
+          {t("importSnapshot")}
+        </Button>
+      </PageActions>
+
+      <SnapshotImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        onImported={reload}
+      />
+      <SnapshotExportDialog
+        open={exportOpen}
+        snapshot={exportTarget}
+        onClose={() => setExportOpen(false)}
+      />
+
       <div className="mb-6 flex flex-wrap gap-3">
         <Select value={filterKid} onValueChange={setFilterKid}>
           <SelectTrigger className="w-[180px]">
@@ -221,6 +254,32 @@ export default function ParentSnapshotsPage() {
                 </RowMeta>
               </RowMain>
               <SnapshotBadge snapshot={snapshot} />
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label={t("snapshotActions", {
+                      title: snapshot.info?.title ?? t("unreadable"),
+                    })}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-transparent text-ink-2 transition-colors outline-none hover:border-border-strong hover:bg-card focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary-soft-2 data-[state=open]:border-border-strong data-[state=open]:bg-card"
+                  >
+                    <Icon name="dots" size={18} />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  {/* An unreadable blob can't be decrypted, so it can't be exported. */}
+                  <DropdownMenuItem
+                    disabled={!snapshot.info}
+                    onSelect={() => {
+                      setExportTarget(snapshot);
+                      setExportOpen(true);
+                    }}
+                  >
+                    <Icon name="download" size={15} />
+                    {t("export")}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </Row>
           ))}
         </Section>

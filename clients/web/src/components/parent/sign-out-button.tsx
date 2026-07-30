@@ -7,6 +7,8 @@ import { Icon } from "@/components/shared/icon";
 import { clearParentUnlocked } from "@/lib/parent-lock";
 import { createClient } from "@/lib/supabase/client";
 import { useAccountStore } from "@/stores/account-store";
+import { useDodiAIBillingStore } from "@/stores/dodi-ai-billing-store";
+import { useDodiAIKeyStore } from "@/stores/dodi-ai-key-store";
 import { useKidStore } from "@/stores/kid-store";
 
 export function SignOutButton() {
@@ -19,6 +21,9 @@ export function SignOutButton() {
     // subsequent login (possibly another account) never sees stale data.
     useAccountStore.getState().reset();
     useKidStore.getState().invalidate();
+    // dodi AI session credentials live in memory only — drop them with the session.
+    useDodiAIKeyStore.getState().clear();
+    useDodiAIBillingStore.getState().clear();
     const supabase = createClient();
     await supabase.auth.signOut();
     router.push("/login");

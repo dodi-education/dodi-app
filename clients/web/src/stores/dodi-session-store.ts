@@ -5,8 +5,16 @@ import { createVoiceClient } from "@/lib/ai/create-voice-client";
 import type {
   VoiceClient,
   VoiceEvent,
+  VoiceSocketStrategy,
   VoiceToolDeclaration,
 } from "@/lib/ai/voice-client";
+import { voiceSocketStrategy } from "@/lib/ai/voice-client";
+import { VoiceSocketPool, VoiceSocketPoolError } from "@/lib/ai/voice-socket-pool";
+import {
+  buildRecapContext,
+  recordRecapRound,
+  resetRecap,
+} from "@/lib/ai/session-recap";
 import { AudioStreamer } from "@/lib/ai/audio-streamer";
 import { AudioRecorder } from "@/lib/ai/audio-recorder";
 import { buildGameVoiceConfig, buildHomeVoiceConfig } from "@/lib/ai/voice-session";
@@ -174,6 +182,18 @@ let streamer: AudioStreamer | null = null;
 let recorder: AudioRecorder | null = null;
 let abortController: AbortController | null = null;
 
+// Pooled-strategy refs (xAI): warm never-audio standby sockets. While deaf
+// there is NO active client at all — deafening retires (closes) the tainted
+// socket, activation acquires a warm one. See lib/ai/voice-socket-pool.ts.
+let pool: VoiceSocketPool | null = null;
+let sessionStrategy: VoiceSocketStrategy = "persistent";
+// Rate limit for promoting a warm socket after an unexpected active-socket
+// drop — repeated drops fall through to the full teardown path instead.
+let lastFastRecoveryAt = 0;
+// Whether the current `client`'s session has witnessed this conversation. A
+// freshly attached socket gets a recap context frame on its first activation.
+let socketHasHistory = false;
+
 let currentKidId: string | null = null;
 // Round coalescer: streaming transcription fragments accumulate here until the
 // speaker changes or the turn completes, then flush as ONE entry.
@@ -201,22 +221,35 @@ let sessionStartDeaf = false;
 let turnBuffer = "";
 let gameAssistanceTurns = 0;
 let lastSentGameState = "";
+// Pooled strategy: the game-state snapshot embedded in the pool's config —
+// what every warm standby already "knows". A freshly acquired socket resets
+// lastSentGameState to this baseline so activation pushes exactly the delta.
+let poolBaselineGameState = "";
 let stateDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
-// Voice active-minute metering. Gemini Live exposes no token usage, so we meter
-// wall-clock time in the "active" state (mic on + audio playing). The kid/game
-// is captured at START so attribution survives even when `currentKidId` is
-// nulled before cleanup() (sleep / endSession do that). One `voice_minutes`
-// event per active↔inactive cycle; stop is idempotent so overlapping hooks are safe.
+// The provider/model of the current voice session, set whenever a config is
+// built (connect / setContext). Drives usage attribution.
+let sessionProvider: AIProviderId | null = null;
+let sessionModel: string | null = null;
+
+// Voice active-minute metering. Live voice APIs expose no reliable token usage,
+// so we meter wall-clock time in the "active" state (mic on + audio playing).
+// The kid/game/provider is captured at START so attribution survives even when
+// `currentKidId` is nulled before cleanup() (sleep / endSession do that). One
+// `voice_minutes` event per active↔inactive cycle; stop is idempotent so
+// overlapping hooks are safe.
 let voiceActiveSince: number | null = null;
 let voiceMeterKidId: string | null = null;
 let voiceMeterGameId: string | null = null;
-const voiceMeterModel = "gemini-3.1-flash-live-preview";
+let voiceMeterProvider: AIProviderId | null = null;
+let voiceMeterModel: string | null = null;
 
 function voiceMeterStart(): void {
   if (voiceActiveSince !== null || !currentKidId) return;
   voiceActiveSince = Date.now();
   voiceMeterKidId = currentKidId;
+  voiceMeterProvider = sessionProvider;
+  voiceMeterModel = sessionModel;
   const ctx = useDodiSessionStore.getState().context;
   // Snapshot play: gameId may reference a deleted or foreign game — usage rows
   // FK games, so attribute snapshot sessions to no game.
@@ -228,17 +261,21 @@ function voiceMeterStop(keepalive = false): void {
   const seconds = Math.round((Date.now() - voiceActiveSince) / 1000);
   const kidId = voiceMeterKidId;
   const gameId = voiceMeterGameId;
+  const provider = voiceMeterProvider;
+  const model = voiceMeterModel;
   voiceActiveSince = null;
   voiceMeterKidId = null;
   voiceMeterGameId = null;
-  if (seconds < 1 || !kidId) return;
+  voiceMeterProvider = null;
+  voiceMeterModel = null;
+  if (seconds < 1 || !kidId || !provider || !model) return;
   reportUsage(
     {
       eventType: "voice_minutes",
       kidId,
       gameId,
-      provider: "gemini",
-      model: voiceMeterModel,
+      provider,
+      model,
       voiceSeconds: seconds,
     },
     { keepalive },
@@ -287,6 +324,9 @@ const CLIENT_CALL_TIMEOUT_FALLBACK_MS = 15000;
 // refresh local context but skip the interrupting context push (see updateGameState).
 const CLIENT_CALL_COMPLETION_QUIET_MS = 2500;
 const INACTIVITY_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+// Minimum gap between fast recoveries (pooled strategy): an active socket that
+// keeps dying is a systematic failure — stop promoting standbys into it.
+const FAST_RECOVERY_MIN_INTERVAL_MS = 30 * 1000;
 
 // ---------------------------------------------------------------------------
 // Inactivity timer
@@ -366,6 +406,8 @@ function flushRound(): void {
       text,
       occurredAt: roundStartedAt ?? new Date().toISOString(),
     });
+    // Feed the recap replayed onto fresh sockets (pooled swaps, sleep→wake).
+    recordRecapRound(roundRole, text);
   }
   roundRole = null;
   roundText = "";
@@ -474,6 +516,9 @@ function cleanup(): void {
   client?.disconnect();
   client = null;
 
+  pool?.destroy();
+  pool = null;
+
   clearStateDebounce();
   clearClientCallTimeout();
   pendingClientCall = null;
@@ -485,6 +530,7 @@ function cleanup(): void {
   turnBuffer = "";
   gameAssistanceTurns = 0;
   lastSentGameState = "";
+  poolBaselineGameState = "";
   stateSequenceNumber = 0;
 }
 
@@ -566,6 +612,15 @@ function transitionToActive(
   set({ state: "active", gestureNeeded: false, error: null });
   voiceMeterStart();
 
+  // A fresh socket knows nothing beyond its system instruction — replay a
+  // compact recap of this page-load's conversation so Dodi keeps continuity
+  // across socket swaps (pooled deaf cycles) and sleep→wake reconnects.
+  if (!socketHasHistory) {
+    socketHasHistory = true;
+    const recap = buildRecapContext();
+    if (recap) client.sendContext(recap);
+  }
+
   if (!greetingSent) {
     greetingSent = true;
     if (!sessionStartedAt) {
@@ -578,6 +633,27 @@ function transitionToActive(
       hasGreetedThisPageLoad = true;
       const mode = getGreetingMode(currentKidId!, sessionIsBirthday);
       client.sendGreeting(mode);
+    }
+  }
+
+  // Catch the socket up on game state it hasn't seen: changes while deaf are
+  // never pushed (there is nothing to push to), and a pooled socket only knows
+  // the snapshot embedded in its config — one delta lands here instead.
+  const ctx = get().context;
+  if (ctx.type === "game") {
+    const stateJson = JSON.stringify(ctx.gameState);
+    if (stateJson !== lastSentGameState) {
+      lastSentGameState = stateJson;
+      pendingGameState = null;
+      clearStateDebounce();
+      stateSequenceNumber++;
+      gameDebug(
+        "voice",
+        `Sending activation game state update #${stateSequenceNumber} (${stateJson.length} chars)`,
+      );
+      client.sendContext(
+        `[GAME STATE UPDATE #${stateSequenceNumber}]\nThis is the CURRENT game state. Previous updates are outdated.\n${stateJson}`,
+      );
     }
   }
 
@@ -597,6 +673,27 @@ function transitionToDeaf(
   recorder = null;
   streamer?.stop();
 
+  // Pooled strategy (xAI): the active socket is tainted — it carried audio, so
+  // the provider bills it for as long as it stays open, silent or not. Closing
+  // it stops the clock; a warm standby takes its place on the next activation.
+  if (sessionStrategy === "pooled" && client) {
+    flushRound();
+    clearStateDebounce();
+    pendingGameState = null;
+    clearClientCallTimeout();
+    pendingClientCall = null;
+    if (pool) {
+      pool.retire(client);
+    } else {
+      client.disconnect();
+    }
+    client = null;
+    // The next acquired socket starts from its config-embedded knowledge only.
+    lastSentGameState = poolBaselineGameState;
+    stateSequenceNumber = 0;
+    turnBuffer = "";
+  }
+
   set({
     state: "deaf",
     gestureNeeded: !manual,
@@ -605,6 +702,168 @@ function transitionToDeaf(
 
   // Keep inactivity timer running — if no interaction for 5 min in deaf mode, sleep
   resetInactivityTimer();
+}
+
+/**
+ * The connecting→active/deaf decision shared by every path that brings a
+ * session up: persisted deaf comes up deaf directly (manual-style, so an
+ * incidental page click can't wake her); otherwise try to resume the
+ * AudioContext without a gesture — success means active, failure means deaf
+ * with gestureNeeded (any click then wakes her). Persistent sockets run this
+ * from their `setupComplete` event; pooled sessions after `pool.whenReady()`.
+ */
+function decideInitialPresence(
+  set: (partial: Partial<DodiSessionState>) => void,
+  get: () => DodiSessionState,
+  kidId: string,
+  generation: number,
+): void {
+  if (sessionStartDeaf) {
+    transitionToDeaf(set, true);
+    return;
+  }
+  if (!streamer) {
+    transitionToDeaf(set, false);
+    return;
+  }
+  void streamer.tryResume().then((audioOk) => {
+    // Guard against stale callback
+    if (generation !== contextGeneration) return;
+    if (currentKidId !== kidId) return;
+
+    if (!audioOk) {
+      transitionToDeaf(set, false);
+      return;
+    }
+    if (sessionStrategy === "pooled") {
+      void (async () => {
+        const acquired = await acquireActiveClient(set, get);
+        if (acquired) transitionToActive(set, get);
+      })();
+    } else {
+      transitionToActive(set, get);
+    }
+  });
+}
+
+/**
+ * Pooled strategy: take a warm socket from the pool and make it the session's
+ * `client`. Usually instant (a standby is already setup-complete); when none
+ * is ready yet (rapid toggling), the state dips to "connecting" until the
+ * standby finishes its handshake. Returns false when superseded/destroyed
+ * (silent) — pool-fatal failures surface through the pool's onFatal.
+ */
+async function acquireActiveClient(
+  set: (partial: Partial<DodiSessionState>) => void,
+  get: () => DodiSessionState,
+): Promise<boolean> {
+  const thisPool = pool;
+  const kidId = currentKidId;
+  if (!thisPool || !kidId) return false;
+  const gen = contextGeneration;
+  const isGameContext = get().context.type === "game";
+
+  if (!thisPool.headReady) set({ state: "connecting" });
+  try {
+    const acquired = await thisPool.acquire(
+      createEventHandler(set, get, kidId, gen, isGameContext),
+    );
+    if (gen !== contextGeneration || pool !== thisPool || currentKidId !== kidId) {
+      thisPool.retire(acquired);
+      return false;
+    }
+    client = acquired;
+    socketHasHistory = false;
+    return true;
+  } catch (err) {
+    if (err instanceof VoiceSocketPoolError) {
+      // superseded/destroyed are benign races; fatal already ran handlePoolFatal.
+      return false;
+    }
+    if (gen !== contextGeneration || pool !== thisPool) return false;
+    const message = err instanceof Error ? err.message : "Failed to activate voice";
+    tapStartedAtMs = null;
+    set({
+      state: "disconnected",
+      dodiSpeaking: false,
+      gestureNeeded: false,
+      error: message,
+      fatalError: true,
+    });
+    return false;
+  }
+}
+
+/**
+ * The pool cannot provide sockets anymore (auth/quota/exhausted retries).
+ * With a conversation running on an already-acquired socket, let it finish —
+ * the failure surfaces when the next activation checks the pool. Otherwise
+ * mirror the fatal-close teardown: fatal blocks auto-reconnect.
+ */
+function handlePoolFatal(
+  set: (partial: Partial<DodiSessionState>) => void,
+  get: () => DodiSessionState,
+  message: string,
+): void {
+  if (get().state === "active" && client) {
+    console.warn("[VoicePool] fatal while a conversation is running:", message);
+    return;
+  }
+  window.removeEventListener("beforeunload", handleBeforeUnload);
+  window.removeEventListener("pagehide", handlePageHide);
+  cleanup();
+  resetFlowFlags();
+  set({
+    state: "disconnected",
+    dodiSpeaking: false,
+    gestureNeeded: false,
+    fatalError: true,
+    error: message,
+  });
+}
+
+/**
+ * Pooled strategy: an ACTIVE socket died unexpectedly (network blip, server
+ * kill). Instead of tearing the session down, retire it and promote a warm
+ * standby — the conversation resumes in about a second (with recap). Rate
+ * limited; systematic failures fall through to the normal teardown, where the
+ * game pages' auto-reconnect remains the backstop. Returns whether recovery
+ * was started.
+ */
+function tryFastRecovery(
+  set: (partial: Partial<DodiSessionState>) => void,
+  get: () => DodiSessionState,
+): boolean {
+  if (sessionStrategy !== "pooled") return false;
+  if (get().state !== "active") return false;
+  if (!pool || pool.hasFatalError) return false;
+  if (Date.now() - lastFastRecoveryAt < FAST_RECOVERY_MIN_INTERVAL_MS) return false;
+  lastFastRecoveryAt = Date.now();
+  console.info("[VoicePool] active socket dropped — promoting a warm standby");
+
+  voiceMeterStop();
+  recorder?.stop();
+  recorder = null;
+  streamer?.stop();
+  flushRound();
+  clearStateDebounce();
+  pendingGameState = null;
+  clearClientCallTimeout();
+  pendingClientCall = null;
+  if (client) {
+    pool.retire(client);
+    client = null;
+  }
+  lastSentGameState = poolBaselineGameState;
+  stateSequenceNumber = 0;
+  turnBuffer = "";
+  set({ dodiSpeaking: false });
+
+  void (async () => {
+    const acquired = await acquireActiveClient(set, get);
+    if (acquired) transitionToActive(set, get);
+  })();
+  return true;
 }
 
 async function startMic(
@@ -797,8 +1056,16 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
     // Stop audio but don't fire memory update — transcript persists
     recorder?.stop();
     recorder = null;
-    client?.disconnect();
-    client = null;
+    if (client) {
+      // Pooled: retire through the pool so the close stays internal and a
+      // replacement standby is warmed.
+      if (sessionStrategy === "pooled" && pool) {
+        pool.retire(client);
+      } else {
+        client.disconnect();
+      }
+      client = null;
+    }
     clearStateDebounce();
     turnBuffer = "";
     lastSentGameState = "";
@@ -837,17 +1104,62 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
       if (gen !== contextGeneration || controller.signal.aborted) return;
 
       sessionIsBirthday = config.isBirthday ?? false;
+      sessionProvider = config.provider;
+      sessionModel = config.model;
+      const newStrategy = voiceSocketStrategy(config.provider);
 
       if (!streamer) {
         streamer = new AudioStreamer();
       }
 
-      const isGameContext = newContext.type === "game";
-      const handleEvent = createEventHandler(set, get, kidId, gen, isGameContext);
-      client = createVoiceClient(config, handleEvent);
-      client.connect();
+      if (newStrategy === "pooled") {
+        // Warm standbys will carry the new config-embedded game state.
+        poolBaselineGameState =
+          newContext.type === "game" ? JSON.stringify(newContext.gameState) : "";
+        lastSentGameState = poolBaselineGameState;
+        if (pool && sessionStrategy === "pooled" && !pool.hasFatalError) {
+          // Re-instruct the existing warm standbys in place — one JSON frame
+          // per socket, no reconnect.
+          sessionStrategy = newStrategy;
+          await pool.updateConfig(config);
+        } else {
+          pool?.destroy();
+          sessionStrategy = newStrategy;
+          const newPool: VoiceSocketPool = new VoiceSocketPool({
+            config,
+            onFatal: (message) => {
+              if (pool !== newPool) return;
+              handlePoolFatal(set, get, message);
+            },
+          });
+          pool = newPool;
+          newPool.start();
+          await newPool.whenReady();
+        }
+        if (gen !== contextGeneration || controller.signal.aborted) return;
+        // Parity with the persistent path, which logs this from setupComplete
+        // on every reconnect.
+        logKidActivity({
+          kidId,
+          event: "session_start",
+          message: "Voice session started",
+        });
+        decideInitialPresence(set, get, kidId, gen);
+      } else {
+        pool?.destroy();
+        pool = null;
+        sessionStrategy = newStrategy;
+        const isGameContext = newContext.type === "game";
+        const handleEvent = createEventHandler(set, get, kidId, gen, isGameContext);
+        client = createVoiceClient(config, handleEvent);
+        socketHasHistory = false;
+        client.connect();
+      }
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return;
+      // Pool aborts (superseded/destroyed) are benign races; pool-fatal
+      // failures already surfaced through the pool's onFatal.
+      if (err instanceof VoiceSocketPoolError) return;
       if (gen !== contextGeneration) return;
       const message = err instanceof Error ? err.message : "Failed to switch context";
       // Same as connect(): a failed config build won't recover on auto-retry, so
@@ -872,11 +1184,12 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
     }
 
     if (currentKidId && currentKidId !== kidId) {
-      // Different kid — teardown
+      // Different kid — teardown; the recap must never cross kids.
       window.removeEventListener("beforeunload", handleBeforeUnload);
       window.removeEventListener("pagehide", handlePageHide);
       cleanup();
       resetFlowFlags();
+      resetRecap();
     }
 
     window.removeEventListener("beforeunload", handleBeforeUnload);
@@ -937,15 +1250,49 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
       if (gen !== contextGeneration || controller.signal.aborted) return;
 
       sessionIsBirthday = config.isBirthday ?? false;
+      sessionProvider = config.provider;
+      sessionModel = config.model;
+      sessionStrategy = voiceSocketStrategy(config.provider);
 
       streamer = new AudioStreamer();
 
-      const isGameContext = currentContext.type === "game";
-      const handleEvent = createEventHandler(set, get, kidId, gen, isGameContext);
-      client = createVoiceClient(config, handleEvent);
-      client.connect();
+      if (sessionStrategy === "pooled") {
+        // Warm standbys already carry the config-embedded game state.
+        poolBaselineGameState =
+          currentContext.type === "game" ? JSON.stringify(currentContext.gameState) : "";
+        lastSentGameState = poolBaselineGameState;
+        lastFastRecoveryAt = 0;
+        const newPool: VoiceSocketPool = new VoiceSocketPool({
+          config,
+          onFatal: (message) => {
+            if (pool !== newPool) return;
+            handlePoolFatal(set, get, message);
+          },
+        });
+        pool = newPool;
+        newPool.start();
+        await newPool.whenReady();
+        if (gen !== contextGeneration || controller.signal.aborted) return;
+        // Insights: voice session connected (dashboard counts session_start).
+        // Persistent sockets log this from their setupComplete event.
+        logKidActivity({
+          kidId,
+          event: "session_start",
+          message: "Voice session started",
+        });
+        decideInitialPresence(set, get, kidId, gen);
+      } else {
+        const isGameContext = currentContext.type === "game";
+        const handleEvent = createEventHandler(set, get, kidId, gen, isGameContext);
+        client = createVoiceClient(config, handleEvent);
+        socketHasHistory = false;
+        client.connect();
+      }
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return;
+      // Pool aborts (superseded/destroyed) are benign races; pool-fatal
+      // failures already surfaced through the pool's onFatal.
+      if (err instanceof VoiceSocketPoolError) return;
       if (gen !== contextGeneration) return;
       const message = err instanceof Error ? err.message : "Failed to connect";
       tapStartedAtMs = null;
@@ -965,14 +1312,32 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
   activate: async () => {
     const current = get();
     if (current.state !== "deaf") return;
-    if (!client || !currentKidId) return;
+    if (!currentKidId) return;
+    if (sessionStrategy === "persistent" && !client) return;
 
-    // Prime AudioContext from user gesture
+    // Prime AudioContext from user gesture — must stay synchronous inside the
+    // gesture (autoplay unlock), before any await below.
     if (!streamer) {
       streamer = new AudioStreamer();
     }
     streamer.primeFromGesture();
     tapStartedAtMs = performance.now();
+
+    if (sessionStrategy === "pooled") {
+      // A pool that failed fatally while the last conversation was running
+      // surfaces here, on the next deliberate wake.
+      if (!pool || pool.hasFatalError) {
+        handlePoolFatal(
+          set,
+          get,
+          pool?.fatalErrorMessage ??
+            "dodi couldn't reach the voice provider. Please try again.",
+        );
+        return;
+      }
+      const acquired = await acquireActiveClient(set, get);
+      if (!acquired) return;
+    }
 
     transitionToActive(set, get);
     // The kid deliberately woke Dodi → clear the persisted deaf state so the
@@ -1016,6 +1381,7 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
     currentKidId = null;
     sessionStartedAt = null;
     hasGreetedThisPageLoad = false;
+    resetRecap();
 
     cleanup();
     resetFlowFlags();
@@ -1164,36 +1530,15 @@ function createEventHandler(
 
     switch (event.type) {
       case "setupComplete": {
+        // Persistent sockets only — pooled sockets complete setup inside the
+        // pool and arrive here already ready (this event never fires for them).
         // Insights: voice session connected (dashboard counts session_start).
         logKidActivity({
           kidId,
           event: "session_start",
           message: "Voice session started",
         });
-        // Persisted deaf: the kid muted Dodi previously, so come up deaf
-        // directly — no audio resume, no greeting — until she's tapped awake.
-        // Manual-style deaf (gestureNeeded false) so an incidental page click
-        // can't wake her; only a deliberate tap on the Dodi control does.
-        if (sessionStartDeaf) {
-          transitionToDeaf(set, true);
-          break;
-        }
-        // Try to resume AudioContext without a gesture
-        if (streamer) {
-          void streamer.tryResume().then((audioOk) => {
-            // Guard against stale callback
-            if (generation !== contextGeneration) return;
-            if (currentKidId !== kidId) return;
-
-            if (audioOk) {
-              transitionToActive(set, get);
-            } else {
-              transitionToDeaf(set, false);
-            }
-          });
-        } else {
-          transitionToDeaf(set, false);
-        }
+        decideInitialPresence(set, get, kidId, generation);
         break;
       }
 
@@ -1468,6 +1813,10 @@ function createEventHandler(
         break;
 
       case "error": {
+        // Pooled + active: the retire inside recovery swallows the `closed`
+        // that usually follows a socket error, so recovering here covers both
+        // the error→closed sequence and error-only server hiccups.
+        if (tryFastRecovery(set, get)) break;
         const wasConnected =
           get().state === "connecting" ||
           get().state === "active" ||
@@ -1486,6 +1835,7 @@ function createEventHandler(
       }
 
       case "closed": {
+        if (!event.fatal && tryFastRecovery(set, get)) break;
         const wasConnected =
           get().state === "connecting" ||
           get().state === "active" ||

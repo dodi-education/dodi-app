@@ -53,7 +53,7 @@ Dodi is a personalized, AI-powered learning platform that creates fun, targeted 
 ## User Roles & Flows
 
 ### Parent
-- Registers via email/password or Google Auth
+- Registers via email/password
 - Manages account settings, kid profiles, and API keys
 - Switches between **Configuration View** (parent-facing) and **App View** (kid-facing)
 - Configuration View can only be accessed with a defined PIN code
@@ -74,11 +74,12 @@ Dodi is a personalized, AI-powered learning platform that creates fun, targeted 
 ## Feature Requirements
 
 ### F1: Authentication & Account Management
-- **F1.1**: Parent registration via email/password
-- **F1.2**: Parent registration/login via Google OAuth
-- **F1.3**: Session management with secure token handling
-- **F1.4**: Password reset flow
-- **F1.5**: Account deletion with full data removal
+- **F1.1**: Parent registration via email/password (email mandatory on hosted)
+- **F1.2**: Session management with secure token handling
+- **F1.3**: Password reset flow
+- **F1.4**: Account deletion with full data removal
+- **F1.5**: Portable vault root (`nsec`) + public account id (`npub`) — see [NOSTR_PROJECT.md](./NOSTR_PROJECT.md)
+- **F1.6**: Encrypted account export/import for self-host — see [NOSTR_PROJECT.md](./NOSTR_PROJECT.md)
 
 ### F2: Profile Management
 - **F2.1**: Create multiple kid profiles per account
@@ -114,7 +115,7 @@ Dodi is a personalized, AI-powered learning platform that creates fun, targeted 
 
   **Avatar click**: Disconnected → reconnect; Connecting → no-op; Active → Deaf (mute); Deaf → Active (unmute).
 
-  **Deaf mode rules**: No mic audio forwarded to AI. Incoming audio chunks dropped. WebSocket stays alive. Greeting deferred until first activation.
+  **Deaf mode rules**: No mic audio forwarded to AI. Incoming audio chunks dropped. Greeting deferred until first activation. Socket handling is per-provider (`voiceSocketStrategy`): Gemini keeps the WebSocket alive; xAI runs a two-socket pipeline (active/head + one warm, never-audio standby — xAI bills any socket that ever carried audio for its whole open lifetime, while silenced-from-birth sockets are free): deafening closes the tainted active socket and warms a replacement secondary, re-activation promotes the standby instantly with a conversation recap for continuity.
 
 ### F4: AI Provider Configuration
 - **F4.1**: Parents enter API keys for supported providers
@@ -407,9 +408,10 @@ The MVP focuses on delivering a functional, delightful core experience:
 
 ## Future Roadmap
 
+- **Nostr foundation + account export**: `nsec` vault root, `npub` on accounts, encrypted export/import for self-host — see [NOSTR_PROJECT.md](./NOSTR_PROJECT.md)
 - **Native apps**: Port to iOS/Android via React Native or Capacitor
 - **Managed AI**: Offer built-in AI so parents don't need API keys
-- **Game marketplace (dodi Discover)**: Kids share and discover games from the community
+- **Game marketplace (dodi Discover)**: Kids share and discover games from the community (later: optional Nostr discovery bus)
 - **Curriculum alignment**: Map games to educational standards
 - **Institutional accounts**: Schools and tutoring centers
 - **Advanced analytics**: Learning progress dashboards for parents
@@ -440,6 +442,22 @@ parent-defined goal — and, in future, generate challenges like "Solve 3 math g
   `countSucceededPlays({ profileId, subject: 'math', sinceDays: 1 })` (`src/lib/services/game-plays.ts`).
 
 ## TODO
+
+- Change api.dodi.app to platform.dodi.app
+- Create public page for published games
+ - Allow to embedd games.
+ - Soft registration locks (Snapshot, Remix, etc.)
+
+- ~~Optimize game-state update as every push costs 0.004 USD with grok voice~~
+  Done: while deaf no pushes happen at all; on (re)activation exactly one delta
+  against what the socket already knows is pushed (`transitionToActive`).
+- ~~Investigate grok voice billing (deaf mode)~~ Confirmed: xAI bills a socket
+  for its whole open lifetime once audio has ever crossed it (docs claim
+  audio-minutes only). Fixed by the warm-socket pool
+  (`clients/web/src/lib/ai/voice-socket-pool.ts`): a two-socket pipeline
+  (active + silenced-from-birth standby, free), deafening closes the tainted
+  active socket and warms a replacement, activation promotes the standby —
+  cost ≈ active talk time only.
 
 - Make game code creation progress more transparent (output rough agent loop actions in chat)
 - Implement Venice.ai

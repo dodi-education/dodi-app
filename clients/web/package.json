@@ -18,6 +18,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",
     "@dodi/ai": "workspace:*",
+    "@dodi/billing-contract": "workspace:*",
     "@dodi/crypto": "workspace:*",
     "@dodi/games": "workspace:*",
     "@dodi/intl": "workspace:*",

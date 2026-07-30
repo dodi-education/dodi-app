@@ -82,7 +82,7 @@ Authentication → **Emails**
 > set `EMAIL_FROM="dodi <team@dev-mail.dodi.app>"`.
 >
 > The email **logo** is served by the platform itself
-> (`platform/public/dodi-logo.png` → `https://api.dodi.app/dodi-logo.png`), so
+> (`platform/public/dodi-logo.png` → `https://platform.dodi.app/dodi-logo.png`), so
 > it doesn't depend on the web app's deploy — override with
 > `EMAIL_ASSET_BASE_URL`. Dashboard/settings **links** point at the web app
 > (`NEXT_PUBLIC_APP_URL`, default `https://app.dodi.app`).
@@ -91,7 +91,7 @@ Authentication → **Emails**
 
 Authentication → **Hooks** → *Before User Created* → **HTTPS**:
 - URI = the **publicly reachable** platform URL:
-  `https://api.dodi.app/api/auth/hooks/before-user-created`
+  `https://platform.dodi.app/api/auth/hooks/before-user-created`
 - Copy the generated secret into `BEFORE_USER_CREATED_HOOK_SECRET`.
 
 > ⚠️ A configured-but-unreachable hook **fails signups closed**. Only enable it

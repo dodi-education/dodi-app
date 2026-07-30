@@ -24,8 +24,8 @@ describe("FriendApprovalEmail", () => {
 
   it("shows the logo from the platform origin (no text wordmark, no wave emoji)", async () => {
     const html = await renderEmail("https://app.dodi.app", "en");
-    // Logo is platform-hosted (api.dodi.app), independent of the web app origin.
-    expect(html).toContain('src="https://api.dodi.app/dodi-logo.png"');
+    // Logo is platform-hosted (platform.dodi.app), independent of the web app origin.
+    expect(html).toContain('src="https://platform.dodi.app/dodi-logo.png"');
     expect(html).toContain('alt="dodi"');
     expect(html).not.toContain("👋");
   });

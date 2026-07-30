@@ -127,6 +127,56 @@ export const AI_PROVIDERS: AIProviderDefinition[] = [
       { id: "leo", name: "Leo" },
     ],
   },
+  {
+    // dodi AI — the managed meta-provider. Selectable per category like any
+    // BYOK provider, but there is no vault key: resolvers map "dodi" to a real
+    // provider + a dodi-minted inference key before any adapter runs, so it
+    // must never reach the factories/switches. The model list is the curated,
+    // billed catalog (real upstream ids — usage reporting stays untouched);
+    // "default" is a sentinel resolved against platform_config at call time.
+    id: "dodi",
+    name: "dodi AI",
+    isManaged: true,
+    supportsVoice: true,
+    supportsLiveStreaming: true,
+    supportsThinking: true,
+    supportsImage: true,
+    supportsAgentic: true,
+    models: [
+      {
+        id: "default",
+        name: "dodi default",
+        capabilities: ["voice", "text", "live", "thinking", "image", "agentic"],
+      },
+      {
+        id: "grok-voice-latest",
+        name: "Grok Voice",
+        capabilities: ["voice", "live"],
+      },
+      {
+        id: "grok-4.5",
+        name: "Grok 4.5",
+        capabilities: ["text", "thinking", "agentic"],
+      },
+      {
+        id: "grok-4.3",
+        name: "Grok 4.3",
+        capabilities: ["text", "thinking", "agentic"],
+      },
+      {
+        id: "grok-imagine-image",
+        name: "Grok Imagine",
+        capabilities: ["image"],
+      },
+    ],
+    voices: [
+      { id: "ara", name: "Ara" },
+      { id: "eve", name: "Eve" },
+      { id: "rex", name: "Rex" },
+      { id: "sal", name: "Sal" },
+      { id: "leo", name: "Leo" },
+    ],
+  },
 ];
 
 export function getProviderDefinition(

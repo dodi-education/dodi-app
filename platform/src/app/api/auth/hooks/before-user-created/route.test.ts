@@ -25,7 +25,7 @@ const B64_SECRET = Buffer.from("dodi-test-secret-0123456789abcdef").toString(
   "base64",
 );
 const FULL_SECRET = `v1,whsec_${B64_SECRET}`;
-const URL = "https://api.dodi.app/api/auth/hooks/before-user-created";
+const URL = "https://platform.dodi.app/api/auth/hooks/before-user-created";
 
 /** Build a request signed the way GoTrue signs before_user_created payloads. */
 function signedRequest(body: unknown): Request {

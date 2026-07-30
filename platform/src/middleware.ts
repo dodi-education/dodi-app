@@ -3,7 +3,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { isInternalAuthorized } from "@/lib/internal-auth";
 
 /**
- * CORS for the api.dodi.app API. Clients (dodi.app, native apps, the agent)
+ * CORS for the platform.dodi.app API. Clients (dodi.app, native apps, the agent)
  * authenticate with a bearer token — no cookies — so we allow the
  * `Authorization` header from an allow-list of origins. The allow-list is
  * env-driven (CORS_ALLOWED_ORIGINS, comma-separated); defaults to local dev.

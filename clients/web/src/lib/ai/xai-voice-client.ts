@@ -82,16 +82,20 @@ export class XaiVoiceClient implements VoiceClient {
       token = await this.mintEphemeralToken();
     } catch (err) {
       // No socket ever opened; surface a terminal (fatal) close so the session
-      // store stops the reconnect hot-loop and shows a helpful message.
+      // store stops the reconnect hot-loop and shows a helpful message. The
+      // reason distinguishes auth failures ("ephemeral_token_auth", retrying
+      // won't help) from transient ones ("ephemeral_token", the socket pool
+      // retries those a couple of times before giving up).
+      const isAuthFailure =
+        err instanceof Error && /40[13]|unauthor|api.?key/i.test(err.message);
       this.onEvent({
         type: "closed",
         code: 0,
-        reason: "ephemeral_token",
+        reason: isAuthFailure ? "ephemeral_token_auth" : "ephemeral_token",
         fatal: true,
-        message:
-          err instanceof Error && /40[13]|unauthor|api.?key/i.test(err.message)
-            ? "dodi couldn't authenticate with xAI. Please check the API key in parent settings, then reconnect."
-            : "dodi couldn't start the xAI voice session. Please try again in a moment.",
+        message: isAuthFailure
+          ? "dodi couldn't authenticate with xAI. Please check the API key in parent settings, then reconnect."
+          : "dodi couldn't start the xAI voice session. Please try again in a moment.",
       });
       return;
     }
@@ -311,6 +315,14 @@ export class XaiVoiceClient implements VoiceClient {
 
   sendGreeting(mode: VoiceGreetingMode = "long"): void {
     this.sendText(greetingText(mode));
+  }
+
+  /** Re-apply a changed config on the live session (session.update mid-session
+   * is part of the realtime protocol). Pre-open, the stored config is picked up
+   * by the session.created → sendSessionUpdate() path automatically. */
+  updateSession(config: VoiceClientConfig): void {
+    this.config = config;
+    if (this.isOpen()) this.sendSessionUpdate();
   }
 
   /** Return a tool result and let the model continue. `name` is unused (xAI keys

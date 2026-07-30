@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 const supabase = createClient();
 
 /**
- * Browser API client for the Dodi platform (api.dodi.app). Pure client: all data
+ * Browser API client for the Dodi platform (platform.dodi.app). Pure client: all data
  * goes through the platform HTTP API, authenticated with the user's Supabase
  * access token as a bearer (no cookies cross to the API origin). `baseUrl` is
  * env-driven (NEXT_PUBLIC_API_URL); empty = same-origin (dev fallback).

@@ -6,12 +6,11 @@
  * Mirrors the resolution in client-memory-update.ts.
  */
 import { dodi } from "@/lib/api";
-import { AI_PROVIDERS } from "@dodi/ai/providers";
-import { useProvidersStore } from "@/stores/providers-store";
+import { resolveExecution } from "@/lib/ai/resolve-dodi-ai";
 import type { AccountModelConfig, AIProviderId } from "@dodi/types/ai";
 
 export interface ResolvedClientThinking {
-  provider: AIProviderId;
+  provider: Exclude<AIProviderId, "dodi">;
   model: string;
   apiKey: string;
 }
@@ -30,15 +29,10 @@ export async function resolveClientThinking(): Promise<ResolvedClientThinking | 
   // provider/model (Live models can't drive generateContent/agent tasks).
   const provider = config.thinkingProvider;
   if (!provider) return null;
-  const def = AI_PROVIDERS.find((p) => p.id === provider);
-  const model =
-    config.thinkingModel ??
-    def?.models.find((m) => m.capabilities.includes("thinking"))?.id;
 
-  const providers = useProvidersStore.getState();
-  if (!providers.providers) await providers.load();
-  const apiKey = useProvidersStore.getState().getKey(provider);
-
-  if (!apiKey || !model) return null;
-  return { provider, model, apiKey };
+  return resolveExecution({
+    provider,
+    category: "thinking",
+    model: config.thinkingModel,
+  });
 }

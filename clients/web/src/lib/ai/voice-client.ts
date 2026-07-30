@@ -50,7 +50,31 @@ export interface VoiceClient {
     name: string,
     response: Record<string, unknown>,
   ): void;
+  /**
+   * Re-apply a changed config (instructions/voice/tools) on the live session
+   * without reconnecting. Optional: providers that accept setup only once
+   * (Gemini Live) leave it undefined and callers recycle the socket instead.
+   */
+  updateSession?(config: VoiceClientConfig): void;
   disconnect(): void;
+}
+
+/**
+ * How the session store manages a provider's voice socket across active↔deaf.
+ *
+ * "persistent": one socket for the whole session; deaf just mutes mic/playback.
+ * "pooled": warm never-audio standby sockets; deafening closes the active
+ * socket and re-activation promotes a warm one.
+ *
+ * xAI bills any socket that has EVER carried audio for its whole open lifetime
+ * (deaf included, despite the docs), so xAI runs pooled: silenced-from-birth
+ * sockets are free and the tainted active socket is closed on deafen. Gemini
+ * bills per use and caps sessions at ~15 min → keep-open stays cheapest.
+ */
+export type VoiceSocketStrategy = "persistent" | "pooled";
+
+export function voiceSocketStrategy(provider: AIProviderId): VoiceSocketStrategy {
+  return provider === "xai" ? "pooled" : "persistent";
 }
 
 /** The greeting-trigger prompt sent as a user turn to open a session. */

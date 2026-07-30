@@ -9,6 +9,7 @@
     "./envelope": "./src/envelope.ts",
     "./friend-card": "./src/friend-card.ts",
     "./snapshot": "./src/snapshot.ts",
+    "./snapshot-export": "./src/snapshot-export.ts",
     "./schemas": "./src/schemas.ts",
     "./publication-handle": "./src/publication-handle.ts",
     "./publication-review": "./src/publication-review.ts",
@@ -23,6 +24,7 @@
   },
   "dependencies": {
     "@dodi/crypto": "workspace:*",
+    "@dodi/games": "workspace:*",
     "@dodi/types": "workspace:*",
     "@dodi/vault": "workspace:*",
     "zod": "^4.3.6"

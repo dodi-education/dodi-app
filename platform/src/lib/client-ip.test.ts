@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { clientIp, hashIp } from "./client-ip";
 
 function req(headers: Record<string, string>): Request {
-  return new Request("https://api.dodi.app/api/newsletter", { headers });
+  return new Request("https://platform.dodi.app/api/newsletter", { headers });
 }
 
 describe("clientIp", () => {

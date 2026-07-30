@@ -137,6 +137,19 @@ export async function getModelConfig(
   return (data.model_config as unknown as AccountModelConfig) ?? null;
 }
 
+/** Reset the account to the unconfigured state (dodi AI disabled, no BYOK fallback). */
+export async function clearModelConfig(
+  supabase: Client,
+  accountId: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from("accounts")
+    .update({ model_config: null })
+    .eq("id", accountId);
+
+  if (error) throw error;
+}
+
 export async function updateModelConfig(
   supabase: Client,
   accountId: string,

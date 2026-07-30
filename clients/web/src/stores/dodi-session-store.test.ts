@@ -11,6 +11,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  * mocked, and `localStorage` / `window` / `document` are stubbed manually.
  */
 
+interface MockVoiceClient {
+  handler: (e: unknown) => void;
+  connect: ReturnType<typeof vi.fn>;
+  disconnect: ReturnType<typeof vi.fn>;
+  sendGreeting: ReturnType<typeof vi.fn>;
+  sendAudio: ReturnType<typeof vi.fn>;
+  sendText: ReturnType<typeof vi.fn>;
+  sendContext: ReturnType<typeof vi.fn>;
+  sendToolResponse: ReturnType<typeof vi.fn>;
+  updateSession: ReturnType<typeof vi.fn>;
+}
+
 const {
   runClientMemoryUpdate,
   beginDaySpy,
@@ -18,6 +30,8 @@ const {
   syncAndSeedSpy,
   flushNowSpy,
   liveHandler,
+  createdClients,
+  mockVoiceProvider,
   sendToolResponseSpy,
   sendContextSpy,
   streamerStopSpy,
@@ -35,6 +49,12 @@ const {
   syncAndSeedSpy: vi.fn(),
   flushNowSpy: vi.fn(),
   liveHandler: { current: null as ((e: unknown) => void) | null },
+  // Every client the factory made this test, in creation order. Pooled tests
+  // (xai) get several per session; persistent tests (gemini) exactly one.
+  createdClients: { current: [] as unknown[] },
+  // Provider returned by the mocked config builders: "gemini" exercises the
+  // persistent single-socket path, "xai" the warm-socket pool.
+  mockVoiceProvider: { current: "gemini" },
   sendToolResponseSpy: vi.fn(),
   sendContextSpy: vi.fn(),
   streamerStopSpy: vi.fn(),
@@ -74,24 +94,31 @@ vi.mock("@/stores/kid-store", () => ({
 
 vi.mock("@/lib/ai/client-memory-update", () => ({ runClientMemoryUpdate }));
 
-// The store resolves the voice client through the provider-neutral factory, so
-// intercept that (not the concrete Gemini/xAI clients) and capture the handler.
+// The store (and the warm-socket pool) resolve voice clients through the
+// provider-neutral factory, so intercept that (not the concrete Gemini/xAI
+// clients). Each call gets its OWN mock client with per-client spies, recorded
+// in createdClients; liveHandler tracks the latest handler for the persistent
+// single-socket tests.
 vi.mock("@/lib/ai/create-voice-client", () => ({
   createVoiceClient: (_cfg: unknown, handler: (e: unknown) => void) => {
-    liveHandler.current = handler;
-    return {
-      connect() {},
-      disconnect() {},
-      sendGreeting() {},
-      sendAudio() {},
-      sendText() {},
-      sendContext(...args: unknown[]) {
+    const mockClient = {
+      handler,
+      connect: vi.fn(),
+      disconnect: vi.fn(),
+      sendGreeting: vi.fn(),
+      sendAudio: vi.fn(),
+      sendText: vi.fn(),
+      sendContext: vi.fn((...args: unknown[]) => {
         sendContextSpy(...args);
-      },
-      sendToolResponse(...args: unknown[]) {
+      }),
+      sendToolResponse: vi.fn((...args: unknown[]) => {
         sendToolResponseSpy(...args);
-      },
+      }),
+      updateSession: vi.fn(),
     };
+    createdClients.current.push(mockClient);
+    liveHandler.current = handler;
+    return mockClient;
   },
 }));
 
@@ -121,7 +148,7 @@ vi.mock("@/lib/ai/audio-recorder", () => ({
 
 vi.mock("@/lib/ai/voice-session", () => ({
   buildHomeVoiceConfig: async () => ({
-    provider: "gemini",
+    provider: mockVoiceProvider.current,
     apiKey: "k",
     model: "m",
     voiceName: "Puck",
@@ -129,7 +156,7 @@ vi.mock("@/lib/ai/voice-session", () => ({
     isBirthday: false,
   }),
   buildGameVoiceConfig: async () => ({
-    provider: "gemini",
+    provider: mockVoiceProvider.current,
     apiKey: "k",
     model: "m",
     voiceName: "Puck",
@@ -242,6 +269,8 @@ function installTestEnv() {
     },
   );
   liveHandler.current = null;
+  createdClients.current = [];
+  mockVoiceProvider.current = "gemini";
   tryResumeResult.current = true;
   useDodiSessionStore.setState({ state: "disconnected", context: { type: "home" } });
 }
@@ -804,5 +833,312 @@ describe("dodi session store — AI activity (thinking) tracking", () => {
 
     // Analysis done → thinking state cleared even without any manual toggle.
     expect(selectDodiThinking(state())).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// xAI warm-socket pool: xAI bills any socket that ever carried audio for its
+// whole open lifetime (deaf included), so the pooled strategy keeps two warm
+// never-audio standbys, closes the tainted active socket on deafen, and
+// promotes a standby on (re)activation. Pinned here: the store-level wiring —
+// pool lifecycle across connect/deactivate/activate/endSession, the persisted
+// deaf $0 path, catch-up game-state pushes, recap replay, fast recovery, and
+// usage attribution. Pool internals live in voice-socket-pool.test.ts.
+// ---------------------------------------------------------------------------
+
+describe("dodi session store — xai warm-socket pool", () => {
+  beforeEach(() => {
+    installTestEnv();
+    mockVoiceProvider.current = "xai";
+    vi.spyOn(console, "info").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  const state = () => useDodiSessionStore.getState();
+  const clients = () => createdClients.current as MockVoiceClient[];
+
+  // Pooled connect: the store awaits the pool's first ready standby, so the
+  // handshake must be driven while connect() is in flight.
+  async function connectPooled(pid: string) {
+    useDodiSessionStore.setState({ state: "disconnected" });
+    const connectPromise = useDodiSessionStore.getState().connect(pid);
+    await flush(); // let the config build and the pool spawn its standbys
+    for (const c of clients()) c.handler({ type: "setupComplete" });
+    await connectPromise;
+    await flush();
+  }
+
+  function expectWarmSilence(client: MockVoiceClient) {
+    expect(client.sendGreeting).not.toHaveBeenCalled();
+    expect(client.sendAudio).not.toHaveBeenCalled();
+    expect(client.sendText).not.toHaveBeenCalled();
+    expect(client.sendContext).not.toHaveBeenCalled();
+  }
+
+  it("connect warms the pipeline and activates on the head socket", async () => {
+    await connectPooled(PID);
+
+    expect(state().state).toBe("active");
+    // The pipeline is 2 sockets TOTAL: the acquired active one + 1 warm standby.
+    expect(clients()).toHaveLength(2);
+    expect(clients()[0].sendGreeting).toHaveBeenCalledTimes(1);
+    expectWarmSilence(clients()[1]);
+  });
+
+  it("deactivate closes the tainted active socket; its close never tears the session down", async () => {
+    await connectPooled(PID);
+
+    state().deactivate();
+
+    expect(state().state).toBe("deaf");
+    expect(clients()[0].disconnect).toHaveBeenCalledTimes(1);
+    // The warm standbys stay open — they are free.
+    expect(clients()[1].disconnect).not.toHaveBeenCalled();
+    expect(clients()[2].disconnect).not.toHaveBeenCalled();
+
+    // The retired socket's close event is pool-internal — the store must not
+    // treat it as a session loss.
+    clients()[0].handler({
+      type: "closed",
+      code: 1000,
+      reason: "",
+      fatal: false,
+      message: "closed",
+    });
+    expect(state().state).toBe("deaf");
+  });
+
+  it("reactivation promotes the next warm standby instantly, without re-greeting", async () => {
+    await connectPooled(PID);
+    state().deactivate();
+
+    await state().activate();
+    await flush();
+
+    expect(state().state).toBe("active");
+    // The standby was already set up → no connecting dip on this path, and the
+    // page-load greeting is not repeated on the fresh socket.
+    expect(clients()[1].sendGreeting).not.toHaveBeenCalled();
+    // Deafening had warmed a replacement secondary; acquiring spawns nothing.
+    expect(clients()).toHaveLength(3);
+  });
+
+  it("persisted deaf never acquires a socket — the whole session stays $0", async () => {
+    kidLoadOneSpy.mockResolvedValue({
+      display_name: "Ada",
+      language: "en",
+      deafened_dodi_at: DAY1,
+    });
+
+    await connectPooled(PID);
+
+    expect(state().state).toBe("deaf");
+    expect(state().gestureNeeded).toBe(false);
+    expect(clients()).toHaveLength(2); // warmed only, nothing acquired
+    for (const c of clients()) {
+      expectWarmSilence(c);
+      expect(c.disconnect).not.toHaveBeenCalled();
+    }
+  });
+
+  it("gesture-needed deaf acquires only once the kid's gesture activates", async () => {
+    tryResumeResult.current = false;
+    await connectPooled(PID);
+
+    expect(state().state).toBe("deaf");
+    expect(state().gestureNeeded).toBe(true);
+    expect(clients()).toHaveLength(2);
+
+    tryResumeResult.current = true;
+    await state().activate();
+    await flush();
+
+    expect(state().state).toBe("active");
+    expect(clients()).toHaveLength(2); // 1 active + 1 warm, nothing extra
+  });
+
+  it("rapid toggling dips to connecting when no standby is ready yet", async () => {
+    await connectPooled(PID);
+
+    state().deactivate(); // retires [0]; [1] ready, [2] connecting
+    await state().activate(); // instant on [1]; replenishes [3]
+    await flush();
+    state().deactivate(); // retires [1]; [2]/[3] still connecting
+
+    const activatePromise = state().activate();
+    expect(state().state).toBe("connecting");
+
+    clients()[2].handler({ type: "setupComplete" });
+    await activatePromise;
+    await flush();
+
+    expect(state().state).toBe("active");
+  });
+
+  it("a fatal mint failure while connecting surfaces as a fatal disconnect", async () => {
+    useDodiSessionStore.setState({ state: "disconnected" });
+    const connectPromise = useDodiSessionStore.getState().connect(PID);
+    await flush();
+
+    clients()[0].handler({
+      type: "closed",
+      code: 0,
+      reason: "ephemeral_token_auth",
+      fatal: true,
+      message: "bad key",
+    });
+    await connectPromise;
+    await flush();
+
+    expect(state().state).toBe("disconnected");
+    expect(state().fatalError).toBe(true);
+    expect(state().error).toBe("bad key");
+  });
+
+  it("endSession closes every socket the session ever created", async () => {
+    await connectPooled(PID);
+
+    state().endSession();
+
+    for (const c of clients()) {
+      expect(c.disconnect).toHaveBeenCalled();
+    }
+    expect(state().state).toBe("disconnected");
+  });
+
+  it("pushes exactly one game-state delta on activation after changes while deaf", async () => {
+    useDodiSessionStore.setState({
+      state: "disconnected",
+      context: {
+        type: "game",
+        gameId: "g1",
+        markdown: "",
+        codeBundle: "",
+        gameState: { score: 0 },
+        capabilities: [],
+      },
+    });
+    await connectPooled(PID);
+    expect(state().state).toBe("active");
+    sendContextSpy.mockClear();
+
+    state().deactivate();
+    // The game keeps running while Dodi is deaf — nothing is pushed (there is
+    // no socket to push to), the store just buffers the latest state.
+    state().updateGameState({ score: 5 });
+    expect(sendContextSpy).not.toHaveBeenCalled();
+
+    await state().activate();
+    await flush();
+
+    const statePushes = sendContextSpy.mock.calls.filter((c) =>
+      String(c[0]).includes("[GAME STATE UPDATE"),
+    );
+    expect(statePushes).toHaveLength(1);
+    expect(String(statePushes[0][0])).toContain('"score":5');
+  });
+
+  it("skips the catch-up push when the game state never changed while deaf", async () => {
+    useDodiSessionStore.setState({
+      state: "disconnected",
+      context: {
+        type: "game",
+        gameId: "g1",
+        markdown: "",
+        codeBundle: "",
+        gameState: { score: 0 },
+        capabilities: [],
+      },
+    });
+    await connectPooled(PID);
+    sendContextSpy.mockClear();
+
+    state().deactivate();
+    await state().activate();
+    await flush();
+
+    // The fresh socket's config already embeds { score: 0 } — no delta to push.
+    expect(
+      sendContextSpy.mock.calls.filter((c) => String(c[0]).includes("[GAME STATE UPDATE")),
+    ).toHaveLength(0);
+  });
+
+  it("replays a conversation recap on the fresh socket after a deaf cycle", async () => {
+    await connectPooled(PID);
+
+    // A round of conversation on the first socket.
+    clients()[0].handler({ type: "inputTranscription", text: "I love mangos" });
+    clients()[0].handler({ type: "outputTranscription", text: "Mangos are great!" });
+    clients()[0].handler({ type: "turnComplete" });
+
+    state().deactivate();
+    sendContextSpy.mockClear();
+    await state().activate();
+    await flush();
+
+    const recaps = sendContextSpy.mock.calls.filter((c) =>
+      String(c[0]).includes("[CONVERSATION SO FAR]"),
+    );
+    expect(recaps).toHaveLength(1);
+    expect(String(recaps[0][0])).toContain("I love mangos");
+    expect(String(recaps[0][0])).toContain("Mangos are great!");
+    // The recap lands on the promoted socket, never a warm one.
+    expect(clients()[1].sendContext).toHaveBeenCalledTimes(1);
+  });
+
+  it("recovers from an unexpected active-socket drop by promoting a standby", async () => {
+    await connectPooled(PID);
+
+    clients()[0].handler({
+      type: "closed",
+      code: 1006,
+      reason: "",
+      fatal: false,
+      message: "Connection closed unexpectedly",
+    });
+    await flush();
+
+    // Promoted, still in the conversation — no teardown, no re-greeting.
+    expect(state().state).toBe("active");
+    expect(clients()[0].disconnect).toHaveBeenCalled();
+    expect(clients()[1].sendGreeting).not.toHaveBeenCalled();
+
+    // A second drop right away is rate-limited → normal teardown path.
+    clients()[1].handler({
+      type: "closed",
+      code: 1006,
+      reason: "",
+      fatal: false,
+      message: "Connection closed unexpectedly",
+    });
+    await flush();
+    expect(state().state).toBe("disconnected");
+    expect(state().fatalError).toBe(false);
+  });
+
+  it("attributes voice minutes to the session's actual provider and model", async () => {
+    await connectPooled(PID);
+    expect(state().state).toBe("active");
+
+    await vi.advanceTimersByTimeAsync(5000);
+    state().deactivate();
+
+    const usageCall = dodiRequestSpy.mock.calls.find((c) => c[0] === "/api/usage");
+    expect(usageCall).toBeTruthy();
+    const body = JSON.parse((usageCall![1] as { body: string }).body) as Record<
+      string,
+      unknown
+    >;
+    expect(body).toMatchObject({
+      eventType: "voice_minutes",
+      provider: "xai",
+      model: "m",
+      voiceSeconds: 5,
+    });
   });
 });

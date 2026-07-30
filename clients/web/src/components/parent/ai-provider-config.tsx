@@ -1,82 +1,46 @@
 "use client";
 
-import { dodi } from "@/lib/api";
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 
+import { dodi } from "@/lib/api";
+import { isDodiAIConfigured } from "@/lib/dodi-ai";
 import { Icon } from "@/components/shared/icon";
-import { useDateFormat } from "@/components/providers/date-format-provider";
-import {
-  FieldRow,
-  Row,
-  RowMain,
-  RowMeta,
-  RowTitle,
-} from "@/components/parent/rows";
-import { SaveRow } from "@/components/parent/save-row";
-import { Section } from "@/components/parent/section";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Section } from "@/components/parent/section";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { AI_PROVIDERS } from "@dodi/ai/providers";
-import { validateProviderKey } from "@dodi/ai/validate-key";
+import { useDodiAIKeyStore } from "@/stores/dodi-ai-key-store";
 import { useProvidersStore } from "@/stores/providers-store";
 import type { AIProviderId, AccountModelConfig } from "@dodi/types/ai";
 
-const THINKING_PROVIDER_NONE = "__none__";
-const GAME_PROVIDER_NONE = "__none__";
-const IMAGE_PROVIDER_NONE = "__none__";
+import { ByokKeysPanel } from "./byok-keys-panel";
+import {
+  CapabilityModelConfig,
+  type DraftModelConfig,
+  EMPTY_DRAFT,
+} from "./capability-model-config";
+import { DodiAIPanel } from "./dodi-ai-panel";
 
+/**
+ * Settings → AI Providers. With dodi AI configured (NEXT_PUBLIC_DODI_AI_URL)
+ * this is a two-tab page: "dodi AI" (managed — state card + the per-capability
+ * pickers, where dodi AI and BYOK combine per category) and "Your own keys"
+ * (BYOK). Self-host (no URL): the BYOK experience renders untabbed, exactly as
+ * before dodi AI existed.
+ */
 export function AIProviderConfig() {
   const t = useTranslations("settings");
-  const tc = useTranslations("common");
-  const { formatDate } = useDateFormat();
 
-  // API keys are E2EE: decrypted client-side from the vault (the server never
-  // sees them). The providers map lives in the providers store.
   const providersMap = useProvidersStore((s) => s.providers);
   const [loading, setLoading] = useState(true);
-
-  // Dialog state
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [selectedProvider, setSelectedProvider] = useState<AIProviderId | "">("");
-  const [apiKey, setApiKey] = useState("");
-  const [showKey, setShowKey] = useState(false);
-  const [validating, setValidating] = useState(false);
-  const [validationStatus, setValidationStatus] = useState<"idle" | "valid" | "invalid">("idle");
-  const [validationError, setValidationError] = useState("");
+  const [config, setConfig] = useState<DraftModelConfig>(EMPTY_DRAFT);
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
-  // Voice/thinking config state (model_config is plaintext — not a secret)
-  const [voiceProvider, setVoiceProvider] = useState<AIProviderId | "">("");
-  const [voiceModel, setVoiceModel] = useState("");
-  const [voiceName, setVoiceName] = useState("");
-  const [thinkingProvider, setThinkingProvider] = useState<AIProviderId | "">("");
-  const [thinkingModel, setThinkingModel] = useState("");
-  const [gameProvider, setGameProvider] = useState<AIProviderId | "">("");
-  const [gameModel, setGameModel] = useState("");
-  const [imageProvider, setImageProvider] = useState<AIProviderId | "">("");
-  const [imageModel, setImageModel] = useState("");
-  const [configSaving, setConfigSaving] = useState(false);
-  const [configSaved, setConfigSaved] = useState(false);
+  const dodiConfigured = isDodiAIConfigured();
+  const keyStatus = useDodiAIKeyStore((s) => s.status);
 
   useEffect(() => {
     let cancelled = false;
@@ -88,15 +52,17 @@ export function AIProviderConfig() {
         if (res.ok) {
           const cfg: AccountModelConfig | null = await res.json();
           if (cfg) {
-            setVoiceProvider(cfg.voiceProvider);
-            setVoiceModel(cfg.voiceModel);
-            setVoiceName(cfg.voiceName);
-            setThinkingProvider(cfg.thinkingProvider ?? "");
-            setThinkingModel(cfg.thinkingModel ?? "");
-            setGameProvider(cfg.gameProvider ?? "");
-            setGameModel(cfg.gameModel ?? "");
-            setImageProvider(cfg.imageProvider ?? "");
-            setImageModel(cfg.imageModel ?? "");
+            setConfig({
+              voiceProvider: cfg.voiceProvider,
+              voiceModel: cfg.voiceModel,
+              voiceName: cfg.voiceName,
+              thinkingProvider: cfg.thinkingProvider ?? "",
+              thinkingModel: cfg.thinkingModel ?? "",
+              gameProvider: cfg.gameProvider ?? "",
+              gameModel: cfg.gameModel ?? "",
+              imageProvider: cfg.imageProvider ?? "",
+              imageModel: cfg.imageModel ?? "",
+            });
           }
         }
       } catch {
@@ -111,145 +77,59 @@ export function AIProviderConfig() {
     };
   }, []);
 
-  const providers = Object.entries(providersMap ?? {}).map(([id, entry]) => ({
+  const byokProviders = Object.keys(providersMap ?? {}).map((id) => ({
     id: id as AIProviderId,
     name: AI_PROVIDERS.find((p) => p.id === id)?.name ?? id,
-    keyPreview: entry?.keyPreview ?? "",
-    addedAt: entry?.addedAt ?? "",
   }));
 
-  function resetDialog() {
-    setSelectedProvider("");
-    setApiKey("");
-    setShowKey(false);
-    setValidating(false);
-    setValidationStatus("idle");
-    setValidationError("");
-    setSaving(false);
+  const anyDodi =
+    config.voiceProvider === "dodi" ||
+    config.thinkingProvider === "dodi" ||
+    config.gameProvider === "dodi" ||
+    config.imageProvider === "dodi";
+  const dodiSelectable = dodiConfigured && (anyDodi || keyStatus === "active");
+
+  async function persist(next: DraftModelConfig): Promise<boolean> {
+    if (!next.voiceProvider || !next.voiceModel || !next.voiceName) return false;
+    const res = await dodi.request("/api/ai/config", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        voiceProvider: next.voiceProvider,
+        voiceModel: next.voiceModel,
+        voiceName: next.voiceName,
+        thinkingProvider: next.thinkingProvider || undefined,
+        thinkingModel: next.thinkingProvider ? next.thinkingModel : undefined,
+        gameProvider: next.gameProvider || undefined,
+        gameModel: next.gameProvider ? next.gameModel : undefined,
+        imageProvider: next.imageProvider || undefined,
+        imageModel: next.imageProvider ? next.imageModel : undefined,
+      }),
+    });
+    if (!res.ok) return false;
+    setConfig(next);
+    return true;
   }
 
-  async function handleValidateAndSave() {
-    if (!selectedProvider || !apiKey) return;
+  async function clearConfig(): Promise<boolean> {
+    const res = await dodi.request("/api/ai/config", { method: "DELETE" });
+    if (!res.ok) return false;
+    setConfig(EMPTY_DRAFT);
+    return true;
+  }
 
-    setValidating(true);
-    setValidationStatus("idle");
-    setValidationError("");
-
+  async function handleSave() {
+    setSaving(true);
+    setSaved(false);
     try {
-      const def = AI_PROVIDERS.find((p) => p.id === selectedProvider);
-      // Validate with a generateContent-capable model — NOT a Live (voice)
-      // model, which only works over the Live WebSocket and 404s generateContent.
-      const validateModel =
-        (def?.models.find((m) => !m.capabilities.includes("live")) ??
-          def?.models[0])?.id ?? "";
-
-      // Validate client-side (server never sees the plaintext key).
-      const result = await validateProviderKey(selectedProvider, apiKey, validateModel);
-      if (!result.valid) {
-        setValidationStatus("invalid");
-        setValidationError(result.error || t("keyInvalid"));
-        setValidating(false);
-        return;
+      if (await persist(config)) {
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
       }
-
-      setValidationStatus("valid");
-      setValidating(false);
-      setSaving(true);
-
-      const isFirst = Object.keys(providersMap ?? {}).length === 0;
-      // Encrypt + store under the vault.
-      await useProvidersStore.getState().addKey(selectedProvider, apiKey);
-
-      // First provider → seed a default voice config (model_config is plaintext).
-      if (isFirst && def) {
-        const defaultModel =
-          def.models.find((m) => m.capabilities.includes("voice")) ?? def.models[0];
-        const defaultVoice = def.voices[0];
-        if (defaultModel && defaultVoice) {
-          await dodi.request("/api/ai/config", {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              voiceProvider: selectedProvider,
-              voiceModel: defaultModel.id,
-              voiceName: defaultVoice.id,
-            }),
-          });
-          setVoiceProvider(selectedProvider);
-          setVoiceModel(defaultModel.id);
-          setVoiceName(defaultVoice.id);
-        }
-      }
-
-      setDialogOpen(false);
-      resetDialog();
-    } catch (error) {
-      setValidationStatus("invalid");
-      setValidationError(
-        error instanceof Error ? error.message : "An unexpected error occurred",
-      );
     } finally {
-      setValidating(false);
       setSaving(false);
     }
   }
-
-  async function handleRemoveProvider(providerId: AIProviderId) {
-    if (!confirm(t("confirmRemoveProvider"))) return;
-    try {
-      await useProvidersStore.getState().removeKey(providerId);
-    } catch {
-      // non-critical
-    }
-  }
-
-  async function handleSaveConfig() {
-    if (!voiceProvider || !voiceModel || !voiceName) return;
-
-    setConfigSaving(true);
-    setConfigSaved(false);
-
-    try {
-      const res = await dodi.request("/api/ai/config", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          voiceProvider,
-          voiceModel,
-          voiceName,
-          thinkingProvider: thinkingProvider || undefined,
-          thinkingModel: thinkingProvider ? thinkingModel : undefined,
-          gameProvider: gameProvider || undefined,
-          gameModel: gameProvider ? gameModel : undefined,
-          imageProvider: imageProvider || undefined,
-          imageModel: imageProvider ? imageModel : undefined,
-        }),
-      });
-
-      if (res.ok) {
-        const data: AccountModelConfig = await res.json();
-        setThinkingProvider(data.thinkingProvider ?? "");
-        setThinkingModel(data.thinkingModel ?? "");
-        setGameProvider(data.gameProvider ?? "");
-        setGameModel(data.gameModel ?? "");
-        setImageProvider(data.imageProvider ?? "");
-        setImageModel(data.imageModel ?? "");
-        setConfigSaved(true);
-        setTimeout(() => setConfigSaved(false), 2000);
-      }
-    } finally {
-      setConfigSaving(false);
-    }
-  }
-
-  const availableProviders = AI_PROVIDERS.filter(
-    (p) => !providers.some((cp) => cp.id === p.id),
-  );
-
-  const activeProviderDef = AI_PROVIDERS.find((p) => p.id === voiceProvider);
-  const activeThinkingProviderDef = AI_PROVIDERS.find((p) => p.id === thinkingProvider);
-  const activeGameProviderDef = AI_PROVIDERS.find((p) => p.id === gameProvider);
-  const activeImageProviderDef = AI_PROVIDERS.find((p) => p.id === imageProvider);
 
   if (loading) {
     return (
@@ -262,435 +142,52 @@ export function AIProviderConfig() {
     );
   }
 
+  const capabilityConfig =
+    byokProviders.length > 0 || dodiSelectable ? (
+      <CapabilityModelConfig
+        config={config}
+        onChange={(patch) => setConfig((c) => ({ ...c, ...patch }))}
+        byokProviders={byokProviders}
+        dodiSelectable={dodiSelectable}
+        onSave={() => void handleSave()}
+        saving={saving}
+        saved={saved}
+      />
+    ) : null;
+
+  // Self-host: no dodi AI anywhere — the page is the BYOK experience as before.
+  if (!dodiConfigured) {
+    return (
+      <>
+        <ByokKeysPanel onFirstKeySeeded={(patch) => void persist({ ...config, ...patch })} />
+        {capabilityConfig}
+      </>
+    );
+  }
+
   return (
-    <>
-      <Section
-        title={t("aiConfigTitle")}
-        desc={t("aiConfigDescription")}
-        action={
-          availableProviders.length > 0 ? (
-            <Dialog
-              open={dialogOpen}
-              onOpenChange={(open) => {
-                setDialogOpen(open);
-                if (!open) resetDialog();
-              }}
-            >
-              <DialogTrigger asChild>
-                <Button variant="outline" size="sm" className="cursor-pointer">
-                  <Icon name="add" className="h-4 w-4" />
-                  {t("addProvider")}
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>{t("addProviderTitle")}</DialogTitle>
-                  <DialogDescription>
-                    {t("addProviderDescription")}
-                  </DialogDescription>
-                </DialogHeader>
+    <Tabs defaultValue="dodi-ai">
+      <TabsList>
+        <TabsTrigger value="dodi-ai">
+          <Icon name="sparkles" className="h-4 w-4" />
+          {t("aiTabManaged")}
+        </TabsTrigger>
+        <TabsTrigger value="byok">
+          {t("aiTabByok")}
+          {byokProviders.length > 0 ? (
+            <Badge variant="secondary">{byokProviders.length}</Badge>
+          ) : null}
+        </TabsTrigger>
+      </TabsList>
 
-                <div className="flex flex-col gap-4">
-                  <div className="flex flex-col gap-2">
-                    <Label>{t("selectProvider")}</Label>
-                    <Select
-                      value={selectedProvider}
-                      onValueChange={(value) => {
-                        setSelectedProvider(value as AIProviderId);
-                        setValidationStatus("idle");
-                        setValidationError("");
-                      }}
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder={t("selectProvider")} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {availableProviders.map((p) => (
-                          <SelectItem key={p.id} value={p.id}>
-                            {p.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+      <TabsContent value="dodi-ai">
+        <DodiAIPanel config={config} applyConfig={persist} clearConfig={clearConfig} />
+        {capabilityConfig}
+      </TabsContent>
 
-                  <div className="flex flex-col gap-2">
-                    <Label>{t("apiKey")}</Label>
-                    <div className="relative">
-                      <Input
-                        type={showKey ? "text" : "password"}
-                        placeholder={t("apiKeyPlaceholder")}
-                        value={apiKey}
-                        onChange={(e) => {
-                          setApiKey(e.target.value);
-                          setValidationStatus("idle");
-                          setValidationError("");
-                        }}
-                        className="pr-10"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowKey(!showKey)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer text-muted-foreground hover:text-foreground"
-                        aria-label={showKey ? "Hide API key" : "Show API key"}
-                      >
-                        {showKey ? (
-                          <Icon name="hide" className="h-4 w-4" />
-                        ) : (
-                          <Icon name="show" className="h-4 w-4" />
-                        )}
-                      </button>
-                    </div>
-                  </div>
-
-                  {validationStatus === "valid" && (
-                    <div className="flex items-center gap-2 text-sm text-success">
-                      <Icon name="success" className="h-4 w-4" />
-                      {t("keyValid")}
-                    </div>
-                  )}
-
-                  {validationStatus === "invalid" && (
-                    <div className="flex items-center gap-2 text-sm text-danger">
-                      <Icon name="alert" className="h-4 w-4" />
-                      {validationError || t("keyInvalid")}
-                    </div>
-                  )}
-                </div>
-
-                <DialogFooter>
-                  <Button
-                    onClick={handleValidateAndSave}
-                    disabled={!selectedProvider || !apiKey || validating || saving}
-                    className="cursor-pointer"
-                  >
-                    {validating || saving ? (
-                      <>
-                        <Icon name="loading" className="mr-2 h-4 w-4 animate-spin" />
-                        {t("validating")}
-                      </>
-                    ) : (
-                      t("validateAndSave")
-                    )}
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-          ) : undefined
-        }
-      >
-        {providers.length === 0 ? (
-          <p className="px-5 py-3.5 text-sm text-muted-foreground">
-            {t("noProviders")}
-          </p>
-        ) : (
-          providers.map((provider) => (
-            <Row key={provider.id}>
-              <RowMain>
-                <RowTitle>
-                  {provider.name}
-                  <Badge variant="key">...{provider.keyPreview}</Badge>
-                </RowTitle>
-                <RowMeta>
-                  {t("added", {
-                    date: formatDate(provider.addedAt),
-                  })}
-                </RowMeta>
-              </RowMain>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => handleRemoveProvider(provider.id)}
-                className="cursor-pointer text-danger hover:bg-danger-soft hover:text-danger"
-              >
-                <Icon name="delete" className="mr-1 h-4 w-4" />
-                {t("removeProvider")}
-              </Button>
-            </Row>
-          ))
-        )}
-      </Section>
-
-      {providers.length > 0 && (
-        <>
-          <Section title={t("voiceConfig")} desc={t("voiceConfigDescription")}>
-            <FieldRow label={t("voiceProvider")}>
-              <Select
-                value={voiceProvider}
-                onValueChange={(value) => {
-                  const pid = value as AIProviderId;
-                  setVoiceProvider(pid);
-                  const def = AI_PROVIDERS.find((p) => p.id === pid);
-                  if (def) {
-                    const voiceModel =
-                      def.models.find((m) => m.capabilities.includes("voice")) ??
-                      def.models[0];
-                    setVoiceModel(voiceModel?.id ?? "");
-                    setVoiceName(def.voices[0]?.id ?? "");
-                  }
-                }}
-              >
-                <SelectTrigger className="w-full sm:w-[260px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {providers
-                    .filter((p) => {
-                      const def = AI_PROVIDERS.find((d) => d.id === p.id);
-                      return def?.supportsVoice;
-                    })
-                    .map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.name}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-            </FieldRow>
-
-            {activeProviderDef && (
-              <>
-                <FieldRow label={t("voiceModel")}>
-                  <Select value={voiceModel} onValueChange={setVoiceModel}>
-                    <SelectTrigger className="w-full sm:w-[260px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {activeProviderDef.models
-                        .filter((m) => m.capabilities.includes("voice"))
-                        .map((m) => (
-                          <SelectItem key={m.id} value={m.id}>
-                            {m.name}
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
-                </FieldRow>
-
-                <FieldRow label={t("voiceName")}>
-                  <Select value={voiceName} onValueChange={setVoiceName}>
-                    <SelectTrigger className="w-full sm:w-[260px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {activeProviderDef.voices.map((v) => (
-                        <SelectItem key={v.id} value={v.id}>
-                          {v.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </FieldRow>
-              </>
-            )}
-          </Section>
-
-          <Section title={t("thinkingModel")} desc={t("thinkingModelDescription")}>
-            <FieldRow label={t("thinkingProvider")}>
-              <Select
-                value={thinkingProvider || THINKING_PROVIDER_NONE}
-                onValueChange={(value) => {
-                  if (value === THINKING_PROVIDER_NONE) {
-                    setThinkingProvider("");
-                    setThinkingModel("");
-                    return;
-                  }
-                  const providerId = value as AIProviderId;
-                  setThinkingProvider(providerId);
-                  const providerDef = AI_PROVIDERS.find((provider) => provider.id === providerId);
-                  const defaultModel = providerDef?.models.find((model) =>
-                    model.capabilities.includes("thinking"),
-                  );
-                  setThinkingModel(defaultModel?.id ?? "");
-                }}
-              >
-                <SelectTrigger className="w-full sm:w-[260px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={THINKING_PROVIDER_NONE}>
-                    {t("thinkingProviderFallback")}
-                  </SelectItem>
-                  {providers
-                    .filter((provider) => {
-                      const def = AI_PROVIDERS.find((p) => p.id === provider.id);
-                      return def?.supportsThinking;
-                    })
-                    .map((provider) => (
-                      <SelectItem key={provider.id} value={provider.id}>
-                        {provider.name}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-            </FieldRow>
-
-            {thinkingProvider && activeThinkingProviderDef ? (
-              <FieldRow label={t("thinkingModel")}>
-                <Select value={thinkingModel} onValueChange={setThinkingModel}>
-                  <SelectTrigger className="w-full sm:w-[260px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {activeThinkingProviderDef.models
-                      .filter((model) => model.capabilities.includes("thinking"))
-                      .map((model) => (
-                        <SelectItem key={model.id} value={model.id}>
-                          {model.name}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-              </FieldRow>
-            ) : null}
-          </Section>
-
-          <Section title={t("gameConfig")} desc={t("gameConfigDescription")}>
-            <FieldRow label={t("gameProvider")}>
-              <Select
-                value={gameProvider || GAME_PROVIDER_NONE}
-                onValueChange={(value) => {
-                  if (value === GAME_PROVIDER_NONE) {
-                    setGameProvider("");
-                    setGameModel("");
-                    return;
-                  }
-                  const providerId = value as AIProviderId;
-                  setGameProvider(providerId);
-                  const providerDef = AI_PROVIDERS.find((provider) => provider.id === providerId);
-                  const defaultModel = providerDef?.models.find((model) =>
-                    model.capabilities.includes("agentic"),
-                  );
-                  setGameModel(defaultModel?.id ?? "");
-                }}
-              >
-                <SelectTrigger className="w-full sm:w-[260px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={GAME_PROVIDER_NONE}>
-                    {t("gameProviderFallback")}
-                  </SelectItem>
-                  {providers
-                    .filter((provider) => {
-                      const def = AI_PROVIDERS.find((p) => p.id === provider.id);
-                      return def?.supportsAgentic;
-                    })
-                    .map((provider) => (
-                      <SelectItem key={provider.id} value={provider.id}>
-                        {provider.name}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-            </FieldRow>
-
-            {gameProvider && activeGameProviderDef ? (
-              <FieldRow label={t("gameModel")}>
-                <Select value={gameModel} onValueChange={setGameModel}>
-                  <SelectTrigger className="w-full sm:w-[260px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {activeGameProviderDef.models
-                      .filter((model) => model.capabilities.includes("agentic"))
-                      .map((model) => (
-                        <SelectItem key={model.id} value={model.id}>
-                          {model.name}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-              </FieldRow>
-            ) : null}
-          </Section>
-
-          <Section title={t("imageConfig")} desc={t("imageConfigDescription")}>
-            <FieldRow label={t("imageProvider")}>
-              <Select
-                value={imageProvider || IMAGE_PROVIDER_NONE}
-                onValueChange={(value) => {
-                  if (value === IMAGE_PROVIDER_NONE) {
-                    setImageProvider("");
-                    setImageModel("");
-                    return;
-                  }
-                  const providerId = value as AIProviderId;
-                  setImageProvider(providerId);
-                  const providerDef = AI_PROVIDERS.find((provider) => provider.id === providerId);
-                  const defaultModel = providerDef?.models.find((model) =>
-                    model.capabilities.includes("image"),
-                  );
-                  setImageModel(defaultModel?.id ?? "");
-                }}
-              >
-                <SelectTrigger className="w-full sm:w-[260px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={IMAGE_PROVIDER_NONE}>
-                    {t("imageProviderFallback")}
-                  </SelectItem>
-                  {providers
-                    .filter((provider) => {
-                      const def = AI_PROVIDERS.find((p) => p.id === provider.id);
-                      return def?.supportsImage;
-                    })
-                    .map((provider) => (
-                      <SelectItem key={provider.id} value={provider.id}>
-                        {provider.name}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-            </FieldRow>
-
-            {imageProvider && activeImageProviderDef ? (
-              <FieldRow label={t("imageModel")}>
-                <Select value={imageModel} onValueChange={setImageModel}>
-                  <SelectTrigger className="w-full sm:w-[260px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {activeImageProviderDef.models
-                      .filter((model) => model.capabilities.includes("image"))
-                      .map((model) => (
-                        <SelectItem key={model.id} value={model.id}>
-                          {model.name}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-              </FieldRow>
-            ) : null}
-
-            <SaveRow note={configSaved ? t("configSaved") : undefined}>
-              <Button
-                onClick={handleSaveConfig}
-                disabled={
-                  !voiceProvider ||
-                  !voiceModel ||
-                  !voiceName ||
-                  configSaving ||
-                  (Boolean(thinkingProvider) && !thinkingModel) ||
-                  (Boolean(gameProvider) && !gameModel) ||
-                  (Boolean(imageProvider) && !imageModel)
-                }
-                className="cursor-pointer"
-              >
-                {configSaving ? (
-                  <>
-                    <Icon name="loading" className="mr-2 h-4 w-4 animate-spin" />
-                    {tc("save")}
-                  </>
-                ) : (
-                  tc("save")
-                )}
-              </Button>
-            </SaveRow>
-          </Section>
-        </>
-      )}
-    </>
+      <TabsContent value="byok">
+        <ByokKeysPanel onFirstKeySeeded={(patch) => void persist({ ...config, ...patch })} />
+      </TabsContent>
+    </Tabs>
   );
 }

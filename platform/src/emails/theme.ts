@@ -11,12 +11,12 @@ export const fontStack =
 
 /**
  * Base URL for platform-hosted email assets (the logo). The platform serves
- * `/dodi-logo.png` from its OWN origin (api.dodi.app) — kept here, next to the
+ * `/dodi-logo.png` from its OWN origin (platform.dodi.app) — kept here, next to the
  * email code, so the asset doesn't depend on the web app's deploy. Override with
  * EMAIL_ASSET_BASE_URL (e.g. the dev platform origin or a CDN).
  */
 export function emailAssetBaseUrl(): string {
-  return (process.env.EMAIL_ASSET_BASE_URL ?? "https://api.dodi.app").replace(
+  return (process.env.EMAIL_ASSET_BASE_URL ?? "https://platform.dodi.app").replace(
     /\/+$/,
     "",
   );

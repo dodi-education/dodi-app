@@ -4,7 +4,7 @@
   "ignoreCommand": "npx turbo-ignore @dodi/platform",
   "crons": [
     {
-      "path": "/api/internal/publications/process",
+      "path": "/api/internal/jobs/review-publications",
       "schedule": "0 * * * *"
     }
   ]

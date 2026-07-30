@@ -3,10 +3,16 @@ import { z } from "zod/v4";
 
 import { serverErrorResponse } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
-import { getModelConfig, updateModelConfig } from "@/services/ai-providers";
+import {
+  clearModelConfig,
+  getModelConfig,
+  updateModelConfig,
+} from "@/services/ai-providers";
 import type { AccountModelConfig } from "@dodi/types/ai";
 
-const providerEnum = z.enum(["gemini", "openai", "anthropic", "xai"]);
+// "dodi" = the managed dodi AI meta-provider (resolved client-side to a real
+// provider + dodi-minted key); it is a valid *selection*, never a vault key.
+const providerEnum = z.enum(["gemini", "openai", "anthropic", "xai", "dodi"]);
 
 const UpdateConfigSchema = z.object({
   voiceProvider: providerEnum,
@@ -67,6 +73,26 @@ export async function PATCH(request: Request): Promise<NextResponse> {
     return NextResponse.json(config);
   } catch (error) {
     return serverErrorResponse(error, "Failed to update config", "api/ai/config#PATCH", {
+      accountId,
+    });
+  }
+}
+
+/**
+ * Clear the whole model config. Used when dodi AI is disabled and no BYOK
+ * provider exists to fall back to — the account returns to the unconfigured
+ * state (same as before any provider was set up).
+ */
+export async function DELETE(request: Request): Promise<NextResponse> {
+  const auth = await requireAuth(request);
+  if (auth instanceof Response) return auth;
+  const { accountId, supabase } = auth;
+
+  try {
+    await clearModelConfig(supabase, accountId);
+    return NextResponse.json({ cleared: true });
+  } catch (error) {
+    return serverErrorResponse(error, "Failed to clear config", "api/ai/config#DELETE", {
       accountId,
     });
   }

@@ -17,7 +17,7 @@ import {
   clampMemoryDossier,
   parseMemoryOpsResponse,
 } from "@dodi/ai/memory-prompt";
-import { AI_PROVIDERS } from "@dodi/ai/providers";
+import { resolveExecution } from "@/lib/ai/resolve-dodi-ai";
 import { getActivePersona } from "@/lib/ai/voice-session";
 import {
   decryptContent,
@@ -27,7 +27,6 @@ import {
   type TranscriptMirrorEntry,
 } from "@dodi/vault";
 import { useKidStore } from "@/stores/kid-store";
-import { useProvidersStore } from "@/stores/providers-store";
 import { useVaultStore } from "@/stores/vault-store";
 import type { AccountModelConfig } from "@dodi/types/ai";
 import type { Memory, Transcript } from "@dodi/types/database";
@@ -98,18 +97,14 @@ export async function runClientMemoryUpdate(
     const config = (await cfgRes.json()) as AccountModelConfig | null;
     if (!config) return false;
 
-    const thinkingProvider = config.thinkingProvider;
-    if (!thinkingProvider) return false;
-    const thinkingDef = AI_PROVIDERS.find((p) => p.id === thinkingProvider);
-    const thinkingModel =
-      config.thinkingModel ??
-      thinkingDef?.models.find((m) => m.capabilities.includes("thinking"))?.id;
-    if (!thinkingModel) return false;
-
-    const providers = useProvidersStore.getState();
-    if (!providers.providers) await providers.load();
-    const apiKey = useProvidersStore.getState().getKey(thinkingProvider);
-    if (!apiKey) return false;
+    if (!config.thinkingProvider) return false;
+    const resolved = await resolveExecution({
+      provider: config.thinkingProvider,
+      category: "thinking",
+      model: config.thinkingModel,
+    });
+    if (!resolved) return false;
+    const { provider: thinkingProvider, model: thinkingModel, apiKey } = resolved;
 
     const memRes = await dodi.request(
       `/api/kids/${kidId}/memories?status=active&includeSources=1`,
