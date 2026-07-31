@@ -18,6 +18,7 @@ interface SwTestSurface {
   navigationFallbackKeys(pathname: string): string[];
   extractShellAssets(html: string): string[];
   rawImageFallbackPath(requestUrl: string): string | null;
+  systemPreviewPaths(rows: unknown): string[];
   KID_SECTIONS: string[];
   SYNTHETIC_DETAIL_PATHS: string[];
 }
@@ -157,5 +158,43 @@ describe("sw next/image raw fallback", () => {
     expect(
       sw.rawImageFallbackPath("https://app.test/_next/image?w=64&q=75"),
     ).toBeNull();
+  });
+});
+
+describe("sw system preview extraction", () => {
+  // Path-based preview images (system games) live in DATA, not page HTML, so
+  // shell warming can't see them — and a client-side prefetch only runs after
+  // the multi-MB games payload finishes, which a short online window cuts off
+  // (the reported broken game previews offline). The worker instead reads the
+  // cached rows from the offline IndexedDB during its warm cycle; the preview
+  // path on a system row is plaintext inside the otherwise-E2EE row.
+  it("extracts deduped path previews from cached game rows", () => {
+    expect(
+      sw.systemPreviewPaths([
+        { id: "g1", preview_image: "/images/game-previews/drawing.svg" },
+        { id: "g2", preview_image: "/images/game-previews/mandala.svg" },
+        { id: "g3", preview_image: "/images/game-previews/drawing.svg" },
+      ]),
+    ).toEqual([
+      "/images/game-previews/drawing.svg",
+      "/images/game-previews/mandala.svg",
+    ]);
+  });
+
+  it("skips encrypted, inline, absent and protocol-relative previews", () => {
+    expect(
+      sw.systemPreviewPaths([
+        { preview_image: "enc:v1:k:n:c" },
+        { preview_image: "data:image/png;base64,AAAA" },
+        { preview_image: null },
+        { preview_image: "//evil.test/x.png" },
+        {},
+      ]),
+    ).toEqual([]);
+  });
+
+  it("tolerates non-array garbage", () => {
+    expect(sw.systemPreviewPaths(null)).toEqual([]);
+    expect(sw.systemPreviewPaths("nope")).toEqual([]);
   });
 });

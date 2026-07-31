@@ -197,12 +197,83 @@ async function warmShellAssets(html) {
   }
 }
 
+// The web app's offline DB (see src/lib/offline/offline-cache.ts). The worker
+// only ever READS it — and only when it already exists: a bare open() would
+// otherwise create an empty store-less v1 database and permanently break the
+// app's own upgrade path.
+const OFFLINE_DB = "dodi-offline";
+const OFFLINE_KV_STORE = "kv";
+
+/** Path-based preview images from cached game rows (plaintext on system rows). */
+function systemPreviewPaths(rows) {
+  const paths = new Set();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const preview =
+      row && typeof row.preview_image === "string" ? row.preview_image : null;
+    if (preview && preview.startsWith("/") && !preview.startsWith("//")) {
+      paths.add(preview);
+    }
+  }
+  return [...paths];
+}
+
+/**
+ * Fill the static cache with preview images referenced by the cached game
+ * rows. Data-referenced assets appear in no shell HTML, and the app's own
+ * prefetch only runs after the multi-MB games payload lands — a short online
+ * window cuts it off. This runs every warm cycle and self-heals.
+ */
+async function warmSystemPreviewImages() {
+  try {
+    if (!indexedDB.databases) return;
+    const databases = await indexedDB.databases();
+    if (!databases.some((db) => db.name === OFFLINE_DB)) return;
+
+    const db = await new Promise((resolve, reject) => {
+      const req = indexedDB.open(OFFLINE_DB);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    try {
+      if (!db.objectStoreNames.contains(OFFLINE_KV_STORE)) return;
+      const rowLists = await new Promise((resolve, reject) => {
+        const req = db
+          .transaction(OFFLINE_KV_STORE, "readonly")
+          .objectStore(OFFLINE_KV_STORE)
+          .getAll(
+            IDBKeyRange.bound("games:", `games:${String.fromCharCode(0xffff)}`),
+          );
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+
+      const cache = await caches.open(STATIC_CACHE);
+      for (const rows of rowLists) {
+        for (const path of systemPreviewPaths(rows)) {
+          if (await cache.match(path, { ignoreVary: true })) continue;
+          try {
+            const response = await fetch(path);
+            if (response.ok) await cache.put(path, response);
+          } catch {
+            // Offline — the next warm cycle fills the gap.
+          }
+        }
+      }
+    } finally {
+      db.close();
+    }
+  } catch {
+    // Best-effort: preview warming must never break the warm cycle.
+  }
+}
+
 /**
  * Background-refresh every section shell + the two synthetic detail shells,
- * then pre-cache the static assets each references, so EVERY kid surface
- * works offline after a single online session — no tab visits required.
- * Failures are ignored — offline attempts are cheap; the throttle only stamps
- * after a success so coming back online refreshes promptly.
+ * then pre-cache the static assets each references (and the data-referenced
+ * preview images), so EVERY kid surface works offline after a single online
+ * session — no tab visits required. Failures are ignored — offline attempts
+ * are cheap; the throttle only stamps after a success so coming back online
+ * refreshes promptly.
  */
 async function maybeWarmKidShells() {
   if (Date.now() - lastShellWarmAt < SHELL_WARM_INTERVAL_MS) return;
@@ -222,12 +293,15 @@ async function maybeWarmKidShells() {
       // Offline — try again on a later navigation.
     }
   }
+  await warmSystemPreviewImages();
   if (warmed) lastShellWarmAt = Date.now();
 }
 
 async function handleStatic(request) {
   const cache = await caches.open(STATIC_CACHE);
-  const cached = await cache.match(request);
+  // ignoreVary: static assets are cached by URL; a CDN Vary header must not
+  // make a warmed asset unmatchable for a request with different headers.
+  const cached = await cache.match(request, { ignoreVary: true });
   if (cached) return cached;
   const response = await fetch(request);
   if (response.ok) await cache.put(request, response.clone());
@@ -254,7 +328,7 @@ function rawImageFallbackPath(requestUrl) {
  */
 async function handleNextImage(request) {
   const cache = await caches.open(STATIC_CACHE);
-  const cached = await cache.match(request);
+  const cached = await cache.match(request, { ignoreVary: true });
   if (cached) return cached;
   try {
     const response = await fetch(request);
@@ -263,7 +337,7 @@ async function handleNextImage(request) {
   } catch (error) {
     const rawPath = rawImageFallbackPath(request.url);
     if (rawPath) {
-      const raw = await cache.match(rawPath);
+      const raw = await cache.match(rawPath, { ignoreVary: true });
       if (raw) return raw;
     }
     throw error;
@@ -310,6 +384,7 @@ self.__TEST__ = {
   navigationFallbackKeys,
   extractShellAssets,
   rawImageFallbackPath,
+  systemPreviewPaths,
   KID_SECTIONS,
   SYNTHETIC_DETAIL_PATHS,
 };
