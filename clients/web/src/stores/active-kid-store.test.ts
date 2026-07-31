@@ -1,14 +1,36 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { useActiveKidStore } from "./active-kid-store";
+import {
+  readPersistedUnlockedKidIds,
+  useActiveKidStore,
+} from "./active-kid-store";
 import type { Kid } from "@dodi/types/database";
 
 function kid(id: string, extra: Partial<Kid> = {}): Kid {
   return { id, avatar_pin: null, language: "en", ...extra } as Kid;
 }
 
+function makeSessionStorage() {
+  let store: Record<string, string> = {};
+  return {
+    getItem: (k: string) => (k in store ? store[k] : null),
+    setItem: (k: string, v: string) => {
+      store[k] = String(v);
+    },
+    removeItem: (k: string) => {
+      delete store[k];
+    },
+    clear: () => {
+      store = {};
+    },
+  };
+}
+
 // A fresh store per test models a fresh page-load (no in-memory unlocks).
 beforeEach(() => {
+  (globalThis as { window?: unknown }).window = {
+    sessionStorage: makeSessionStorage(),
+  };
   useActiveKidStore.setState({ activeKidId: null, unlockedKidIds: new Set() });
 });
 
@@ -56,5 +78,28 @@ describe("unlock lifecycle", () => {
     const before = useActiveKidStore.getState().unlockedKidIds;
     useActiveKidStore.getState().markUnlocked("a");
     expect(useActiveKidStore.getState().unlockedKidIds).not.toBe(before);
+  });
+
+  // Offline tab switches are FULL-document navigations (the service worker
+  // serves cached shells; connectivity-aware links force location.assign), so
+  // in-memory-only unlocks would re-prompt the puzzle on every offline
+  // navigation. Unlocks must survive a reload within the same tab session —
+  // same tradeoff as the sessionStorage-backed parent gate (lib/parent-lock).
+  it("a solved puzzle survives a full-document navigation (offline tab switch)", () => {
+    useActiveKidStore.getState().markUnlocked("a");
+
+    // Simulate the next page-load: fresh in-memory state, seeded the same way
+    // the store seeds itself at module init.
+    useActiveKidStore.setState({
+      activeKidId: null,
+      unlockedKidIds: readPersistedUnlockedKidIds(),
+    });
+
+    expect(useActiveKidStore.getState().unlockedKidIds.has("a")).toBe(true);
+  });
+
+  it("setActive's unlock also survives a full-document navigation", () => {
+    useActiveKidStore.getState().setActive(kid("b"));
+    expect(readPersistedUnlockedKidIds().has("b")).toBe(true);
   });
 });
