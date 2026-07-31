@@ -17,6 +17,7 @@ interface SwTestSurface {
   detailShellKey(pathname: string): string | null;
   navigationFallbackKeys(pathname: string): string[];
   extractShellAssets(html: string): string[];
+  rawImageFallbackPath(requestUrl: string): string | null;
   KID_SECTIONS: string[];
   SYNTHETIC_DETAIL_PATHS: string[];
 }
@@ -122,5 +123,39 @@ describe("sw shell asset extraction", () => {
 
   it("returns nothing for asset-free HTML", () => {
     expect(sw.extractShellAssets("<html><body>offline</body></html>")).toEqual([]);
+  });
+});
+
+describe("sw next/image raw fallback", () => {
+  // Optimizer URLs vary by width/DPR/quality, so offline can miss a variant
+  // that was never requested online (e.g. the SLEEP avatar when only the
+  // active one was seen). The worker then serves the raw source image — an
+  // unoptimized PNG beats a broken image (the reported header-avatar and
+  // game-preview holes).
+  it("extracts the same-origin source path from an optimizer URL", () => {
+    expect(
+      sw.rawImageFallbackPath(
+        "https://app.test/_next/image?url=%2Fimages%2Fdodi-head-sleep.png&w=64&q=75",
+      ),
+    ).toBe("/images/dodi-head-sleep.png");
+  });
+
+  it("refuses external and protocol-relative sources", () => {
+    expect(
+      sw.rawImageFallbackPath(
+        "https://app.test/_next/image?url=https%3A%2F%2Fevil.test%2Fx.png&w=64&q=75",
+      ),
+    ).toBeNull();
+    expect(
+      sw.rawImageFallbackPath(
+        "https://app.test/_next/image?url=%2F%2Fevil.test%2Fx.png&w=64&q=75",
+      ),
+    ).toBeNull();
+  });
+
+  it("refuses optimizer URLs without a source", () => {
+    expect(
+      sw.rawImageFallbackPath("https://app.test/_next/image?w=64&q=75"),
+    ).toBeNull();
   });
 });

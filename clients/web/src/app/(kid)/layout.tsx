@@ -100,6 +100,15 @@ export default function KidLayout({
       void useGameStore
         .getState()
         .loadForKid(activeKidId)
+        .then((games) => {
+          // Path-based preview images (system games) only load when the
+          // library renders — fetch them so the SW caches them for offline.
+          // Family games carry inline data: URLs and need nothing.
+          for (const game of games) {
+            const preview = game.preview_image;
+            if (preview?.startsWith("/")) void fetch(preview).catch(() => {});
+          }
+        })
         .catch(() => {});
       void fetchSnapshots(activeKidId)
         .then((views) => prefetchSnapshotPayloadsForOffline(views))

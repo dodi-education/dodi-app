@@ -31,9 +31,14 @@ warming makes every tab offline-capable without ever having been visited, and
 re-syncs cached shells + chunks with the current build after a deploy — a
 stale shell executes stale JavaScript. The kid layout complements it with a
 data warmup: it prefetches the active kid's game rows and snapshot
-list/payloads once per session, so the E2EE data is cached without opening
-the tabs. Net contract: install → one online session on /home → everything
-kid-facing works offline. Registered in
+list/payloads once per session — plus each game's path-based preview image
+(system games; family games carry inline data: URLs) — so data-referenced
+assets are cached without opening the tabs. Images through `/_next/image` are
+cached per variant URL (width/DPR/quality); when a variant was never
+requested online, the worker falls back to the raw source image from the
+precache (`rawImageFallbackPath` — unoptimized beats broken; this covers the
+sleep-state dodi art that online sessions never render). Net contract:
+install → one online session on /home → everything kid-facing works offline. Registered in
 production or with `NEXT_PUBLIC_ENABLE_SW=1` (`register-service-worker.tsx`).
 Manifest/icons: `src/app/manifest.ts`, `public/icons/` (regenerate via
 `scripts/generate-pwa-icons.mjs`). **Bump `CACHE_VERSION` in sw.js when the

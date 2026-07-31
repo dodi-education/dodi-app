@@ -59,7 +59,6 @@ let lastShellWarmAt = 0;
 
 const STATIC_PREFIXES = [
   "/_next/static/",
-  "/_next/image",
   "/images/",
   "/icons/",
   "/sounds/",
@@ -228,12 +227,47 @@ async function maybeWarmKidShells() {
 
 async function handleStatic(request) {
   const cache = await caches.open(STATIC_CACHE);
-  // Full-URL match: /_next/image variants differ by query string on purpose.
   const cached = await cache.match(request);
   if (cached) return cached;
   const response = await fetch(request);
   if (response.ok) await cache.put(request, response.clone());
   return response;
+}
+
+/**
+ * The same-origin source path behind a /_next/image optimizer URL, or null.
+ * Protocol-relative ("//host/…") and absolute externals are refused.
+ */
+function rawImageFallbackPath(requestUrl) {
+  const source = new URL(requestUrl).searchParams.get("url");
+  if (!source || !source.startsWith("/") || source.startsWith("//")) {
+    return null;
+  }
+  return source;
+}
+
+/**
+ * /_next/image variants are cached full-URL (they differ by width/DPR/quality
+ * on purpose), so offline can miss a variant never requested online — e.g.
+ * the SLEEP avatar when only the active one was ever rendered. Fall back to
+ * the raw source image then: unoptimized beats broken.
+ */
+async function handleNextImage(request) {
+  const cache = await caches.open(STATIC_CACHE);
+  const cached = await cache.match(request);
+  if (cached) return cached;
+  try {
+    const response = await fetch(request);
+    if (response.ok) await cache.put(request, response.clone());
+    return response;
+  } catch (error) {
+    const rawPath = rawImageFallbackPath(request.url);
+    if (rawPath) {
+      const raw = await cache.match(rawPath);
+      if (raw) return raw;
+    }
+    throw error;
+  }
 }
 
 self.addEventListener("fetch", (event) => {
@@ -258,6 +292,11 @@ self.addEventListener("fetch", (event) => {
   // to a full-page load served from the pages cache instead.
   if (url.searchParams.has("_rsc")) return;
 
+  if (url.pathname.startsWith("/_next/image")) {
+    event.respondWith(handleNextImage(request));
+    return;
+  }
+
   if (STATIC_PREFIXES.some((prefix) => url.pathname.startsWith(prefix))) {
     event.respondWith(handleStatic(request));
   }
@@ -270,6 +309,7 @@ self.__TEST__ = {
   detailShellKey,
   navigationFallbackKeys,
   extractShellAssets,
+  rawImageFallbackPath,
   KID_SECTIONS,
   SYNTHETIC_DETAIL_PATHS,
 };
