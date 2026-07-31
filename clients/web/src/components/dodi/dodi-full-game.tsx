@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import Image from "next/image";
 import { useTranslations } from "next-intl";
 
-import { Icon } from "@/components/shared/icon";
+import { Icon, type IconName } from "@/components/shared/icon";
 import { ListeningPulse } from "@/components/kid/listening-pulse";
 import { useOnline } from "@/hooks/use-online";
 import {
@@ -16,7 +16,25 @@ import {
 import { cn } from "@/lib/utils";
 import { getDodiImage } from "@/lib/dodi-image";
 
-export function DodiFullGame() {
+/**
+ * A contextual quick action the panel offers for the current game (save a
+ * photo, ask for a hint, …). Selecting one either runs the action directly or
+ * sends a prepared message into the dodi chat — the play view decides.
+ */
+export interface GameAssistantAction {
+  id: string;
+  icon: IconName;
+  label: string;
+  onSelect: () => void;
+  disabled?: boolean;
+}
+
+export function DodiFullGame({
+  actions,
+}: {
+  /** Contextual quick actions for the current game, rendered as chips. */
+  actions?: GameAssistantAction[];
+}) {
   const t = useTranslations("games");
 
   const dodiState = useDodiSessionStore((s) => s.state);
@@ -57,7 +75,9 @@ export function DodiFullGame() {
             : t("tapToReconnect");
 
   return (
-    <section className="flex h-full flex-col rounded-[20px] bg-white p-[18px] shadow-[0_2px_10px_rgba(34,56,78,0.05)]">
+    // Content-sized (not stretched to the stage height): with the action chips
+    // in view the panel stays compact and the chat area scrolls within a cap.
+    <section className="flex flex-col rounded-[20px] bg-white p-[18px] shadow-[0_2px_10px_rgba(34,56,78,0.05)]">
       {/* Dodi avatar + status */}
       <div className="flex items-center gap-3 border-b border-border pb-3.5">
         <button
@@ -120,10 +140,28 @@ export function DodiFullGame() {
         </div>
       </div>
 
+      {/* Contextual quick actions for this game */}
+      {actions && actions.length > 0 && (
+        <div className="flex flex-wrap gap-2 border-b border-border py-3">
+          {actions.map((action) => (
+            <button
+              key={action.id}
+              type="button"
+              onClick={action.onSelect}
+              disabled={action.disabled}
+              className="inline-flex items-center gap-1.5 rounded-full bg-primary-soft px-3 py-1.5 text-[12.5px] font-extrabold text-primary transition-colors hover:bg-primary-soft-2 disabled:pointer-events-none disabled:opacity-50"
+            >
+              <Icon name={action.icon} size={14} stroke={2.5} />
+              {action.label}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Dodi's spoken text output */}
       <div
         ref={scrollRef}
-        className="flex flex-1 flex-col gap-2 overflow-y-auto pt-3.5"
+        className="flex max-h-[280px] min-h-[120px] flex-1 flex-col gap-2 overflow-y-auto pt-3.5"
       >
         {chatMessages.length === 0 ? (
           <p className="m-auto px-3 text-center text-[13px] font-bold leading-relaxed text-faint">

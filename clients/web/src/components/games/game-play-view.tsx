@@ -11,6 +11,8 @@ import { GameStage } from "@/components/games/game-stage";
 import { GameViewShell } from "@/components/games/game-view-shell";
 import { Icon } from "@/components/shared/icon";
 import { KidButton } from "@/components/kid/kid-button";
+import type { GameAssistantAction } from "@/components/dodi/dodi-full-game";
+import { useOnline } from "@/hooks/use-online";
 import {
   finalizePlay,
   logGameEvent,
@@ -137,6 +139,7 @@ export function GamePlayView({
   // autosaves without depending on the late-defined debounce callback.
   const scheduleAutosaveRef = useRef<() => void>(() => {});
 
+  const chatSubmitting = useDodiSessionStore((s) => s.chatSubmitting);
   const updateGameState = useDodiSessionStore((s) => s.updateGameState);
   const setOnRunCommands = useDodiSessionStore((s) => s.setOnRunCommands);
   const setOnRequestSnapshot = useDodiSessionStore((s) => s.setOnRequestSnapshot);
@@ -714,6 +717,72 @@ export function GamePlayView({
     [kidId, title, inlineContext, captureSnapshotContent, triggerSnapshotFlash, beginAiActivity, endAiActivity, t],
   );
 
+  // ── Title-bar photo button + Dodi panel quick actions ─────────────────────
+  const isOnline = useOnline();
+  const [savingSnapshot, setSavingSnapshot] = useState(false);
+
+  // The button variant of the `save_snapshot` voice command. Safe to call
+  // without a pending voice tool call: resolveClientCommand no-ops then.
+  const handlePhotoButton = useCallback(async (): Promise<void> => {
+    if (savingSnapshot) return;
+    setSavingSnapshot(true);
+    try {
+      await handleSaveSnapshot({ type: "save_snapshot" });
+    } finally {
+      setSavingSnapshot(false);
+    }
+  }, [savingSnapshot, handleSaveSnapshot]);
+
+  // Contextual chips in the Dodi panel. The photo chip runs the capture
+  // directly; the rest go through the chat as the kid's own words, so dodi
+  // answers (and e.g. asks WHICH friend before emitting share_snapshot) —
+  // calling handleShareSnapshot directly would fail silently without a
+  // friend_name and a pending voice call to report through.
+  const assistantActions = useMemo<GameAssistantAction[]>(() => {
+    if (!isOnline || isSnapshotSession) return [];
+    const ask = (prompt: string) => () => {
+      void useDodiSessionStore.getState().sendTextMessage(prompt, gameId);
+    };
+    return [
+      {
+        id: "photo",
+        icon: "camera",
+        label: t("chipSavePhoto"),
+        disabled: savingSnapshot,
+        onSelect: () => void handlePhotoButton(),
+      },
+      {
+        id: "share",
+        icon: "share",
+        label: t("chipShareFriend"),
+        disabled: chatSubmitting,
+        onSelect: ask(t("chipSharePrompt")),
+      },
+      {
+        id: "explain",
+        icon: "info",
+        label: t("chipExplain"),
+        disabled: chatSubmitting,
+        onSelect: ask(t("chipExplainPrompt")),
+      },
+      {
+        id: "hint",
+        icon: "sparkles",
+        label: t("chipHint"),
+        disabled: chatSubmitting,
+        onSelect: ask(t("chipHintPrompt")),
+      },
+    ];
+  }, [
+    isOnline,
+    isSnapshotSession,
+    gameId,
+    savingSnapshot,
+    chatSubmitting,
+    handlePhotoButton,
+    t,
+  ]);
+
   const runCommands = useCallback((commands: GameCommand[]): void => {
     gameDebug("playview", `runCommands called with ${commands.length} commands`);
 
@@ -812,19 +881,33 @@ export function GamePlayView({
       backLabel={snapshot ? tSnapshots("title") : t("title")}
       title={title}
       description={description}
+      assistantActions={assistantActions}
       action={
         isSnapshotSession ? undefined : (
-          <KidButton
-            variant="icon"
-            size="none"
-            onClick={handleResetGame}
-            disabled={!autosave.checked}
-            title={t("resetGame")}
-            aria-label={t("resetGame")}
-            className="rounded-[12px] border border-danger/30 bg-white text-danger shadow-sm hover:bg-danger-soft"
-          >
-            <Icon name="delete" size={20} stroke={2} />
-          </KidButton>
+          <div className="flex shrink-0 items-center gap-2.5">
+            <KidButton
+              variant="icon"
+              size="none"
+              onClick={() => void handlePhotoButton()}
+              disabled={savingSnapshot || !autosave.checked}
+              title={t("chipSavePhoto")}
+              aria-label={t("chipSavePhoto")}
+              className="rounded-[12px] border border-border-strong bg-white text-ink-2 shadow-sm hover:bg-primary-soft hover:text-primary"
+            >
+              <Icon name="camera" size={20} stroke={2} />
+            </KidButton>
+            <KidButton
+              variant="icon"
+              size="none"
+              onClick={handleResetGame}
+              disabled={!autosave.checked}
+              title={t("resetGame")}
+              aria-label={t("resetGame")}
+              className="rounded-[12px] border border-danger/30 bg-white text-danger shadow-sm hover:bg-danger-soft"
+            >
+              <Icon name="delete" size={20} stroke={2} />
+            </KidButton>
+          </div>
         )
       }
     >

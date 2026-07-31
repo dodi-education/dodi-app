@@ -3,7 +3,10 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-import { DodiFullGame } from "@/components/dodi/dodi-full-game";
+import {
+  DodiFullGame,
+  type GameAssistantAction,
+} from "@/components/dodi/dodi-full-game";
 import { Icon } from "@/components/shared/icon";
 import { KidButton } from "@/components/kid/kid-button";
 import { STAGE, stageWidthVars } from "@/lib/games/stage";
@@ -19,6 +22,14 @@ interface GameViewShellProps {
   description?: string;
   /** Optional action rendered at the right edge of the title bar (e.g. Remix). */
   action?: ReactNode;
+  /** Contextual quick actions shown as chips inside the Dodi panel. */
+  assistantActions?: GameAssistantAction[];
+  /**
+   * Replaces the Dodi panel in the left column (lg+). The public game page
+   * puts its sign-in/popular cards here so both views share one layout and
+   * the title bar, action buttons and canvas all align identically.
+   */
+  sidebar?: ReactNode;
   /** Game content shown beside the Dodi panel (sandbox, remix controls, …). */
   children: ReactNode;
 }
@@ -40,6 +51,8 @@ export function GameViewShell({
   title,
   description,
   action,
+  assistantActions,
+  sidebar,
   children,
 }: GameViewShellProps) {
   return (
@@ -75,7 +88,7 @@ export function GameViewShell({
 
       <div className="grid gap-4 lg:grid-cols-[300px_1fr]">
         <div className="hidden lg:block">
-          <DodiFullGame />
+          {sidebar ?? <DodiFullGame actions={assistantActions} />}
         </div>
         <div className="min-w-0">{children}</div>
       </div>

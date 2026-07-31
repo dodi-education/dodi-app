@@ -72,9 +72,25 @@ export interface DiscoverGameSummary {
   sharing: GameSharingState;
 }
 
+/**
+ * The anonymous projection of a published game: a DiscoverGameSummary minus
+ * the caller-specific `sharing` state and the cross-family `plays`/`copies`
+ * stats. Served by the public (no-auth) /api/public/games endpoints.
+ */
+export type PublicGameSummary = Omit<
+  DiscoverGameSummary,
+  "sharing" | "plays" | "copies"
+>;
+
+/** Sitemap feed row for one LIVE published game (public /api/public/games). */
+export interface PublishedSitemapEntry {
+  id: string;
+  published_at: string;
+  updated_at: string;
+}
+
 /** Full plaintext content of a published game — the copy (remix) source. */
-export interface DiscoverGameDetail
-  extends Omit<DiscoverGameSummary, "sharing" | "plays" | "copies"> {
+export interface DiscoverGameDetail extends PublicGameSummary {
   code_bundle: string;
   markdown: string;
   learning_goal: string;

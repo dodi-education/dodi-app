@@ -75,6 +75,12 @@
   --color-warning-soft: #FBF3E2;
   --shadow-card: 0 1px 2px rgba(34, 56, 78, 0.04);
 
+  /* Public-page footer (ported from the landing site's dark footer) */
+  --color-ink-deep: #20374D;
+  --color-mist: #AFC2D8;
+  --color-mist-2: #8FA3BC;
+  --color-mist-3: #7E92AC;
+
   /* Dodi brand scale — re-pointed to the new palette */
   --color-dodi-50: #F5F8FB;
   --color-dodi-100: #EAF1FC;

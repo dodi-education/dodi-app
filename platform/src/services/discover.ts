@@ -24,7 +24,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Game, Json } from "@dodi/types/database";
 import type {
   DiscoverGameDetail,
-  DiscoverGameSummary,
+  PublicGameSummary,
+  PublishedSitemapEntry,
 } from "@dodi/types/games";
 import type { ProgressKind } from "@dodi/types/success";
 
@@ -52,11 +53,9 @@ export const DISCOVER_MAX_PAGE_SIZE = 50;
 /**
  * Summary DTO minus the fields the route attaches per request: the caller's own
  * `sharing` state and the cross-family `plays`/`copies` counts (see getGameStats).
+ * Identical to the anonymous public projection, so the public routes serve it as-is.
  */
-export type DiscoverGameSummaryRow = Omit<
-  DiscoverGameSummary,
-  "sharing" | "plays" | "copies"
->;
+export type DiscoverGameSummaryRow = PublicGameSummary;
 
 function toSummary(row: Record<string, unknown> & BylineRow): DiscoverGameSummaryRow {
   return {
@@ -101,6 +100,74 @@ export async function listPublishedGames(
   return ((data ?? []) as unknown as (Record<string, unknown> & BylineRow)[]).map(
     toSummary,
   );
+}
+
+/**
+ * Id-pool cap for random sampling. The catalog is tiny today (system games +
+ * approved publications); if it ever outgrows this, swap the in-process sample
+ * for an ORDER BY random() RPC instead of raising the cap.
+ */
+const RANDOM_ID_POOL_LIMIT = 1000;
+
+/**
+ * Up to `limit` RANDOM published games — the logged-out game page's "popular
+ * games" rail. Samples in process: fetch the published ids, partial
+ * Fisher-Yates with the injectable `rng`, then one summary fetch by id.
+ */
+export async function listRandomPublishedGameSummaries(
+  service: Client,
+  limit: number,
+  rng: () => number = Math.random,
+): Promise<DiscoverGameSummaryRow[]> {
+  const { data, error } = await service
+    .from("games")
+    .select("id")
+    .not("published_at", "is", null)
+    .limit(RANDOM_ID_POOL_LIMIT);
+  if (error) throw error;
+  const ids = ((data ?? []) as { id: string }[]).map((row) => row.id);
+
+  // Partial Fisher-Yates: after i steps the first i slots are the sample.
+  const count = Math.min(Math.max(limit, 0), ids.length);
+  for (let i = 0; i < count; i++) {
+    const j = i + Math.floor(rng() * (ids.length - i));
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+  }
+  const sampled = ids.slice(0, count);
+  if (sampled.length === 0) return [];
+
+  const { data: rows, error: rowsError } = await service
+    .from("games")
+    .select(SUMMARY_COLUMNS)
+    .in("id", sampled);
+  if (rowsError) throw rowsError;
+  const byId = new Map(
+    ((rows ?? []) as unknown as (Record<string, unknown> & BylineRow)[]).map(
+      (row) => [row.id as string, toSummary(row)] as const,
+    ),
+  );
+  return sampled.flatMap((id) => byId.get(id) ?? []);
+}
+
+/** Sitemap cap — well above any near-term catalog size. */
+const SITEMAP_LIMIT = 5000;
+
+/** Ids + timestamps of every LIVE published game, newest first — the sitemap feed. */
+export async function listPublishedSitemapEntries(
+  service: Client,
+): Promise<PublishedSitemapEntry[]> {
+  const { data, error } = await service
+    .from("games")
+    .select("id, published_at, updated_at")
+    .not("published_at", "is", null)
+    .order("published_at", { ascending: false })
+    .limit(SITEMAP_LIMIT);
+  if (error) throw error;
+  return ((data ?? []) as unknown as Record<string, unknown>[]).map((row) => ({
+    id: row.id as string,
+    published_at: row.published_at as string,
+    updated_at: row.updated_at as string,
+  }));
 }
 
 /** Aggregate play & copy counts for one published game. */

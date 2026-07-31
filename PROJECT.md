@@ -396,12 +396,11 @@ The MVP focuses on delivering a functional, delightful core experience:
 - [x] Drawing game: Let the kid save drawings and share them with friends
 
 ### Phase 5: Polish & PWA
-- [ ] PWA manifest + service worker
-- [ ] Offline game caching
+- [x] PWA manifest + service worker
+- [x] Offline game caching
 - [ ] Dodi appearance customization
 - [ ] Onboarding tutorial
 - [ ] Performance optimization
-- [ ] Accessibility audit
 - [ ] Before initially deploying the DB to supabase, merge all migrations into a single schema to avoid unnecessary migration steps.
 
 ---
@@ -442,18 +441,6 @@ parent-defined goal — and, in future, generate challenges like "Solve 3 math g
   `countSucceededPlays({ profileId, subject: 'math', sinceDays: 1 })` (`src/lib/services/game-plays.ts`).
 
 ## TODO
-
-- Allow offline game play
-- Translate landing routes (e.g. /ueber-uns, /kostenlose-lernspiele-fuer-kinder)
-- SEO optimized game lists for landing sub-pages (static generation) with links to app
-- Soft registration locks (Snapshot, Remix, etc.)
-
-- Create public page for published games
- - Allow to embedd games.
- - Soft registration locks (Snapshot, Remix, etc.)
- - SEO optimized game lists for landing sub-pages (static generation) with links to app
-
-- Optimize game-state update as every push costs 0.004 USD with grok voice
 
 - Make game code creation progress more transparent (output rough agent loop actions in chat)
 - Implement Venice.ai

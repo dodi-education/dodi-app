@@ -8,6 +8,8 @@ import {
   getPublishedGameDetail,
   getPublishedGamesByIds,
   listPublishedGames,
+  listPublishedSitemapEntries,
+  listRandomPublishedGameSummaries,
 } from "./discover";
 
 /**
@@ -115,6 +117,99 @@ describe("listPublishedGames", () => {
       expect(row).not.toHaveProperty("published_by_account_id");
       expect(row).not.toHaveProperty("agent_transcript_enc");
       expect(row).not.toHaveProperty("code_bundle");
+    }
+  });
+});
+
+describe("listRandomPublishedGameSummaries", () => {
+  /** rng stub yielding a fixed sequence (repeating the last value). */
+  function sequenceRng(values: number[]): () => number {
+    let i = 0;
+    return () => values[Math.min(i++, values.length - 1)];
+  }
+
+  it("samples only LIVE games, honoring the limit", async () => {
+    const rows = await listRandomPublishedGameSummaries(db.client, 1);
+    expect(rows).toHaveLength(1);
+    expect(["pub-1", "pub-2"]).toContain(rows[0].id);
+  });
+
+  it("is deterministic under an injected rng", async () => {
+    // Pool is [pub-1, pub-2]; rng 0.99 swaps the last candidate into slot 0.
+    const rows = await listRandomPublishedGameSummaries(
+      db.client,
+      2,
+      sequenceRng([0.99, 0]),
+    );
+    expect(rows.map((r) => r.id)).toEqual(["pub-2", "pub-1"]);
+  });
+
+  it("returns the whole catalog when limit exceeds it", async () => {
+    const rows = await listRandomPublishedGameSummaries(db.client, 10);
+    expect(rows.map((r) => r.id).sort()).toEqual(["pub-1", "pub-2"]);
+  });
+
+  it("returns [] for an empty catalog", async () => {
+    db.tables.games.length = 0;
+    await expect(
+      listRandomPublishedGameSummaries(db.client, 10),
+    ).resolves.toEqual([]);
+  });
+
+  it("never exposes publisher ids or content in the summary shape", async () => {
+    const rows = await listRandomPublishedGameSummaries(db.client, 10);
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows as unknown as Row[]) {
+      expect(row).not.toHaveProperty("account_id");
+      expect(row).not.toHaveProperty("kid_id");
+      expect(row).not.toHaveProperty("published_by_account_id");
+      expect(row).not.toHaveProperty("agent_transcript_enc");
+      expect(row).not.toHaveProperty("code_bundle");
+    }
+  });
+
+  it("maps the byline for parent publications and system rows", async () => {
+    db.tables.games.push(
+      publishedRow({
+        id: "sys-1",
+        is_system: true,
+        system_key: "drawing-basic",
+        account_id: null,
+        kid_id: null,
+        published_by_account_id: null,
+        publication_requested_at: null,
+        approved_by: "system",
+        published_at: "2026-07-11T10:00:00Z",
+        author: null,
+      }),
+    );
+    const rows = await listRandomPublishedGameSummaries(db.client, 10);
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    expect(byId.get("pub-1")?.publication_handle).toBe("fun_games");
+    expect(byId.get("sys-1")?.publication_handle).toBeNull();
+    expect(byId.get("sys-1")?.is_system).toBe(true);
+  });
+});
+
+describe("listPublishedSitemapEntries", () => {
+  it("returns id + timestamps of LIVE games only, newest first", async () => {
+    const entries = await listPublishedSitemapEntries(db.client);
+    expect(entries.map((e) => e.id)).toEqual(["pub-2", "pub-1"]);
+    expect(entries[0]).toEqual({
+      id: "pub-2",
+      published_at: "2026-07-10T10:00:00Z",
+      updated_at: "2026-07-02T10:00:00Z",
+    });
+  });
+
+  it("carries nothing beyond the three sitemap fields", async () => {
+    const entries = await listPublishedSitemapEntries(db.client);
+    for (const entry of entries as unknown as Row[]) {
+      expect(Object.keys(entry).sort()).toEqual([
+        "id",
+        "published_at",
+        "updated_at",
+      ]);
     }
   });
 });

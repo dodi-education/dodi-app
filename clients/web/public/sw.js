@@ -28,7 +28,7 @@
  * drops every cache not in EXPECTED_CACHES.
  */
 
-const CACHE_VERSION = "v1";
+const CACHE_VERSION = "v2";
 const STATIC_CACHE = `dodi-static-${CACHE_VERSION}`;
 const PAGES_CACHE = `dodi-pages-${CACHE_VERSION}`;
 const EXPECTED_CACHES = [STATIC_CACHE, PAGES_CACHE];
@@ -132,6 +132,10 @@ function navigationFallbackKeys(pathname) {
 
 function isCacheableShell(response) {
   if (!response || !response.ok || response.redirected) return false;
+  // /games/<id> is publicly reachable: an ANONYMOUS render (marked by
+  // middleware) is the marketing page, not the kid shell — caching it would
+  // poison the offline detail shell for the signed-in kid (and vice versa).
+  if (response.headers.get("x-dodi-anon") === "1") return false;
   const type = response.headers.get("content-type") ?? "";
   return type.includes("text/html");
 }
@@ -355,8 +359,16 @@ self.addEventListener("fetch", (event) => {
     const responsePromise = handleNavigation(request);
     event.respondWith(responsePromise);
     if (kidSection(url.pathname)) {
+      // Skip warming for anonymous visitors (public game page): every warm
+      // fetch would just bounce off the auth redirect and cache nothing.
       event.waitUntil(
-        responsePromise.then(maybeWarmKidShells).catch(() => {}),
+        responsePromise
+          .then((response) =>
+            response && response.headers.get("x-dodi-anon") !== "1"
+              ? maybeWarmKidShells()
+              : undefined,
+          )
+          .catch(() => {}),
       );
     }
     return;

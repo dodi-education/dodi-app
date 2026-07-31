@@ -111,13 +111,22 @@ export async function updateSession(
 
   // Public routes that don't require auth
   const publicRoutes = ["/", "/login", "/register", "/reset-password"];
+  // A single game page is public — the SEO inbound channel. Only published
+  // games render there (the server page redirects everything else to /login);
+  // the /games library and all other kid routes stay gated.
+  const isPublicGamePage = /^\/games\/[^/]+$/.test(pathname);
   const isPublicRoute =
-    publicRoutes.includes(pathname) || pathname.startsWith("/auth/");
+    publicRoutes.includes(pathname) ||
+    pathname.startsWith("/auth/") ||
+    isPublicGamePage;
 
-  // Redirect unauthenticated users from protected routes to login
+  // Redirect unauthenticated users from protected routes to login, carrying
+  // the target so a successful login can return to it (deep links).
   if (!user && !isPublicRoute) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
+    url.search = "";
+    url.searchParams.set("next", pathname);
     return NextResponse.redirect(url);
   }
 
@@ -165,5 +174,21 @@ export async function updateSession(
     return NextResponse.redirect(url);
   }
 
-  return supabaseResponse;
+  // Forward the resolved auth state to server components — the (kid) layout
+  // and the game page branch between the kid and the public experience on it.
+  // Rebuilt AFTER getUser() so the forwarded request carries any refreshed
+  // auth cookies too; the refreshed Set-Cookies are copied from the response
+  // Supabase populated above (same nuance as primeRedirect).
+  const finalHeaders = forwardedHeaders();
+  finalHeaders.set("x-dodi-authed", user ? "1" : "0");
+  const response = NextResponse.next({ request: { headers: finalHeaders } });
+  supabaseResponse.cookies
+    .getAll()
+    .forEach((cookie) => response.cookies.set(cookie));
+  if (!user) {
+    // Response marker for the service worker: an anonymous render must never
+    // be cached as the offline kid shell (see public/sw.js).
+    response.headers.set("x-dodi-anon", "1");
+  }
+  return response;
 }
