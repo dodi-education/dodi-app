@@ -17,7 +17,15 @@ detail pages derive their entity id from `location.pathname` (not the hydrated
 route params) and render nothing until data resolves, so ONE cached shell
 serves every `/games/<id>` offline. RSC flight fetches (`?_rsc=`) are never
 intercepted — offline navigations become full-page loads (connectivity-aware
-links in the kid nav/cards force this; `OfflineAwareLink`). Registered in
+links in the kid nav/cards force this; `OfflineAwareLink`).
+Two rules keep shells correct (`sw-routing.test.ts` pins them): fallbacks
+NEVER cross sections (a Next shell hydrates the route baked into its flight
+payload — serving `/home` for `/snapshots` would render Home at the wrong
+URL), and after each kid navigation the worker background-refreshes all four
+section shells plus one representative detail URL per section (throttled,
+10 min). The warming both makes every tab offline-capable without having been
+visited and re-syncs cached shells with the current build after a deploy — a
+stale shell executes stale JavaScript. Registered in
 production or with `NEXT_PUBLIC_ENABLE_SW=1` (`register-service-worker.tsx`).
 Manifest/icons: `src/app/manifest.ts`, `public/icons/` (regenerate via
 `scripts/generate-pwa-icons.mjs`). **Bump `CACHE_VERSION` in sw.js when the

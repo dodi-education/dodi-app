@@ -7,6 +7,15 @@
  *    are additionally stored under a synthetic "__detail-shell" key: the detail
  *    pages derive their entity id from location.pathname on the client, so one
  *    cached shell serves every /games/<id> (resp. /snapshots/<id>) URL offline.
+ *  - After a kid navigation, ALL four section shells (plus one representative
+ *    detail URL per section) are re-fetched in the background (throttled).
+ *    This keeps every tab available offline even if never visited, and keeps
+ *    cached shells running the CURRENT build after a deploy — a stale shell
+ *    executes stale JavaScript.
+ *  - Offline fallbacks never cross sections: a Next.js shell hydrates the
+ *    route baked into its flight payload, so serving the /home shell for
+ *    /snapshots would render the Home screen at the /snapshots URL. A missing
+ *    shell gets the branded offline page instead.
  *  - Hashed build assets (/_next/static), the Next image optimizer
  *    (/_next/image), and public assets are cache-first (content-hashed or
  *    immutable-in-practice).
@@ -39,6 +48,10 @@ const PRECACHE_URLS = [
 const KID_SECTIONS = ["/home", "/games", "/snapshots", "/friends"];
 const DETAIL_SHELL_SECTIONS = ["/games", "/snapshots"];
 
+// Background shell refresh at most this often (per worker instance).
+const SHELL_WARM_INTERVAL_MS = 10 * 60 * 1000;
+let lastShellWarmAt = 0;
+
 const STATIC_PREFIXES = [
   "/_next/static/",
   "/_next/image",
@@ -51,8 +64,8 @@ const STATIC_PREFIXES = [
 const OFFLINE_FALLBACK_HTML = `<!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>dodi</title>
-<style>body{font-family:system-ui,sans-serif;background:#F5F8FB;color:#1c314d;display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0;text-align:center}p{font-size:1.1rem;font-weight:600}</style>
-</head><body><div><p>No internet connection.</p><p lang="de">Keine Internetverbindung.</p></div></body></html>`;
+<style>body{font-family:system-ui,sans-serif;background:#F5F8FB;color:#1c314d;display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0;text-align:center}p{font-size:1.1rem;font-weight:600}a{display:inline-block;margin-top:1rem;padding:.6rem 1.4rem;border-radius:999px;background:#fff;color:#1c314d;font-weight:700;text-decoration:none;box-shadow:0 2px 10px rgba(34,56,78,.08)}</style>
+</head><body><div><p>No internet connection.</p><p lang="de">Keine Internetverbindung.</p><a href="/home">dodi Home</a></div></body></html>`;
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -97,49 +110,91 @@ function detailShellKey(pathname) {
   return `${section}/__detail-shell`;
 }
 
+/**
+ * Ordered cache keys to try when a navigation can't reach the network.
+ * NEVER crosses sections (see module header); non-kid routes get none.
+ */
+function navigationFallbackKeys(pathname) {
+  if (pathname === "/") return ["/home"]; // mirrors the online root redirect
+  const section = kidSection(pathname);
+  if (!section) return [];
+  const keys = [pathname];
+  const shellKey = detailShellKey(pathname);
+  if (shellKey) keys.push(shellKey);
+  // A detail URL without its shell still shows its own section's library.
+  if (pathname !== section) keys.push(section);
+  return keys;
+}
+
 function isCacheableShell(response) {
   if (!response || !response.ok || response.redirected) return false;
   const type = response.headers.get("content-type") ?? "";
   return type.includes("text/html");
 }
 
+async function cacheShell(cache, pathname, response) {
+  // Keyed by pathname (not full URL) so query strings don't fragment the cache.
+  await cache.put(pathname, response.clone());
+  const shellKey = detailShellKey(pathname);
+  if (shellKey) await cache.put(shellKey, response.clone());
+}
+
 async function handleNavigation(request) {
-  const url = new URL(request.url);
-  const pathname = url.pathname;
-  const section = kidSection(pathname);
+  const pathname = new URL(request.url).pathname;
 
   try {
     const response = await fetch(request);
-    if (section && isCacheableShell(response)) {
-      const cache = await caches.open(PAGES_CACHE);
-      const shellKey = detailShellKey(pathname);
-      // Keyed by pathname (not full URL) so query strings don't fragment the cache.
-      await cache.put(pathname, response.clone());
-      if (shellKey) await cache.put(shellKey, response.clone());
+    if (kidSection(pathname) && isCacheableShell(response)) {
+      await cacheShell(await caches.open(PAGES_CACHE), pathname, response);
     }
     return response;
   } catch {
     const cache = await caches.open(PAGES_CACHE);
-    // Root redirects to /home online; mirror that offline.
-    const effectiveSection = section ?? (pathname === "/" ? "/home" : null);
-    if (effectiveSection) {
-      const shellKey = detailShellKey(pathname);
-      const fallbacks = [
-        pathname,
-        ...(shellKey ? [shellKey] : []),
-        effectiveSection,
-        "/home",
-      ];
-      for (const key of fallbacks) {
-        const cached = await cache.match(key);
-        if (cached) return cached;
-      }
+    for (const key of navigationFallbackKeys(pathname)) {
+      const cached = await cache.match(key);
+      if (cached) return cached;
     }
     return new Response(OFFLINE_FALLBACK_HTML, {
       status: 503,
       headers: { "content-type": "text/html; charset=utf-8" },
     });
   }
+}
+
+/**
+ * Background-refresh every section shell + one representative cached detail
+ * URL per section (any one keeps the universal "__detail-shell" current).
+ * Failures are ignored — offline attempts are cheap; the throttle only stamps
+ * after a success so coming back online refreshes promptly.
+ */
+async function maybeWarmKidShells() {
+  if (Date.now() - lastShellWarmAt < SHELL_WARM_INTERVAL_MS) return;
+  const cache = await caches.open(PAGES_CACHE);
+
+  const targets = new Set(KID_SECTIONS);
+  const seenShellKeys = new Set();
+  for (const request of await cache.keys()) {
+    const pathname = new URL(request.url).pathname;
+    const shellKey = detailShellKey(pathname);
+    if (shellKey && !seenShellKeys.has(shellKey)) {
+      seenShellKeys.add(shellKey);
+      targets.add(pathname);
+    }
+  }
+
+  let warmed = false;
+  for (const pathname of targets) {
+    try {
+      const response = await fetch(pathname);
+      if (isCacheableShell(response)) {
+        await cacheShell(cache, pathname, response);
+        warmed = true;
+      }
+    } catch {
+      // Offline — try again on a later navigation.
+    }
+  }
+  if (warmed) lastShellWarmAt = Date.now();
 }
 
 async function handleStatic(request) {
@@ -160,7 +215,13 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin) return;
 
   if (request.mode === "navigate") {
-    event.respondWith(handleNavigation(request));
+    const responsePromise = handleNavigation(request);
+    event.respondWith(responsePromise);
+    if (kidSection(url.pathname)) {
+      event.waitUntil(
+        responsePromise.then(maybeWarmKidShells).catch(() => {}),
+      );
+    }
     return;
   }
 
@@ -172,3 +233,12 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(handleStatic(request));
   }
 });
+
+// Test-only surface (consumed by src/lib/offline/sw-routing.test.ts); inert at
+// runtime.
+self.__TEST__ = {
+  kidSection,
+  detailShellKey,
+  navigationFallbackKeys,
+  KID_SECTIONS,
+};
