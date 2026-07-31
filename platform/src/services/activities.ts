@@ -57,7 +57,9 @@ export async function listActivities(
     .from("activities")
     .select("*")
     .eq("account_id", accountId)
-    .order("created_at", { ascending: false })
+    // occurred_at, not created_at: offline-synced events land late but must
+    // appear at their gameplay moment.
+    .order("occurred_at", { ascending: false })
     .range(offset, offset + limit - 1);
 
   if (kidId) {

@@ -1,6 +1,5 @@
 "use client";
 
-import { dodi } from "@/lib/api";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 
@@ -12,6 +11,12 @@ import { GameStage } from "@/components/games/game-stage";
 import { GameViewShell } from "@/components/games/game-view-shell";
 import { Icon } from "@/components/shared/icon";
 import { KidButton } from "@/components/kid/kid-button";
+import {
+  finalizePlay,
+  logGameEvent,
+  recordPlayPatch,
+  startPlay as startTrackedPlay,
+} from "@/lib/games/play-sync";
 import { STAGE } from "@/lib/games/stage";
 import { gameDebug, gameDebugWarn } from "@dodi/games/debug";
 import {
@@ -150,23 +155,9 @@ export function GamePlayView({
   const latestMetricsRef = useRef<MetricsSummary>({});
   const latestProgressRef = useRef(0);
 
-  const patchPlay = useCallback(
-    (body: Record<string, unknown>, keepalive = false): void => {
-      const id = playIdRef.current;
-      if (!id) return;
-      try {
-        void dodi.request(`/api/games/${gameId}/plays/${id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-          keepalive,
-        });
-      } catch {
-        // Persistence must never block gameplay.
-      }
-    },
-    [gameId],
-  );
+  // Play tracking goes through the play-sync outbox: recording is synchronous
+  // (localStorage), the upload is debounced/queued and survives offline.
+  // Persistence must never block gameplay.
 
   // Merge in the host-observed "asking Dodi" count, evaluate, and record success.
   const evaluateAndRecord = useCallback(
@@ -185,10 +176,16 @@ export function GamePlayView({
           summary: goal.successDefinition,
           metrics: merged,
         });
-        patchPlay({ succeeded: true, finalProgress: progress, metrics: merged });
+        if (playIdRef.current) {
+          recordPlayPatch(playIdRef.current, {
+            succeeded: true,
+            finalProgress: progress,
+            metrics: merged,
+          });
+        }
       }
     },
-    [goal, patchPlay],
+    [goal],
   );
 
   const ingestDodiState = useCallback(
@@ -237,48 +234,28 @@ export function GamePlayView({
     latestProgressRef.current = 0;
     if (isSnapshotSession) return;
 
-    let cancelled = false;
-    void (async () => {
-      try {
-        const res = await dodi.request(`/api/games/${gameId}/plays`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ kidId }),
-        });
-        if (!res.ok) return;
-        const data = (await res.json()) as { playId?: string };
-        if (!cancelled && data.playId) playIdRef.current = data.playId;
-      } catch {
-        // Non-critical.
-      }
-    })();
+    // Synchronous: the id is client-generated, so tracking works offline and
+    // later patches can never no-op on a failed start.
+    playIdRef.current = startTrackedPlay({ gameId, kidId });
 
     return () => {
-      cancelled = true;
+      const playId = playIdRef.current;
+      playIdRef.current = null;
+      if (!playId) return;
       const dodiTurns = useDodiSessionStore.getState().gameAssistanceCount;
       const merged = mergeMetrics(latestMetricsRef.current, { dodiTurns });
-      patchPlay(
-        { finalProgress: latestProgressRef.current, metrics: merged, ended: true },
-        true,
-      );
+      // The synchronous outbox write replaces the old `keepalive` fetch: on a
+      // page teardown the record persists and syncs on the next visit.
+      finalizePlay(playId, {
+        finalProgress: latestProgressRef.current,
+        metrics: merged,
+      });
     };
-  }, [gameId, kidId, isSnapshotSession, resetGameAssistance, patchPlay]);
+  }, [gameId, kidId, isSnapshotSession, resetGameAssistance]);
 
   const logEvent = useCallback(async (event: string, message: string) => {
     if (isSnapshotSession) return;
-    try {
-      await dodi.request(`/api/games/${gameId}/events`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          kidId,
-          event,
-          message,
-        }),
-      });
-    } catch {
-      // Event logging should never block gameplay.
-    }
+    logGameEvent({ gameId, kidId, event, message });
   }, [gameId, kidId, isSnapshotSession]);
 
   // `generate_drawing` is a client-only meta-command: image generation needs the

@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 
 import { Icon } from "@/components/shared/icon";
 import { useFriends } from "@/hooks/use-friends";
+import { useOnline } from "@/hooks/use-online";
 import type { DecodedFriend } from "@/lib/friends";
 
 import { AddFriend } from "./add-friend";
@@ -26,6 +27,7 @@ export function FriendsApp({ kidId }: { kidId: string }) {
   const t = useTranslations("friends");
   const f = useFriends(kidId);
   const { reload } = f;
+  const isOnline = useOnline();
   const searchParams = useSearchParams();
   const router = useRouter();
 
@@ -57,6 +59,17 @@ export function FriendsApp({ kidId }: { kidId: string }) {
     window.addEventListener("kid-tab-reselect", onReselect);
     return () => window.removeEventListener("kid-tab-reselect", onReselect);
   }, [reload]);
+
+  // Friends are online-only (QR pairing, card exchange, shared snapshots all
+  // need the platform). Offline shows a friendly placeholder instead.
+  if (!isOnline) {
+    return (
+      <Centered>
+        <Icon name="wifi_off" size={28} className="text-muted-foreground" />
+        {t("offlineUnavailable")}
+      </Centered>
+    );
+  }
 
   if (f.error === "locked") {
     return <Centered>{t("errorVaultLocked")}</Centered>;

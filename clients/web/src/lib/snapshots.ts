@@ -10,6 +10,8 @@
  */
 import { dodi } from "@/lib/api";
 import { decodeView, ensureFriendKeys, fetchFriends } from "@/lib/friends";
+import { offlineCache } from "@/lib/offline/offline-cache";
+import { useConnectivityStore } from "@/stores/connectivity-store";
 import { sanitizeGameBundle } from "@dodi/games/sanitizer";
 import {
   openOwnSnapshotInfo,
@@ -74,19 +76,66 @@ async function jsonRequest<T>(path: string, init?: RequestInit): Promise<T> {
 // API calls
 // ---------------------------------------------------------------------------
 
-export function fetchSnapshots(
+export async function fetchSnapshots(
   kidId: string,
   opts?: { includeAutosave?: boolean },
 ): Promise<SnapshotView[]> {
   const params = new URLSearchParams({ kidId });
   if (opts?.includeAutosave) params.set("includeAutosave", "1");
-  return jsonRequest<SnapshotView[]>(`/api/snapshots?${params.toString()}`);
+  try {
+    const views = await jsonRequest<SnapshotView[]>(
+      `/api/snapshots?${params.toString()}`,
+    );
+    // Only the default collection is cached — the autosave-including variant
+    // is a superset used by internal flows.
+    if (!opts?.includeAutosave) void offlineCache.writeSnapshotList(kidId, views);
+    return views;
+  } catch (error) {
+    if (!(error instanceof TypeError) || opts?.includeAutosave) throw error;
+    const cached = await offlineCache.readSnapshotList<SnapshotView>(kidId);
+    if (!cached) throw error;
+    useConnectivityStore.getState().reportOffline();
+    return cached;
+  }
 }
 
-export function fetchSnapshot(id: string): Promise<SnapshotDetailView> {
-  return jsonRequest<SnapshotDetailView>(
-    `/api/snapshots/${encodeURIComponent(id)}`,
-  );
+export async function fetchSnapshot(id: string): Promise<SnapshotDetailView> {
+  try {
+    const detail = await jsonRequest<SnapshotDetailView>(
+      `/api/snapshots/${encodeURIComponent(id)}`,
+    );
+    void offlineCache.writeSnapshotPayload(id, detail, detail.payloadBytes);
+    return detail;
+  } catch (error) {
+    if (!(error instanceof TypeError)) throw error;
+    const cached = await offlineCache.readSnapshotPayload<SnapshotDetailView>(id);
+    if (!cached) throw error;
+    useConnectivityStore.getState().reportOffline();
+    return cached;
+  }
+}
+
+/**
+ * Background-fill the offline payload cache from a freshly fetched collection.
+ * Sequential and skip-if-present; iterates oldest-first so the NEWEST
+ * snapshots are written last and survive the cache's LRU budget.
+ */
+export async function prefetchSnapshotPayloadsForOffline(
+  views: SnapshotView[],
+): Promise<void> {
+  const PREFETCH_LIMIT = 20;
+  try {
+    const cachedIds = await offlineCache.cachedSnapshotPayloadIds();
+    const candidates = views
+      .filter((v) => !cachedIds.has(v.id))
+      .slice(0, PREFETCH_LIMIT)
+      .reverse();
+    for (const view of candidates) {
+      await fetchSnapshot(view.id);
+    }
+  } catch {
+    // Prefetch is opportunistic — the collection still works online.
+  }
 }
 
 export interface CreateOwnSnapshotInput {
@@ -135,28 +184,98 @@ export interface UpsertAutosaveInput {
   payloadBytes: number;
 }
 
-/** Overwrite (or create) the kid's single autosave slot for a game. */
-export function upsertAutosaveSnapshot(
+/**
+ * Overwrite (or create) the kid's single autosave slot for a game. A
+ * network-level failure parks the sealed upload as a PENDING record (flushed
+ * by {@link flushPendingAutosaves}) instead of throwing, so offline progress
+ * survives; other errors rethrow.
+ */
+export async function upsertAutosaveSnapshot(
   input: UpsertAutosaveInput,
-): Promise<{ id: string }> {
-  return jsonRequest("/api/snapshots/autosave", {
-    method: "PUT",
-    body: JSON.stringify(input),
-  });
+): Promise<{ id: string } | { id: null; pending: true }> {
+  try {
+    const result = await jsonRequest<{ id: string }>("/api/snapshots/autosave", {
+      method: "PUT",
+      body: JSON.stringify(input),
+    });
+    void offlineCache.deletePendingAutosave(input.kidId, input.gameId);
+    return result;
+  } catch (error) {
+    if (!(error instanceof TypeError)) throw error;
+    useConnectivityStore.getState().reportOffline();
+    await offlineCache.writePendingAutosave(input.kidId, input.gameId, input);
+    return { id: null, pending: true };
+  }
 }
 
-/** The kid's autosave slot for a game, or null when none exists yet. */
+/** A pending (not-yet-uploaded) autosave rendered as a detail view. */
+function pendingAutosaveDetail(input: UpsertAutosaveInput): SnapshotDetailView {
+  return {
+    id: `pending-autosave:${input.kidId}:${input.gameId}`,
+    origin: "autosave",
+    gameId: input.gameId,
+    infoEnc: input.infoEnc,
+    payloadEnc: input.payloadEnc,
+    payloadBytes: input.payloadBytes,
+    viewedAt: null,
+    createdAt: new Date().toISOString(),
+    senderKidId: null,
+    senderSignPublicKey: null,
+    sharedWithKidId: null,
+  };
+}
+
+/**
+ * The kid's autosave slot for a game, or null when none exists yet.
+ * Resolution order: pending offline upload (always the newest state, even
+ * when back online before the flush ran) → network (write-through to the
+ * offline cache) → cached copy (network unreachable).
+ */
 export async function fetchAutosaveSnapshot(
   kidId: string,
   gameId: string,
 ): Promise<SnapshotDetailView | null> {
+  const pending = await offlineCache.readPendingAutosave<UpsertAutosaveInput>(
+    kidId,
+    gameId,
+  );
+  if (pending) return pendingAutosaveDetail(pending);
   try {
-    return await jsonRequest<SnapshotDetailView>(
+    const detail = await jsonRequest<SnapshotDetailView>(
       `/api/snapshots/autosave?kidId=${encodeURIComponent(kidId)}&gameId=${encodeURIComponent(gameId)}`,
     );
+    void offlineCache.writeAutosave(kidId, gameId, detail);
+    return detail;
   } catch (error) {
     if (error instanceof SnapshotsError && error.status === 404) return null;
-    throw error;
+    if (!(error instanceof TypeError)) throw error;
+    const cached = await offlineCache.readAutosave<SnapshotDetailView>(
+      kidId,
+      gameId,
+    );
+    if (!cached) throw error;
+    useConnectivityStore.getState().reportOffline();
+    return cached;
+  }
+}
+
+/**
+ * Upload autosaves parked while offline (oldest first). Stops at the first
+ * failure — a later online signal retries. Triggered from the kid layout on
+ * mount and on every offline→online transition.
+ */
+export async function flushPendingAutosaves(): Promise<void> {
+  const pending = await offlineCache.readPendingAutosaves<UpsertAutosaveInput>();
+  for (const input of pending) {
+    try {
+      await jsonRequest<{ id: string }>("/api/snapshots/autosave", {
+        method: "PUT",
+        body: JSON.stringify(input),
+      });
+      await offlineCache.deletePendingAutosave(input.kidId, input.gameId);
+    } catch {
+      return;
+    }
   }
 }
 

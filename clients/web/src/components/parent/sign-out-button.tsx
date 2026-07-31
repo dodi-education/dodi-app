@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 
 import { Icon } from "@/components/shared/icon";
+import { offlineCache } from "@/lib/offline/offline-cache";
 import { clearParentUnlocked } from "@/lib/parent-lock";
 import { createClient } from "@/lib/supabase/client";
 import { useAccountStore } from "@/stores/account-store";
@@ -24,6 +25,9 @@ export function SignOutButton() {
     // dodi AI session credentials live in memory only — drop them with the session.
     useDodiAIKeyStore.getState().clear();
     useDodiAIBillingStore.getState().clear();
+    // Offline caches persist in IndexedDB — wipe them so another account on
+    // this device never inherits cached (ciphertext) rows or vault keys.
+    await offlineCache.clearAll();
     const supabase = createClient();
     await supabase.auth.signOut();
     router.push("/login");

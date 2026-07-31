@@ -1,11 +1,12 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
 import { useFormatter, useTranslations } from "next-intl";
 
 import { Icon } from "@/components/shared/icon";
+import { OfflineAwareLink } from "@/components/shared/offline-aware-link";
 import { KidButton } from "@/components/kid/kid-button";
+import { useOnline } from "@/hooks/use-online";
 import type { DecodedSnapshot } from "@/hooks/use-snapshots";
 
 interface SnapshotCardProps {
@@ -17,6 +18,8 @@ export function SnapshotCard({ snapshot, onDelete }: SnapshotCardProps) {
   const t = useTranslations("snapshots");
   const format = useFormatter();
   const { view, info, senderName } = snapshot;
+  // Deleting is a server round-trip; offline it would fail and reload.
+  const isOnline = useOnline();
 
   const isReceived = view.origin === "received";
   const isNew = isReceived && view.viewedAt === null;
@@ -24,7 +27,7 @@ export function SnapshotCard({ snapshot, onDelete }: SnapshotCardProps) {
 
   return (
     <div className="flex flex-col gap-3 rounded-[20px] bg-white p-[18px] pb-4 shadow-[0_2px_10px_rgba(34,56,78,0.05)]">
-      <Link
+      <OfflineAwareLink
         href={`/snapshots/${view.id}`}
         className="group flex items-start gap-3.5 rounded-[16px] outline-none focus-visible:ring-2 focus-visible:ring-primary-soft-2"
       >
@@ -69,7 +72,7 @@ export function SnapshotCard({ snapshot, onDelete }: SnapshotCardProps) {
             )}
           </div>
         </div>
-      </Link>
+      </OfflineAwareLink>
 
       <div className="mt-auto flex items-center justify-between gap-2">
         <button
@@ -77,16 +80,17 @@ export function SnapshotCard({ snapshot, onDelete }: SnapshotCardProps) {
           onClick={() => {
             if (window.confirm(t("deleteConfirm"))) onDelete(view.id);
           }}
+          disabled={!isOnline}
           aria-label={t("deleteAction")}
-          className="flex size-11 items-center justify-center rounded-full text-danger transition-colors hover:bg-danger-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger/40"
+          className="flex size-11 items-center justify-center rounded-full text-danger transition-colors hover:bg-danger-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger/40 disabled:opacity-40"
         >
           <Icon name="delete" size={20} stroke={2} />
         </button>
         <KidButton asChild size="sm" className="px-6">
-          <Link href={`/snapshots/${view.id}`}>
+          <OfflineAwareLink href={`/snapshots/${view.id}`}>
             <Icon name="play" size={13} />
             {t("openAction")}
-          </Link>
+          </OfflineAwareLink>
         </KidButton>
       </div>
     </div>

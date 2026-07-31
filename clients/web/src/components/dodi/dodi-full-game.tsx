@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 
 import { Icon } from "@/components/shared/icon";
 import { ListeningPulse } from "@/components/kid/listening-pulse";
+import { useOnline } from "@/hooks/use-online";
 import {
   useDodiSessionStore,
   selectDodiThinking,
@@ -38,9 +39,12 @@ export function DodiFullGame() {
 
   const isConnecting = dodiState === "connecting";
   const isConnected = dodiState === "active" || dodiState === "deaf";
+  const isOnline = useOnline();
 
-  const stateLine =
-    activityKind === "image"
+  // Offline wins: dodi sleeps, and a "tap to reconnect" hint would mislead.
+  const stateLine = !isOnline
+    ? t("offline")
+    : activityKind === "image"
       ? t("voiceCreatingImage")
       : activityKind === "thinking"
         ? t("voiceThinking")
@@ -95,7 +99,13 @@ export function DodiFullGame() {
 
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-[14.5px] font-extrabold text-ink">
-            {isConnecting && (
+            {!isOnline && (
+              <Icon
+                name="wifi_off"
+                className="h-3.5 w-3.5 text-muted-foreground"
+              />
+            )}
+            {isOnline && isConnecting && (
               <Icon name="loading" className="h-3.5 w-3.5 animate-spin text-primary" />
             )}
             {(isThinking || (dodiSpeaking && dodiState === "active")) && (

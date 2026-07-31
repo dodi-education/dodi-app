@@ -3,11 +3,13 @@
 import Image from "next/image";
 import { useTranslations } from "next-intl";
 
+import { Icon } from "@/components/shared/icon";
 import {
   useDodiSessionStore,
   selectDodiActivityKind,
   selectDodiThinking,
 } from "@/stores/dodi-session-store";
+import { useOnline } from "@/hooks/use-online";
 import { cn } from "@/lib/utils";
 import { getDodiImage } from "@/lib/dodi-image";
 
@@ -20,6 +22,7 @@ export function DodiCompact() {
   const toggleActive = useDodiSessionStore((s) => s.toggleActive);
   const isThinking = useDodiSessionStore(selectDodiThinking);
   const activityKind = useDodiSessionStore(selectDodiActivityKind);
+  const isOnline = useOnline();
 
   const isConnected = dodiState === "active" || dodiState === "deaf";
   const isConnecting = dodiState === "connecting";
@@ -82,12 +85,23 @@ export function DodiCompact() {
         {isConnecting && (
           <span className="absolute inset-0 animate-spin rounded-full border-2 border-dodi-400 border-t-transparent" />
         )}
-        {/* Status dot */}
-        {isConnected && (
-          <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white bg-success" />
-        )}
-        {dodiState === "disconnected" && error && (
-          <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white bg-danger" />
+        {/* Status dot / offline badge */}
+        {!isOnline ? (
+          <span className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full border border-dodi-200 bg-white">
+            <Icon
+              name="wifi_off"
+              className="h-2.5 w-2.5 text-muted-foreground"
+            />
+          </span>
+        ) : (
+          <>
+            {isConnected && (
+              <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white bg-success" />
+            )}
+            {dodiState === "disconnected" && error && (
+              <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white bg-danger" />
+            )}
+          </>
         )}
       </button>
 

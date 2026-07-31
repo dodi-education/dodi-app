@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 
 import { serverErrorResponse } from "@/lib/error-logs";
+import { isPlausiblePlayTimestamp } from "@/lib/play-timestamps";
 import { requireAuth } from "@/lib/resolve-auth";
 import { getPlay, updatePlay } from "@/services/game-plays";
 import { MetricsSummarySchema } from "@dodi/games/success";
@@ -11,6 +12,9 @@ const UpdatePlaySchema = z.object({
   metrics: MetricsSummarySchema.optional(),
   succeeded: z.boolean().optional(),
   ended: z.boolean().optional(),
+  // Offline sync: the real (past) times the outbox recorded; default is now.
+  succeededAt: z.iso.datetime({ offset: true }).optional(),
+  endedAt: z.iso.datetime({ offset: true }).optional(),
 });
 
 interface RouteContext {
@@ -36,6 +40,15 @@ export async function PATCH(
     );
   }
 
+  for (const at of [parsed.data.succeededAt, parsed.data.endedAt]) {
+    if (at && !isPlausiblePlayTimestamp(at)) {
+      return NextResponse.json(
+        { error: "timestamp out of range" },
+        { status: 400 },
+      );
+    }
+  }
+
   try {
     const play = await getPlay(supabase, playId);
     if (!play || play.account_id !== accountId) {
@@ -47,6 +60,8 @@ export async function PATCH(
       metrics: parsed.data.metrics,
       succeeded: parsed.data.succeeded,
       ended: parsed.data.ended,
+      succeededAt: parsed.data.succeededAt,
+      endedAt: parsed.data.endedAt,
     });
 
     return NextResponse.json(

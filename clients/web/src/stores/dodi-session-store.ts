@@ -29,6 +29,7 @@ import { logKidActivity } from "@/lib/activities/log-activity";
 import { reportUsage } from "@/lib/usage/report-usage";
 import { runGameTextAssistant } from "@/lib/ai/client-game-assistant";
 import { resolveClientThinking } from "@/lib/ai/resolve-client-thinking";
+import { isCurrentlyOnline } from "@/stores/connectivity-store";
 import { useKidStore } from "@/stores/kid-store";
 import { analyzeGameState } from "@dodi/ai/game-analysis";
 import { getLanguageDisplayName } from "@dodi/ai/dodi-context";
@@ -1002,6 +1003,13 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
       return;
     }
 
+    // Offline: record the context but skip the doomed reconnect. Deliberately
+    // NOT fatal — the auto-connect effects retry when connectivity returns.
+    if (!isCurrentlyOnline()) {
+      set({ context: newContext, state: "disconnected", error: null });
+      return;
+    }
+
     // Context requires reconnect (e.g., home/browse <-> game, or game <-> different game)
     const gen = ++contextGeneration;
 
@@ -1117,6 +1125,13 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
 
   connect: async (kidId: string) => {
     if (!kidId) return;
+
+    // Offline: stay disconnected quietly (dodi sleeps). Deliberately NOT
+    // fatal — the auto-connect effects retry when connectivity returns.
+    if (!isCurrentlyOnline()) {
+      set({ kidId, state: "disconnected", error: null, fatalError: false });
+      return;
+    }
 
     const currentState = get();
 

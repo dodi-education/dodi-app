@@ -2,6 +2,8 @@
  * Client game cache: fetch ciphertext once, decrypt once with the VaultSession,
  * and reuse the plaintext across navigation. Decrypted data lives in memory only
  * (never persisted). Mutations call `invalidate()` to force a refetch.
+ * Kid-library CIPHERTEXT rows are additionally written through to the offline
+ * cache (IndexedDB) and served from it when the network is unreachable.
  *
  * This is the SINGLE decrypt point for games. Every consumer — the kid library,
  * the parent studio, the play page, the voice/text AI context — reads plaintext
@@ -15,6 +17,7 @@
 import { dodi } from "@/lib/api";
 import { create } from "zustand";
 
+import { offlineCache } from "@/lib/offline/offline-cache";
 import {
   type GameContentFields,
   type GameCreateFields,
@@ -30,6 +33,7 @@ import type {
 } from "@dodi/types/games";
 
 import { awaitSession } from "./await-session";
+import { useConnectivityStore } from "./connectivity-store";
 
 /** A game as delivered to the kid library — carries the per-kid favorite flag. */
 export type LibraryGame = Game & { is_favorite: boolean };
@@ -128,11 +132,27 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
     if (existing && !force) return existing;
 
     const pending = (async () => {
-      const res = await dodi.request(
-        `/api/games?kidId=${encodeURIComponent(kidId)}`,
-      );
-      if (!res.ok) throw new Error("Failed to load games");
-      const rows = (await res.json()) as LibraryGame[];
+      let rows: LibraryGame[];
+      try {
+        const res = await dodi.request(
+          `/api/games?kidId=${encodeURIComponent(kidId)}`,
+        );
+        if (!res.ok) throw new Error("Failed to load games");
+        rows = (await res.json()) as LibraryGame[];
+        useConnectivityStore.getState().reportOnline();
+        // Write-through of the CIPHERTEXT rows (pre-decrypt) so a later cold
+        // start can serve the library offline.
+        void offlineCache.writeGameRows(kidId, rows);
+      } catch (error) {
+        // Network-level failure (fetch throw) → serve the cached ciphertext.
+        // HTTP errors rethrow above without a cache fallback, keeping today's
+        // behavior for auth/server problems.
+        if (!(error instanceof TypeError)) throw error;
+        const cached = await offlineCache.readGameRows<LibraryGame>(kidId);
+        if (!cached) throw error;
+        useConnectivityStore.getState().reportOffline();
+        rows = cached;
+      }
       const session = await awaitSession();
       const decrypted = rows.map((row) => ({
         ...decryptGame(session, row),
@@ -204,10 +224,24 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
     if (existing && !force) return existing;
 
     const pending = (async () => {
-      const query = kidId ? `?kidId=${encodeURIComponent(kidId)}` : "";
-      const res = await dodi.request(`/api/games/${id}${query}`);
-      if (!res.ok) return null;
-      const row = (await res.json()) as Game;
+      let row: Game;
+      try {
+        const query = kidId ? `?kidId=${encodeURIComponent(kidId)}` : "";
+        const res = await dodi.request(`/api/games/${id}${query}`);
+        if (!res.ok) return null;
+        row = (await res.json()) as Game;
+        useConnectivityStore.getState().reportOnline();
+      } catch (error) {
+        // Offline kid deep-link: resolve from the cached library rows (they
+        // carry the full code_bundle). Visibility holds — the cache only ever
+        // contains rows the platform returned for this kid.
+        if (!(error instanceof TypeError) || !kidId) throw error;
+        const cached = await offlineCache.readGameRows<Game>(kidId);
+        const cachedRow = cached?.find((g) => g.id === id);
+        if (!cachedRow) throw error;
+        useConnectivityStore.getState().reportOffline();
+        row = cachedRow;
+      }
       const decrypted = decryptGame(await awaitSession(), row);
 
       set((state) => ({ byId: { ...state.byId, [key]: decrypted } }));

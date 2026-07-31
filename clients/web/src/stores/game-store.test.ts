@@ -41,8 +41,19 @@ const { vaultMock } = vi.hoisted(() => {
 
 const { requestMock } = vi.hoisted(() => ({ requestMock: vi.fn() }));
 
+// Controllable stand-in for the IndexedDB offline cache (absent in node).
+const { offlineCacheMock } = vi.hoisted(() => ({
+  offlineCacheMock: {
+    writeGameRows: vi.fn(async () => {}),
+    readGameRows: vi.fn(async (): Promise<unknown[] | null> => null),
+  },
+}));
+
 vi.mock("@/stores/vault-store", () => ({ useVaultStore: vaultMock }));
 vi.mock("@/lib/api", () => ({ dodi: { request: requestMock } }));
+vi.mock("@/lib/offline/offline-cache", () => ({
+  offlineCache: offlineCacheMock,
+}));
 
 // Stand-in crypto: strips a "sealed:" prefix so the tests can assert that the
 // store, and only the store, is what turns ciphertext into readable fields.
@@ -59,6 +70,7 @@ vi.mock("@dodi/vault/game-crypto", () => ({
   encryptGameCreateFields: (_s: unknown, f: unknown) => f,
 }));
 
+import { useConnectivityStore } from "@/stores/connectivity-store";
 import { useGameStore } from "@/stores/game-store";
 
 function ok(body: unknown) {
@@ -75,10 +87,14 @@ describe("useGameStore", () => {
     vaultMock.reset();
     useGameStore.setState({ byKid: {}, account: null, byId: {} });
     requestMock.mockReset();
+    offlineCacheMock.writeGameRows.mockClear();
+    offlineCacheMock.readGameRows.mockReset();
+    offlineCacheMock.readGameRows.mockResolvedValue(null);
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+    useConnectivityStore.setState({ isOnline: true });
   });
 
   it("decrypts the kid library once and serves the cache afterwards", async () => {
@@ -163,5 +179,55 @@ describe("useGameStore", () => {
     vaultMock.setState({ session: {}, status: "unlocked" });
 
     await expect(useGameStore.getState().loadOne("nope", "k1")).resolves.toBeNull();
+  });
+
+  it("writes the ciphertext rows through to the offline cache on a successful load", async () => {
+    requestMock.mockResolvedValue(ok(KID_ROWS));
+    vaultMock.setState({ session: {}, status: "unlocked" });
+
+    await useGameStore.getState().loadForKid("k1");
+    expect(offlineCacheMock.writeGameRows).toHaveBeenCalledWith("k1", KID_ROWS);
+  });
+
+  it("serves the cached ciphertext library when the network is unreachable", async () => {
+    requestMock.mockRejectedValue(new TypeError("fetch failed"));
+    offlineCacheMock.readGameRows.mockResolvedValue(KID_ROWS);
+    vaultMock.setState({ session: {}, status: "unlocked" });
+
+    const games = await useGameStore.getState().loadForKid("k1");
+    expect(games.map((g) => g.title)).toEqual([
+      "Counting Comets",
+      "Word Wagon",
+    ]);
+    expect(useConnectivityStore.getState().isOnline).toBe(false);
+  });
+
+  it("resolves an offline deep-link from the cached library rows", async () => {
+    requestMock.mockRejectedValue(new TypeError("fetch failed"));
+    offlineCacheMock.readGameRows.mockResolvedValue(KID_ROWS);
+    vaultMock.setState({ session: {}, status: "unlocked" });
+
+    const game = await useGameStore.getState().loadOne("g2", "k1");
+    expect(game?.title).toBe("Word Wagon");
+  });
+
+  it("rethrows when the network is unreachable and the cache is cold", async () => {
+    requestMock.mockRejectedValue(new TypeError("fetch failed"));
+    vaultMock.setState({ session: {}, status: "unlocked" });
+
+    await expect(useGameStore.getState().loadForKid("k1")).rejects.toThrow(
+      "fetch failed",
+    );
+  });
+
+  it("does NOT fall back to the cache on an HTTP error (auth/server problems)", async () => {
+    requestMock.mockResolvedValue({ ok: false, json: async () => ({}) });
+    offlineCacheMock.readGameRows.mockResolvedValue(KID_ROWS);
+    vaultMock.setState({ session: {}, status: "unlocked" });
+
+    await expect(useGameStore.getState().loadForKid("k1")).rejects.toThrow(
+      "Failed to load games",
+    );
+    expect(useConnectivityStore.getState().isOnline).toBe(true);
   });
 });

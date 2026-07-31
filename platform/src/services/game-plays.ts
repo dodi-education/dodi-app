@@ -23,6 +23,10 @@ export interface StartPlayInput {
   kidId: string;
   gameId: string;
   progressKind: ProgressKind;
+  /** Client-generated id (offline sync); omitted → DB default. */
+  playId?: string;
+  /** Real start time for late-synced plays; omitted → DB default (now). */
+  startedAt?: string;
 }
 
 export async function startPlay(
@@ -34,6 +38,8 @@ export async function startPlay(
     kid_id: input.kidId,
     game_id: input.gameId,
     progress_kind: input.progressKind,
+    ...(input.playId ? { id: input.playId } : {}),
+    ...(input.startedAt ? { started_at: input.startedAt } : {}),
   };
 
   const { data, error } = await supabase
@@ -55,6 +61,9 @@ export interface UpdatePlayInput {
   ended?: boolean;
   /** Timestamp (ISO) to use for succeeded_at / ended_at. Defaults to now. */
   at?: string;
+  /** Per-field overrides for late-synced (offline) plays; win over `at`. */
+  succeededAt?: string;
+  endedAt?: string;
 }
 
 export async function updatePlay(
@@ -73,10 +82,10 @@ export async function updatePlay(
   }
   if (input.succeeded) {
     updates.succeeded = true;
-    updates.succeeded_at = now;
+    updates.succeeded_at = input.succeededAt ?? now;
   }
   if (input.ended) {
-    updates.ended_at = now;
+    updates.ended_at = input.endedAt ?? now;
   }
 
   const { data, error } = await supabase

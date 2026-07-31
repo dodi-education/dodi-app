@@ -5,8 +5,10 @@ import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 
 import { GamePlayView } from "@/components/games/game-play-view";
-import { dodi } from "@/lib/api";
+import { Icon } from "@/components/shared/icon";
 import { getCookie } from "@/lib/cookies";
+import { logGameEvent } from "@/lib/games/play-sync";
+import { isCurrentlyOnline } from "@/stores/connectivity-store";
 import { useGameStore } from "@/stores/game-store";
 import {
   coerceProgressKind,
@@ -17,14 +19,24 @@ import type { GameMetadata } from "@dodi/types/games";
 
 export default function GamePlayPage() {
   const params = useParams<{ id: string }>();
-  const id = params.id;
   const t = useTranslations("games");
 
   const [kidId, setKidId] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [game, setGame] = useState<Game | null>(null);
   const [missing, setMissing] = useState(false);
+  const [offlineUnavailable, setOfflineUnavailable] = useState(false);
   const loggedRef = useRef(false);
+
+  // The service worker serves ONE cached detail shell for every /games/<id>
+  // URL offline, so the hydrated route params may belong to a different id —
+  // the URL is the truth. This page must keep rendering nothing until the
+  // effect resolves; that's what makes the shell substitution invisible
+  // (see public/sw.js detail-shell caching).
+  const id =
+    (typeof window !== "undefined"
+      ? /^\/games\/([^/]+)\/?$/.exec(window.location.pathname)?.[1]
+      : undefined) ?? params.id;
 
   useEffect(() => {
     const pid = getCookie("dodi-active-kid");
@@ -48,29 +60,29 @@ export default function GamePlayPage() {
         .then((g) => {
           if (cancelled) return;
           if (!g) {
-            setMissing(true);
+            if (!isCurrentlyOnline()) setOfflineUnavailable(true);
+            else setMissing(true);
             return;
           }
           setGame(g);
-          // Fire-and-forget activity log; the route derives the persona and
-          // references the game by id (its title is E2EE).
+          // Activity log via the offline-capable outbox; the route derives the
+          // persona and references the game by id (its title is E2EE).
           if (!loggedRef.current) {
             loggedRef.current = true;
-            void dodi
-              .request(`/api/games/${id}/events`, {
-                method: "POST",
-                headers: { "content-type": "application/json" },
-                body: JSON.stringify({
-                  kidId: pid,
-                  event: "game_started",
-                  message: "Started game",
-                }),
-              })
-              .catch(() => {});
+            logGameEvent({
+              gameId: id,
+              kidId: pid,
+              event: "game_started",
+              message: "Started game",
+            });
           }
         })
         .catch(() => {
-          if (!cancelled) setMissing(true);
+          if (cancelled) return;
+          // Offline with no cached copy is not a 404 — the game exists, it
+          // just isn't saved for offline.
+          if (!isCurrentlyOnline()) setOfflineUnavailable(true);
+          else setMissing(true);
         });
     }
     return () => {
@@ -79,6 +91,21 @@ export default function GamePlayPage() {
   }, [id]);
 
   if (missing) notFound();
+
+  if (offlineUnavailable) {
+    return (
+      <div className="w-full max-w-xl rounded-2xl border bg-white p-6 text-center shadow-sm">
+        <Icon
+          name="wifi_off"
+          size={28}
+          className="mx-auto text-muted-foreground"
+        />
+        <p className="mt-3 text-sm font-semibold text-muted-foreground">
+          {t("offlineNotAvailable")}
+        </p>
+      </div>
+    );
+  }
 
   if (ready && !kidId) {
     return (

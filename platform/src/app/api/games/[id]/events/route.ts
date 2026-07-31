@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 
 import { serverErrorResponse } from "@/lib/error-logs";
+import { isPlausiblePlayTimestamp } from "@/lib/play-timestamps";
 import { requireAuth } from "@/lib/resolve-auth";
 import { serviceClient } from "@/lib/supabase";
 import { getPlayableGame } from "@/services/games";
@@ -16,6 +17,8 @@ const LogGameEventSchema = z.object({
     "game_command_failed",
   ]),
   message: z.string().min(1).max(800),
+  // Offline sync: when the event actually happened; default is now.
+  occurredAt: z.iso.datetime({ offset: true }).optional(),
 });
 
 interface RouteContext {
@@ -41,7 +44,14 @@ export async function POST(
     );
   }
 
-  const { kidId, event, message } = parsed.data;
+  const { kidId, event, message, occurredAt } = parsed.data;
+
+  if (occurredAt && !isPlausiblePlayTimestamp(occurredAt)) {
+    return NextResponse.json(
+      { error: "occurredAt out of range" },
+      { status: 400 },
+    );
+  }
 
   try {
     const kid = await getKid(supabase, kidId);
@@ -66,6 +76,7 @@ export async function POST(
       event: event,
       message,
       game_id: game.id,
+      ...(occurredAt ? { occurred_at: occurredAt } : {}),
     });
 
     return NextResponse.json({ success: true }, { status: 201 });

@@ -7,10 +7,20 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { sealedRef, saveVaultKeysMock, fetchVaultKeysMock } = vi.hoisted(() => ({
-  sealedRef: { current: null as string | null },
-  saveVaultKeysMock: vi.fn(),
-  fetchVaultKeysMock: vi.fn(),
+const { sealedRef, saveVaultKeysMock, fetchVaultKeysMock, offlineCacheMock } =
+  vi.hoisted(() => ({
+    sealedRef: { current: null as string | null },
+    saveVaultKeysMock: vi.fn(),
+    fetchVaultKeysMock: vi.fn(),
+    // Controllable stand-in for the IndexedDB offline cache (absent in node).
+    offlineCacheMock: {
+      writeVaultKeys: vi.fn(async () => {}),
+      readVaultKeys: vi.fn(async (): Promise<unknown> => null),
+    },
+  }));
+
+vi.mock("@/lib/offline/offline-cache", () => ({
+  offlineCache: offlineCacheMock,
 }));
 
 // In-memory stand-in for the IndexedDB-backed seal (unavailable in the node env).
@@ -79,8 +89,9 @@ vi.mock("@dodi/crypto", () => ({
   setArgon2idExecutor: vi.fn(),
 }));
 
-import { unlockVaultWithPassword } from "@dodi/vault";
+import { unlockVaultWithDevice, unlockVaultWithPassword } from "@dodi/vault";
 
+import { useConnectivityStore } from "./connectivity-store";
 import { useVaultStore } from "./vault-store";
 
 beforeEach(() => {
@@ -228,5 +239,50 @@ describe("vault-store password unlock (login fast path)", () => {
 
     expect(useVaultStore.getState().status).toBe("locked");
     expect(useVaultStore.getState().error).toBe("bad key");
+  });
+});
+
+describe("vault-store offline silent unlock", () => {
+  // Wrapped-keys blob covering THIS device (getOrCreateDevice mock → dev-1).
+  const deviceKeys = () => ({
+    deviceWraps: [{ deviceId: "dev-1" }],
+    passwordWrap: { scheme: "password", salt: "s" },
+    vmkCheck: "enc:v1:x",
+  });
+
+  beforeEach(() => {
+    vi.mocked(unlockVaultWithDevice).mockReset();
+    vi.mocked(unlockVaultWithDevice).mockReturnValue(new Uint8Array([1, 2, 3]));
+    offlineCacheMock.writeVaultKeys.mockClear();
+    offlineCacheMock.readVaultKeys.mockReset();
+    offlineCacheMock.readVaultKeys.mockResolvedValue(null);
+    useConnectivityStore.setState({ isOnline: true });
+  });
+
+  it("writes the wrapped keys through to the sealed offline cache when online", async () => {
+    const keys = deviceKeys();
+    fetchVaultKeysMock.mockResolvedValue(keys);
+
+    await expect(useVaultStore.getState().unlockSilently()).resolves.toBe(true);
+    expect(useVaultStore.getState().status).toBe("unlocked");
+    expect(offlineCacheMock.writeVaultKeys).toHaveBeenCalledWith(keys);
+  });
+
+  it("falls back to the sealed offline copy when the network fails", async () => {
+    fetchVaultKeysMock.mockRejectedValue(new TypeError("fetch failed"));
+    offlineCacheMock.readVaultKeys.mockResolvedValue(deviceKeys());
+
+    await expect(useVaultStore.getState().unlockSilently()).resolves.toBe(true);
+    expect(useVaultStore.getState().status).toBe("unlocked");
+    expect(useConnectivityStore.getState().isOnline).toBe(false);
+  });
+
+  it("locks — never needs-setup — when the network fails and the cache is cold", async () => {
+    fetchVaultKeysMock.mockRejectedValue(new TypeError("fetch failed"));
+
+    await expect(useVaultStore.getState().unlockSilently()).resolves.toBe(false);
+    // needs-setup would bounce the kid to /finish-setup; a network failure
+    // must never be read as "this account has no vault".
+    expect(useVaultStore.getState().status).toBe("locked");
   });
 });

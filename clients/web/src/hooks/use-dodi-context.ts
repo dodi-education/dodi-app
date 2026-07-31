@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 
+import { useOnline } from "@/hooks/use-online";
 import {
   useDodiSessionStore,
   type DodiContext,
@@ -29,6 +30,7 @@ export function useDodiContext({
   const connect = useDodiSessionStore((s) => s.connect);
   const dodiState = useDodiSessionStore((s) => s.state);
   const fatalError = useDodiSessionStore((s) => s.fatalError);
+  const isOnline = useOnline();
 
   // Stable reference for context object to avoid re-triggering on every render.
   // Snapshot sessions key on the snapshot id — two snapshots of the same game
@@ -60,10 +62,12 @@ export function useDodiContext({
 
   // Auto-connect if session is disconnected (e.g. direct navigation to /games).
   // Skip when the last close was fatal (quota/auth) — retrying won't help and
-  // would hot-loop. The kid must explicitly tap to reconnect.
+  // would hot-loop. The kid must explicitly tap to reconnect. Skip while
+  // offline; the `isOnline` flip re-runs the effect, so regaining
+  // connectivity reconnects automatically.
   useEffect(() => {
-    if (kidId && dodiState === "disconnected" && !fatalError) {
+    if (kidId && dodiState === "disconnected" && !fatalError && isOnline) {
       void connect(kidId);
     }
-  }, [kidId, dodiState, fatalError, connect]);
+  }, [kidId, dodiState, fatalError, isOnline, connect]);
 }

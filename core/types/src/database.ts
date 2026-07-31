@@ -796,6 +796,8 @@ export interface Database {
           message: string;
           /** Soft reference so the feed can name a game whose title is E2EE. */
           game_id: string | null;
+          /** When it happened (offline events sync late); feed order key. */
+          occurred_at: string;
           created_at: string;
         };
         Insert: {
@@ -806,6 +808,7 @@ export interface Database {
           event: string;
           message: string;
           game_id?: string | null;
+          occurred_at?: string;
           created_at?: string;
         };
         Update: {
@@ -816,6 +819,7 @@ export interface Database {
           event?: string;
           message?: string;
           game_id?: string | null;
+          occurred_at?: string;
           created_at?: string;
         };
         Relationships: [];

@@ -213,7 +213,7 @@ export default function ActivitiesPage() {
                       <DotSep />
                     </>
                   )}
-                  {formatDateTime(row.created_at)}
+                  {formatDateTime(row.occurred_at ?? row.created_at)}
                 </RowMeta>
               </RowMain>
               <Badge variant={EVENT_BADGE_VARIANTS[row.event] ?? "gray"}>

@@ -33,6 +33,7 @@ import {
   unlockVaultWithNsec,
   unlockVaultWithPassword,
 } from "@dodi/vault";
+import { offlineCache } from "@/lib/offline/offline-cache";
 import { clearParentUnlocked, markParentUnlocked } from "@/lib/parent-lock";
 import {
   clearSealedSecret,
@@ -40,6 +41,7 @@ import {
   stashSealedSecret,
 } from "@/lib/sealed-secret";
 import { fetchVaultKeys, saveVaultKeys } from "@/lib/vault-client";
+import { useConnectivityStore } from "@/stores/connectivity-store";
 
 export type VaultStatus =
   "idle" | "working" | "unlocked" | "locked" | "needs-setup";
@@ -302,7 +304,19 @@ export const useVaultStore = create<VaultStoreState>((set, get) => {
       set({ status: "working", error: null });
       try {
         const device = await loadDevice();
-        const keys = await fetchVaultKeys();
+        let keys: StoredVaultKeys | null;
+        try {
+          keys = await fetchVaultKeys();
+          // Write-through (sealed under a non-extractable key) so the next
+          // cold start can unlock offline.
+          if (keys) void offlineCache.writeVaultKeys(keys);
+        } catch (error) {
+          // Network failure → sealed offline copy. `needs-setup` stays
+          // online-authoritative: only a real server `null` reaches it below.
+          keys = await offlineCache.readVaultKeys<StoredVaultKeys>();
+          if (!keys) throw error;
+          useConnectivityStore.getState().reportOffline();
+        }
         if (!keys) {
           set({ status: "needs-setup" });
           return false;

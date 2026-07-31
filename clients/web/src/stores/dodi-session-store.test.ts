@@ -183,6 +183,7 @@ import {
   selectDodiThinking,
   selectDodiActivityKind,
 } from "@/stores/dodi-session-store";
+import { useConnectivityStore } from "@/stores/connectivity-store";
 
 // --- localStorage stub -----------------------------------------------------
 
@@ -1164,5 +1165,61 @@ describe("dodi session store — xai warm-socket pool", () => {
       model: "m",
       voiceSeconds: 5,
     });
+  });
+});
+
+describe("dodi session store — offline guard", () => {
+  beforeEach(() => {
+    installTestEnv();
+    useConnectivityStore.setState({ isOnline: false });
+  });
+
+  afterEach(() => {
+    useConnectivityStore.setState({ isOnline: true });
+    useDodiSessionStore.getState().endSession();
+    vi.useRealTimers();
+  });
+
+  const state = () => useDodiSessionStore.getState();
+
+  it("connect while offline stays disconnected without fatalError and opens nothing", async () => {
+    await state().connect(PID);
+    await flush();
+
+    expect(state().state).toBe("disconnected");
+    expect(state().error).toBeNull();
+    expect(state().fatalError).toBe(false);
+    expect(createdClients.current).toHaveLength(0);
+    // The whole connect pipeline is skipped — no transcript day begins.
+    expect(beginDaySpy).not.toHaveBeenCalled();
+  });
+
+  it("setContext while offline records the context but skips the reconnect", async () => {
+    const gameContext = {
+      type: "game" as const,
+      gameId: "g1",
+      markdown: "",
+      codeBundle: "",
+      gameState: {},
+      capabilities: [],
+    };
+    await state().setContext(gameContext, PID);
+    await flush();
+
+    expect(state().context).toEqual(gameContext);
+    expect(state().state).toBe("disconnected");
+    expect(state().fatalError).toBe(false);
+    expect(createdClients.current).toHaveLength(0);
+  });
+
+  it("connect works again once connectivity returns", async () => {
+    await state().connect(PID);
+    await flush();
+    expect(state().state).toBe("disconnected");
+
+    useConnectivityStore.setState({ isOnline: true });
+    await connect(PID);
+    expect(beginDaySpy).toHaveBeenCalled();
+    expect(createdClients.current.length).toBeGreaterThan(0);
   });
 });

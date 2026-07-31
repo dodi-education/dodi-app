@@ -75,6 +75,7 @@ import {
   IconUserShare,
   IconUsers,
   IconVolume,
+  IconWifiOff,
   IconWorldUp,
   IconX,
   type IconProps as TablerIconProps,
@@ -148,6 +149,7 @@ export type IconName =
   | "event_logs"
   | "usage"
   | "volume"
+  | "wifi_off"
   | "world_up"
   // Game-tag icons — Tabler slugs (see @dodi/games/tags); "philosophy" is custom.
   | "abc"
@@ -233,6 +235,7 @@ const ICONS: Record<IconName, ComponentType<TablerIconProps>> = {
   event_logs: IconLogs,
   usage: IconReceipt2,
   volume: IconVolume,
+  wifi_off: IconWifiOff,
   world_up: IconWorldUp,
   // Game-tag icons (see @dodi/games/tags).
   abc: IconAbc,

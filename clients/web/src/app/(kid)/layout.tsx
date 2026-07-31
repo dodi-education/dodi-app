@@ -9,9 +9,15 @@ import { Icon, type IconName } from "@/components/shared/icon";
 import { DodiCompact } from "@/components/dodi/dodi-compact";
 import { cn } from "@/lib/utils";
 import { clearParentUnlocked } from "@/lib/parent-lock";
+import { flushPlayOutbox } from "@/lib/games/play-sync";
+import { flushPendingAutosaves } from "@/lib/snapshots";
 import { KidAvatar } from "@/components/kid/kid-avatar";
 import { KidSwitcher } from "@/components/kid/kid-switcher";
 import { useActiveKid } from "@/hooks/use-active-kid";
+import {
+  isCurrentlyOnline,
+  onBackOnline,
+} from "@/stores/connectivity-store";
 import { useDodiSessionStore } from "@/stores/dodi-session-store";
 import { useVaultStore } from "@/stores/vault-store";
 import type { Kid } from "@dodi/types/database";
@@ -62,6 +68,21 @@ export default function KidLayout({
     };
   }, []);
 
+  // Offline support: ask for durable storage (protects the IndexedDB caches
+  // from eviction, esp. on iPad Safari), and flush work parked while offline —
+  // on entry and on every offline→online transition.
+  useEffect(() => {
+    if (typeof navigator !== "undefined" && navigator.storage?.persist) {
+      void navigator.storage.persist().catch(() => {});
+    }
+    void flushPendingAutosaves();
+    void flushPlayOutbox();
+    return onBackOnline(() => {
+      void flushPendingAutosaves();
+      void flushPlayOutbox();
+    });
+  }, []);
+
   useEffect(() => {
     if (pendingNavigation) {
       router.push(pendingNavigation);
@@ -110,6 +131,13 @@ export default function KidLayout({
       window.dispatchEvent(
         new CustomEvent("kid-tab-reselect", { detail: { href } }),
       );
+      return;
+    }
+    // Offline: a soft navigation would fetch an RSC payload and fail. Force a
+    // full-page load instead — the service worker serves the cached shell.
+    if (!isCurrentlyOnline()) {
+      e.preventDefault();
+      window.location.assign(href);
     }
   }
 

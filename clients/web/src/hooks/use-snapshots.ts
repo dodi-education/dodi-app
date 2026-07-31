@@ -10,6 +10,7 @@ import {
   decodeSnapshotInfo,
   deleteSnapshot,
   fetchSnapshots,
+  prefetchSnapshotPayloadsForOffline,
 } from "@/lib/snapshots";
 import { useKids } from "@/hooks/use-kids";
 import { useVaultStore } from "@/stores/vault-store";
@@ -55,6 +56,9 @@ export function useSnapshots(kidId: string): UseSnapshots {
     }
     try {
       const views = await fetchSnapshots(kid.id);
+      // Background-fill the offline payload cache (skip-if-present; no-ops
+      // when the list itself came from the offline cache).
+      void prefetchSnapshotPayloadsForOffline(views);
 
       const hasReceived = views.some((v) => v.origin === "received");
       let keys = keysForKid(keysRef.current, kid.id);

@@ -11,6 +11,7 @@ import { ListeningPulse } from "@/components/kid/listening-pulse";
 import { useDodiSessionStore } from "@/stores/dodi-session-store";
 import { useDodiContext } from "@/hooks/use-dodi-context";
 import { useKids } from "@/hooks/use-kids";
+import { useOnline } from "@/hooks/use-online";
 import { getDodiImage } from "@/lib/dodi-image";
 
 interface DodiFullHomeProps {
@@ -64,13 +65,15 @@ export function DodiFullHome({
   const error = useDodiSessionStore((s) => s.error);
   const connect = useDodiSessionStore((s) => s.connect);
   const toggleActive = useDodiSessionStore((s) => s.toggleActive);
+  const isOnline = useOnline();
 
-  // Auto-connect on mount if provider available
+  // Auto-connect on mount if provider available. Skipped while offline; the
+  // `isOnline` flip re-runs the effect, so regaining connectivity connects.
   useEffect(() => {
-    if (hasProvider) {
+    if (hasProvider && isOnline) {
       void connect(kidId);
     }
-  }, [hasProvider, connect, kidId]);
+  }, [hasProvider, isOnline, connect, kidId]);
 
   // Manual override: `?process-memory=1` force-processes the day's accumulated
   // transcript into memory now, without waiting for a day change. Read once
@@ -89,6 +92,37 @@ export function DodiFullHome({
   const mascotButtonClass =
     "relative z-[1] size-[76%] cursor-pointer transition-transform duration-200 ease-[cubic-bezier(0.34,1.56,0.64,1)] active:scale-[0.94]";
   const mascotImageClass = "relative z-[1]";
+
+  // Offline — dodi sleeps until connectivity returns. Checked before
+  // `!hasProvider`: offline also makes the providers fetch fail, which would
+  // otherwise mis-render the "needs voice setup" message.
+  if (!isOnline) {
+    return (
+      <Stage>
+        <MascotWrap>
+          <div className={mascotImageClass + " size-[76%]"}>
+            <Image
+              src={getDodiImage("sleep", false)}
+              alt="dodi sleeping"
+              fill
+              sizes="300px"
+              className="object-contain"
+              priority
+            />
+          </div>
+        </MascotWrap>
+        <SpeechBubble className="w-full max-w-xs text-center">
+          <div className="flex items-center justify-center gap-2">
+            <Icon name="wifi_off" className="h-4 w-4 text-muted-foreground" />
+            <p className="text-sm font-bold text-ink-2">{t("offline")}</p>
+          </div>
+          <p className="mt-1 text-xs font-semibold text-muted-foreground">
+            {t("offlineHint")}
+          </p>
+        </SpeechBubble>
+      </Stage>
+    );
+  }
 
   // No provider configured
   if (!hasProvider) {

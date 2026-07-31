@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 
 import { GamePlayView } from "@/components/games/game-play-view";
+import { Icon } from "@/components/shared/icon";
 import { getCookie } from "@/lib/cookies";
 import { ensureFriendKeys } from "@/lib/friends";
 import {
@@ -14,13 +15,13 @@ import {
   fetchSnapshot,
   markSnapshotViewed,
 } from "@/lib/snapshots";
+import { isCurrentlyOnline } from "@/stores/connectivity-store";
 import { useKidStore } from "@/stores/kid-store";
 import { useVaultStore } from "@/stores/vault-store";
 import { EMPTY_SUCCESS_CRITERIA } from "@dodi/games/game-spec";
 
 export default function SnapshotPlayPage() {
   const params = useParams<{ id: string }>();
-  const id = params.id;
   const t = useTranslations("snapshots");
 
   const vaultSession = useVaultStore((s) => s.session);
@@ -29,8 +30,19 @@ export default function SnapshotPlayPage() {
   const [detail, setDetail] = useState<SnapshotDetailView | null>(null);
   const [decoded, setDecoded] = useState<DecodedSnapshotPayload | null>(null);
   const [missing, setMissing] = useState(false);
+  const [offlineUnavailable, setOfflineUnavailable] = useState(false);
   const [openFailed, setOpenFailed] = useState(false);
   const viewedRef = useRef(false);
+
+  // The service worker serves ONE cached detail shell for every
+  // /snapshots/<id> URL offline, so the hydrated route params may belong to a
+  // different id — the URL is the truth. This page must keep rendering
+  // nothing until the effects resolve; that's what makes the shell
+  // substitution invisible (see public/sw.js detail-shell caching).
+  const id =
+    (typeof window !== "undefined"
+      ? /^\/snapshots\/([^/]+)\/?$/.exec(window.location.pathname)?.[1]
+      : undefined) ?? params.id;
 
   useEffect(() => {
     const pid = getCookie("dodi-active-kid");
@@ -50,7 +62,11 @@ export default function SnapshotPlayPage() {
           if (!cancelled) setDetail(snapshot);
         })
         .catch(() => {
-          if (!cancelled) setMissing(true);
+          if (cancelled) return;
+          // Offline with no cached payload is not a 404 — the snapshot
+          // exists, it just isn't saved for offline.
+          if (!isCurrentlyOnline()) setOfflineUnavailable(true);
+          else setMissing(true);
         });
     }
     return () => {
@@ -89,6 +105,21 @@ export default function SnapshotPlayPage() {
   }, [detail, kidId, vaultSession, id]);
 
   if (missing) notFound();
+
+  if (offlineUnavailable) {
+    return (
+      <div className="w-full max-w-xl rounded-2xl border bg-white p-6 text-center shadow-sm">
+        <Icon
+          name="wifi_off"
+          size={28}
+          className="mx-auto text-muted-foreground"
+        />
+        <p className="mt-3 text-sm font-semibold text-muted-foreground">
+          {t("offlineNotAvailable")}
+        </p>
+      </div>
+    );
+  }
 
   if (ready && !kidId) {
     return (
