@@ -48,6 +48,11 @@ const PRECACHE_URLS = [
 const KID_SECTIONS = ["/home", "/games", "/snapshots", "/friends"];
 const DETAIL_SHELL_SECTIONS = ["/games", "/snapshots"];
 
+// Warm the universal detail shells with a synthetic id: the detail pages are
+// id-agnostic until hydration (they read location.pathname client-side), so
+// any id yields a valid shell — no online detail visit required.
+const SYNTHETIC_DETAIL_PATHS = ["/games/__shell", "/snapshots/__shell"];
+
 // Background shell refresh at most this often (per worker instance).
 const SHELL_WARM_INTERVAL_MS = 10 * 60 * 1000;
 let lastShellWarmAt = 0;
@@ -162,8 +167,41 @@ async function handleNavigation(request) {
 }
 
 /**
- * Background-refresh every section shell + one representative cached detail
- * URL per section (any one keeps the universal "__detail-shell" current).
+ * Every /_next/static asset a shell's HTML references — script tags, css
+ * links, font preloads AND the chunk paths embedded in the inlined flight
+ * payload (which is where lazily-loaded route chunks appear). A warmed shell
+ * without its chunks dies on a ChunkLoadError offline.
+ */
+function extractShellAssets(html) {
+  const matches =
+    html.match(
+      /(?:\/_next\/)?static\/(?:chunks|css|media)\/[^"'\s\\<>]+/g,
+    ) ?? [];
+  const assets = new Set();
+  for (const match of matches) {
+    const ref = match.replace(/[),;:]+$/, "");
+    assets.add(ref.startsWith("/_next/") ? ref : `/_next/${ref}`);
+  }
+  return [...assets];
+}
+
+async function warmShellAssets(html) {
+  const cache = await caches.open(STATIC_CACHE);
+  for (const asset of extractShellAssets(html)) {
+    if (await cache.match(asset)) continue;
+    try {
+      const response = await fetch(asset);
+      if (response.ok) await cache.put(asset, response);
+    } catch {
+      // Offline — the next warm run fills the gap.
+    }
+  }
+}
+
+/**
+ * Background-refresh every section shell + the two synthetic detail shells,
+ * then pre-cache the static assets each references, so EVERY kid surface
+ * works offline after a single online session — no tab visits required.
  * Failures are ignored — offline attempts are cheap; the throttle only stamps
  * after a success so coming back online refreshes promptly.
  */
@@ -171,23 +209,14 @@ async function maybeWarmKidShells() {
   if (Date.now() - lastShellWarmAt < SHELL_WARM_INTERVAL_MS) return;
   const cache = await caches.open(PAGES_CACHE);
 
-  const targets = new Set(KID_SECTIONS);
-  const seenShellKeys = new Set();
-  for (const request of await cache.keys()) {
-    const pathname = new URL(request.url).pathname;
-    const shellKey = detailShellKey(pathname);
-    if (shellKey && !seenShellKeys.has(shellKey)) {
-      seenShellKeys.add(shellKey);
-      targets.add(pathname);
-    }
-  }
-
   let warmed = false;
-  for (const pathname of targets) {
+  for (const pathname of [...KID_SECTIONS, ...SYNTHETIC_DETAIL_PATHS]) {
     try {
       const response = await fetch(pathname);
       if (isCacheableShell(response)) {
+        const html = await response.clone().text();
         await cacheShell(cache, pathname, response);
+        await warmShellAssets(html);
         warmed = true;
       }
     } catch {
@@ -240,5 +269,7 @@ self.__TEST__ = {
   kidSection,
   detailShellKey,
   navigationFallbackKeys,
+  extractShellAssets,
   KID_SECTIONS,
+  SYNTHETIC_DETAIL_PATHS,
 };

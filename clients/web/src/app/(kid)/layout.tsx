@@ -10,7 +10,12 @@ import { DodiCompact } from "@/components/dodi/dodi-compact";
 import { cn } from "@/lib/utils";
 import { clearParentUnlocked } from "@/lib/parent-lock";
 import { flushPlayOutbox } from "@/lib/games/play-sync";
-import { flushPendingAutosaves } from "@/lib/snapshots";
+import {
+  fetchSnapshots,
+  flushPendingAutosaves,
+  prefetchSnapshotPayloadsForOffline,
+} from "@/lib/snapshots";
+import { useGameStore } from "@/stores/game-store";
 import { KidAvatar } from "@/components/kid/kid-avatar";
 import { KidSwitcher } from "@/components/kid/kid-switcher";
 import { useActiveKid } from "@/hooks/use-active-kid";
@@ -82,6 +87,27 @@ export default function KidLayout({
       void flushPlayOutbox();
     });
   }, []);
+
+  // Offline data warmup: pull the active kid's games and snapshots once per
+  // session so their ciphertext lands in the offline cache (write-through in
+  // the stores) even if the tabs are never opened online. Cache-first +
+  // single-flight in the stores make this a no-op when a tab loaded it first.
+  const activeKidId = activeKid?.id ?? null;
+  useEffect(() => {
+    if (!activeKidId) return;
+    const warm = () => {
+      if (!isCurrentlyOnline()) return;
+      void useGameStore
+        .getState()
+        .loadForKid(activeKidId)
+        .catch(() => {});
+      void fetchSnapshots(activeKidId)
+        .then((views) => prefetchSnapshotPayloadsForOffline(views))
+        .catch(() => {});
+    };
+    warm();
+    return onBackOnline(warm);
+  }, [activeKidId]);
 
   useEffect(() => {
     if (pendingNavigation) {

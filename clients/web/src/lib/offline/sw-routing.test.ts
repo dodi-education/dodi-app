@@ -16,7 +16,9 @@ interface SwTestSurface {
   kidSection(pathname: string): string | undefined;
   detailShellKey(pathname: string): string | null;
   navigationFallbackKeys(pathname: string): string[];
+  extractShellAssets(html: string): string[];
   KID_SECTIONS: string[];
+  SYNTHETIC_DETAIL_PATHS: string[];
 }
 
 function loadSwTestSurface(): SwTestSurface {
@@ -70,5 +72,55 @@ describe("sw navigation fallback", () => {
 
   it("warms all four kid sections so every tab works offline", () => {
     expect(sw.KID_SECTIONS).toEqual(["/home", "/games", "/snapshots", "/friends"]);
+  });
+
+  it("warms the universal detail shells via synthetic ids (no online detail visit needed)", () => {
+    expect(sw.SYNTHETIC_DETAIL_PATHS).toEqual([
+      "/games/__shell",
+      "/snapshots/__shell",
+    ]);
+    // The synthetic paths must land under the detail-shell cache keys the
+    // fallback chain looks up.
+    expect(sw.detailShellKey("/games/__shell")).toBe("/games/__detail-shell");
+    expect(sw.detailShellKey("/snapshots/__shell")).toBe(
+      "/snapshots/__detail-shell",
+    );
+  });
+});
+
+describe("sw shell asset extraction", () => {
+  // A warmed shell's HTML references route chunks the browser never fetched
+  // (the page was never visited online). Offline, hydration then dies on a
+  // ChunkLoadError — the reported "Application error: a client-side
+  // exception" on never-visited tabs. The worker must pre-cache every
+  // /_next/static asset a shell references.
+  it("finds script/css/font refs incl. route-group chunks and flight strings", () => {
+    const html = `<!doctype html><html><head>
+      <link rel="stylesheet" href="/_next/static/css/abc123.css">
+      <link rel="preload" href="/_next/static/media/nunito-latin.woff2" as="font">
+      <script src="/_next/static/chunks/app/%28kid%29/snapshots/page-11aa22.js" defer></script>
+      </head><body>
+      <script>self.__next_f.push([1,"5:I[123,[\\"static/chunks/4567-def.js\\",\\"static/chunks/app/%28kid%29/friends/page-33cc.js\\"],\\"default\\"]"])</script>
+      </body></html>`;
+
+    expect(sw.extractShellAssets(html).sort()).toEqual([
+      "/_next/static/chunks/4567-def.js",
+      "/_next/static/chunks/app/%28kid%29/friends/page-33cc.js",
+      "/_next/static/chunks/app/%28kid%29/snapshots/page-11aa22.js",
+      "/_next/static/css/abc123.css",
+      "/_next/static/media/nunito-latin.woff2",
+    ]);
+  });
+
+  it("dedupes prefixed and bare refs to the same asset", () => {
+    const html = `<script src="/_next/static/chunks/main-app-9f.js"></script>
+      <script>self.__next_f.push([1,"\\"static/chunks/main-app-9f.js\\""])</script>`;
+    expect(sw.extractShellAssets(html)).toEqual([
+      "/_next/static/chunks/main-app-9f.js",
+    ]);
+  });
+
+  it("returns nothing for asset-free HTML", () => {
+    expect(sw.extractShellAssets("<html><body>offline</body></html>")).toEqual([]);
   });
 });

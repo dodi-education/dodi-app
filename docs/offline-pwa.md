@@ -22,10 +22,18 @@ Two rules keep shells correct (`sw-routing.test.ts` pins them): fallbacks
 NEVER cross sections (a Next shell hydrates the route baked into its flight
 payload — serving `/home` for `/snapshots` would render Home at the wrong
 URL), and after each kid navigation the worker background-refreshes all four
-section shells plus one representative detail URL per section (throttled,
-10 min). The warming both makes every tab offline-capable without having been
-visited and re-syncs cached shells with the current build after a deploy — a
-stale shell executes stale JavaScript. Registered in
+section shells plus the two universal detail shells — fetched via synthetic
+ids (`/games/__shell`), valid because the detail pages are id-agnostic until
+hydration — and then pre-caches every `/_next/static` asset each shell's HTML
+references (script tags AND flight-payload chunk refs; a shell without its
+chunks dies on a ChunkLoadError offline). Throttled to every 10 min. The
+warming makes every tab offline-capable without ever having been visited, and
+re-syncs cached shells + chunks with the current build after a deploy — a
+stale shell executes stale JavaScript. The kid layout complements it with a
+data warmup: it prefetches the active kid's game rows and snapshot
+list/payloads once per session, so the E2EE data is cached without opening
+the tabs. Net contract: install → one online session on /home → everything
+kid-facing works offline. Registered in
 production or with `NEXT_PUBLIC_ENABLE_SW=1` (`register-service-worker.tsx`).
 Manifest/icons: `src/app/manifest.ts`, `public/icons/` (regenerate via
 `scripts/generate-pwa-icons.mjs`). **Bump `CACHE_VERSION` in sw.js when the
