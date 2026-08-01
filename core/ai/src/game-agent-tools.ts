@@ -92,7 +92,9 @@ export const AGENT_TOOLS: Anthropic.Tool[] = [
             "EVERY standardized command your game implements — chosen ONLY from the standard " +
             "vocabulary (see 'Standard Command Vocabulary' in your system prompt / read_bridge_docs). " +
             "These become Dodi's first-class voice tools. Declare 'get_snapshot' if your game has a " +
-            "visual surface (lets Dodi see it), and 'generate_drawing' if it supports AI-drawn pictures. " +
+            "visual surface (lets Dodi see it), 'generate_drawing' if it supports AI-drawn pictures, " +
+            "and 'generate_text' if it presents AI-written text (the game must publish " +
+            "state.contentSlots and implement set_generated_text). " +
             "Do NOT invent command names. Use an empty array only if the game has no Dodi-driven actions.",
         },
         successCriteria: {

@@ -35,6 +35,11 @@ import {
   generateDrawing,
   NoImageModelError,
 } from "@/lib/ai/client-generate-drawing";
+import {
+  generateGameText,
+  NoThinkingModelError,
+} from "@/lib/ai/client-generate-text";
+import { parseContentSlots } from "@dodi/ai/game-content";
 import { downscaleDataUrl } from "@/lib/games/thumbnail";
 import {
   createOwnSnapshot,
@@ -68,6 +73,14 @@ import type {
 const AUTOSAVE_DEBOUNCE_MS = 1500;
 /** E2EE-internal marker title — autosave slots never appear in the collection. */
 const AUTOSAVE_TITLE = "Autosave";
+/**
+ * Caps for game-initiated text generation (game:event "request_generate_text").
+ * The requesting code is sealed, AI-generated game code — treat it as untrusted
+ * and never let it spend AI tokens unbounded. Dodi-initiated calls are gated by
+ * the conversation itself and bypass these.
+ */
+const GAME_TEXT_REQUEST_MAX_PER_PLAY = 20;
+const GAME_TEXT_REQUEST_COOLDOWN_MS = 5000;
 
 interface GamePlayViewProps {
   gameId: string;
@@ -296,6 +309,135 @@ export function GamePlayView({
       }
     },
     [t, beginAiActivity, endAiActivity, drawingStyle],
+  );
+
+  // `generate_text` is a client-only meta-command like `generate_drawing`: text
+  // generation needs the vault-held thinking key and can't run inside the
+  // sandbox. We fill the game's declared content slots (state.contentSlots) in
+  // one coherent generation, then push a `set_generated_text` command with the
+  // slot map into the sandbox. Triggered by dodi (voice/text tool call) or by
+  // the game itself via game:event "request_generate_text" (rate-limited; on
+  // any failure the game receives set_generated_text { slots: {}, error } so
+  // its loading UI can recover).
+  const textGenerationBusyRef = useRef(false);
+  const gameTextRequestCountRef = useRef(0);
+  const lastGameTextRequestAtRef = useRef(0);
+
+  const deliverTextFailure = useCallback((error: string): void => {
+    sandboxRef.current?.sendCommand({
+      type: "set_generated_text",
+      payload: { slots: {}, error },
+    });
+  }, []);
+
+  const handleGenerateText = useCallback(
+    async (
+      command: GameCommand,
+      opts?: { isGameRequested?: boolean },
+    ): Promise<void> => {
+      const isGameRequested = opts?.isGameRequested === true;
+      const store = useDodiSessionStore.getState();
+
+      if (textGenerationBusyRef.current) {
+        // One generation at a time — the in-flight result lands shortly.
+        if (isGameRequested) return;
+        store.resolveClientCommand({
+          ok: false,
+          error:
+            "New text is already being written for this game. In one short sentence, ask the child to wait a moment.",
+        });
+        return;
+      }
+      if (isGameRequested) {
+        const now = Date.now();
+        if (
+          gameTextRequestCountRef.current >= GAME_TEXT_REQUEST_MAX_PER_PLAY ||
+          now - lastGameTextRequestAtRef.current < GAME_TEXT_REQUEST_COOLDOWN_MS
+        ) {
+          gameDebugWarn("playview", "request_generate_text denied (rate limit)");
+          deliverTextFailure("rate_limited");
+          return;
+        }
+        gameTextRequestCountRef.current += 1;
+        lastGameTextRequestAtRef.current = now;
+      }
+
+      const request =
+        typeof command.payload?.request === "string" ? command.payload.request : "";
+      const ctx = store.context;
+      const slots = ctx.type === "game" ? parseContentSlots(ctx.gameState) : [];
+      if (slots.length === 0) {
+        // Not an app failure: the game declares no fillable slots right now.
+        if (isGameRequested) {
+          deliverTextFailure("no_slots");
+          return;
+        }
+        store.resolveClientCommand({
+          ok: false,
+          error:
+            "This game has no text slots to fill right now, so no text was written. " +
+            "In one short sentence, gently tell the child this game cannot take new text at the moment.",
+        });
+        return;
+      }
+
+      setGameError(null);
+      textGenerationBusyRef.current = true;
+      beginAiActivity("writing");
+      try {
+        const generated = await generateGameText({
+          kidId,
+          gameId: isSnapshotSession ? null : gameId,
+          request,
+          slots,
+          gameTitle: inlineContext?.title ?? title,
+          gameDescription: inlineContext?.description ?? description,
+        });
+        sandboxRef.current?.sendCommand({
+          type: "set_generated_text",
+          payload: { slots: generated },
+        });
+        // Content is in the game → release the held-open voice tool call so
+        // dodi announces it. Game-requested runs skip this: a no-op for text
+        // chat, but it must never resolve an unrelated pending voice call.
+        if (!isGameRequested) {
+          useDodiSessionStore.getState().resolveClientCommand({
+            ok: true,
+            message:
+              "The new text is now in the game. In ONE short, cheerful sentence, tell the child it is ready — do not repeat yourself.",
+          });
+        }
+      } catch (error) {
+        gameDebugWarn("playview", "generate_text failed:", error);
+        const isMissingModel = error instanceof NoThinkingModelError;
+        const message = isMissingModel
+          ? t("noThinkingModel")
+          : t("textGenerationFailed");
+        setGameError(message);
+        if (isGameRequested) {
+          deliverTextFailure(isMissingModel ? "no_thinking_model" : "generation_failed");
+        } else {
+          useDodiSessionStore
+            .getState()
+            .resolveClientCommand({ ok: false, error: message });
+        }
+      } finally {
+        textGenerationBusyRef.current = false;
+        endAiActivity("writing");
+      }
+    },
+    [
+      t,
+      kidId,
+      gameId,
+      isSnapshotSession,
+      title,
+      description,
+      inlineContext,
+      beginAiActivity,
+      endAiActivity,
+      deliverTextFailure,
+    ],
   );
 
   // Request a canvas snapshot from the sandbox (used by analyze_game_state and
@@ -802,6 +944,10 @@ export function GamePlayView({
         void handleGenerateDrawing(command);
         continue;
       }
+      if (command.type === "generate_text") {
+        void handleGenerateText(command);
+        continue;
+      }
       if (command.type === "save_snapshot") {
         void handleSaveSnapshot(command);
         continue;
@@ -813,7 +959,7 @@ export function GamePlayView({
       gameDebug("playview", `Sending command to sandbox:`, command);
       sandboxRef.current.sendCommand(command);
     }
-  }, [t, handleGenerateDrawing, handleSaveSnapshot, handleShareSnapshot]);
+  }, [t, handleGenerateDrawing, handleGenerateText, handleSaveSnapshot, handleShareSnapshot]);
 
   // Register command + snapshot handlers with the Dodi session store
   useEffect(() => {
@@ -845,6 +991,34 @@ export function GamePlayView({
       return;
     }
 
+    // Game-initiated content generation: an in-game button (or game start)
+    // posts this event; the host runs the same generate_text flow, gated by
+    // the declared capability and the per-play rate limit. The canonical event
+    // is "request_generate_text"; "generate_text_request" is accepted as an
+    // alias because generation agents naturally produce that order too.
+    if (
+      message.type === "game:event" &&
+      (message.payload.event === "request_generate_text" ||
+        message.payload.event === "generate_text_request")
+    ) {
+      if (!capabilities.includes("generate_text")) {
+        gameDebugWarn(
+          "playview",
+          "request_generate_text ignored — generate_text capability not declared",
+        );
+        return;
+      }
+      const request = (message.payload as Record<string, unknown>).request;
+      void handleGenerateText(
+        {
+          type: "generate_text",
+          payload: typeof request === "string" ? { request } : {},
+        },
+        { isGameRequested: true },
+      );
+      return;
+    }
+
     // Full restorable serialization, in reply to dodi:get_save_state
     if (message.type === "game:save_state") {
       gameDebug("playview", "Received game:save_state");
@@ -873,7 +1047,7 @@ export function GamePlayView({
         );
       }
     }
-  }, [logEvent, t]);
+  }, [logEvent, t, capabilities, handleGenerateText]);
 
   return (
     <GameViewShell

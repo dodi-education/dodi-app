@@ -10,9 +10,14 @@ vi.mock("openai", () => ({
   },
 }));
 
+import type Anthropic from "@anthropic-ai/sdk";
+import type { AgentActivityEvent } from "@dodi/types/agent-progress";
+
 import { AGENT_TOOLS, buildAgentTools } from "./game-agent-tools";
 import {
+  createAnthropicActivityHandler,
   createGameDriver,
+  createXaiTurnAccumulator,
   toAnthropicContent,
   toOpenAITools,
   toXaiContent,
@@ -21,6 +26,15 @@ import {
 beforeEach(() => {
   create.mockReset();
 });
+
+/** Minimal async-iterable standing in for the SDK's chat-completions stream. */
+function streamOf(...chunks: unknown[]): AsyncIterable<unknown> {
+  return {
+    async *[Symbol.asyncIterator]() {
+      yield* chunks;
+    },
+  };
+}
 
 describe("toOpenAITools", () => {
   it("maps Anthropic tool defs to OpenAI function tools", () => {
@@ -63,26 +77,44 @@ describe("createGameDriver", () => {
 });
 
 describe("XaiGameDriver", () => {
-  it("parses tool calls, normalizes usage, and appends tool results in OpenAI shape", async () => {
-    create.mockResolvedValueOnce({
-      choices: [
+  it("parses streamed tool calls, normalizes usage, and appends tool results in OpenAI shape", async () => {
+    create.mockResolvedValueOnce(
+      streamOf(
         {
-          finish_reason: "tool_calls",
-          message: {
-            role: "assistant",
-            content: "",
-            tool_calls: [
-              {
-                id: "call_1",
-                type: "function",
-                function: { name: "read_bridge_docs", arguments: "{}" },
+          choices: [
+            {
+              delta: {
+                tool_calls: [
+                  {
+                    index: 0,
+                    id: "call_1",
+                    type: "function",
+                    function: { name: "read_bridge_docs", arguments: "" },
+                  },
+                ],
               },
-            ],
+            },
+          ],
+        },
+        {
+          choices: [
+            {
+              delta: { tool_calls: [{ index: 0, function: { arguments: "{}" } }] },
+              finish_reason: "tool_calls",
+            },
+          ],
+        },
+        // Usage rides the final chunk (stream_options.include_usage).
+        {
+          choices: [],
+          usage: {
+            prompt_tokens: 12,
+            completion_tokens: 4,
+            prompt_tokens_details: { cached_tokens: 3 },
           },
         },
-      ],
-      usage: { prompt_tokens: 12, completion_tokens: 4, prompt_tokens_details: { cached_tokens: 3 } },
-    });
+      ),
+    );
 
     const driver = createGameDriver("xai", {
       apiKey: "k",
@@ -103,34 +135,47 @@ describe("XaiGameDriver", () => {
       cacheReadTokens: 3,
     });
 
-    // First request seeds a system + user message and forwards the tools.
+    // First request seeds a system + user message, forwards the tools, streams.
     const first = create.mock.calls[0][0] as {
       messages: Array<{ role: string; content?: unknown }>;
       tools: unknown[];
       tool_choice: string;
+      stream: boolean;
+      stream_options: unknown;
     };
     expect(first.messages.map((m) => m.role)).toEqual(["system", "user"]);
     expect(first.messages[0]).toEqual({ role: "system", content: "SYS" });
     expect(first.tool_choice).toBe("auto");
     expect(first.tools).toHaveLength(AGENT_TOOLS.length);
+    expect(first.stream).toBe(true);
+    expect(first.stream_options).toEqual({ include_usage: true });
 
     driver.addToolResults([{ id: "call_1", content: "bridge docs" }]);
 
-    create.mockResolvedValueOnce({
-      choices: [{ finish_reason: "stop", message: { role: "assistant", content: "all done" } }],
-      usage: { prompt_tokens: 2, completion_tokens: 1 },
-    });
+    create.mockResolvedValueOnce(
+      streamOf(
+        { choices: [{ delta: { content: "all done" }, finish_reason: "stop" }] },
+        { choices: [], usage: { prompt_tokens: 2, completion_tokens: 1 } },
+      ),
+    );
     const turn2 = await driver.runTurn();
     expect(turn2.toolCalls).toEqual([]);
     expect(turn2.hasText).toBe(true);
     expect(turn2.expectsToolResults).toBe(false);
 
-    // The second request must carry the assistant tool_call turn + its tool result
-    // (OpenAI requires each tool_call to be answered by a role:"tool" message).
+    // The second request must carry the reassembled assistant tool_call turn +
+    // its tool result (OpenAI requires each tool_call to be answered).
     const second = create.mock.calls[1][0] as {
       messages: Array<{ role: string; tool_call_id?: string; content?: unknown }>;
     };
     expect(second.messages.map((m) => m.role)).toEqual(["system", "user", "assistant", "tool"]);
+    expect(second.messages[2]).toEqual({
+      role: "assistant",
+      content: "",
+      tool_calls: [
+        { id: "call_1", type: "function", function: { name: "read_bridge_docs", arguments: "{}" } },
+      ],
+    });
     expect(second.messages[3]).toEqual({
       role: "tool",
       tool_call_id: "call_1",
@@ -139,25 +184,26 @@ describe("XaiGameDriver", () => {
   });
 
   it("coerces malformed tool-call arguments to an empty object", async () => {
-    create.mockResolvedValueOnce({
-      choices: [
-        {
-          finish_reason: "tool_calls",
-          message: {
-            role: "assistant",
-            content: null,
-            tool_calls: [
-              {
-                id: "c1",
-                type: "function",
-                function: { name: "write_game_code", arguments: "not json" },
-              },
-            ],
+    create.mockResolvedValueOnce(
+      streamOf({
+        choices: [
+          {
+            delta: {
+              tool_calls: [
+                {
+                  index: 0,
+                  id: "c1",
+                  type: "function",
+                  function: { name: "write_game_code", arguments: "not json" },
+                },
+              ],
+            },
+            finish_reason: "tool_calls",
           },
-        },
-      ],
-      usage: { prompt_tokens: 1, completion_tokens: 1 },
-    });
+        ],
+        usage: { prompt_tokens: 1, completion_tokens: 1 },
+      }),
+    );
 
     const driver = createGameDriver("xai", {
       apiKey: "k",
@@ -168,6 +214,128 @@ describe("XaiGameDriver", () => {
     driver.seed(undefined, "go");
     const turn = await driver.runTurn();
     expect(turn.toolCalls).toEqual([{ id: "c1", name: "write_game_code", input: {} }]);
+  });
+
+  it("emits narration + write-progress activity while streaming and forwards the signal", async () => {
+    create.mockResolvedValueOnce(
+      streamOf(
+        { choices: [{ delta: { content: "Now " } }] },
+        { choices: [{ delta: { content: "writing the game." } }] },
+        {
+          choices: [
+            {
+              delta: {
+                tool_calls: [
+                  { index: 0, id: "c1", function: { name: "write_game_code", arguments: "" } },
+                ],
+              },
+            },
+          ],
+        },
+        { choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: '{"code":' } }] } }] },
+        {
+          choices: [
+            {
+              delta: { tool_calls: [{ index: 0, function: { arguments: '"x"}' } }] },
+              finish_reason: "tool_calls",
+            },
+          ],
+        },
+        { choices: [], usage: { prompt_tokens: 1, completion_tokens: 1 } },
+      ),
+    );
+
+    const events: AgentActivityEvent[] = [];
+    const controller = new AbortController();
+    const driver = createGameDriver("xai", {
+      apiKey: "k",
+      model: "grok-4.3",
+      systemPrompt: "s",
+      maxTokens: 10,
+      onActivity: (e) => events.push(e),
+      signal: controller.signal,
+    });
+    driver.seed(undefined, "go");
+    const turn = await driver.runTurn();
+
+    expect(turn.toolCalls).toEqual([{ id: "c1", name: "write_game_code", input: { code: "x" } }]);
+    expect(turn.hasText).toBe(true);
+    expect(events).toEqual([
+      { type: "narration_start" },
+      { type: "narration_delta", text: "Now " },
+      { type: "narration_delta", text: "writing the game." },
+      { type: "tool_started", name: "write_game_code" },
+      { type: "write_progress", chars: 8 },
+      { type: "write_progress", chars: 12 },
+    ]);
+    expect(create.mock.calls[0][1]).toEqual({ signal: controller.signal });
+  });
+});
+
+describe("createXaiTurnAccumulator", () => {
+  it("only reports write progress for write_game_code arguments", () => {
+    const events: AgentActivityEvent[] = [];
+    const acc = createXaiTurnAccumulator((e) => events.push(e));
+    acc.push({
+      choices: [
+        {
+          delta: {
+            tool_calls: [{ index: 0, id: "v1", function: { name: "validate_game", arguments: "" } }],
+          },
+        },
+      ],
+    } as never);
+    acc.push({
+      choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: '{"a":1}' } }] } }],
+    } as never);
+    expect(events).toEqual([{ type: "tool_started", name: "validate_game" }]);
+    expect(acc.finish().toolCalls).toEqual([
+      { id: "v1", name: "validate_game", arguments: '{"a":1}' },
+    ]);
+  });
+});
+
+describe("createAnthropicActivityHandler", () => {
+  const event = (e: unknown): Anthropic.MessageStreamEvent => e as Anthropic.MessageStreamEvent;
+
+  it("maps text blocks to narration and write_game_code input deltas to progress", () => {
+    const events: AgentActivityEvent[] = [];
+    const handle = createAnthropicActivityHandler((e) => events.push(e));
+
+    handle(event({ type: "content_block_start", index: 0, content_block: { type: "text", text: "" } }));
+    handle(event({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "Reading the docs" } }));
+    handle(event({ type: "content_block_stop", index: 0 }));
+    handle(
+      event({
+        type: "content_block_start",
+        index: 1,
+        content_block: { type: "tool_use", id: "t1", name: "write_game_code", input: {} },
+      }),
+    );
+    handle(event({ type: "content_block_delta", index: 1, delta: { type: "input_json_delta", partial_json: '{"code":"<html' } }));
+    handle(event({ type: "content_block_delta", index: 1, delta: { type: "input_json_delta", partial_json: ">..." } }));
+
+    expect(events).toEqual([
+      { type: "narration_start" },
+      { type: "narration_delta", text: "Reading the docs" },
+      { type: "tool_started", name: "write_game_code" },
+      { type: "write_progress", chars: 14 },
+      { type: "write_progress", chars: 18 },
+    ]);
+  });
+
+  it("stays silent for other tools' input deltas", () => {
+    const events: AgentActivityEvent[] = [];
+    const handle = createAnthropicActivityHandler((e) => events.push(e));
+    handle(
+      event({
+        type: "content_block_start",
+        index: 0,
+        content_block: { type: "tool_use", id: "t1", name: "validate_game", input: {} },
+      }),
+    );
+    handle(event({ type: "content_block_delta", index: 0, delta: { type: "input_json_delta", partial_json: "{}" } }));
+    expect(events).toEqual([{ type: "tool_started", name: "validate_game" }]);
   });
 });
 
@@ -207,10 +375,12 @@ describe("content mappers", () => {
 
 describe("driver toolset override", () => {
   it("xAI driver forwards the run's toolset to the request", async () => {
-    create.mockResolvedValueOnce({
-      choices: [{ finish_reason: "stop", message: { role: "assistant", content: "ok" } }],
-      usage: { prompt_tokens: 1, completion_tokens: 1 },
-    });
+    create.mockResolvedValueOnce(
+      streamOf({
+        choices: [{ delta: { content: "ok" }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 1, completion_tokens: 1 },
+      }),
+    );
     const driver = createGameDriver("xai", {
       apiKey: "k",
       model: "grok-4.3",
@@ -228,10 +398,12 @@ describe("driver toolset override", () => {
 
 describe("XaiGameDriver image seeding", () => {
   it("prior user turns and the first message carry image parts", async () => {
-    create.mockResolvedValueOnce({
-      choices: [{ finish_reason: "stop", message: { role: "assistant", content: "ok" } }],
-      usage: { prompt_tokens: 1, completion_tokens: 1 },
-    });
+    create.mockResolvedValueOnce(
+      streamOf({
+        choices: [{ delta: { content: "ok" }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 1, completion_tokens: 1 },
+      }),
+    );
 
     const driver = createGameDriver("xai", {
       apiKey: "k",

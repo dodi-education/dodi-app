@@ -134,7 +134,8 @@ export function aggregateMonthly(rows: UsageRow[]): MonthlyUsage {
     m.cacheReadTokens += r.cache_read_tokens ?? 0;
     if (r.event_type === "game_create") m.creates += 1;
     else if (r.event_type === "game_edit") m.edits += 1;
-    else if (r.event_type === "game_analysis") m.analyses += 1;
+    else if (r.event_type === "game_analysis" || r.event_type === "game_text_generation")
+      m.analyses += 1;
 
     if (isGame(r.event_type)) {
       gamesByModel[r.model] = (gamesByModel[r.model] ?? 0) + 1;

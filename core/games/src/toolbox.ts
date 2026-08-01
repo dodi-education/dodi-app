@@ -42,6 +42,12 @@ export interface StandardTool {
    * save_snapshot rides on save_state).
    */
   requiresCapability?: string;
+  /**
+   * For client-intercepted tools: the internal bridge command the APP sends the
+   * game with the result (generate_drawing → set_generated_image,
+   * generate_text → set_generated_text). Drives handler validation.
+   */
+  deliveryCommand?: string;
   /** Gemini tool description (voice). */
   description: string;
   /** Gemini/JSON-schema parameters object. */
@@ -192,6 +198,7 @@ export const STANDARD_TOOLS: StandardTool[] = [
     kind: "client",
     voiceExposed: true,
     declarable: true,
+    deliveryCommand: "set_generated_image",
     description:
       "Create a black-and-white coloring sheet of ANY subject the child asks for and place it " +
       "on the canvas for them to color in. This is the ONLY way to draw a picture — call it " +
@@ -252,6 +259,47 @@ export const STANDARD_TOOLS: StandardTool[] = [
     description: "Undo the last action.",
     parameters: { type: "object", properties: {} },
     implementationNote: "Undo the last change and send updated game:state.",
+  },
+
+  // ── AI-written content (stories, questions, word lists) ──
+  {
+    name: "generate_text",
+    kind: "client",
+    voiceExposed: true,
+    declarable: true,
+    deliveryCommand: "set_generated_text",
+    description:
+      "Write fresh, tailored text content for this game and place it into the game's content " +
+      "slots: a story, questions, word lists, numbers as words. This is the ONLY way to put " +
+      "new text into the game — call it when the child asks for a new story, new questions, or " +
+      "fresh content, or when the game needs its text refilled. Describe WHAT to write in " +
+      "`request` (topic, difficulty, the child's wishes); one call fills ALL of the game's " +
+      "current slots with one coherent set of texts.",
+    parameters: {
+      type: "object",
+      properties: {
+        request: {
+          type: "string",
+          description:
+            'What to write, e.g. "a short bedtime story about a brave hedgehog, plus 3 easy questions about it".',
+        },
+      },
+      required: ["request"],
+    },
+    implementationNote:
+      "The APP generates the text and sends you a set_generated_text command with " +
+      "{ slots: { <slotId>: <text> } } — or { slots: {}, error } on failure. Declare your " +
+      "fillable slots in EVERY game:state as state.contentSlots: [{ id, description }] (the " +
+      "description says what belongs in the slot: content, format, rough length); you may " +
+      "change the slot set dynamically. Use ONE SLOT PER DISPLAYED FIELD (e.g. story_title, " +
+      "story_text, question_1, answer_correct, answer_wrong_1, hint) — NEVER one combined slot " +
+      "in a self-invented format you parse yourself; all slots are filled coherently in one " +
+      "generation. Implement set_generated_text (render each slot's text where it belongs AND " +
+      "keep the filled content in your state and save_state so Dodi can read it back); do NOT " +
+      "implement generate_text yourself. To let the child trigger new content from INSIDE the " +
+      "game (a button, or once on first start), post game:event { event: " +
+      "'request_generate_text', request: '<what to write>' } and wait for set_generated_text — " +
+      "the app rate-limits these requests. Declare 'generate_text' in capabilities to support this.",
   },
 
   // ── Universal ──
@@ -346,6 +394,35 @@ export const STANDARD_TOOLS: StandardTool[] = [
     implementationNote:
       "On set_generated_image, draw payload.dataUrl as the canvas base layer (used by " +
       "generate_drawing). Implied when you declare 'generate_drawing'; not declared on its own.",
+  },
+  {
+    name: "set_generated_text",
+    kind: "internal",
+    voiceExposed: false,
+    declarable: false,
+    description: "App→game: deliver AI-written text for the game's declared content slots.",
+    parameters: {
+      type: "object",
+      properties: {
+        slots: {
+          type: "object",
+          description: "Map of slot id → generated text, one entry per declared content slot.",
+        },
+        error: {
+          type: "string",
+          description:
+            "Set instead of slot content when the generation failed or was denied " +
+            "(e.g. rate_limited, no_thinking_model, generation_failed).",
+        },
+      },
+      required: ["slots"],
+    },
+    implementationNote:
+      "On set_generated_text, render payload.slots[id] into each declared content slot and " +
+      "store the filled texts in your game state and save_state (used by generate_text). If " +
+      "payload.error is set (slots is then empty), the generation failed: leave the current " +
+      "content unchanged, clear any loading UI, and offer a retry. Implied when you declare " +
+      "'generate_text'; not declared on its own.",
   },
 ];
 

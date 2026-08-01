@@ -545,7 +545,7 @@ describe("dodi session store — generate_drawing deferral", () => {
         markdown: "",
         codeBundle: "",
         gameState: {},
-        capabilities: ["generate_drawing", "set_drawing_color", "get_snapshot"],
+        capabilities: ["generate_drawing", "generate_text", "set_drawing_color", "get_snapshot"],
       },
     });
     await useDodiSessionStore.getState().connect(pid);
@@ -592,6 +592,46 @@ describe("dodi session store — generate_drawing deferral", () => {
     expect(id).toBe("call-1");
     expect(name).toBe("generate_drawing");
     expect(response).toMatchObject({ ok: true, status: "done" });
+  });
+
+  it("holds the generate_text tool response until the content lands (defers like generate_drawing)", async () => {
+    const runCommands = vi.fn();
+    useDodiSessionStore.getState().setOnRunCommands(runCommands);
+    await connectGame(PID);
+
+    fire({
+      type: "toolCall",
+      id: "call-text",
+      name: "generate_text",
+      args: { request: "a story about dragons" },
+    });
+
+    // Routed to the play view as a client command; the tool response is held
+    // open so the model stays silent through the generation window.
+    expect(runCommands).toHaveBeenCalledWith([
+      { type: "generate_text", payload: { request: "a story about dragons" } },
+    ]);
+    expect(sendToolResponseSpy).not.toHaveBeenCalled();
+
+    // Play view reports the slots are filled → the held call is answered.
+    useDodiSessionStore.getState().resolveClientCommand({
+      ok: true,
+      message: "The new text is now in the game.",
+    });
+
+    expect(sendToolResponseSpy).toHaveBeenCalledTimes(1);
+    const [id, name, response] = sendToolResponseSpy.mock.calls[0] as [
+      string,
+      string,
+      Record<string, unknown>,
+    ];
+    expect(id).toBe("call-text");
+    expect(name).toBe("generate_text");
+    expect(response).toMatchObject({
+      ok: true,
+      status: "done",
+      message: "The new text is now in the game.",
+    });
   });
 
   it("forwards a first-class bridge command and defers the answer until the game's state event", async () => {
@@ -794,7 +834,7 @@ describe("dodi session store — generate_drawing deferral", () => {
 describe("dodi session store — AI activity (thinking) tracking", () => {
   beforeEach(() => {
     installTestEnv();
-    useDodiSessionStore.setState({ aiActivity: { image: 0, thinking: 0 } });
+    useDodiSessionStore.setState({ aiActivity: { image: 0, thinking: 0, writing: 0 } });
   });
 
   afterEach(() => {

@@ -14,6 +14,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type OpenAI from "openai";
 
+import type { AgentActivityEvent } from "@dodi/types/agent-progress";
 import type { AIProviderId } from "@dodi/types/ai";
 import type { TokenUsage } from "@dodi/types/usage";
 
@@ -90,6 +91,10 @@ export interface GameDriverOptions {
   maxTokens: number;
   /** Toolset for this run (defaults to the base AGENT_TOOLS). */
   tools?: Anthropic.Tool[];
+  /** Live activity sink — narration text deltas, tool starts, write progress. */
+  onActivity?: (event: AgentActivityEvent) => void;
+  /** Aborts the in-flight request mid-stream (Stop button). */
+  signal?: AbortSignal;
 }
 
 function parseJsonObject(raw: string | undefined | null): Record<string, unknown> {
@@ -186,6 +191,38 @@ function messagesWithRollingCache(
   return out;
 }
 
+/**
+ * Per-turn translator from raw Anthropic stream events to AgentActivityEvents.
+ * Stateful across one turn (tracks which block is currently streaming) —
+ * create a fresh handler for every runTurn.
+ */
+export function createAnthropicActivityHandler(
+  emit: (event: AgentActivityEvent) => void,
+): (event: Anthropic.MessageStreamEvent) => void {
+  let currentTool: string | null = null;
+  let writeChars = 0;
+  return (event) => {
+    if (event.type === "content_block_start") {
+      const block = event.content_block;
+      if (block.type === "text") {
+        currentTool = null;
+        emit({ type: "narration_start" });
+      } else if (block.type === "tool_use") {
+        currentTool = block.name;
+        if (block.name === "write_game_code") writeChars = 0;
+        emit({ type: "tool_started", name: block.name });
+      }
+    } else if (event.type === "content_block_delta") {
+      if (event.delta.type === "text_delta") {
+        emit({ type: "narration_delta", text: event.delta.text });
+      } else if (event.delta.type === "input_json_delta" && currentTool === "write_game_code") {
+        writeChars += event.delta.partial_json.length;
+        emit({ type: "write_progress", chars: writeChars });
+      }
+    }
+  };
+}
+
 class AnthropicGameDriver implements GameCodeDriver {
   #client: Anthropic;
   #model: string;
@@ -193,12 +230,16 @@ class AnthropicGameDriver implements GameCodeDriver {
   #tools: Anthropic.Tool[];
   #system: Anthropic.TextBlockParam[];
   #messages: Anthropic.MessageParam[] = [];
+  #onActivity?: (event: AgentActivityEvent) => void;
+  #signal?: AbortSignal;
 
   constructor(opts: GameDriverOptions) {
     this.#client = new Anthropic({ apiKey: opts.apiKey, dangerouslyAllowBrowser: true });
     this.#model = opts.model;
     this.#maxTokens = opts.maxTokens;
     this.#tools = opts.tools ?? AGENT_TOOLS;
+    this.#onActivity = opts.onActivity;
+    this.#signal = opts.signal;
     // Cache the static prefix (tools render before system, so this one breakpoint
     // covers both). The rolling per-turn breakpoint is added at request time.
     this.#system = [
@@ -220,13 +261,17 @@ class AnthropicGameDriver implements GameCodeDriver {
     // above ~16k tokens, a non-streaming request would sit silent for minutes
     // and blow the SDK's HTTP timeout budget; a streaming connection keeps
     // bytes flowing for the whole write.
-    const stream = this.#client.messages.stream({
-      model: this.#model,
-      max_tokens: this.#maxTokens,
-      system: this.#system,
-      tools: this.#tools,
-      messages: messagesWithRollingCache(this.#messages),
-    });
+    const stream = this.#client.messages.stream(
+      {
+        model: this.#model,
+        max_tokens: this.#maxTokens,
+        system: this.#system,
+        tools: this.#tools,
+        messages: messagesWithRollingCache(this.#messages),
+      },
+      { signal: this.#signal },
+    );
+    if (this.#onActivity) stream.on("streamEvent", createAnthropicActivityHandler(this.#onActivity));
     const response = await stream.finalMessage();
 
     const toolUseBlocks = response.content.filter(
@@ -300,6 +345,71 @@ export function toXaiContent(
   return parts;
 }
 
+/** One turn's worth of accumulated streaming chunks in provider shape. */
+interface XaiAccumulatedTurn {
+  content: string;
+  toolCalls: { id: string; name: string; arguments: string }[];
+  finishReason: string | null;
+  usage: OpenAI.Completions.CompletionUsage | undefined;
+}
+
+/**
+ * Per-turn accumulator for OpenAI-compatible streaming chunks: reassembles the
+ * assistant message (content + tool calls, usage from the final chunk) while
+ * emitting AgentActivityEvents as deltas arrive. Create a fresh one per turn.
+ */
+export function createXaiTurnAccumulator(
+  emit: (event: AgentActivityEvent) => void = () => {},
+): {
+  push: (chunk: OpenAI.Chat.Completions.ChatCompletionChunk) => void;
+  finish: () => XaiAccumulatedTurn;
+} {
+  let content = "";
+  let hasNarration = false;
+  let finishReason: string | null = null;
+  let usage: OpenAI.Completions.CompletionUsage | undefined;
+  // Sparse by delta index — a provider may interleave several calls per turn.
+  const calls: { id: string; name: string; arguments: string }[] = [];
+
+  return {
+    push(chunk) {
+      if (chunk.usage) usage = chunk.usage;
+      const choice = chunk.choices?.[0];
+      if (!choice) return;
+      if (choice.finish_reason) finishReason = choice.finish_reason;
+      const delta = choice.delta;
+      if (!delta) return;
+      if (typeof delta.content === "string" && delta.content.length > 0) {
+        if (!hasNarration) {
+          hasNarration = true;
+          emit({ type: "narration_start" });
+        }
+        content += delta.content;
+        emit({ type: "narration_delta", text: delta.content });
+      }
+      for (const tc of delta.tool_calls ?? []) {
+        let call = calls[tc.index];
+        if (!call) {
+          call = { id: "", name: "", arguments: "" };
+          calls[tc.index] = call;
+        }
+        if (tc.id) call.id = tc.id;
+        if (tc.function?.name) {
+          call.name = tc.function.name;
+          emit({ type: "tool_started", name: call.name });
+        }
+        if (tc.function?.arguments) {
+          call.arguments += tc.function.arguments;
+          if (call.name === "write_game_code") {
+            emit({ type: "write_progress", chars: call.arguments.length });
+          }
+        }
+      }
+    },
+    finish: () => ({ content, toolCalls: calls.filter(Boolean), finishReason, usage }),
+  };
+}
+
 class XaiGameDriver implements GameCodeDriver {
   #client: OpenAI;
   #model: string;
@@ -307,6 +417,8 @@ class XaiGameDriver implements GameCodeDriver {
   #systemPrompt: string;
   #tools: OpenAI.Chat.Completions.ChatCompletionTool[];
   #messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
+  #onActivity?: (event: AgentActivityEvent) => void;
+  #signal?: AbortSignal;
 
   constructor(opts: GameDriverOptions) {
     this.#client = createXaiClient(opts.apiKey, true);
@@ -314,6 +426,8 @@ class XaiGameDriver implements GameCodeDriver {
     this.#maxTokens = opts.maxTokens;
     this.#systemPrompt = opts.systemPrompt;
     this.#tools = toOpenAITools(opts.tools ?? AGENT_TOOLS);
+    this.#onActivity = opts.onActivity;
+    this.#signal = opts.signal;
   }
 
   seed(priorTurns: PriorTurn[] | undefined, firstUserMessage: string | UserContent): void {
@@ -335,38 +449,53 @@ class XaiGameDriver implements GameCodeDriver {
   }
 
   async runTurn(): Promise<GameTurn> {
-    const res = await this.#client.chat.completions.create({
-      model: this.#model,
-      max_tokens: this.#maxTokens,
-      // Snapshot: we append the assistant reply to #messages right after, so the
-      // request must not alias the live array.
-      messages: [...this.#messages],
-      tools: this.#tools,
-      tool_choice: "auto",
-    });
+    // Stream the turn: keeps long code writes from sitting silent against HTTP
+    // timeouts, feeds the live activity line, and lets Stop abort mid-write.
+    const stream = await this.#client.chat.completions.create(
+      {
+        model: this.#model,
+        max_tokens: this.#maxTokens,
+        // Snapshot: we append the assistant reply to #messages right after, so the
+        // request must not alias the live array.
+        messages: [...this.#messages],
+        tools: this.#tools,
+        tool_choice: "auto",
+        stream: true,
+        // Usage arrives on the stream's final chunk instead of a response envelope.
+        stream_options: { include_usage: true },
+      },
+      { signal: this.#signal },
+    );
 
-    const choice = res.choices[0];
-    const msg = choice?.message;
-    const rawToolCalls = msg?.tool_calls ?? [];
-    const functionCalls = rawToolCalls.filter((tc) => tc.type === "function");
+    const acc = createXaiTurnAccumulator(this.#onActivity);
+    for await (const chunk of stream) acc.push(chunk);
+    const turn = acc.finish();
+
+    const rawToolCalls: OpenAI.Chat.Completions.ChatCompletionMessageToolCall[] =
+      turn.toolCalls.map((c) => ({
+        id: c.id,
+        type: "function",
+        function: { name: c.name, arguments: c.arguments },
+      }));
 
     // Append the assistant message (with its tool_calls) so the tool results we
     // add next attach to it — OpenAI requires each tool_call to be answered.
     this.#messages.push({
       role: "assistant",
-      content: msg?.content ?? "",
+      content: turn.content,
       ...(rawToolCalls.length > 0 ? { tool_calls: rawToolCalls } : {}),
     });
 
     return {
-      toolCalls: functionCalls.map((tc) => {
-        const fn = (tc as { function: { name: string; arguments: string } }).function;
-        return { id: tc.id, name: fn.name, input: parseJsonObject(fn.arguments) };
-      }),
-      hasText: typeof msg?.content === "string" && msg.content.trim().length > 0,
-      expectsToolResults: choice?.finish_reason === "tool_calls",
-      stopReason: choice?.finish_reason ?? null,
-      usage: xaiUsage(res.usage),
+      toolCalls: turn.toolCalls.map((c) => ({
+        id: c.id,
+        name: c.name,
+        input: parseJsonObject(c.arguments),
+      })),
+      hasText: turn.content.trim().length > 0,
+      expectsToolResults: turn.finishReason === "tool_calls",
+      stopReason: turn.finishReason,
+      usage: xaiUsage(turn.usage),
     };
   }
 

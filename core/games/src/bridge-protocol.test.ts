@@ -4,6 +4,7 @@ import {
   GameToParentMessageSchema,
   ParentToGameMessageSchema,
   createBridgeToken,
+  toJsonSafeMessage,
 } from "./bridge-protocol";
 
 const token = createBridgeToken();
@@ -109,5 +110,45 @@ describe("host-snapshot bridge messages", () => {
       payload: { event: "host_snapshot", snapshot: null },
     });
     expect(parsed.success).toBe(true);
+  });
+});
+
+describe("toJsonSafeMessage", () => {
+  it("drops undefined properties so a real game's game:state validates", () => {
+    // Regression: AI-generated games write `x ? y : undefined` into their state;
+    // structured clone keeps the property and the JSON-only schema rejected it.
+    const message = {
+      type: "game:state",
+      token,
+      payload: { phase: "idle", correctIndex: undefined, answers: ["a", "b"] },
+    };
+    expect(GameToParentMessageSchema.safeParse(message).success).toBe(false);
+    const parsed = GameToParentMessageSchema.safeParse(toJsonSafeMessage(message));
+    expect(parsed.success).toBe(true);
+  });
+
+  it("cleans nested state inside game:ready", () => {
+    const message = {
+      type: "game:ready",
+      token,
+      payload: {
+        capabilities: ["submit_answer"],
+        state: { deep: { value: undefined }, list: [1, undefined, 2] },
+      },
+    };
+    expect(GameToParentMessageSchema.safeParse(message).success).toBe(false);
+    const parsed = GameToParentMessageSchema.safeParse(toJsonSafeMessage(message));
+    expect(parsed.success).toBe(true);
+    if (parsed.success && parsed.data.type === "game:ready") {
+      // Undefined array items become null; undefined properties disappear.
+      expect(parsed.data.payload.state).toEqual({ deep: {}, list: [1, null, 2] });
+    }
+  });
+
+  it("returns unserializable input unchanged", () => {
+    const cyclic: Record<string, unknown> = {};
+    cyclic.self = cyclic;
+    expect(toJsonSafeMessage(cyclic)).toBe(cyclic);
+    expect(toJsonSafeMessage(undefined)).toBe(undefined);
   });
 });

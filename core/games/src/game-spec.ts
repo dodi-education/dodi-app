@@ -59,6 +59,9 @@ Sending messages to parent:
 
 The capabilities array in game:ready MUST list ALL command types the game supports.
 The state object MUST include ALL meaningful game state (score, level, positions, selections, etc).
+Every payload MUST be plain JSON: NEVER put undefined in state or any payload (write null or omit
+the key instead — e.g. "x ? y : null", not "x ? y : undefined"). Only strings, numbers, booleans,
+null, arrays, and plain objects.
 `.trim();
 
 export interface MappedSuccess {

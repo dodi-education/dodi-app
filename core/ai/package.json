@@ -17,6 +17,7 @@
     "./game-agent-tools": "./src/game-agent-tools.ts",
     "./game-agent-prompt": "./src/game-agent-prompt.ts",
     "./game-analysis": "./src/game-analysis.ts",
+    "./game-content": "./src/game-content.ts",
     "./success-mapping": "./src/success-mapping.ts",
     "./thinking-providers/factory": "./src/thinking-providers/factory.ts",
     "./thinking-providers/anthropic": "./src/thinking-providers/anthropic.ts",

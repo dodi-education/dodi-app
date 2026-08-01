@@ -17,6 +17,11 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",
+    "@codemirror/commands": "^6.10.4",
+    "@codemirror/lang-html": "^6.4.11",
+    "@codemirror/language": "^6.12.4",
+    "@codemirror/state": "^6.7.1",
+    "@codemirror/view": "^6.43.7",
     "@dodi/ai": "workspace:*",
     "@dodi/billing-contract": "workspace:*",
     "@dodi/crypto": "workspace:*",
@@ -26,6 +31,7 @@
     "@dodi/types": "workspace:*",
     "@dodi/vault": "workspace:*",
     "@google/generative-ai": "^0.24.1",
+    "@lezer/highlight": "^1.2.3",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "2.98.0",
     "@tabler/icons-react": "^3.39.0",
@@ -42,7 +48,6 @@
     "radix-ui": "^1.4.3",
     "react": "19.2.3",
     "react-dom": "19.2.3",
-    "react-simple-code-editor": "^0.14.1",
     "tailwind-merge": "^3.5.0",
     "zod": "^4.3.6",
     "zustand": "^5.0.11"

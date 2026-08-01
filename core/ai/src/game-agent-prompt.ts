@@ -23,12 +23,29 @@ export interface AgentPromptContext {
   learningContext?: string;
   /** Parent-configured camera perspective (null/undefined = agent chooses). */
   perspective?: GamePerspective | null;
+  /**
+   * Language for the live "working aloud" status sentences shown to the parent
+   * while the agent builds (the parent's UI language, e.g. "German" — NOT
+   * necessarily the child's game language). Unset ⇒ no narration instruction.
+   */
+  narrationLanguage?: string;
 }
 
 export function buildAgentSystemPrompt(context: AgentPromptContext): string {
   const ageLine = context.age
     ? `- Child's age: ${context.age} years old`
     : "- Child's age: unknown";
+
+  const narrationSection = context.narrationLanguage?.trim()
+    ? `
+
+## Working Aloud
+The parent watches your progress live while you build. Immediately BEFORE each tool call,
+write ONE short plain-text sentence in ${context.narrationLanguage.trim()} telling the parent
+what you are about to do, in friendly, non-technical words (for example: "Now I'm painting
+the background picture."). One sentence only — never code, JSON, or private details. These
+sentences appear next to a progress indicator while you work; they are not part of the game.`
+    : "";
 
   const learningContextSection = context.learningContext?.trim()
     ? `
@@ -91,7 +108,20 @@ invent new command types. In write_game_code, pass a "capabilities" array listin
 command your game implements; these become Dodi's first-class voice tools. Read each command's
 payload keys exactly as named. If your game has a visual surface, implement get_snapshot and declare
 it so Dodi can "see" it (via analyze_game_state); if it supports AI-drawn pictures, declare
-generate_drawing and implement the set_generated_image command the app sends back. Every stateful
+generate_drawing and implement the set_generated_image command the app sends back. If it presents
+AI-written text (stories, reading questions, word lists, numbers as words), declare generate_text:
+publish the fillable slots in EVERY game:state as state.contentSlots: [{ id, description }] (each
+description states what belongs in the slot — content, format, rough length; you may change the
+slot set as the game progresses), implement the set_generated_text command the app sends back
+({ slots: { <slotId>: <text> } }, or { slots: {}, error } on failure — then clear any loading UI
+and offer a retry), render each slot where it belongs, and keep the filled texts in your state and
+save_state so Dodi can read them back and ask about them. Use ONE slot per displayed field (e.g.
+story_title, story_text, question_1, answer_correct) — never one combined slot in a self-invented
+format you parse yourself. To trigger generation from inside the game (a "new story" button, or
+once on first start), post game:event { event: 'request_generate_text', request: '<what to
+write>' } and wait for set_generated_text; the app rate-limits these requests, so always handle
+the error delivery. Document every slot and
+the filled-content fields in the markdown State Fields section. Every stateful
 game MUST implement full save/restore (see the bridge interface: 'dodi:get_save_state' →
 'game:save_state', and restoring 'dodi:init' payload.savedState) and declare save_state — this is
 what lets the child save and share snapshots of your game.
@@ -143,6 +173,6 @@ Every time you call write_game_code, you MUST include a "changeSummary": a short
 written for the parent (2-4 concise bullet lines, each starting with "- "). For a brand-new game,
 summarize what you made; for an update, summarize ONLY what changed in this turn. Keep it plain and
 non-technical — describe the gameplay/experience, not the code. Never include the child's name,
-birthday, or any personal detail in the summary — refer to "your child" generically.
+birthday, or any personal detail in the summary — refer to "your child" generically.${narrationSection}
 `;
 }

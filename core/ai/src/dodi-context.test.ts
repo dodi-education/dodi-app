@@ -65,6 +65,20 @@ describe("buildGameVoiceContext tool registration", () => {
     expect(systemInstruction).toContain("generate_drawing");
     expect(systemInstruction).not.toContain("execute_game_command");
   });
+
+  it("generate_text capability registers the voice tool, never set_generated_text", () => {
+    const withCap = buildGameVoiceContext({
+      ...base,
+      capabilities: ["generate_text"],
+    }).tools.map((t) => t.name);
+    expect(withCap).toContain("generate_text");
+    expect(withCap).not.toContain("set_generated_text");
+
+    const withoutCap = buildGameVoiceContext({ ...base, capabilities: [] }).tools.map(
+      (t) => t.name,
+    );
+    expect(withoutCap).not.toContain("generate_text");
+  });
 });
 
 describe("snapshot tools & guidance", () => {

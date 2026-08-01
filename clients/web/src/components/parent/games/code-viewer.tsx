@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import Prism from "prismjs";
 // markup first so css/javascript can graft embedded <style>/<script> highlighting
 // onto it; clike is javascript's dependency. All four ship in the default build,
@@ -13,6 +14,7 @@ import "prismjs/components/prism-javascript";
 
 import { Icon } from "@/components/shared/icon";
 import { CodeDiffView } from "@/components/parent/games/code-diff-view";
+import type { CodeEditorHandle } from "@/components/parent/games/code-editor";
 import {
   Select,
   SelectContent,
@@ -21,6 +23,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+
+// CodeMirror is edit-only: lazy-load it so the read view ships none of it.
+const CodeEditor = dynamic(
+  () =>
+    import("@/components/parent/games/code-editor").then((m) => m.CodeEditor),
+  { ssr: false },
+);
 
 /** One entry in the version selector (date preformatted by the parent). */
 export interface CodeViewerVersion {
@@ -74,9 +83,10 @@ interface CodeViewerProps {
 /**
  * Syntax-highlighted view of a game's HTML bundle, styled like a modern code
  * editor — a light surface, a filename tab, a line-number gutter, and a copy
- * action. Read-only until the parent unlocks editing (Edit → plain textarea,
- * saved via Ctrl+S or the Save button). Token colors live in `globals.css`
- * (scoped under `.dodi-code`).
+ * action. Read-only until the parent unlocks editing (Edit swaps in a
+ * lazy-loaded CodeMirror view with matching highlighting, saved via Ctrl+S or
+ * the Save button). Token colors live in `globals.css` (scoped under
+ * `.dodi-code`).
  */
 export function CodeViewer({
   code,
@@ -102,9 +112,16 @@ export function CodeViewer({
   const [copied, setCopied] = useState(false);
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Manual-edit mode: the draft lives here; the parent only sees it on save.
+  // Manual-edit mode: CodeMirror owns the draft (no re-render per keystroke);
+  // the handle pulls the text out on save/copy. Null until the lazy chunk
+  // loads and the view mounts — Save stays disabled meanwhile. `editSeed`
+  // freezes the code at edit-start so a chat build landing mid-edit can't
+  // remount the editor and wipe the typed draft.
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState("");
+  const [editSeed, setEditSeed] = useState("");
+  const [editorHandle, setEditorHandle] = useState<CodeEditorHandle | null>(
+    null,
+  );
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
 
@@ -131,7 +148,9 @@ export function CodeViewer({
 
   const copy = async (): Promise<void> => {
     try {
-      await navigator.clipboard.writeText(editing ? draft : code);
+      await navigator.clipboard.writeText(
+        editing ? (editorHandle?.getCode() ?? code) : code,
+      );
       setCopied(true);
       if (copiedTimer.current) clearTimeout(copiedTimer.current);
       copiedTimer.current = setTimeout(() => setCopied(false), 1600);
@@ -141,35 +160,35 @@ export function CodeViewer({
   };
 
   const startEdit = (): void => {
-    setDraft(code);
+    setEditSeed(code);
     setEditing(true);
   };
 
   const cancelEdit = (): void => {
     setEditing(false);
-    setDraft("");
   };
 
   const saveEdit = useCallback(async (): Promise<void> => {
     if (!onSaveEdit || savingRef.current) return;
-    // Nothing changed — just lock the editor again, no save round-trip.
-    if (draft === code) {
+    const edited = editorHandle?.getCode();
+    if (edited === undefined) return; // editor chunk still loading
+    // Nothing typed — just lock the editor again, no save round-trip.
+    if (edited === editSeed) {
       setEditing(false);
       return;
     }
     savingRef.current = true;
     setSaving(true);
     try {
-      const saved = await onSaveEdit(draft);
+      const saved = await onSaveEdit(edited);
       if (saved) {
         setEditing(false);
-        setDraft("");
       }
     } finally {
       savingRef.current = false;
       setSaving(false);
     }
-  }, [onSaveEdit, draft, code]);
+  }, [onSaveEdit, editorHandle, editSeed]);
 
   // Ctrl+S / Cmd+S saves while editing (window-level so focus doesn't matter).
   useEffect(() => {
@@ -234,8 +253,8 @@ export function CodeViewer({
               <button
                 type="button"
                 onClick={() => void saveEdit()}
-                disabled={saving}
-                className={headerButton(true, saving)}
+                disabled={saving || !editorHandle}
+                className={headerButton(true, saving || !editorHandle)}
               >
                 <Icon name="check" size={14} />
                 {editSaveLabel}
@@ -309,12 +328,13 @@ export function CodeViewer({
           min-w-0 lets this scroll horizontally instead of widening the studio pane
           (which would otherwise squeeze the Dodi sidebar). */}
       {editing ? (
-        <textarea
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          spellCheck={false}
-          autoFocus
-          className="min-h-0 w-full flex-1 resize-none bg-card p-4 font-mono text-[12.5px] leading-[1.75] text-ink-2 outline-none"
+        /* CodeMirror brings its own gutter and scroller; `min-h-0 flex-1`
+           bounds it so the editor scrolls internally instead of growing the
+           pane. */
+        <CodeEditor
+          initialCode={editSeed}
+          onReady={setEditorHandle}
+          className="min-h-0 flex-1 overflow-hidden"
         />
       ) : diffActive && previousCode ? (
         <CodeDiffView

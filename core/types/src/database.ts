@@ -570,6 +570,7 @@ export interface Database {
             | "game_create"
             | "game_edit"
             | "game_analysis"
+            | "game_text_generation"
             | "memory_update"
             | "voice_minutes";
           provider: string;
@@ -600,6 +601,7 @@ export interface Database {
             | "game_create"
             | "game_edit"
             | "game_analysis"
+            | "game_text_generation"
             | "memory_update"
             | "voice_minutes";
           provider: string;
@@ -630,6 +632,7 @@ export interface Database {
             | "game_create"
             | "game_edit"
             | "game_analysis"
+            | "game_text_generation"
             | "memory_update"
             | "voice_minutes";
           provider?: string;

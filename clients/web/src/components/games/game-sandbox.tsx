@@ -13,6 +13,7 @@ import { GameToParentMessageSchema } from "@dodi/games/bridge-protocol";
 import {
   createBridgeToken,
   isBridgeTokenValid,
+  toJsonSafeMessage,
 } from "@dodi/games/bridge-protocol";
 import { gameDebug, gameDebugWarn } from "@dodi/games/debug";
 import type { MetricsSummary } from "@dodi/games/success";
@@ -336,7 +337,9 @@ export const GameSandbox = forwardRef<GameSandboxHandle, GameSandboxProps>(
         const frameWindow = iframeRef.current?.contentWindow;
         if (!frameWindow || event.source !== frameWindow) return;
 
-        const parsed = GameToParentMessageSchema.safeParse(event.data);
+        // Tolerate non-JSON payload values from game code (undefined properties
+        // etc.) — normalize to plain JSON before validating.
+        const parsed = GameToParentMessageSchema.safeParse(toJsonSafeMessage(event.data));
         if (!parsed.success) {
           gameDebugWarn("sandbox", "Schema validation FAILED for message:", event.data, "Issues:", parsed.error.issues);
           return;

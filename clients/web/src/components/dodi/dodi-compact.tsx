@@ -49,13 +49,15 @@ export function DodiCompact() {
   const statusLine =
     activityKind === "image"
       ? t("voiceCreatingImage")
-      : activityKind === "thinking"
-        ? t("voiceThinking")
-        : isConnecting
-          ? t("voiceConnecting")
-          : dodiSpeaking && dodiState === "active"
-            ? t("voiceSpeaking")
-            : null;
+      : activityKind === "writing"
+        ? t("voiceWritingText")
+        : activityKind === "thinking"
+          ? t("voiceThinking")
+          : isConnecting
+            ? t("voiceConnecting")
+            : dodiSpeaking && dodiState === "active"
+              ? t("voiceSpeaking")
+              : null;
 
   return (
     <div className="flex min-w-0 items-center gap-2.5">

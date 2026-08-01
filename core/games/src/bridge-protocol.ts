@@ -166,6 +166,23 @@ export const GameToParentMessageSchema = z.discriminatedUnion("type", [
   GameErrorMessageSchema,
 ]);
 
+/**
+ * Normalize a postMessage payload to plain JSON before schema validation.
+ * Structured clone keeps `undefined` object properties, which the JSON-only
+ * bridge schemas reject — and AI-generated games produce them routinely
+ * (`x ? y : undefined`). The round-trip drops `undefined` properties, turns
+ * `undefined` array items into `null`, and collapses non-JSON values (Date, …)
+ * to their JSON form. Returns the input unchanged when it can't be serialized
+ * (cycles, top-level undefined) — the schema then rejects it as before.
+ */
+export function toJsonSafeMessage(value: unknown): unknown {
+  try {
+    return JSON.parse(JSON.stringify(value)) as unknown;
+  } catch {
+    return value;
+  }
+}
+
 export function parseParentToGameMessage(value: unknown): ParentToGameMessage {
   return ParentToGameMessageSchema.parse(value) as ParentToGameMessage;
 }

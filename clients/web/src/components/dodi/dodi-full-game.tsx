@@ -64,15 +64,17 @@ export function DodiFullGame({
     ? t("offline")
     : activityKind === "image"
       ? t("voiceCreatingImage")
-      : activityKind === "thinking"
-        ? t("voiceThinking")
-        : isConnecting
-          ? t("voiceConnecting")
-          : dodiState === "active"
-            ? dodiSpeaking
-              ? t("voiceSpeaking")
-              : t("voiceListening")
-            : t("tapToReconnect");
+      : activityKind === "writing"
+        ? t("voiceWritingText")
+        : activityKind === "thinking"
+          ? t("voiceThinking")
+          : isConnecting
+            ? t("voiceConnecting")
+            : dodiState === "active"
+              ? dodiSpeaking
+                ? t("voiceSpeaking")
+                : t("voiceListening")
+              : t("tapToReconnect");
 
   return (
     // Content-sized (not stretched to the stage height): with the action chips
@@ -110,7 +112,7 @@ export function DodiFullGame({
           )}
           <Image
             src={isThinking ? "/images/dodi-thinking.png" : getDodiImage(dodiState, false)}
-            alt={activityKind === "image" ? "dodi is creating a picture" : activityKind === "thinking" ? "dodi is thinking" : dodiState === "active" ? "dodi listening" : dodiState === "deaf" ? "dodi can't hear you" : "dodi sleeping"}
+            alt={activityKind === "image" ? "dodi is creating a picture" : activityKind === "writing" ? "dodi is writing" : activityKind === "thinking" ? "dodi is thinking" : dodiState === "active" ? "dodi listening" : dodiState === "deaf" ? "dodi can't hear you" : "dodi sleeping"}
             fill
             sizes="300px"
             className="relative z-[1] object-contain"

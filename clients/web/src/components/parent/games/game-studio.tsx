@@ -304,6 +304,12 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
   // kills the in-flight provider fetch and the whole build with it.
   useWakeLock(thinking);
   const [step, setStep] = useState<AgentStep | null>(null);
+  // Live "working aloud" text streamed from the model while it builds — shown
+  // under the thinking indicator. Ephemeral: reset per text block, never persisted.
+  const [narration, setNarration] = useState("");
+  // Cumulative streamed size of the current write_game_code call, rounded to
+  // 200-char steps so state updates (re-renders) stay coarse. 0 = hidden.
+  const [writeChars, setWriteChars] = useState(0);
   const [error, setError] = useState<string | null>(null);
   // Background generation was enabled but the build produced no image — tells
   // the parent whether the model skipped the tool or generation failed.
@@ -386,7 +392,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     requestAnimationFrame(() => {
       el.scrollTop = el.scrollHeight;
     });
-  }, [messages, thinking, mtab, locked, vertical]);
+  }, [messages, thinking, narration, writeChars, mtab, locked, vertical]);
 
   // Building/editing a game is a complex task that requires an explicitly
   // configured Game generation model. Without one we lock the composer (just
@@ -925,6 +931,8 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     setMessages(withUser);
     setThinking(true);
     setStep(null);
+    setNarration("");
+    setWriteChars(0);
 
     // First build of a freshly-saved draft uses generate_game semantics (build
     // from scratch) even though the game id exists; later edits are updates.
@@ -1018,6 +1026,17 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
           lastStep = s;
           setStep(s);
         },
+        // Live activity: narration text streams into the line under the loader;
+        // the write ticker counts streamed write_game_code input. Rounding to
+        // 200-char steps keeps re-renders coarse (React skips equal states).
+        onActivity: (e) => {
+          if (e.type === "narration_start") setNarration("");
+          else if (e.type === "narration_delta") setNarration((n) => n + e.text);
+          else if (e.type === "tool_started" && e.name === "write_game_code") setWriteChars(0);
+          else if (e.type === "write_progress") setWriteChars(Math.floor(e.chars / 200) * 200);
+        },
+        // Narration is for the parent watching the studio — their UI language.
+        narrationLanguage: getLanguageDisplayName(locale),
         onGenerateBackgroundImage: game.generateBackgroundImage ? makeBackgroundImage : undefined,
         // Independent of the generate toggle: "use my attached image as the
         // background" needs no image provider, just the bundle-size bound.
@@ -1239,6 +1258,8 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     } finally {
       setThinking(false);
       setStep(null);
+      setNarration("");
+      setWriteChars(0);
       abortRef.current = null;
     }
   }
@@ -1753,7 +1774,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
                 )
               )}
               {thinking && (
-                <div className="flex items-center gap-3">
+                <div className="flex items-start gap-3">
                   <Image
                     src="/images/dodi-head-active.png"
                     alt=""
@@ -1761,10 +1782,24 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
                     height={30}
                     className="-mt-px h-[30px] w-[30px] shrink-0 object-contain"
                   />
-                  <div className="flex gap-1.5 py-1.5">
-                    <span className="h-[7px] w-[7px] animate-bounce rounded-full bg-faint [animation-delay:0ms]" />
-                    <span className="h-[7px] w-[7px] animate-bounce rounded-full bg-faint [animation-delay:150ms]" />
-                    <span className="h-[7px] w-[7px] animate-bounce rounded-full bg-faint [animation-delay:300ms]" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex gap-1.5 py-1.5">
+                      <span className="h-[7px] w-[7px] animate-bounce rounded-full bg-faint [animation-delay:0ms]" />
+                      <span className="h-[7px] w-[7px] animate-bounce rounded-full bg-faint [animation-delay:150ms]" />
+                      <span className="h-[7px] w-[7px] animate-bounce rounded-full bg-faint [animation-delay:300ms]" />
+                    </div>
+                    {/* No aria-live: announcing every streamed delta would spam
+                        screen readers — the header status line carries progress. */}
+                    {narration.trim() && (
+                      <p className="mt-1 whitespace-pre-wrap text-[12.5px] italic leading-relaxed text-muted-foreground">
+                        {narration.trim()}
+                      </p>
+                    )}
+                    {step === "writing_code" && writeChars > 0 && (
+                      <p className="mt-1 text-[11.5px] font-medium tabular-nums text-faint">
+                        {t("writeProgress", { chars: writeChars })}
+                      </p>
+                    )}
                   </div>
                 </div>
               )}

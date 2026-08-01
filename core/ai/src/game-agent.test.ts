@@ -2,12 +2,14 @@ import { describe, expect, it, vi } from "vitest";
 
 import type {
   GameCodeDriver,
+  GameDriverOptions,
   GameToolResult,
   GameTurn,
   PriorTurn,
   UserContent,
 } from "./game-agent-drivers";
-import { AGENT_LIMITS, GameAgentError, MAX_IMAGE_TURNS, runGameAgent } from "./game-agent";
+import { AGENT_LIMITS, AgentAbortedError, GameAgentError, MAX_IMAGE_TURNS, runGameAgent } from "./game-agent";
+import type { AgentActivityEvent, AgentStep } from "@dodi/types/agent-progress";
 import type { AgentTaskRequest } from "@dodi/types/tasks";
 
 vi.mock("./game-agent-drivers", async (importOriginal) => {
@@ -757,5 +759,93 @@ describe("preview image loop integration", () => {
     expect(result.previewImageFailed).toBe(true);
     expect(result.previewOnly).toBeUndefined();
     expect(result.validationPassed).toBe(true);
+  });
+});
+
+describe("live activity + narration", () => {
+  const idleTurn: GameTurn = {
+    toolCalls: [],
+    hasText: false,
+    expectsToolResults: false,
+    stopReason: "end_turn",
+    usage: emptyUsage,
+  };
+
+  function captureDriverOpts(): { get: () => GameDriverOptions } {
+    let opts: GameDriverOptions | undefined;
+    mockDriverFactory = (...args: unknown[]) => {
+      opts = args[1] as GameDriverOptions;
+      return driverReturning([idleTurn]);
+    };
+    return { get: () => opts! };
+  }
+
+  it("flips the step early on tool_started and forwards events to onActivity", async () => {
+    const captured = captureDriverOpts();
+    const steps: AgentStep[] = [];
+    const events: AgentActivityEvent[] = [];
+    await runGameAgent({
+      provider: "anthropic",
+      apiKey: "k",
+      model: "m",
+      task: TASK,
+      onStep: (s) => steps.push(s),
+      onActivity: (e) => events.push(e),
+    }).catch(() => {});
+
+    // Simulate the driver streaming a tool-call start + narration mid-turn.
+    captured.get().onActivity!({ type: "tool_started", name: "write_game_code" });
+    captured.get().onActivity!({ type: "narration_delta", text: "hi" });
+
+    expect(steps).toContain("writing_code");
+    expect(events).toEqual([
+      { type: "tool_started", name: "write_game_code" },
+      { type: "narration_delta", text: "hi" },
+    ]);
+  });
+
+  it("passes the narration language into the system prompt", async () => {
+    const captured = captureDriverOpts();
+    await runGameAgent({
+      provider: "anthropic",
+      apiKey: "k",
+      model: "m",
+      task: TASK,
+      narrationLanguage: "German",
+    }).catch(() => {});
+    expect(captured.get().systemPrompt).toContain("## Working Aloud");
+    expect(captured.get().systemPrompt).toContain("sentence in German");
+  });
+
+  it("omits the working-aloud section without a narration language", async () => {
+    const captured = captureDriverOpts();
+    await runGameAgent({ provider: "anthropic", apiKey: "k", model: "m", task: TASK }).catch(
+      () => {},
+    );
+    expect(captured.get().systemPrompt).not.toContain("## Working Aloud");
+  });
+
+  it("normalizes a mid-stream abort into AgentAbortedError", async () => {
+    const controller = new AbortController();
+    mockDriverFactory = () => ({
+      seed: () => {},
+      addUserMessage: () => {},
+      addToolResults: () => {},
+      runTurn: () => {
+        // The Stop button aborts while the provider request is in flight — the
+        // SDK then rejects with its own error type, not AgentAbortedError.
+        controller.abort();
+        return Promise.reject(new Error("Request was aborted."));
+      },
+    });
+    await expect(
+      runGameAgent({
+        provider: "anthropic",
+        apiKey: "k",
+        model: "m",
+        task: TASK,
+        signal: controller.signal,
+      }),
+    ).rejects.toBeInstanceOf(AgentAbortedError);
   });
 });

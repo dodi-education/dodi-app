@@ -127,8 +127,9 @@ export function validateGameCode(
       errors.push(`Unknown capability '${cap}' — use only the standard command vocabulary`);
       continue;
     }
-    // generate_drawing is client-intercepted: the game implements set_generated_image.
-    const needle = tool.kind === "client" ? "set_generated_image" : cap;
+    // Client-intercepted tools: the game implements the delivery command instead
+    // (generate_drawing → set_generated_image, generate_text → set_generated_text).
+    const needle = tool.deliveryCommand ?? cap;
     if (!code.includes(needle)) {
       errors.push(`Declares capability '${cap}' but the code has no '${needle}' handler`);
     }

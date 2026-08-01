@@ -19,7 +19,7 @@ import {
   hasBackgroundPlaceholder,
 } from "@dodi/games/background-image";
 import type { AgentCodeResult, AgentTaskRequest, GenerateGamePayload, UpdateGamePayload } from "@dodi/types/tasks";
-import type { AgentStep } from "@dodi/types/agent-progress";
+import type { AgentActivityEvent, AgentStep } from "@dodi/types/agent-progress";
 import type { AIProviderId } from "@dodi/types/ai";
 import type { TokenUsage } from "@dodi/types/usage";
 
@@ -35,6 +35,7 @@ import {
   createGameDriver,
   type GameToolCall,
   type GameToolResult,
+  type GameTurn,
   type PriorTurn,
 } from "./game-agent-drivers";
 
@@ -101,6 +102,17 @@ export interface RunGameAgentParams {
   /** Progress callback driving the studio's step indicator. */
   onStep?: (step: AgentStep) => void;
   /**
+   * Live activity callback (narration text deltas, tool starts, write
+   * progress) driving the studio's narration line. Ephemeral — never persisted.
+   */
+  onActivity?: (event: AgentActivityEvent) => void;
+  /**
+   * Display language for the model's "working aloud" narration sentences (the
+   * PARENT's UI language, not the child's game language — the studio is a
+   * parent surface). Unset ⇒ the prompt omits the narration instruction.
+   */
+  narrationLanguage?: string;
+  /**
    * Client-injected background-image generation (image provider + vault key are
    * resolved by the caller). Presence enables the generate_background_image
    * tool. Returns a downscaled data URL; throws on failure.
@@ -128,6 +140,19 @@ export interface RunGameAgentParams {
 
 /** How many of the most recent image-bearing user turns re-send their images. */
 export const MAX_IMAGE_TURNS = 2;
+
+/** Which studio step a tool call represents — applied both when the call
+ *  starts streaming (early, via tool_started) and when it executes. */
+const STEP_BY_TOOL: Partial<Record<string, AgentStep>> = {
+  read_bridge_docs: "reading_docs",
+  read_existing_game: "reading_docs",
+  read_char_paths: "reading_docs",
+  generate_background_image: "generating_image",
+  use_uploaded_background: "generating_image",
+  generate_preview_image: "generating_preview",
+  write_game_code: "writing_code",
+  validate_game: "validating",
+};
 
 /**
  * Strip images from all but the most recent MAX_IMAGE_TURNS user turns so old
@@ -215,6 +240,8 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
     priorTurns,
     signal,
     onStep,
+    onActivity,
+    narrationLanguage,
     onGenerateBackgroundImage,
     onPrepareBackgroundImage,
     onGeneratePreviewImage,
@@ -223,6 +250,25 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
   const emitStep = onStep ?? (() => {});
   const checkAborted = (): void => {
     if (signal?.aborted) throw new AgentAbortedError();
+  };
+  // Flip the step the moment the model STARTS a tool call — executeTool may be
+  // minutes away while a big write_game_code input is still streaming.
+  const emitActivity = (event: AgentActivityEvent): void => {
+    if (event.type === "tool_started") {
+      const step = STEP_BY_TOOL[event.name];
+      if (step) emitStep(step);
+    }
+    onActivity?.(event);
+  };
+  // A mid-stream abort surfaces as a provider SDK error — normalize it so
+  // pressing Stop never reads as a build failure.
+  const runTurnChecked = async (driver: { runTurn(): Promise<GameTurn> }): Promise<GameTurn> => {
+    try {
+      return await driver.runTurn();
+    } catch (err) {
+      if (signal?.aborted) throw new AgentAbortedError();
+      throw err;
+    }
   };
 
   const goalPayload = task.payload as Partial<GenerateGamePayload & UpdateGamePayload>;
@@ -233,6 +279,7 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
     systemPrompt: buildAgentSystemPrompt({
       ...task.childContext,
       perspective: goalPayload.perspective ?? null,
+      narrationLanguage,
     }),
     maxTokens: Math.min(AGENT_LIMITS.MAX_TOKENS, getModelOutputCap(provider, model)),
     tools: buildAgentTools({
@@ -240,6 +287,8 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
       uploadedImages: Boolean(goalPayload.images?.length),
       previewImage: Boolean(onGeneratePreviewImage),
     }),
+    onActivity: emitActivity,
+    signal,
   });
 
   // Update tasks preload the existing code so read_existing_game returns it —
@@ -329,21 +378,8 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
   };
 
   const runToolTurn = async (call: GameToolCall): Promise<GameToolResult> => {
-    if (
-      call.name === "read_bridge_docs" ||
-      call.name === "read_existing_game" ||
-      call.name === "read_char_paths"
-    ) {
-      emitStep("reading_docs");
-    } else if (call.name === "generate_background_image" || call.name === "use_uploaded_background") {
-      emitStep("generating_image");
-    } else if (call.name === "generate_preview_image") {
-      emitStep("generating_preview");
-    } else if (call.name === "write_game_code") {
-      emitStep("writing_code");
-    } else if (call.name === "validate_game") {
-      emitStep("validating");
-    }
+    const step = STEP_BY_TOOL[call.name];
+    if (step) emitStep(step);
     const { result, writeResult } = await executeTool(call.name, call.input, toolContext);
     if (writeResult) {
       lastWrite = writeResult;
@@ -356,7 +392,7 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
   // Agentic loop
   for (let turn = 0; turn < AGENT_LIMITS.MAX_AGENT_TURNS; turn++) {
     checkAborted();
-    const result = await driver.runTurn();
+    const result = await runTurnChecked(driver);
     iterationCount++;
     addUsage(result.usage);
     lastStopReason = result.stopReason;
@@ -463,7 +499,7 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
     for (let retry = 0; retry < AGENT_LIMITS.MAX_VALIDATION_RETRIES; retry++) {
       checkAborted();
       validationRetries++;
-      const fix = await driver.runTurn();
+      const fix = await runTurnChecked(driver);
       iterationCount++;
       addUsage(fix.usage);
 

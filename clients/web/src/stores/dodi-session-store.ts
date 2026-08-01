@@ -69,9 +69,10 @@ export type DodiContext =
 export type DodiState = "disconnected" | "connecting" | "active" | "deaf" | "sleep";
 
 // In-game AI provider work the companion should visibly "think" through.
-// "image" = image provider (drawing); "thinking" = thinking provider
+// "image" = image provider (drawing); "writing" = thinking provider filling
+// game content slots (generate_text); "thinking" = thinking provider
 // (game-state analysis, and future in-game text assistant).
-export type DodiActivity = "image" | "thinking";
+export type DodiActivity = "image" | "thinking" | "writing";
 
 export interface CompanionMessage {
   id: string;
@@ -118,8 +119,8 @@ export interface DodiSessionState {
   aiActivity: Record<DodiActivity, number>;
   beginAiActivity: (kind: DodiActivity) => void;
   endAiActivity: (kind: DodiActivity) => void;
-  // Release a held-open client tool call (generate_drawing, save_snapshot,
-  // share_snapshot) once the app-side work finished (or failed). Dodi stays
+  // Release a held-open client tool call (generate_drawing, generate_text,
+  // save_snapshot, share_snapshot) once the app-side work finished (or failed). Dodi stays
   // silent while the call is pending, then speaks one completion line driven by
   // `message`/`error`. See the client-kind tool-call branch.
   resolveClientCommand: (result: {
@@ -156,11 +157,17 @@ export interface DodiSessionState {
 
 // Is any in-game AI provider currently working? Drives the "thinking" avatar.
 export const selectDodiThinking = (s: DodiSessionState): boolean =>
-  s.aiActivity.image > 0 || s.aiActivity.thinking > 0;
+  s.aiActivity.image > 0 || s.aiActivity.thinking > 0 || s.aiActivity.writing > 0;
 
-// Which activity's copy to show; image wins when both are active.
+// Which activity's copy to show; image wins over writing over thinking.
 export const selectDodiActivityKind = (s: DodiSessionState): DodiActivity | null =>
-  s.aiActivity.image > 0 ? "image" : s.aiActivity.thinking > 0 ? "thinking" : null;
+  s.aiActivity.image > 0
+    ? "image"
+    : s.aiActivity.writing > 0
+      ? "writing"
+      : s.aiActivity.thinking > 0
+        ? "thinking"
+        : null;
 
 // Wrap any in-game AI provider call so the companion shows its "thinking" state
 // for the call's whole lifetime, cleared even on throw. The one place call sites
@@ -315,6 +322,8 @@ const MAX_MESSAGES = 40;
 // are one state capture + one or two POSTs.
 const CLIENT_CALL_TIMEOUT_MS: Record<string, number> = {
   generate_drawing: 30000,
+  // Multi-slot text generation on a thinking model can outlast image generation.
+  generate_text: 45000,
   save_snapshot: 15000,
   share_snapshot: 20000,
 };
@@ -918,7 +927,7 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
 
   onRunCommands: null,
   onRequestSnapshot: null,
-  aiActivity: { image: 0, thinking: 0 },
+  aiActivity: { image: 0, thinking: 0, writing: 0 },
 
   gameAssistanceCount: 0,
   resetGameAssistance: () => {

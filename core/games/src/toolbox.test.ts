@@ -49,6 +49,24 @@ describe("standard toolbox registry", () => {
     expect(DECLARABLE_CAPABILITY_NAMES).toContain("get_snapshot");
     expect(DECLARABLE_CAPABILITY_NAMES).toContain("generate_drawing");
   });
+
+  it("generate_text is a declarable client tool delivering via set_generated_text", () => {
+    const tool = STANDARD_TOOLS_BY_NAME["generate_text"];
+    expect(tool.kind).toBe("client");
+    expect(tool.voiceExposed).toBe(true);
+    expect(tool.declarable).toBe(true);
+    expect(tool.deliveryCommand).toBe("set_generated_text");
+    expect(STANDARD_TOOLS_BY_NAME["generate_drawing"].deliveryCommand).toBe(
+      "set_generated_image",
+    );
+
+    const delivery = STANDARD_TOOLS_BY_NAME["set_generated_text"];
+    expect(delivery.kind).toBe("internal");
+    expect(delivery.voiceExposed).toBe(false);
+    expect(delivery.declarable).toBe(false);
+    expect(DECLARABLE_CAPABILITY_NAMES).toContain("generate_text");
+    expect(DECLARABLE_CAPABILITY_NAMES).not.toContain("set_generated_text");
+  });
 });
 
 describe("buildGameToolDeclarations", () => {
@@ -63,6 +81,13 @@ describe("buildGameToolDeclarations", () => {
       expect.arrayContaining(["submit_answer", "next_task", ...META_TOOL_NAMES]),
     );
     expect(names).not.toContain("generate_drawing");
+    expect(names).not.toContain("generate_text");
+  });
+
+  it("generate_text capability registers the voice tool but never its delivery command", () => {
+    const names = buildGameToolDeclarations(["generate_text"]).map((t) => t.name);
+    expect(names).toContain("generate_text");
+    expect(names).not.toContain("set_generated_text");
   });
 
   it("ignores unknown names and non-voice (internal) capabilities", () => {
@@ -112,6 +137,16 @@ describe("standardCommandsDoc", () => {
     expect(doc).toContain("submit_answer");
     expect(doc).toContain("generate_drawing");
     expect(doc).not.toContain("`launch_game`"); // meta excluded
+  });
+
+  it("teaches the contentSlots convention via the generate_text implementation note", () => {
+    const doc = standardCommandsDoc(["generate_text"]);
+    expect(doc).toContain("generate_text");
+    expect(doc).toContain("contentSlots");
+    expect(doc).toContain("set_generated_text");
+    // Game-initiated trigger + one-slot-per-field rule are part of the contract.
+    expect(doc).toContain("request_generate_text");
+    expect(doc).toContain("ONE SLOT PER DISPLAYED FIELD");
   });
 
   it("filters to the given capabilities", () => {

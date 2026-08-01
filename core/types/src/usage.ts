@@ -21,6 +21,7 @@ export type UsageEventType =
   | "game_create"
   | "game_edit"
   | "game_analysis"
+  | "game_text_generation"
   | "memory_update"
   | "voice_minutes";
 

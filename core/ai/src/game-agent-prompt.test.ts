@@ -24,4 +24,26 @@ describe("buildAgentSystemPrompt", () => {
     expect(prompt).toContain("Perspective: Isometric 2.5D — REQUIRED");
     expect(prompt).not.toContain("choose one, then commit");
   });
+
+  it("with a narration language, instructs working-aloud status sentences in it", () => {
+    const prompt = buildAgentSystemPrompt({ ...BASE, narrationLanguage: "German" });
+    expect(prompt).toContain("## Working Aloud");
+    expect(prompt).toContain("write ONE short plain-text sentence in German");
+  });
+
+  it("without a narration language, omits the working-aloud section", () => {
+    expect(buildAgentSystemPrompt(BASE)).not.toContain("## Working Aloud");
+    expect(buildAgentSystemPrompt({ ...BASE, narrationLanguage: "  " })).not.toContain(
+      "## Working Aloud",
+    );
+  });
+
+  it("teaches the generate_text content-slot convention", () => {
+    const prompt = buildAgentSystemPrompt(BASE);
+    expect(prompt).toContain("generate_text");
+    expect(prompt).toContain("state.contentSlots");
+    expect(prompt).toContain("set_generated_text");
+    expect(prompt).toContain("request_generate_text");
+    expect(prompt).toContain("NEVER put undefined in state");
+  });
 });

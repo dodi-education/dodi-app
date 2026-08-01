@@ -442,10 +442,16 @@ parent-defined goal — and, in future, generate challenges like "Solve 3 math g
 
 ## TODO
 
-- Change game preview generation from html2image to ai generated content
+- Enhance usability of game-studio
+ - Step 1 ("Sketch"): should be a skipable step where you can draw or upload a "Sketch" of the game UI.
+ - Step 2 ("Description"): Describe game (attach sketch) and based on both inputs ask questions regarding functionality scope. User can add more context and request questions, or continue. During "Description" step Agent should already prefill Settings.
+ - Step 3 ("Settings"): Once configured click button "Build game" -> Switch to Game preview and show sidebar. Sketch and Description Conversation should be visible in agent conversation history.
+
+ - Fix request_text_generation in game-studio
+
+
 - Add translation standardization for games ()
 - Add translation service to publication process (all published games should be translated to the default languages)
-- Add the publisher name to the public game page
 
 - Implement plan limits
  - Add 3 transcript logging tiers: basic, advanced, full and change pricing wording to:
@@ -453,7 +459,6 @@ parent-defined goal — and, in future, generate challenges like "Solve 3 math g
   - Advanced: 6 months
   - Full: Unlimited
 
-- Make game code creation progress more transparent (output rough agent loop actions in chat)
 - Implement Venice.ai
 
 - Account Export/import:parent can download their encrypted data and restore it on a
