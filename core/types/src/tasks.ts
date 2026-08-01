@@ -79,6 +79,20 @@ export interface AgentCodeResult {
   backgroundImage?: string;
   /** An image-generation attempt threw during the run (studio shows a notice). */
   backgroundImageFailed?: boolean;
+  /**
+   * AI-generated game-list preview (square data URL, already cropped to the
+   * list size by the client callback). Present when the game's "preview image"
+   * setting is on and the agent's generate_preview_image call succeeded.
+   */
+  previewImage?: string;
+  /** A preview-image generation attempt threw during the run. */
+  previewImageFailed?: boolean;
+  /**
+   * The run only regenerated the preview image (parent asked for a new one in
+   * chat) — code, markdown and every other field are the UNCHANGED existing
+   * values and must not be re-persisted as a content update.
+   */
+  previewOnly?: boolean;
   metadata: Record<string, unknown>;
   learningGoal: string;
   successDefinition: string;

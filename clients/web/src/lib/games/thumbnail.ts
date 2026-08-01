@@ -2,8 +2,8 @@
  * Browser-side raster utilities: downscale a capture/upload into a bounded JPEG
  * data URL. Used for snapshot-gallery thumbnails (tiny, keeps every gallery
  * decrypt cheap), studio reference-image attachments, edit-time screenshots
- * (bounded before they hit provider requests + the sealed transcript), and the
- * square 100×100 game-list preview (`preview_image`).
+ * (bounded before they hit provider requests + the sealed transcript), and for
+ * cropping the AI-generated square 100×100 game-list preview (`preview_image`).
  */
 
 function loadImage(dataUrl: string): Promise<HTMLImageElement> {

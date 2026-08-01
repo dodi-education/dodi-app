@@ -573,3 +573,189 @@ describe("background image loop integration", () => {
     expect(result.backgroundImageFailed).toBe(true);
   });
 });
+
+describe("preview image loop integration", () => {
+  const BG = "data:image/jpeg;base64,QkFDS0dST1VORA==";
+  const PREVIEW = "data:image/jpeg;base64,UFJFVklFVw==";
+  const PLACEHOLDER_BLOCK = `<style id="background-image">:root{--background-image:url("{{BACKGROUND_IMAGE}}")}</style>`;
+  const compliant = (extra: string): string =>
+    `<!doctype html><html><body>${extra}<script>
+      window.addEventListener('message', function (e) {
+        if (e.data.type === 'dodi:init') parent.postMessage({ type: 'game:ready', payload: { capabilities: [] } }, '*');
+        if (e.data.type === 'dodi:command') parent.postMessage({ type: 'game:result' }, '*');
+      });
+    </script></body></html>`;
+
+  const turn = (toolCalls: GameTurn["toolCalls"], hasText = false): GameTurn => ({
+    toolCalls,
+    hasText,
+    expectsToolResults: toolCalls.length > 0,
+    stopReason: toolCalls.length > 0 ? "tool_use" : "end_turn",
+    usage: emptyUsage,
+  });
+
+  function capturingDriver(turns: GameTurn[]) {
+    const toolResults: GameToolResult[][] = [];
+    const nudges: string[] = [];
+    let seedText = "";
+    let i = 0;
+    const driver: GameCodeDriver = {
+      seed: (_t, first) => {
+        seedText = typeof first === "string" ? first : first.text;
+      },
+      addUserMessage: (text) => {
+        nudges.push(typeof text === "string" ? text : text.text);
+      },
+      addToolResults: (rs) => {
+        toolResults.push(rs);
+      },
+      runTurn: () => Promise.resolve(turns[Math.min(i++, turns.length - 1)]),
+    };
+    return { driver, toolResults, nudges, getSeedText: () => seedText };
+  }
+
+  it("generates after the write with the fresh background as style reference", async () => {
+    const captured = capturingDriver([
+      turn([{ id: "b1", name: "generate_background_image", input: { scene: "a meadow" } }]),
+      turn([
+        {
+          id: "w1",
+          name: "write_game_code",
+          input: { code: compliant(PLACEHOLDER_BLOCK), markdown: "m", title: "T", capabilities: [] },
+        },
+      ]),
+      turn([{ id: "p1", name: "generate_preview_image", input: { scene: "a counting fox" } }]),
+      turn([]),
+    ]);
+    mockDriverFactory = () => captured.driver;
+
+    const generatePreview = vi.fn().mockResolvedValue(PREVIEW);
+    const result = await runGameAgent({
+      provider: "anthropic",
+      apiKey: "k",
+      model: "m",
+      task: TASK,
+      onGenerateBackgroundImage: vi.fn().mockResolvedValue(BG),
+      onGeneratePreviewImage: generatePreview,
+    });
+
+    expect(generatePreview).toHaveBeenCalledWith("a counting fox", BG);
+    // The preview tool result never carries image bytes into the transcript.
+    expect(captured.toolResults[2][0].content).not.toContain("data:image");
+    expect(result.previewImage).toBe(PREVIEW);
+    expect(result.previewOnly).toBeUndefined();
+    expect(captured.getSeedText()).toContain("generate_preview_image");
+  });
+
+  it("softens the nudge when the game already has a preview and stays silent when disabled", async () => {
+    const writeTurn = turn([
+      {
+        id: "w1",
+        name: "write_game_code",
+        input: { code: compliant(""), markdown: "m", title: "T", capabilities: [] },
+      },
+    ]);
+
+    const existing = capturingDriver([writeTurn, turn([])]);
+    mockDriverFactory = () => existing.driver;
+    await runGameAgent({
+      provider: "anthropic",
+      apiKey: "k",
+      model: "m",
+      task: TASK,
+      onGeneratePreviewImage: vi.fn().mockResolvedValue(PREVIEW),
+      hasExistingPreviewImage: true,
+    });
+    expect(existing.getSeedText()).toContain("already has a list preview");
+
+    const disabled = capturingDriver([writeTurn, turn([])]);
+    mockDriverFactory = () => disabled.driver;
+    await runGameAgent({ provider: "anthropic", apiKey: "k", model: "m", task: TASK });
+    expect(disabled.getSeedText()).not.toContain("generate_preview_image");
+  });
+
+  it("completes a preview-only update without a write, returning the bundle untouched", async () => {
+    const placeholderCode = compliant(PLACEHOLDER_BLOCK);
+    const inlinedCode = placeholderCode.replace("{{BACKGROUND_IMAGE}}", BG);
+    const captured = capturingDriver([
+      turn([{ id: "p1", name: "generate_preview_image", input: { scene: "a fox" } }]),
+      turn([], true),
+    ]);
+    mockDriverFactory = () => captured.driver;
+
+    const result = await runGameAgent({
+      provider: "anthropic",
+      apiKey: "k",
+      model: "m",
+      task: {
+        ...TASK,
+        taskType: "update_game",
+        payload: { instruction: "make a new preview image", existingCode: inlinedCode },
+      },
+      onGeneratePreviewImage: vi.fn().mockResolvedValue(PREVIEW),
+      hasExistingPreviewImage: true,
+    });
+
+    expect(result.previewOnly).toBe(true);
+    expect(result.previewImage).toBe(PREVIEW);
+    // The existing bundle survives untouched (placeholder form + carried image).
+    expect(result.codeBundle).toBe(placeholderCode);
+    expect(result.backgroundImage).toBe(BG);
+    // The model was never nudged into a pointless full rewrite.
+    expect(captured.nudges).toEqual([]);
+  });
+
+  it("ends a failed preview-only update gracefully with the failure flag", async () => {
+    const captured = capturingDriver([
+      turn([{ id: "p1", name: "generate_preview_image", input: { scene: "a fox" } }]),
+      turn([], true),
+    ]);
+    mockDriverFactory = () => captured.driver;
+
+    const result = await runGameAgent({
+      provider: "anthropic",
+      apiKey: "k",
+      model: "m",
+      task: {
+        ...TASK,
+        taskType: "update_game",
+        payload: { instruction: "make a new preview image", existingCode: compliant("") },
+      },
+      onGeneratePreviewImage: vi.fn().mockRejectedValue(new Error("provider down")),
+      hasExistingPreviewImage: true,
+    });
+
+    expect(result.previewOnly).toBe(true);
+    expect(result.previewImage).toBeUndefined();
+    expect(result.previewImageFailed).toBe(true);
+    expect(captured.nudges).toEqual([]);
+  });
+
+  it("propagates a preview failure on a normal build without failing the build", async () => {
+    const captured = capturingDriver([
+      turn([
+        {
+          id: "w1",
+          name: "write_game_code",
+          input: { code: compliant(""), markdown: "m", title: "T", capabilities: [] },
+        },
+      ]),
+      turn([{ id: "p1", name: "generate_preview_image", input: { scene: "a fox" } }]),
+      turn([]),
+    ]);
+    mockDriverFactory = () => captured.driver;
+
+    const result = await runGameAgent({
+      provider: "anthropic",
+      apiKey: "k",
+      model: "m",
+      task: TASK,
+      onGeneratePreviewImage: vi.fn().mockRejectedValue(new Error("provider down")),
+    });
+
+    expect(result.previewImage).toBeUndefined();
+    expect(result.previewImageFailed).toBe(true);
+    expect(result.previewOnly).toBeUndefined();
+    expect(result.validationPassed).toBe(true);
+  });
+});

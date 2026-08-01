@@ -3,6 +3,7 @@ import { useTranslations } from "next-intl";
 import { LoginDialogProvider } from "@/components/auth/login-dialog";
 import { GameViewShell } from "@/components/games/game-view-shell";
 import { CompanionIntroCard } from "@/components/public/companion-intro-card";
+import { GameAboutCard } from "@/components/public/game-about-card";
 import { PopularGamesCard } from "@/components/public/popular-games-card";
 import { PublicActionButtons } from "@/components/public/public-action-buttons";
 import { PublicFooter } from "@/components/public/public-footer";
@@ -20,8 +21,10 @@ import type { DiscoverGameDetail, PublicGameSummary } from "@dodi/types/games";
 /**
  * The logged-out /games/[id] experience — the SEO inbound page. It renders
  * through the SAME GameViewShell as the signed-in view, with contextual slots
- * swapped: sign-in/popular cards instead of the Dodi panel, login-gated action
- * buttons instead of the live ones, and the marketing site as the back target.
+ * swapped: sign-in/about/popular cards instead of the Dodi panel, login-gated
+ * action buttons instead of the live ones, and the marketing site as the back
+ * target. The description lives in the about card, not the title bar, so the
+ * back button, title and action buttons share one row.
  * Sharing the shell keeps the title bar, buttons and canvas pixel-aligned
  * across both states. Server rendered: title, description, popular rail and
  * JSON-LD are all in the HTML; only the sandbox and sign-in surfaces hydrate.
@@ -75,6 +78,7 @@ export function PublicGamePage({
   const cards = (
     <div className="flex flex-col gap-5">
       <CompanionIntroCard />
+      <GameAboutCard game={game} />
       <PopularGamesCard games={popular} locale={locale} />
     </div>
   );
@@ -89,7 +93,6 @@ export function PublicGamePage({
               backHref={siteUrl("games", locale)}
               backLabel={tg("title")}
               title={game.title}
-              description={game.description}
               action={<PublicActionButtons />}
               sidebar={cards}
             >

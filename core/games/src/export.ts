@@ -92,6 +92,7 @@ const ManifestMetadataSchema = z.preprocess(
     drawingStyle: z.enum(["picture", "mandala"]).optional(),
     perspective: z.enum(["bird", "side", "isometric"]).optional(),
     generateBackgroundImage: z.boolean().optional(),
+    generatePreviewImage: z.boolean().optional(),
   }),
 );
 

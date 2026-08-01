@@ -25,7 +25,7 @@ import {
 import { STAGE } from "@/lib/games/stage";
 import { GAME_TAGS } from "@dodi/games/tags";
 import { sanitizeGameBundle } from "@dodi/games/sanitizer";
-import { UNBUILT_GAME_PLACEHOLDER, isUnbuiltBundle } from "@dodi/games/placeholder";
+import { UNBUILT_GAME_PLACEHOLDER } from "@dodi/games/placeholder";
 import { injectBackgroundImage } from "@dodi/games/background-image";
 import { tagStyle } from "@/components/parent/games/tag-style";
 import { CodeViewer } from "@/components/parent/games/code-viewer";
@@ -38,7 +38,7 @@ import {
   fileToDataUrl,
   squareThumbnailDataUrl,
 } from "@/lib/games/thumbnail";
-import { gameDebug, gameDebugWarn } from "@dodi/games/debug";
+import { gameDebugWarn } from "@dodi/games/debug";
 import { useKids } from "@/hooks/use-kids";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { useNavigationGuard } from "@/hooks/use-navigation-guard";
@@ -56,6 +56,7 @@ import { resolveClientGame } from "@/lib/ai/resolve-client-game";
 import { resolveClientImage } from "@/lib/ai/resolve-client-image";
 import { createClientImageProvider } from "@dodi/ai/image-providers/factory";
 import { buildBackgroundPrompt } from "@dodi/ai/image-providers/background-prompt";
+import { buildPreviewPrompt } from "@dodi/ai/image-providers/preview-prompt";
 import { calculateChildAge, getLanguageDisplayName } from "@dodi/ai/dodi-context";
 import { buildLearningContext, measureLearningContext } from "@dodi/ai/learning-context";
 import { runGameAgent, AgentAbortedError, GameAgentError, type PriorTurn } from "@dodi/ai/game-agent";
@@ -69,7 +70,7 @@ import {
 import { mapSuccessDefinition } from "@dodi/ai/success-mapping";
 import type { AgentStep } from "@dodi/types/agent-progress";
 import type { Game, GameVersion, Json } from "@dodi/types/database";
-import type { GamePerspective, GameToParentMessage } from "@dodi/types/games";
+import type { GamePerspective } from "@dodi/types/games";
 import type { AgentCodeResult, AgentTaskRequest } from "@dodi/types/tasks";
 import type { ProgressKind } from "@dodi/games/success";
 
@@ -111,6 +112,8 @@ export interface StudioGame {
   perspective: GamePerspective | null;
   /** Generate an AI background image during builds (needs an image provider). */
   generateBackgroundImage: boolean;
+  /** Generate an AI game-list preview image after builds (needs an image provider). */
+  generatePreviewImage: boolean;
   /** Standard commands the built game implements (metadata.capabilities). */
   capabilities: string[];
   /** 100×100 JPEG data URL shown in game lists (E2EE at rest; null = none yet). */
@@ -160,11 +163,8 @@ const COMPOSER_DEFAULT = 150;
 const MAX_ATTACHMENTS = 3;
 /** Sealed-transcript guard: only this many trailing messages keep their images. */
 const TRANSCRIPT_IMAGE_MESSAGES = 6;
-/** Game-list preview capture: square edge, boot wait cap and first-frames settle. */
+/** Square edge of the game-list preview the generated image is cropped to. */
 const PREVIEW_IMAGE_SIZE = 100;
-const PREVIEW_READY_POLL_MS = 250;
-const PREVIEW_READY_MAX_POLLS = 20; // ×250ms — up to 5s for the game to boot
-const PREVIEW_SETTLE_MS = 800;
 
 function emptyGame(): StudioGame {
   return {
@@ -188,6 +188,7 @@ function emptyGame(): StudioGame {
     isActive: false,
     perspective: null,
     generateBackgroundImage: false,
+    generatePreviewImage: false,
     capabilities: [],
     previewImage: null,
   };
@@ -307,6 +308,9 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
   // Background generation was enabled but the build produced no image — tells
   // the parent whether the model skipped the tool or generation failed.
   const [bgNotice, setBgNotice] = useState<"skipped" | "failed" | null>(null);
+  // Same signal for the game-list preview image: the setting was on, the game
+  // had no preview yet, and the build still ended without one.
+  const [previewNotice, setPreviewNotice] = useState<"skipped" | "failed" | null>(null);
   // Mandatory settings fields left empty on save — drives the red field markers.
   const [invalid, setInvalid] = useState<{
     title?: boolean;
@@ -362,14 +366,6 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
   const threadRef = useRef<HTMLDivElement | null>(null);
   // Handle into the always-mounted preview sandbox (edit-time screenshots).
   const sandboxRef = useRef<GameSandboxHandle | null>(null);
-  // Whether the sandbox's CURRENT code has reported game:ready — the list
-  // preview capture waits for it rather than shooting a blank boot screen.
-  const sandboxReadyRef = useRef(false);
-  // True while refreshPreviewImage captures the list preview (wait-for-ready +
-  // settle + snapshot ≈ several seconds). Drives the stage overlay so the user
-  // knows to wait rather than leaving before the thumbnail lands (leaving
-  // unmounts the sandbox and aborts the capture).
-  const [capturingPreview, setCapturingPreview] = useState(false);
   const sideWidthRef = useRef(sideWidth);
   const composerHeightRef = useRef(composerHeight);
   // The in-flight build's abort handle — drives Stop + navigation guards.
@@ -416,7 +412,16 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
         setHasGameProvider(Boolean(cfg?.gameProvider));
         // Full check incl. vault key (resolveClientImage re-reads the config).
         const image = await resolveClientImage().catch(() => null);
-        if (!cancelled) setHasImageProvider(Boolean(image));
+        if (!cancelled) {
+          setHasImageProvider(Boolean(image));
+          // New games default the list-preview generation on — but only once an
+          // image provider is confirmed, so accounts without an image model
+          // never save the flag (or a checked-but-disabled switch) they can't
+          // use. Existing games keep whatever their settings say.
+          if (image && !editing) {
+            setGame((g) => (g.id ? g : { ...g, generatePreviewImage: true }));
+          }
+        }
       } catch {
         if (!cancelled) {
           setHasGameProvider(false);
@@ -427,7 +432,9 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     return () => {
       cancelled = true;
     };
-  }, []);
+    // `editing` is fixed for a mounted studio (derived from initialGame), so
+    // this still runs exactly once per mount.
+  }, [editing]);
 
   const startSideResize = (e: React.MouseEvent): void => {
     e.preventDefault();
@@ -554,6 +561,8 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
       learning_goal: result.learningGoal,
       success_definition: result.successDefinition,
       success_criteria: result.successCriteria as unknown as Json,
+      // The agent-generated list preview rides along with the build persist.
+      ...(result.previewImage ? { preview_image: result.previewImage } : {}),
     });
     const res = await dodi.request(`/api/games/${game.id}`, {
       method: "PATCH",
@@ -575,84 +584,30 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
 
   // ----- Game-list preview image -----------------------------------------
 
-  // New code → the sandbox reloads and must report ready again before a capture.
-  useEffect(() => {
-    sandboxReadyRef.current = false;
-  }, [game.codeBundle]);
-
-  const handleSandboxMessage = useCallback((message: GameToParentMessage) => {
-    if (message.type === "game:ready") sandboxReadyRef.current = true;
-  }, []);
-
-  // Capture the running game as the 100×100 list preview: wait (bounded) for
-  // the game to boot plus a settle beat for its first frames, snapshot the live
-  // sandbox, then center-crop to the square that keeps as much of the surface
-  // as fits. Resolves null whenever nothing usable could be captured.
-  const capturePreviewImage = async (capabilities: string[]): Promise<string | null> => {
-    for (let poll = 0; poll < PREVIEW_READY_MAX_POLLS; poll++) {
-      await new Promise((resolve) => setTimeout(resolve, PREVIEW_READY_POLL_MS));
-      if (sandboxReadyRef.current) break;
+  // Client-side preview-image generation injected into the agent loop (only
+  // when the setting is on): resolve provider + vault key, generate a square
+  // icon — with the game's background image riding along as a style reference
+  // when one exists — then crop it to the 100×100 list preview ourselves.
+  const makePreviewImage = async (
+    scene: string,
+    backgroundImage?: string,
+  ): Promise<string> => {
+    const image = await resolveClientImage();
+    if (!image) throw new Error("No image provider configured");
+    const provider = createClientImageProvider(image.provider, image.apiKey, image.model);
+    const generated = await provider.generateImage(
+      buildPreviewPrompt(scene, { hasStyleReference: Boolean(backgroundImage) }),
+      {
+        aspectRatio: "1:1",
+        referenceImages: backgroundImage ? [backgroundImage] : undefined,
+      },
+    );
+    const square = await squareThumbnailDataUrl(generated.dataUrl, PREVIEW_IMAGE_SIZE);
+    if (!square) {
+      gameDebugWarn("preview", "cropping the generated preview image failed");
+      throw new Error("Preview image processing failed");
     }
-    if (!sandboxReadyRef.current) {
-      gameDebugWarn(
-        "preview",
-        `no game:ready after ${PREVIEW_READY_MAX_POLLS * PREVIEW_READY_POLL_MS}ms — capturing anyway`,
-      );
-    }
-    await new Promise((resolve) => setTimeout(resolve, PREVIEW_SETTLE_MS));
-    const raw = await sandboxRef.current
-      ?.requestSnapshot({ preferGameCapture: capabilities.includes("get_snapshot") })
-      .catch(() => null);
-    if (!raw) {
-      gameDebugWarn(
-        "preview",
-        sandboxRef.current
-          ? "sandbox returned no snapshot"
-          : "sandbox unmounted mid-capture (sandboxRef is null)",
-      );
-      return null;
-    }
-    const square = await squareThumbnailDataUrl(raw, PREVIEW_IMAGE_SIZE);
-    if (!square) gameDebugWarn("preview", "downscale to square thumbnail failed");
     return square;
-  };
-
-  // Refresh the sealed preview_image after a build, or backfill it on saves of
-  // games that predate previews. Fire-and-forget best effort: a failed capture
-  // never disturbs the save that triggered it — the next one simply retries.
-  // Callers that follow up with router.refresh() MUST chain it on this promise:
-  // the studio keeps the tab URL in step via history.replaceState, so a refresh
-  // reconciles that URL as a NEW [[...tab]] segment and remounts the whole
-  // studio — killing an in-flight capture (dead sandboxRef ⇒ null preview) and
-  // the "Generating preview…" overlay with it.
-  const refreshPreviewImage = async (
-    gameId: string,
-    capabilities: string[],
-  ): Promise<void> => {
-    setCapturingPreview(true);
-    gameDebug("preview", `list-preview capture started for game ${gameId}`);
-    try {
-      const preview = await capturePreviewImage(capabilities);
-      if (!preview) return; // capturePreviewImage already warned with the reason
-      const sealed = await sealGameFields({ preview_image: preview });
-      const res = await dodi.request(`/api/games/${gameId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ preview_image: sealed.preview_image }),
-      });
-      if (!res.ok) {
-        gameDebugWarn("preview", `preview PATCH failed with status ${res.status}`);
-        return;
-      }
-      gameDebug("preview", "list preview captured and saved");
-      setGame((g) => (g.id === gameId ? { ...g, previewImage: preview } : g));
-      useGameStore.getState().patchLocal(gameId, { preview_image: preview });
-    } catch (e) {
-      /* best effort — lists fall back to the tag tile */
-      gameDebugWarn("preview", "list-preview capture failed", e);
-    } finally {
-      setCapturingPreview(false);
-    }
   };
 
   // Export and publish live in the game list's actions menu, not here — both act
@@ -753,13 +708,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
         codeBundle: row.code_bundle,
         currentGameVersionId: row.current_game_version_id,
       }));
-      // The restored version is the game's look now — refresh the list preview
-      // (route refresh chained after the capture, see refreshPreviewImage).
-      if (!isUnbuiltBundle(row.code_bundle)) {
-        void refreshPreviewImage(row.id, game.capabilities).then(() => router.refresh());
-      } else {
-        router.refresh();
-      }
+      router.refresh();
       return true;
     } catch (e) {
       const reason = e instanceof Error && e.message ? e.message : "";
@@ -848,13 +797,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
       setReverted(false);
       await loadVersions();
       settleSaveEdit(true);
-      // Hand-edited code changes the game's look — refresh the list preview
-      // (route refresh chained after the capture, see refreshPreviewImage).
-      if (!isUnbuiltBundle(row.code_bundle)) {
-        void refreshPreviewImage(row.id, game.capabilities).then(() => router.refresh());
-      } else {
-        router.refresh();
-      }
+      router.refresh();
     } catch (e) {
       const reason = e instanceof Error && e.message ? e.message : "";
       setError(reason ? t("saveFailed", { reason }) : t("saveFailedGeneric"));
@@ -902,6 +845,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     const map: Record<AgentStep, string> = {
       reading_docs: t("stepReadingDocs"),
       generating_image: t("stepGeneratingImage"),
+      generating_preview: t("stepGeneratingPreview"),
       writing_code: t("stepWritingCode"),
       validating: t("stepValidating"),
       fixing_validation: t("stepFixingValidation"),
@@ -966,6 +910,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     }
     setError(null);
     setBgNotice(null);
+    setPreviewNotice(null);
     setDraft("");
     // Attachments belong to this message — stage them and clear the strip.
     const attachments = pendingImages;
@@ -1077,7 +1022,65 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
         // Independent of the generate toggle: "use my attached image as the
         // background" needs no image provider, just the bundle-size bound.
         onPrepareBackgroundImage: boundBackgroundImage,
+        onGeneratePreviewImage: game.generatePreviewImage ? makePreviewImage : undefined,
+        hasExistingPreviewImage: Boolean(game.previewImage),
       });
+
+      // Preview-only run: the parent asked for a new preview image and nothing
+      // else changed — persist just the preview + transcript, leave the game
+      // fields and version chain untouched.
+      if (result.previewOnly && game.id) {
+        if (!result.previewImage) {
+          setPreviewNotice("failed");
+          const withFail: ChatMessage[] = [
+            ...withUser,
+            { role: "assistant", text: t("previewUpdateFailedMessage") },
+          ];
+          setMessages(withFail);
+          void persistTranscript(withFail).catch(() => {
+            /* best effort — the visible thread already has the reply */
+          });
+          return;
+        }
+        const preview = result.previewImage;
+        const gameId = game.id;
+        const withDodi: ChatMessage[] = [
+          ...withUser,
+          { role: "assistant", text: t("previewUpdatedMessage") },
+        ];
+        setMessages(withDodi);
+        setGame((g) => ({ ...g, previewImage: preview }));
+        reportUsage({
+          eventType: "game_edit",
+          kidId: primaryKidId,
+          gameId,
+          provider: gameCfg.provider,
+          model: gameCfg.model,
+          usage: result.usage,
+          meta: { turns: result.iterationCount },
+        });
+        try {
+          const session = useVaultStore.getState().session;
+          const sealed = await sealGameFields({ preview_image: preview });
+          const res = await dodi.request(`/api/games/${gameId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              preview_image: sealed.preview_image,
+              agent_transcript_enc: session
+                ? session.encryptJson(sealableTranscript(withDodi))
+                : null,
+            }),
+          });
+          if (!res.ok) throw new Error(await readError(res));
+          useGameStore.getState().patchLocal(gameId, { preview_image: preview });
+          router.refresh();
+        } catch (saveErr) {
+          const reason = saveErr instanceof Error ? saveErr.message : "";
+          setError(reason ? t("saveFailed", { reason }) : t("saveFailedGeneric"));
+        }
+        return;
+      }
 
       // Swap the background placeholder for the real image BEFORE anything
       // renders or persists — the stored bundle stays self-contained.
@@ -1086,6 +1089,13 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
         : result.codeBundle;
       if (game.generateBackgroundImage && !result.backgroundImage) {
         setBgNotice(result.backgroundImageFailed ? "failed" : "skipped");
+      }
+      // A preview was expected but never landed. With an existing preview,
+      // skipping the regeneration is a correct, deliberate choice — only a
+      // failed attempt is worth a notice then.
+      if (game.generatePreviewImage && !result.previewImage) {
+        if (result.previewImageFailed) setPreviewNotice("failed");
+        else if (!game.previewImage) setPreviewNotice("skipped");
       }
 
       // Sanitize client-side before it touches state/persistence (the games route
@@ -1171,15 +1181,16 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
       try {
         const row = await persistBuild(result, safeCode, withDodi);
         if (row) {
-          // Adopt the server's new version head (an agent persist appends a version).
-          setGame((g) => ({ ...g, currentGameVersionId: row.current_game_version_id }));
+          // Adopt the server's new version head (an agent persist appends a
+          // version) and the freshly persisted list preview, if any.
+          setGame((g) => ({
+            ...g,
+            currentGameVersionId: row.current_game_version_id,
+            previewImage: row.preview_image,
+          }));
           void loadVersions();
-          // Every build refreshes the list preview — the game's look just changed
-          // (route refresh chained after the capture, see refreshPreviewImage).
-          void refreshPreviewImage(row.id, builtCapabilities).then(() => router.refresh());
-        } else {
-          router.refresh();
         }
+        router.refresh();
       } catch (saveErr) {
         const reason = saveErr instanceof Error ? saveErr.message : "";
         setError(reason ? t("saveFailed", { reason }) : t("saveFailedGeneric"));
@@ -1252,9 +1263,6 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     setInvalid({});
     setError(null);
     setSaving(true);
-    // Whether this save also backfills a missing list preview — decided up front
-    // because the tail's router.refresh() must yield to the capture when it runs.
-    const backfillPreview = Boolean(game.id) && game.built && !game.previewImage;
     try {
       if (game.id) {
         // Map the success definition to structured criteria IN THE BROWSER (the
@@ -1303,6 +1311,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
             metadata: {
               perspective: game.perspective,
               generateBackgroundImage: game.generateBackgroundImage,
+              generatePreviewImage: game.generatePreviewImage,
             },
             audience: { isFamily: game.isFamily, audienceIds: game.audienceIds },
           }),
@@ -1311,11 +1320,6 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
         useGameStore
           .getState()
           .put(await decryptGameResponse((await res.json()) as Game));
-        // Settings saves backfill a missing preview for games that predate them
-        // (route refresh chained after the capture, see refreshPreviewImage).
-        if (backfillPreview) {
-          void refreshPreviewImage(game.id, game.capabilities).then(() => router.refresh());
-        }
       } else {
         // Persist a new game straight from settings (no build required). With no
         // code yet we seal the placeholder ourselves — the server can't write
@@ -1342,6 +1346,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
             metadata: {
               perspective: game.perspective,
               generateBackgroundImage: game.generateBackgroundImage,
+              generatePreviewImage: game.generatePreviewImage,
             },
             audience: { isFamily: game.isFamily, audienceIds: game.audienceIds },
           }),
@@ -1355,7 +1360,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
         return;
       }
       setJustSaved(true);
-      if (!backfillPreview) router.refresh();
+      router.refresh();
       setTimeout(() => setJustSaved(false), 2200);
     } catch (e) {
       const reason = e instanceof Error && e.message ? e.message : "";
@@ -1521,22 +1526,6 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
           </div>
 
           <div className="relative min-h-0 min-w-0 flex-1 overflow-y-auto">
-            {/* Preview capture runs for a few seconds after every save/build and
-                is fire-and-forget; without this the list thumbnail just lands
-                late and the save looks like it did nothing. The scrim lives in
-                the parent (outside the sandbox iframe) so it is never captured. */}
-            {capturingPreview && (
-              <div
-                className="absolute inset-0 z-20 flex items-center justify-center bg-background/70 backdrop-blur-sm"
-                role="status"
-                aria-live="polite"
-              >
-                <div className="flex items-center gap-2.5 rounded-full border border-border bg-card px-4 py-2 text-sm font-medium text-muted-foreground shadow-sm">
-                  <Icon name="loading" className="h-4 w-4 animate-spin" />
-                  {t("generatingPreview")}
-                </div>
-              </div>
-            )}
             {/* The stage stays mounted whenever code exists (hidden by CSS on the
                 other tabs) so the sandbox can serve edit-time screenshot capture
                 without a reload — hiding instead of unmounting keeps layout alive
@@ -1557,7 +1546,6 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
                   codeBundle={game.codeBundle}
                   reserved={STAGE.reservedStudio}
                   sandboxRef={sandboxRef}
-                  onMessage={handleSandboxMessage}
                 />
               </div>
             )}
@@ -1814,6 +1802,14 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
               <div className="mb-2 flex items-start gap-1.5 rounded-lg bg-warning-soft px-2.5 py-1.5 text-xs font-medium text-warning">
                 <Icon name="alert" size={14} className="mt-px shrink-0" />
                 <span>{t(bgNotice === "failed" ? "bgFailedNotice" : "bgSkippedNotice")}</span>
+              </div>
+            )}
+            {previewNotice && (
+              <div className="mb-2 flex items-start gap-1.5 rounded-lg bg-warning-soft px-2.5 py-1.5 text-xs font-medium text-warning">
+                <Icon name="alert" size={14} className="mt-px shrink-0" />
+                <span>
+                  {t(previewNotice === "failed" ? "previewFailedNotice" : "previewSkippedNotice")}
+                </span>
               </div>
             )}
             <div className="relative rounded-2xl border border-border-strong bg-card px-4 pb-2.5 pt-3 shadow-[0_4px_18px_rgba(34,56,78,0.07)] transition-colors focus-within:border-primary">
@@ -2297,6 +2293,20 @@ function SettingsForm({
             </p>
           )}
         </div>
+      </Field>
+
+      <Field
+        label={t("previewImageLabel")}
+        hint={hasImageProvider === false ? undefined : t("previewImageHint")}
+      >
+        <label className="flex w-fit cursor-pointer items-center gap-2.5 text-sm font-medium text-ink-2">
+          <Switch
+            checked={game.generatePreviewImage}
+            disabled={!hasImageProvider}
+            onCheckedChange={(checked) => setField("generatePreviewImage", checked)}
+          />
+          {t("previewImageToggle")}
+        </label>
       </Field>
 
       {/* The settings form owns the save action — the built game auto-saves, so

@@ -24,6 +24,13 @@ export interface GeneratedImage {
 export interface GenerateImageOptions {
   /** Aspect ratio hint for the model, e.g. "4:5" to match the game canvas. */
   aspectRatio?: string;
+  /**
+   * Style-reference images (data URLs) passed alongside the prompt so the
+   * result matches an existing look (e.g. the game's background behind its
+   * preview icon). Best effort: providers whose image API takes no image input
+   * (xAI) ignore them and generate from the prompt alone.
+   */
+  referenceImages?: string[];
 }
 
 export interface ImageProvider {

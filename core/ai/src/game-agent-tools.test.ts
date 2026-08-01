@@ -5,6 +5,7 @@ import {
   buildAgentTools,
   executeTool,
   MAX_BACKGROUND_IMAGE_CALLS,
+  MAX_PREVIEW_IMAGE_CALLS,
   type ToolContext,
 } from "./game-agent-tools";
 
@@ -26,6 +27,15 @@ describe("buildAgentTools", () => {
     expect(withUploads.map((t) => t.name)).not.toContain("generate_background_image");
     const both = buildAgentTools({ backgroundImage: true, uploadedImages: true });
     expect(both).toHaveLength(AGENT_TOOLS.length + 2);
+  });
+
+  it("adds generate_preview_image only when enabled", () => {
+    const off = buildAgentTools({ backgroundImage: false });
+    const on = buildAgentTools({ backgroundImage: false, previewImage: true });
+    expect(off.map((t) => t.name)).not.toContain("generate_preview_image");
+    expect(on.map((t) => t.name)).toContain("generate_preview_image");
+    const all = buildAgentTools({ backgroundImage: true, uploadedImages: true, previewImage: true });
+    expect(all).toHaveLength(AGENT_TOOLS.length + 3);
   });
 });
 
@@ -79,6 +89,72 @@ describe("executeTool generate_background_image", () => {
     expect(parsed.error).toContain("do NOT reference");
     expect(context.freshBackgroundImage).toBeUndefined();
     expect(context.backgroundImageFailed).toBe(true);
+  });
+});
+
+describe("executeTool generate_preview_image", () => {
+  it("errors when the capability is not enabled", async () => {
+    const { result } = await executeTool("generate_preview_image", { scene: "a fox" }, {});
+    expect(JSON.parse(result)).toMatchObject({ ok: false });
+  });
+
+  it("errors on a missing scene", async () => {
+    const context: ToolContext = { generatePreviewImage: vi.fn() };
+    const { result } = await executeTool("generate_preview_image", { scene: "  " }, context);
+    expect(JSON.parse(result)).toMatchObject({ ok: false, error: "scene is required" });
+  });
+
+  it("invokes the callback with the background as style reference — never returning the data URL", async () => {
+    const generate = vi.fn().mockResolvedValue(DATA_URL);
+    const context: ToolContext = {
+      generatePreviewImage: generate,
+      freshBackgroundImage: "data:image/jpeg;base64,QkFDS0dST1VORA==",
+    };
+    const { result } = await executeTool(
+      "generate_preview_image",
+      { scene: "a counting fox in a meadow" },
+      context,
+    );
+    expect(generate).toHaveBeenCalledWith(
+      "a counting fox in a meadow",
+      "data:image/jpeg;base64,QkFDS0dST1VORA==",
+    );
+    expect(context.freshPreviewImage).toBe(DATA_URL);
+    expect(JSON.parse(result)).toMatchObject({ ok: true });
+    expect(result).not.toContain("data:image");
+  });
+
+  it("falls back to the carried background as style reference", async () => {
+    const generate = vi.fn().mockResolvedValue(DATA_URL);
+    const context: ToolContext = {
+      generatePreviewImage: generate,
+      carriedBackgroundImage: "data:image/jpeg;base64,Q0FSUklFRA==",
+    };
+    await executeTool("generate_preview_image", { scene: "s" }, context);
+    expect(generate).toHaveBeenCalledWith("s", "data:image/jpeg;base64,Q0FSUklFRA==");
+  });
+
+  it("enforces the per-run call budget", async () => {
+    const context: ToolContext = {
+      generatePreviewImage: vi.fn().mockResolvedValue(DATA_URL),
+    };
+    for (let i = 0; i < MAX_PREVIEW_IMAGE_CALLS; i++) {
+      const { result } = await executeTool("generate_preview_image", { scene: "s" }, context);
+      expect(JSON.parse(result)).toMatchObject({ ok: true });
+    }
+    const { result } = await executeTool("generate_preview_image", { scene: "s" }, context);
+    expect(JSON.parse(result)).toMatchObject({ ok: false });
+    expect(context.generatePreviewImage).toHaveBeenCalledTimes(MAX_PREVIEW_IMAGE_CALLS);
+  });
+
+  it("maps a generation failure to a graceful error result and flags it", async () => {
+    const context: ToolContext = {
+      generatePreviewImage: vi.fn().mockRejectedValue(new Error("provider down")),
+    };
+    const { result } = await executeTool("generate_preview_image", { scene: "s" }, context);
+    expect(JSON.parse(result)).toMatchObject({ ok: false });
+    expect(context.freshPreviewImage).toBeUndefined();
+    expect(context.previewImageFailed).toBe(true);
   });
 });
 

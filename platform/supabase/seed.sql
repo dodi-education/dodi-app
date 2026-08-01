@@ -818,8 +818,8 @@ INSERT INTO public.game_translations (id, game_id, locale, title, description, c
 INSERT INTO public.game_translations (id, game_id, locale, title, description, created_at, updated_at) VALUES ('4810262a-14f9-4373-9ab9-e8405df2f1ee', '00079709-ce39-4669-98e8-a3181640b4fb', 'en', 'Mandala', 'A calming coloring game where Dodi draws mandalas for you to color in.', '2026-03-12 11:44:49.512873+00', '2026-03-12 11:44:49.512873+00');
 
 -- Kid-library preview images for the system games (served from clients/web/public).
-UPDATE public.games SET preview_image = '/images/game-previews/drawing.svg' WHERE system_key = 'drawing-basic';
-UPDATE public.games SET preview_image = '/images/game-previews/mandala.svg' WHERE system_key = 'mandala-basic';
+UPDATE public.games SET preview_image = '/images/game-previews/drawing.png' WHERE system_key = 'drawing-basic';
+UPDATE public.games SET preview_image = '/images/game-previews/mandala.png' WHERE system_key = 'mandala-basic';
 
 -- System games are dodi-published Discover rows (20260730200000 migration):
 -- listed in the parent catalog, playable by a kid only via the family's

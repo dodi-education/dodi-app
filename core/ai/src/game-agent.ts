@@ -12,6 +12,7 @@
  */
 
 import { validateGameCode } from "@dodi/games/agent-validator";
+import { coerceProgressKind, coerceSuccessCriteria } from "@dodi/games/game-spec";
 import {
   BACKGROUND_IMAGE_PLACEHOLDER,
   extractBackgroundImage,
@@ -110,6 +111,19 @@ export interface RunGameAgentParams {
    * uploaded reference image chosen as the background (use_uploaded_background).
    */
   onPrepareBackgroundImage?: (dataUrl: string) => Promise<string>;
+  /**
+   * Client-injected preview-image generation (image provider + vault key are
+   * resolved by the caller). Presence enables the generate_preview_image tool.
+   * Receives the scene plus the game's background image (when one exists) as a
+   * style reference; returns the cropped square list-preview data URL.
+   */
+  onGeneratePreviewImage?: (scene: string, backgroundImage?: string) => Promise<string>;
+  /**
+   * The game already has a list preview image — softens the preview nudge to
+   * "regenerate only on a real look change or when the parent asks" so routine
+   * edits don't spend an image generation every time.
+   */
+  hasExistingPreviewImage?: boolean;
 }
 
 /** How many of the most recent image-bearing user turns re-send their images. */
@@ -203,6 +217,8 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
     onStep,
     onGenerateBackgroundImage,
     onPrepareBackgroundImage,
+    onGeneratePreviewImage,
+    hasExistingPreviewImage,
   } = params;
   const emitStep = onStep ?? (() => {});
   const checkAborted = (): void => {
@@ -222,6 +238,7 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
     tools: buildAgentTools({
       backgroundImage: Boolean(onGenerateBackgroundImage),
       uploadedImages: Boolean(goalPayload.images?.length),
+      previewImage: Boolean(onGeneratePreviewImage),
     }),
   });
 
@@ -231,6 +248,7 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
   const toolContext: ToolContext = {
     generateBackgroundImage: onGenerateBackgroundImage,
     prepareBackgroundImage: onPrepareBackgroundImage,
+    generatePreviewImage: onGeneratePreviewImage,
     referenceImages: goalPayload.images,
   };
   if (task.taskType === "update_game") {
@@ -266,8 +284,21 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
           : "") +
         ` — and reference the result via the ${BACKGROUND_IMAGE_PLACEHOLDER} contract.`
       : "";
+  // The parent enabled AI list previews. Without one yet, generating it is
+  // expected on this build; with one, routine edits must not spend an image
+  // generation — only a real look change or an explicit parent ask does.
+  const previewNote = onGeneratePreviewImage
+    ? hasExistingPreviewImage
+      ? "\n\nThe parent enabled AI preview-image generation and the game already has a list " +
+        "preview. Call generate_preview_image (AFTER your final write_game_code) only when " +
+        "your changes noticeably alter the game's look or theme, or when the parent asks " +
+        "for a new preview."
+      : "\n\nThe parent enabled AI preview-image generation: AFTER your final " +
+        "write_game_code + validate_game, call generate_preview_image once with a scene " +
+        "description of the finished game's key visual — it becomes the game's list icon."
+    : "";
   driver.seed(trimPriorImages(priorTurns), {
-    text: buildCodeTaskUserMessage(task) + carriedNote + backgroundNote,
+    text: buildCodeTaskUserMessage(task) + carriedNote + backgroundNote + previewNote,
     images: taskImages,
   });
 
@@ -306,6 +337,8 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
       emitStep("reading_docs");
     } else if (call.name === "generate_background_image" || call.name === "use_uploaded_background") {
       emitStep("generating_image");
+    } else if (call.name === "generate_preview_image") {
+      emitStep("generating_preview");
     } else if (call.name === "write_game_code") {
       emitStep("writing_code");
     } else if (call.name === "validate_game") {
@@ -335,6 +368,17 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
         emitStep("finalizing");
         break;
       }
+      // Preview-only run: the parent asked for a new preview image in chat and
+      // the model (correctly) changed nothing else — done, no write required.
+      // A failed attempt ends the same way instead of nudging the model into a
+      // pointless full rewrite; the caller surfaces the failure notice.
+      if (
+        task.taskType === "update_game" &&
+        (toolContext.freshPreviewImage || toolContext.previewImageFailed)
+      ) {
+        emitStep("finalizing");
+        break;
+      }
       if (result.hasText) {
         driver.addUserMessage(
           "Please use the write_game_code tool to provide the game code, " +
@@ -353,6 +397,40 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
   }
 
   if (!lastWrite) {
+    // Preview-only completion: hand back the existing bundle untouched with the
+    // fresh preview attached (or just the failure flag) — the caller persists
+    // ONLY the preview image, so every other field here is a placeholder it
+    // must ignore.
+    if (
+      task.taskType === "update_game" &&
+      (toolContext.freshPreviewImage || toolContext.previewImageFailed) &&
+      toolContext.existingCode
+    ) {
+      return {
+        taskType: "update_game",
+        title: goalPayload.title?.trim() ?? "",
+        description: "",
+        tags: [],
+        codeBundle: toolContext.existingCode,
+        markdown: toolContext.existingMarkdown ?? "",
+        backgroundImage: hasBackgroundPlaceholder(toolContext.existingCode)
+          ? toolContext.carriedBackgroundImage
+          : undefined,
+        previewImage: toolContext.freshPreviewImage,
+        previewImageFailed: toolContext.previewImageFailed,
+        previewOnly: true,
+        metadata: {},
+        learningGoal,
+        successDefinition,
+        successCriteria: coerceSuccessCriteria(undefined),
+        progressKind: coerceProgressKind(undefined),
+        changeSummary: "",
+        validationPassed: true,
+        iterationCount,
+        validationRetries,
+        usage,
+      };
+    }
     throw new GameAgentError("Agent did not produce any game code", {
       turns: iterationCount,
       lastStopReason,
@@ -421,6 +499,8 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
     markdown: lastWrite.markdown,
     backgroundImage,
     backgroundImageFailed: toolContext.backgroundImageFailed,
+    previewImage: toolContext.freshPreviewImage,
+    previewImageFailed: toolContext.previewImageFailed,
     metadata: { capabilities: lastWrite.capabilities },
     learningGoal,
     successDefinition,

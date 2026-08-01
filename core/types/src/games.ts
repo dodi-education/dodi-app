@@ -124,6 +124,8 @@ export type GameMetadata = Record<string, Json | undefined> & {
   perspective?: GamePerspective;
   /** Generate an AI background image during builds (needs an image provider). */
   generateBackgroundImage?: boolean;
+  /** Generate an AI game-list preview image after builds (needs an image provider). */
+  generatePreviewImage?: boolean;
 };
 
 export interface GameAssistantResponse {

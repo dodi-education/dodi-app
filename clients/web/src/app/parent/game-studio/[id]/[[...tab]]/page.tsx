@@ -92,6 +92,7 @@ export default function EditGameStudioPage() {
         isActive: game.is_active,
         perspective: metadata.perspective ?? null,
         generateBackgroundImage: Boolean(metadata.generateBackgroundImage),
+        generatePreviewImage: Boolean(metadata.generatePreviewImage),
         capabilities: metadata.capabilities ?? [],
         previewImage: game.preview_image,
         // Sealed prior conversation — the studio unseals it to resume editing.

@@ -7,6 +7,7 @@
  * unlocked browser vault context and never round-trips the key through a server.
  */
 
+import { parseImageDataUrl } from "../data-url";
 import type {
   GeneratedImage,
   GenerateImageOptions,
@@ -58,11 +59,21 @@ export class GeminiImageProvider implements ImageProvider {
       generationConfig.imageConfig = { aspectRatio: options.aspectRatio };
     }
 
+    // Style references ride along as inline image parts before the prompt
+    // (Nano Banana treats leading images as the visual context to match).
+    // Unparseable data URLs are skipped rather than failing the generation.
+    const referenceParts: GeminiPart[] = (options?.referenceImages ?? [])
+      .map(parseImageDataUrl)
+      .filter((parsed): parsed is NonNullable<typeof parsed> => parsed !== null)
+      .map((parsed) => ({
+        inlineData: { mimeType: parsed.mediaType, data: parsed.base64 },
+      }));
+
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
+        contents: [{ parts: [...referenceParts, { text: prompt }] }],
         generationConfig,
       }),
     });

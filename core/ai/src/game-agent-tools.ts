@@ -230,18 +230,47 @@ const USE_UPLOADED_BACKGROUND_TOOL: Anthropic.Tool = {
   },
 };
 
+/** Cost guard: preview-image generations allowed per agent run. */
+export const MAX_PREVIEW_IMAGE_CALLS = 2;
+
+const GENERATE_PREVIEW_IMAGE_TOOL: Anthropic.Tool = {
+  name: "generate_preview_image",
+  description:
+    "Generate the game's square list-preview icon with the account's image model. Call it " +
+    "AFTER your final write_game_code + validate_game (at most once — regenerate only if " +
+    "the parent asks for a different preview), so the icon reflects the finished game. " +
+    "The app crops, stores, and shows the result in game lists itself — your code never " +
+    "references it and you never see the image.",
+  input_schema: {
+    type: "object" as const,
+    properties: {
+      scene: {
+        type: "string",
+        description:
+          "What the icon shows, derived from the game you just wrote: the game's main " +
+          "subject or key moment (one clear centered motif — a character, object, or " +
+          "scene), plus its mood and dominant colors. It MUST be text-free — no letters, " +
+          "numbers, words, or signs anywhere in the image.",
+      },
+    },
+    required: ["scene"],
+  },
+};
+
 /**
- * The agent's toolset. The background tools appear only when usable:
- * generation when the setting + provider are on, uploaded backgrounds when the
- * parent's message carries reference images.
+ * The agent's toolset. The image tools appear only when usable: background /
+ * preview generation when the respective setting + an image provider are on,
+ * uploaded backgrounds when the parent's message carries reference images.
  */
 export function buildAgentTools(opts: {
   backgroundImage: boolean;
   uploadedImages?: boolean;
+  previewImage?: boolean;
 }): Anthropic.Tool[] {
   const extras: Anthropic.Tool[] = [];
   if (opts.backgroundImage) extras.push(GENERATE_BACKGROUND_IMAGE_TOOL);
   if (opts.uploadedImages) extras.push(USE_UPLOADED_BACKGROUND_TOOL);
+  if (opts.previewImage) extras.push(GENERATE_PREVIEW_IMAGE_TOOL);
   return extras.length > 0 ? [...AGENT_TOOLS, ...extras] : AGENT_TOOLS;
 }
 
@@ -288,6 +317,20 @@ export interface ToolContext {
   backgroundImageCalls?: number;
   /** Set when a generation attempt threw (surfaced to the studio as a notice). */
   backgroundImageFailed?: boolean;
+  /**
+   * Client-injected preview-image generation. Present only when the game's
+   * "preview image" setting is on AND an image provider is resolvable. Receives
+   * the scene plus the game's background image (when one exists) as a style
+   * reference; returns the CROPPED square list-preview data URL. Throws on
+   * failure.
+   */
+  generatePreviewImage?: (scene: string, backgroundImage?: string) => Promise<string>;
+  /** Preview generated during THIS run (set by the tool case). */
+  freshPreviewImage?: string;
+  /** Preview generations spent this run (cost guard). */
+  previewImageCalls?: number;
+  /** Set when a preview generation attempt threw (studio shows a notice). */
+  previewImageFailed?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -481,6 +524,57 @@ export async function executeTool(
             error:
               "Image generation failed — build the game without a generated background " +
               `and do NOT reference ${BACKGROUND_IMAGE_PLACEHOLDER}.`,
+          }),
+        };
+      }
+    }
+
+    case "generate_preview_image": {
+      if (!context.generatePreviewImage) {
+        return {
+          result: JSON.stringify({
+            ok: false,
+            error: "Preview image generation is not enabled for this game.",
+          }),
+        };
+      }
+      const scene = typeof toolInput.scene === "string" ? toolInput.scene.trim() : "";
+      if (!scene) {
+        return { result: JSON.stringify({ ok: false, error: "scene is required" }) };
+      }
+      context.previewImageCalls = (context.previewImageCalls ?? 0) + 1;
+      if (context.previewImageCalls > MAX_PREVIEW_IMAGE_CALLS) {
+        return {
+          result: JSON.stringify({
+            ok: false,
+            error:
+              "Preview generation budget for this build is used up — keep the preview " +
+              "you already generated.",
+          }),
+        };
+      }
+      try {
+        // The game's background (fresh this run, else carried over) rides along
+        // as a style reference so the icon matches the game's look. The data
+        // URL stays OUT of the tool result (and thus the transcript).
+        context.freshPreviewImage = await context.generatePreviewImage(
+          scene,
+          context.freshBackgroundImage ?? context.carriedBackgroundImage,
+        );
+        return {
+          result: JSON.stringify({
+            ok: true,
+            message:
+              "Preview image generated and stored. The app shows it in game lists — " +
+              "your code never references it.",
+          }),
+        };
+      } catch {
+        context.previewImageFailed = true;
+        return {
+          result: JSON.stringify({
+            ok: false,
+            error: "Preview image generation failed — finish the task without one.",
           }),
         };
       }

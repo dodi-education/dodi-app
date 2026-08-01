@@ -54,6 +54,27 @@ describe("GeminiImageProvider", () => {
     expect(body.generationConfig.imageConfig).toEqual({ aspectRatio: "4:5" });
   });
 
+  it("sends reference images as inline parts ahead of the prompt", async () => {
+    mockFetchOnce({
+      candidates: [
+        { content: { parts: [{ inlineData: { data: "QUJD" } }] } },
+      ],
+    });
+
+    const provider = new GeminiImageProvider("key", "gemini-3.1-flash-image");
+    await provider.generateImage("game icon", {
+      referenceImages: ["data:image/jpeg;base64,UkVGMQ==", "not-a-data-url"],
+    });
+
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    // The unparseable entry is skipped; the valid one leads, the prompt closes.
+    expect(body.contents[0].parts).toEqual([
+      { inlineData: { mimeType: "image/jpeg", data: "UkVGMQ==" } },
+      { text: "game icon" },
+    ]);
+  });
+
   it("throws when the response contains no image part", async () => {
     mockFetchOnce({
       candidates: [{ content: { parts: [{ text: "no image" }] } }],

@@ -442,6 +442,17 @@ parent-defined goal — and, in future, generate challenges like "Solve 3 math g
 
 ## TODO
 
+- Change game preview generation from html2image to ai generated content
+- Add translation standardization for games ()
+- Add translation service to publication process (all published games should be translated to the default languages)
+- Add the publisher name to the public game page
+
+- Implement plan limits
+ - Add 3 transcript logging tiers: basic, advanced, full and change pricing wording to:
+  - Basic: 1 month
+  - Advanced: 6 months
+  - Full: Unlimited
+
 - Make game code creation progress more transparent (output rough agent loop actions in chat)
 - Implement Venice.ai
 
@@ -458,10 +469,6 @@ parent-defined goal — and, in future, generate challenges like "Solve 3 math g
 - Restrict publication for paid subscribers (plan-driven `monthly_game_publication_limit`)
 
 - Memory / transcripts (implemented foundation):
-- Add 3 transcript logging tiers: basic, advanced, full and change pricing wording to:
-  - Basic: 1 month
-  - Advanced: 6 months
-  - Full: Unlimited
 
 
 - Credit balances
