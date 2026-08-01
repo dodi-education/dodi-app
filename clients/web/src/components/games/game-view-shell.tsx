@@ -18,8 +18,6 @@ interface GameViewShellProps {
   backLabel: string;
   /** Main heading — the game (or screen) title. */
   title: string;
-  /** Optional secondary line under the title. */
-  description?: string;
   /** Optional action rendered at the right edge of the title bar (e.g. Remix). */
   action?: ReactNode;
   /** Contextual quick actions shown as chips inside the Dodi panel. */
@@ -38,18 +36,17 @@ interface GameViewShellProps {
  * Shared shell for the kid full-mode game views (play / edit / create).
  *
  * Mirrors the design's `k-create-bar` sitting above `k-create-cols`: a
- * full-width title bar (back button + title + description) on top, with the
- * persistent Dodi voice panel and the game content side-by-side below it.
+ * full-width title bar (back button + title) on top, with the persistent Dodi
+ * voice panel and the game content side-by-side below it.
  *
  * Below `lg` the shell collapses to a compact single-column layout: the title
- * sits inline next to the back button (no description), and the Dodi panel is
- * hidden — dodi stays reachable as the compact header avatar (see KidLayout).
+ * sits inline next to the back button, and the Dodi panel is hidden — dodi
+ * stays reachable as the compact header avatar (see KidLayout).
  */
 export function GameViewShell({
   backHref,
   backLabel,
   title,
-  description,
   action,
   assistantActions,
   sidebar,
@@ -70,17 +67,12 @@ export function GameViewShell({
             with the game canvas's right edge below (same column, same var). */}
         <div
           style={stageWidthVars(STAGE.reservedKid)}
-          className="flex min-w-0 flex-1 items-center justify-between gap-3 lg:max-w-[var(--stage-w)] lg:flex-wrap"
+          className="flex min-w-0 flex-1 items-center justify-between gap-3 lg:max-w-[var(--stage-w)]"
         >
           <div className="min-w-0">
             <h1 className="truncate text-[17px] font-extrabold text-ink lg:text-[21px]">
               {title}
             </h1>
-            {description ? (
-              <p className="hidden truncate text-sm font-semibold text-muted-foreground lg:block">
-                {description}
-              </p>
-            ) : null}
           </div>
           {action}
         </div>

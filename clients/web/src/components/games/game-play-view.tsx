@@ -1054,7 +1054,6 @@ export function GamePlayView({
       backHref={snapshot ? "/snapshots" : "/games"}
       backLabel={snapshot ? tSnapshots("title") : t("title")}
       title={title}
-      description={description}
       assistantActions={assistantActions}
       action={
         isSnapshotSession ? undefined : (

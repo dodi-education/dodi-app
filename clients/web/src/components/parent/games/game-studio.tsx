@@ -823,6 +823,28 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     }).format(new Date(v.created_at)),
   }));
 
+  // Edit-mode search panel strings, keyed by CodeMirror's English defaults
+  // (its phrase-translation contract; "$" is CodeMirror's placeholder).
+  const searchPhrases: Record<string, string> = {
+    Find: t("codeSearchFind"),
+    Replace: t("codeSearchReplace"),
+    next: t("codeSearchNext"),
+    previous: t("codeSearchPrevious"),
+    "match case": t("codeSearchMatchCase"),
+    regexp: t("codeSearchRegexp"),
+    "by word": t("codeSearchByWord"),
+    replace: t("codeSearchReplaceNext"),
+    "replace all": t("codeSearchReplaceAll"),
+    close: t("codeSearchClose"),
+    "Toggle replace": t("codeSearchToggleReplace"),
+    "no results": t("codeSearchNoResults"),
+    of: t("codeSearchOf"),
+    "current match": t("codeSearchCurrentMatch"),
+    "on line": t("codeSearchOnLine"),
+    "replaced $ matches": t("codeSearchReplacedMatches"),
+    "replaced match on line $": t("codeSearchReplacedOnLine"),
+  };
+
   // ----- End version history ---------------------------------------------
 
   // Stage picked/pasted reference images: read → downscale to a bounded JPEG →
@@ -1596,6 +1618,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
                   editSaveLabel={t("editCodeSave")}
                   editCancelLabel={t("editCodeCancel")}
                   versionSelectorLabel={t("versionSelector")}
+                  searchPhrases={searchPhrases}
                 />
               ) : (
                 <div className="flex min-h-full items-center justify-center p-8">

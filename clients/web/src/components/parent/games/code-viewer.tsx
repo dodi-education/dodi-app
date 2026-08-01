@@ -78,6 +78,11 @@ interface CodeViewerProps {
   editSaveLabel?: string;
   editCancelLabel?: string;
   versionSelectorLabel?: string;
+  /**
+   * Translations for the edit-mode search panel, keyed by CodeMirror's
+   * English defaults (e.g. `"match case"`). Passed to the editor untouched.
+   */
+  searchPhrases?: Record<string, string>;
 }
 
 /**
@@ -108,6 +113,7 @@ export function CodeViewer({
   editSaveLabel,
   editCancelLabel,
   versionSelectorLabel,
+  searchPhrases,
 }: CodeViewerProps) {
   const [copied, setCopied] = useState(false);
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -190,18 +196,37 @@ export function CodeViewer({
     }
   }, [onSaveEdit, editorHandle, editSeed]);
 
-  // Ctrl+S / Cmd+S saves while editing (window-level so focus doesn't matter).
+  // Editing shortcuts, window-level so focus doesn't matter: Ctrl/Cmd+S
+  // saves; Ctrl/Cmd+F opens the editor's search panel, because native
+  // find-in-page only sees CodeMirror's rendered viewport, not the document.
   useEffect(() => {
     if (!editing) return;
     const onKeyDown = (e: KeyboardEvent): void => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      const key = e.key.toLowerCase();
+      if (key === "s") {
         e.preventDefault();
         void saveEdit();
+      } else if (key === "f" && !e.shiftKey && !e.altKey) {
+        // Already handled (focus was inside the editor, whose own keymap
+        // binds Mod+F) — nothing left to do.
+        if (e.defaultPrevented || !editorHandle) return;
+        // Keep native find for other editable surfaces (e.g. the chat box).
+        const target = e.target;
+        if (
+          target instanceof HTMLElement &&
+          !target.closest(".cm-editor") &&
+          (target.isContentEditable ||
+            target.closest("input, textarea, select"))
+        )
+          return;
+        e.preventDefault();
+        editorHandle.openSearch();
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [editing, saveEdit]);
+  }, [editing, saveEdit, editorHandle]);
 
   const headerButton = (
     active: boolean,
@@ -217,7 +242,17 @@ export function CodeViewer({
     );
 
   return (
-    <div className="dodi-code flex min-h-full flex-col bg-card font-mono text-[12.5px] leading-[1.75] text-ink-2">
+    <div
+      className={cn(
+        "dodi-code flex min-h-full flex-col bg-card font-mono text-[12.5px] leading-[1.75] text-ink-2",
+        // Edit mode locks the viewer to the pane's height so CodeMirror is
+        // bounded and scrolls internally. Left unbounded (the read view's
+        // pane-scrolling layout), the editor grows to document height and a
+        // find jump scrolls the pane, carrying the top-docked search panel
+        // out of view.
+        editing && "h-full",
+      )}
+    >
       {/* Editor chrome — filename tab + version/edit/diff/copy actions */}
       <div className="sticky top-0 z-10 flex flex-shrink-0 items-center justify-between gap-2 border-b border-border bg-background px-3 py-2">
         <div className="flex min-w-0 items-center gap-2 font-sans text-[12px] font-medium text-muted-foreground">
@@ -334,6 +369,7 @@ export function CodeViewer({
         <CodeEditor
           initialCode={editSeed}
           onReady={setEditorHandle}
+          phrases={searchPhrases}
           className="min-h-0 flex-1 overflow-hidden"
         />
       ) : diffActive && previousCode ? (
