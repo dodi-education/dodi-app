@@ -170,7 +170,8 @@ When writing game code, also generate a markdown briefing document that includes
 
 ## Change Summary
 Every time you call write_game_code, you MUST include a "changeSummary": a short, friendly recap
-written for the parent (2-4 concise bullet lines, each starting with "- "). For a brand-new game,
+written for the parent (2-4 concise bullet lines, each starting with "- "). Output only the bullet
+lines — no heading or intro line; the app shows its own title above the list. For a brand-new game,
 summarize what you made; for an update, summarize ONLY what changed in this turn. Keep it plain and
 non-technical — describe the gameplay/experience, not the code. Never include the child's name,
 birthday, or any personal detail in the summary — refer to "your child" generically.${narrationSection}

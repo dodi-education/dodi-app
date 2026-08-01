@@ -67,8 +67,9 @@ export const AGENT_TOOLS: Anthropic.Tool[] = [
           type: "string",
           description:
             "A short, friendly recap of what you just built or changed, written for the parent. " +
-            "2-4 concise bullet lines (each starting with '- '). For a brand-new game, summarize " +
-            "what you made; for an update, summarize only what changed.",
+            "2-4 concise bullet lines (each starting with '- '). Bullet lines only — no heading " +
+            "or intro line, the app shows its own title above the list. For a brand-new game, " +
+            "summarize what you made; for an update, summarize only what changed.",
         },
         tags: {
           type: "array",

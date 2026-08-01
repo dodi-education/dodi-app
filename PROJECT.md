@@ -442,16 +442,14 @@ parent-defined goal — and, in future, generate challenges like "Solve 3 math g
 
 ## TODO
 
+
+- Add translation standardization for games ()
+- Add translation service to publication process (all published games should be translated to the default languages)
+
 - Enhance usability of game-studio
  - Step 1 ("Sketch"): should be a skipable step where you can draw or upload a "Sketch" of the game UI.
  - Step 2 ("Description"): Describe game (attach sketch) and based on both inputs ask questions regarding functionality scope. User can add more context and request questions, or continue. During "Description" step Agent should already prefill Settings.
  - Step 3 ("Settings"): Once configured click button "Build game" -> Switch to Game preview and show sidebar. Sketch and Description Conversation should be visible in agent conversation history.
-
- - Fix request_text_generation in game-studio
-
-
-- Add translation standardization for games ()
-- Add translation service to publication process (all published games should be translated to the default languages)
 
 - Implement plan limits
  - Add 3 transcript logging tiers: basic, advanced, full and change pricing wording to:

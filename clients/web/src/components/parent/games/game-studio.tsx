@@ -1184,9 +1184,15 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
         },
       });
 
-      const summary = result.changeSummary?.trim();
+      // The summary contract is bullet lines only; the client owns the title
+      // above the list (localized). Strip a model-authored heading line
+      // (non-bullet first line ending in ":") so it never doubles up.
+      const summary = (result.changeSummary ?? "")
+        .trim()
+        .replace(/^\s*[^-\n][^\n]*:\**\s*\n+/, "")
+        .trim();
       const dodiText = summary
-        ? summary
+        ? `${t("buildSummaryTitle")}\n${summary}`
         : isUpdate
           ? `Updated **${result.title}** — the preview and code are refreshed.`
           : `Here's **${result.title}** — it's live in the preview; flip to Code to see what I wrote.`;
@@ -2428,8 +2434,47 @@ function Field({
   );
 }
 
-/** Minimal markdown: **bold** only. */
+/**
+ * Minimal markdown: **bold** inline; consecutive "- " lines (the agent's
+ * changeSummary format) render as a bullet list instead of literal dashes.
+ */
 function RichText({ text }: { text: string }) {
+  type Block = { kind: "text"; text: string } | { kind: "list"; items: string[] };
+  const blocks: Block[] = [];
+  for (const line of text.split("\n")) {
+    const item = /^\s*-\s+(.*)/.exec(line);
+    if (item) {
+      const prev = blocks[blocks.length - 1];
+      if (prev?.kind === "list") prev.items.push(item[1]);
+      else blocks.push({ kind: "list", items: [item[1]] });
+    } else if (line.trim()) {
+      blocks.push({ kind: "text", text: line });
+    }
+  }
+  // Single plain line (the common case) stays inline, exactly as before.
+  if (blocks.length === 1 && blocks[0].kind === "text") return <BoldText text={blocks[0].text} />;
+  return (
+    <>
+      {blocks.map((b, i) =>
+        b.kind === "list" ? (
+          <ul key={i} className="mt-1 list-disc space-y-0.5 pl-4 first:mt-0">
+            {b.items.map((it, j) => (
+              <li key={j}>
+                <BoldText text={it} />
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p key={i} className="mt-1 first:mt-0">
+            <BoldText text={b.text} />
+          </p>
+        ),
+      )}
+    </>
+  );
+}
+
+function BoldText({ text }: { text: string }) {
   const parts = text.split(/(\*\*[^*]+\*\*)/g);
   return (
     <>

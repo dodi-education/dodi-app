@@ -660,6 +660,7 @@
     "previewSkippedNotice": "dodi finished without generating a preview image this time. Ask dodi to \"create a preview image\" if you want one.",
     "previewFailedNotice": "Preview image generation failed. Check your image model in Settings and try again.",
     "previewUpdatedMessage": "I created a fresh preview image, you can see it in your game list.",
+    "buildSummaryTitle": "Build summary:",
     "previewUpdateFailedMessage": "I couldn't create a new preview image. Check your image model in Settings and try again.",
     "successDefinition": "Success definition",
     "successPlaceholder": "How does dodi know a child succeeded? e.g. \"Counts to the target 3 times in a row without help.\"",
