@@ -55,6 +55,8 @@ interface GameSandboxProps {
   goal?: GameGoal;
   /** Saved state to restore on init (snapshot play). */
   savedState?: GameSaveState;
+  /** Viewer locale delivered to the game on init (resolved by `dodi.translate`). */
+  locale?: string;
   onMessage?: (message: GameToParentMessage) => void;
   onStateChange?: (state: Record<string, unknown>) => void;
   /** Called with state from command results (game:result). Use for immediate (non-debounced) state delivery. */
@@ -72,10 +74,13 @@ const INIT_MAX_RETRIES = 10;
 const SNAPSHOT_TIMEOUT_MS = 2500;
 
 /**
- * Inject the host shim before the first <script>: logs all incoming messages
- * and answers `dodi:host_snapshot` with a capture of the game surface — the
- * dominant <canvas> when one covers the view, else a DOM rasterization via SVG
- * foreignObject. Fully inline (CSP: no network) and game-cooperation-free.
+ * Inject the host shim before the first executable <script> so it runs first:
+ * logs all incoming messages, answers `dodi:host_snapshot` with a capture of
+ * the game surface (the dominant <canvas> when one covers the view, else a DOM
+ * rasterization via SVG foreignObject), and provides the `dodi.translate`
+ * runtime that resolves game text from the bundle's inert
+ * `application/dodi-translations` block against the locale delivered in
+ * `dodi:init`. Fully inline (CSP: no network) and game-cooperation-free.
  */
 function injectHostShim(html: string): string {
   const shim = `<script>
@@ -126,10 +131,52 @@ function injectHostShim(html: string): string {
       img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
     }catch(e){done(null);}
   }
+  // ── dodi.translate runtime ─────────────────────────────────────────────
+  // The translations block sits in <head>, so it is parsed before any game
+  // script runs; games without one (legacy) simply get the key back.
+  var i18nData=null,i18nParsed=false,activeLocale=null;
+  function i18nLoad(){
+    if(i18nParsed)return i18nData;
+    var el=document.querySelector('script[type="application/dodi-translations"]');
+    if(!el)return null; // not in the DOM yet (or legacy game) — retry on next call
+    i18nParsed=true;
+    try{i18nData=JSON.parse(el.textContent||'');}
+    catch(err){console.warn('[iframe-shim] invalid translations block',err);}
+    return i18nData;
+  }
+  function i18nDict(data,locale){
+    if(!locale||!data.locales)return null;
+    var loc=String(locale).toLowerCase();
+    return data.locales[loc]||data.locales[loc.slice(0,2)]||null;
+  }
+  window.dodi=window.dodi||{};
+  window.dodi.translate=function(key,params){
+    var data=i18nLoad();
+    var text=null;
+    if(data&&data.locales){
+      var dict=i18nDict(data,activeLocale)||data.locales[data.sourceLocale];
+      if(dict&&Object.prototype.hasOwnProperty.call(dict,key))text=dict[key];
+      else{
+        var src=data.locales[data.sourceLocale];
+        if(src&&Object.prototype.hasOwnProperty.call(src,key))text=src[key];
+      }
+    }
+    if(text==null)text=key;
+    if(params)text=String(text).replace(/\\{(\\w+)\\}/g,function(m,p){
+      return Object.prototype.hasOwnProperty.call(params,p)?String(params[p]):m;
+    });
+    return text;
+  };
   window.addEventListener('message',function(e){
     var d=e.data;
     if(!d||typeof d!=='object'||typeof d.type!=='string')return;
     console.log('[iframe-shim] IN: '+d.type,d);
+    // This listener registers before any game script, so the locale is set
+    // before the game's own dodi:init handler renders its first frame. Locale
+    // is fixed at init — a mid-session UI language switch remounts the iframe.
+    if(d.type==='dodi:init'&&d.payload&&typeof d.payload.locale==='string'){
+      activeLocale=d.payload.locale;
+    }
     if(d.type!=='dodi:host_snapshot')return;
     var reply=function(snapshot){
       parent.postMessage({type:'game:event',token:d.token,payload:{event:'host_snapshot',snapshot:snapshot}},'*');
@@ -144,10 +191,12 @@ function injectHostShim(html: string): string {
   console.log('[iframe-shim] shim active');
 })();
 </script>`;
-  // Insert before the first <script> in the body so it runs first
-  const idx = html.indexOf("<script>");
-  if (idx !== -1) {
-    return html.slice(0, idx) + shim + html.slice(idx);
+  // Insert before the first EXECUTABLE <script> so the shim runs first. Inert
+  // data blocks (type="application/…", e.g. the translations block) are not
+  // executed and must not pull the shim ahead of themselves into <head>.
+  const executable = html.match(/<script\b(?![^>]*\btype\s*=\s*["']application\/)/i);
+  if (executable?.index !== undefined) {
+    return html.slice(0, executable.index) + shim + html.slice(executable.index);
   }
   return html + shim;
 }
@@ -181,7 +230,7 @@ export function buildSandboxSrcDoc(codeBundle: string): string {
 
 export const GameSandbox = forwardRef<GameSandboxHandle, GameSandboxProps>(
   function GameSandbox(
-    { gameId, codeBundle, className, goal, savedState, onMessage, onStateChange, onCommandResult, onProgress }: GameSandboxProps,
+    { gameId, codeBundle, className, goal, savedState, locale, onMessage, onStateChange, onCommandResult, onProgress }: GameSandboxProps,
     ref,
   ) {
     const iframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -197,6 +246,8 @@ export const GameSandbox = forwardRef<GameSandboxHandle, GameSandboxProps>(
     goalRef.current = goal;
     const savedStateRef = useRef<GameSaveState | undefined>(savedState);
     savedStateRef.current = savedState;
+    const localeRef = useRef<string | undefined>(locale);
+    localeRef.current = locale;
 
     const postEnvelope = useCallback(
       (message: ParentToGameMessage) => {
@@ -226,7 +277,12 @@ export const GameSandbox = forwardRef<GameSandboxHandle, GameSandboxProps>(
       const initPayload: ParentToGameMessage = {
         type: "dodi:init",
         token: bridgeToken,
-        payload: { gameId, goal: goalRef.current, savedState: savedStateRef.current },
+        payload: {
+          gameId,
+          goal: goalRef.current,
+          savedState: savedStateRef.current,
+          locale: localeRef.current,
+        },
       };
 
       gameDebug("sandbox", `Sending dodi:init to game ${gameId} (with retry)`);

@@ -26,6 +26,7 @@ export const SOFT_REJECTION_CODES = [
   "soft_misleading_metadata",
   "soft_quality_below_bar",
   "soft_advertising_or_promotion",
+  "soft_translation_quality",
 ] as const;
 
 export const REJECTION_CODES = [
@@ -74,6 +75,8 @@ export const REJECTION_CODE_CRITERIA: Record<RejectionCode, string> = {
     "The game is broken or effectively empty: does not start, dead-ends, non-functional mechanics, placeholder text/assets, or unplayable in an obvious way.",
   soft_advertising_or_promotion:
     "Advertising or promotion aimed at the player: ads, brand promotion, calls to visit external products, services, channels or communities, or solicitation of payments/donations.",
+  soft_translation_quality:
+    "A locale's translations are wrong, misleading, or materially different from the source language. Compare ALL locales of the bundle's application/dodi-translations block and the per-locale listing title/description: meaning must match across languages, and no content may appear in one locale while hidden from another (cross-locale content smuggling is a safety issue — escalate to a hard code when the divergent content itself violates one).",
 };
 
 export function isRejectionCode(value: unknown): value is RejectionCode {

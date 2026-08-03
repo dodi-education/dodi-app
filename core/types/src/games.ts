@@ -70,6 +70,13 @@ export interface DiscoverGameSummary {
   copies: number;
   /** The CALLER's own sharing state for this game ("Added" = any entry). */
   sharing: GameSharingState;
+  /**
+   * Locales the bundle + listing fully cover (derived at publish; extended by
+   * the platform's locale backfill). NULL only on pre-i18n rows; today every
+   * publication covers all platform locales, so this is future-proofing for
+   * the window after a new platform language ships.
+   */
+  available_locales: string[] | null;
 }
 
 /**
@@ -145,6 +152,13 @@ export interface ParentInitMessage extends ParentToGameEnvelopeBase {
     goal?: GameGoal;
     /** Present when resuming a snapshot — the game restores it before game:ready. */
     savedState?: GameSaveState;
+    /**
+     * The viewer's UI locale. Game text resolves through the host shim's
+     * `dodi.translate` — the shim reads this before the game's own init
+     * handler runs and picks the matching locale from the bundle's embedded
+     * translations block (fallback: the block's sourceLocale).
+     */
+    locale?: string;
   };
 }
 

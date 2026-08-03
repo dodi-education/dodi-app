@@ -237,7 +237,8 @@ describe("executeTool read_char_paths", () => {
 
 describe("executeTool validate_game background awareness", () => {
   const compliant = (extra: string): string =>
-    `<!doctype html><html><body>${extra}<script>
+    `<!doctype html><html><head><script type="application/dodi-translations">{"sourceLocale":"en","locales":{"en":{"game.title":"Game"}}}</script></head><body>${extra}<script>
+      document.title = dodi.translate('game.title');
       window.addEventListener('message', function (e) {
         if (e.data.type === 'dodi:init') parent.postMessage({ type: 'game:ready', payload: { capabilities: [] } }, '*');
         if (e.data.type === 'dodi:command') parent.postMessage({ type: 'game:result' }, '*');

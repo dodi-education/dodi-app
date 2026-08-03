@@ -18,6 +18,8 @@ interface GameStageProps {
   goal?: GameGoal;
   /** Saved state to restore on init (snapshot play). */
   savedState?: GameSaveState;
+  /** Viewer locale delivered to the game on init (resolved by `dodi.translate`). */
+  locale?: string;
   /** Forwarded to the underlying sandbox so callers can send commands / snapshots. */
   sandboxRef?: Ref<GameSandboxHandle>;
   /** The stage card element — lets callers measure the visible game surface. */
@@ -57,6 +59,7 @@ export function GameStage({
   codeBundle,
   goal,
   savedState,
+  locale,
   sandboxRef,
   stageRef,
   onMessage,
@@ -90,6 +93,7 @@ export function GameStage({
         codeBundle={codeBundle}
         goal={goal}
         savedState={savedState}
+        locale={locale}
         className="h-full w-full border-0 bg-white"
         onMessage={onMessage}
         onStateChange={onStateChange}

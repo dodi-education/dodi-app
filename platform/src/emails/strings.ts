@@ -4,13 +4,14 @@
  * can render an email in the parent's own language. Add locales here as the app
  * grows; unknown/missing values fall back to English.
  */
+import { normalizeLocale, type Locale } from "@dodi/intl/locales";
 import type { RejectionCode } from "@dodi/protocol";
 
-export type EmailLocale = "en" | "de";
+export type EmailLocale = Locale;
 
 /** Map a stored BCP-47 short code (e.g. "en", "de-DE") onto a supported locale. */
 export function normalizeEmailLocale(input: string | null | undefined): EmailLocale {
-  return (input ?? "").slice(0, 2).toLowerCase() === "de" ? "de" : "en";
+  return normalizeLocale(input);
 }
 
 /** Shared shell copy: the footer every email carries. */
@@ -162,6 +163,7 @@ const PUBLICATION_OUTCOME: Record<EmailLocale, PublicationOutcomeCopy> = {
       soft_misleading_metadata: "Title or description doesn't match the game",
       soft_quality_below_bar: "Game is broken or incomplete",
       soft_advertising_or_promotion: "Contains advertising or promotion",
+      soft_translation_quality: "Translations don't match across languages",
     },
   },
   de: {
@@ -197,6 +199,7 @@ const PUBLICATION_OUTCOME: Record<EmailLocale, PublicationOutcomeCopy> = {
       soft_age_appropriateness: "Passt nicht zur Zielaltersgruppe",
       soft_misleading_metadata: "Titel oder Beschreibung passen nicht zum Spiel",
       soft_quality_below_bar: "Spiel ist kaputt oder unvollständig",
+      soft_translation_quality: "Übersetzungen stimmen nicht überein",
       soft_advertising_or_promotion: "Enthält Werbung",
     },
   },

@@ -13,6 +13,7 @@
 
 import { validateGameCode } from "@dodi/games/agent-validator";
 import { coerceProgressKind, coerceSuccessCriteria } from "@dodi/games/game-spec";
+import { stripTranslationsToSource } from "@dodi/games/translations";
 import {
   BACKGROUND_IMAGE_PLACEHOLDER,
   extractBackgroundImage,
@@ -278,6 +279,7 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
     model,
     systemPrompt: buildAgentSystemPrompt({
       ...task.childContext,
+      sourceLocale: task.childContext.locale ?? "en",
       perspective: goalPayload.perspective ?? null,
       narrationLanguage,
     }),
@@ -303,7 +305,10 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
   if (task.taskType === "update_game") {
     const payload = task.payload as UpdateGamePayload;
     const extracted = extractBackgroundImage(payload.existingCode);
-    toolContext.existingCode = extracted.code;
+    // A published/remixed bundle carries every platform locale; the model only
+    // ever writes the source, so drop the rest (budget + tokens). Non-source
+    // locales go stale on edit anyway — re-publishing re-translates.
+    toolContext.existingCode = stripTranslationsToSource(extracted.code);
     toolContext.existingMarkdown = payload.existingMarkdown;
     if (extracted.dataUrl) toolContext.carriedBackgroundImage = extracted.dataUrl;
   }
@@ -479,6 +484,7 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
     progressKind: lastWrite!.progressKind,
     requiredMetrics: lastWrite!.successCriteria.requiredMetrics,
     capabilities: lastWrite!.capabilities,
+    requireTranslations: true,
     // "Image available": generated this run, or carried AND still referenced (a
     // carried background may be dropped deliberately — never an error).
     hasBackgroundImage:

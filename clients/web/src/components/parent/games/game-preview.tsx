@@ -16,7 +16,7 @@
  * "Share with kids" (play-in-place — the same flow as the Discover list).
  */
 import { useEffect, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 
 import { GameStage } from "@/components/games/game-stage";
 import { CodeViewer } from "@/components/parent/games/code-viewer";
@@ -46,6 +46,7 @@ export function GamePreview({
   sharing: initialSharing,
 }: GamePreviewProps) {
   const t = useTranslations("gameStudio");
+  const locale = useLocale();
   const [view, setView] = useState<PreviewView>("preview");
   const [shareOpen, setShareOpen] = useState(false);
   // Kept locally so a save in the dialog updates the "Added" chip and re-seeds
@@ -126,6 +127,7 @@ export function GamePreview({
               <GameStage
                 gameId={detail.id}
                 codeBundle={detail.code_bundle}
+                locale={locale}
                 reserved={STAGE.reservedStudio}
               />
             </div>

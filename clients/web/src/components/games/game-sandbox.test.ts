@@ -35,4 +35,27 @@ describe("buildSandboxSrcDoc", () => {
     expect(doc).toContain("Content-Security-Policy");
     expect(doc).toContain("dodi:host_snapshot");
   });
+
+  it("injects the dodi.translate runtime", () => {
+    const doc = buildSandboxSrcDoc(BUNDLE);
+    expect(doc).toContain("window.dodi.translate");
+    expect(doc).toContain("application/dodi-translations");
+  });
+
+  it("anchors on the first EXECUTABLE script, skipping the inert translations block", () => {
+    const bundle = [
+      "<!doctype html><html><head>",
+      '<script type="application/dodi-translations">{"sourceLocale":"en","locales":{"en":{"k":"v"}}}</script>',
+      "</head><body>",
+      '<script type="text/javascript">console.log(\'game\')</script>',
+      "</body></html>",
+    ].join("\n");
+    const doc = buildSandboxSrcDoc(bundle);
+    const blockIdx = doc.indexOf("application/dodi-translations\">");
+    const shimIdx = doc.indexOf("dodi:host_snapshot");
+    const gameScriptIdx = doc.indexOf("console.log('game')");
+    // Block (inert) stays first; shim precedes the game's executable script.
+    expect(blockIdx).toBeLessThan(shimIdx);
+    expect(shimIdx).toBeLessThan(gameScriptIdx);
+  });
 });

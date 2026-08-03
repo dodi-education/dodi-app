@@ -7,8 +7,15 @@
  */
 
 import { BACKGROUND_IMAGE_PLACEHOLDER, hasBackgroundPlaceholder } from "./background-image";
+import { isUnbuiltBundle } from "./placeholder";
 import type { MetricKey, ProgressKind } from "./success";
 import { STANDARD_TOOLS_BY_NAME } from "./toolbox";
+import {
+  TRANSLATIONS_SCRIPT_TYPE,
+  extractTranslations,
+  hasTranslationsBlock,
+  translateCallKeys,
+} from "./translations";
 
 const MAX_BUNDLE_BYTES = 200 * 1024;
 
@@ -29,6 +36,13 @@ export interface ValidateGameOptions {
    * then reference {{BACKGROUND_IMAGE}} (and must not without one).
    */
   hasBackgroundImage?: boolean;
+  /**
+   * Require the embedded translations block + `dodi.translate` usage (the
+   * generation-agent loop sets this). Leave unset on the zip-import path so
+   * legacy bundles without a block keep importing; a PRESENT-but-malformed
+   * block always fails regardless of this option.
+   */
+  requireTranslations?: boolean;
 }
 
 const BLOCKED_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
@@ -116,6 +130,42 @@ export function validateGameCode(
         `Code references ${BACKGROUND_IMAGE_PLACEHOLDER} but no background image exists — ` +
           `remove the background-image style block`,
       );
+    }
+  }
+
+  // Translations block (see ./translations). Skipped for the unbuilt stub —
+  // it has no real code yet.
+  if (!isUnbuiltBundle(code)) {
+    const { translations, errors: translationErrors } = extractTranslations(code);
+    errors.push(...translationErrors);
+    if (translations) {
+      const sourceDict = translations.locales[translations.sourceLocale] ?? {};
+      const missing = translateCallKeys(code).filter((key) => !(key in sourceDict));
+      if (missing.length > 0) {
+        errors.push(
+          `dodi.translate() is called with keys missing from the "${translations.sourceLocale}" ` +
+            `translations: ${missing.join(", ")} — add them to the translations block`,
+        );
+      }
+    }
+    if (options?.requireTranslations) {
+      if (!hasTranslationsBlock(code)) {
+        errors.push(
+          `Missing <script type="${TRANSLATIONS_SCRIPT_TYPE}"> block — every game must ship its ` +
+            `visible text as {"sourceLocale":"…","locales":{"…":{"key":"text"}}} and render it via dodi.translate()`,
+        );
+      } else if (translations) {
+        if (Object.keys(translations.locales[translations.sourceLocale] ?? {}).length === 0) {
+          errors.push(
+            "The translations block's source locale has no entries — move the game's visible text into it",
+          );
+        }
+        if (!/dodi\.translate\s*\(/.test(code)) {
+          errors.push(
+            "The game never calls dodi.translate() — all visible text must be rendered through it",
+          );
+        }
+      }
     }
   }
 

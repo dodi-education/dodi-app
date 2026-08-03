@@ -36,6 +36,7 @@ const UsageReportSchema = z.object({
     "game_edit",
     "game_analysis",
     "game_text_generation",
+    "game_translation",
     "memory_update",
     "voice_minutes",
   ]),

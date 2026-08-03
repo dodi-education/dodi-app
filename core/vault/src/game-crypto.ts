@@ -176,6 +176,13 @@ export interface GamePublicationContent {
   successDefinition: string;
   successCriteria: Json;
   previewImage: string | null;
+  /**
+   * Per-locale listing content, one entry per platform locale (the source
+   * locale's entry mirrors title/description). Produced by the publish
+   * dialog's translate step (client-translate-game.ts); the server gate
+   * requires full coverage and persists it as game_translations rows.
+   */
+  translations?: Record<string, { title: string; description: string }>;
 }
 
 /** Project a DECRYPTED game row onto the publication submission payload. */

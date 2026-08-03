@@ -50,7 +50,14 @@ export interface AgentTaskRequest {
   childContext: {
     name: string;
     age?: number;
+    /** Display name of the child's language for prose (e.g. "German"). */
     language: string;
+    /**
+     * The child's language as a locale code (e.g. "de") — becomes the
+     * sourceLocale of the game's embedded translations block. Optional for
+     * queued-task back-compat; absent ⇒ "en".
+     */
+    locale?: string;
     /**
      * Scrubbing-free learning context (memory + parent notes) for the audience
      * kid(s), used to shape game design. Never echoed verbatim into game content.

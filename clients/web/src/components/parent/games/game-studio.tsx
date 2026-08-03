@@ -25,8 +25,11 @@ import {
 import { STAGE } from "@/lib/games/stage";
 import { GAME_TAGS } from "@dodi/games/tags";
 import { sanitizeGameBundle } from "@dodi/games/sanitizer";
+import { hasTranslationsBlock } from "@dodi/games/translations";
 import { UNBUILT_GAME_PLACEHOLDER } from "@dodi/games/placeholder";
 import { injectBackgroundImage } from "@dodi/games/background-image";
+import { normalizeLocale } from "@dodi/intl/locales";
+import { locales } from "@/i18n/config";
 import { tagStyle } from "@/components/parent/games/tag-style";
 import { CodeViewer } from "@/components/parent/games/code-viewer";
 import { AgeRange, isValidAgeRange } from "@/components/parent/games/age-range";
@@ -497,6 +500,17 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
   const primaryKidId = game.isFamily
     ? (kids[0]?.id ?? null)
     : (game.audienceIds[0] ?? null);
+  // ── Preview locale ─────────────────────────────────────────────────────
+  // Defaults to the kid's game language (= the source locale of new builds);
+  // the picker lets the parent test each platform language. Only games with a
+  // translations block react to it, so the picker hides otherwise.
+  const [previewLocaleChoice, setPreviewLocaleChoice] = useState<string | null>(null);
+  const previewLocale =
+    previewLocaleChoice ??
+    normalizeLocale(kids.find((k) => k.id === primaryKidId)?.language ?? locale);
+  const previewHasTranslations = game.codeBundle
+    ? hasTranslationsBlock(game.codeBundle)
+    : false;
   const selectedKids = game.isFamily
     ? kids
     : kids.filter((k) => game.audienceIds.includes(k.id));
@@ -1032,6 +1046,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
           name: kid?.name ?? "",
           age,
           language: getLanguageDisplayName(kid?.language ?? "en"),
+          locale: normalizeLocale(kid?.language),
           learningContext,
         },
         payload: payload as AgentTaskRequest["payload"],
@@ -1513,6 +1528,30 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
               <SegTab active={view === "code"} onClick={() => setView("code")} icon="code" label={t("code")} />
               <SegTab active={view === "preview"} onClick={() => setView("preview")} icon="show" label={t("preview")} />
             </div>
+            {view === "preview" && previewHasTranslations && (
+              <div
+                role="group"
+                aria-label={t("previewLanguage")}
+                className="inline-flex gap-0.5 rounded-[10px] border border-border bg-background p-[3px]"
+              >
+                {locales.map((code) => (
+                  <button
+                    key={code}
+                    type="button"
+                    aria-pressed={previewLocale === code}
+                    onClick={() => setPreviewLocaleChoice(code)}
+                    className={cn(
+                      "rounded-[8px] px-2 py-1 text-[11px] font-semibold uppercase transition-colors",
+                      previewLocale === code
+                        ? "bg-card text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {code}
+                  </button>
+                ))}
+              </div>
+            )}
             {/* Audience + active state only exist once the game is created. */}
             {game.id && (
               <div className="flex items-center gap-2.5">
@@ -1591,8 +1630,12 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
                 )}
               >
                 <GameStage
+                  // Locale is fixed at init — remount on switch so the game
+                  // re-renders its text in the newly picked language.
+                  key={previewLocale}
                   gameId={game.id ?? "preview"}
                   codeBundle={game.codeBundle}
+                  locale={previewLocale}
                   reserved={STAGE.reservedStudio}
                   sandboxRef={sandboxRef}
                 />

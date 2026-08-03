@@ -100,6 +100,7 @@ export function PublicGamePage({
                 gameId={game.id}
                 codeBundle={game.code_bundle}
                 goal={goal}
+                locale={locale}
               />
               {/* Below lg the shell hides its sidebar — repeat the conversion
                   cards under the stage so mobile visitors still get them. */}

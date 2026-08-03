@@ -315,6 +315,8 @@ export interface Database {
           rejection_reasons: Json | null;
           /** Review attempts consumed; doubles as the worker's optimistic claim token. */
           review_attempts: number;
+          /** Locales the published bundle + listing fully cover (publish/backfill-derived; NULL on private rows). */
+          available_locales: string[] | null;
           created_at: string;
           updated_at: string;
         };
@@ -351,6 +353,7 @@ export interface Database {
           rejection_kind?: "hard" | "soft" | null;
           rejection_reasons?: Json | null;
           review_attempts?: number;
+          available_locales?: string[] | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -387,6 +390,7 @@ export interface Database {
           rejection_kind?: "hard" | "soft" | null;
           rejection_reasons?: Json | null;
           review_attempts?: number;
+          available_locales?: string[] | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -477,35 +481,43 @@ export interface Database {
           source_game_id: string | null;
           /** The plaintext publication copy (SET NULL — survives withdraw). */
           publication_game_id: string | null;
-          requested_at: string;
-          /** NULL while undecided (pending review or withdrawn before a verdict). */
+          /** NULL = draft (translations prepared, not yet submitted for review). */
+          submitted_at: string | null;
+          /** NULL while undecided (draft, pending review, or withdrawn before a verdict). */
           outcome: "approved" | "rejected" | null;
           rejection_kind: "hard" | "soft" | null;
           /** Array of {code, note} — codes from @dodi/protocol/publication-review. */
           rejection_reasons: Json | null;
           decided_at: string | null;
+          /** Draft-only: sealed (enc:v1:) per-locale listing texts; cleared at submit. */
+          listing_translations_enc: string | null;
+          created_at: string;
         };
         Insert: {
           id?: string;
           account_id: string;
           source_game_id?: string | null;
           publication_game_id?: string | null;
-          requested_at?: string;
+          submitted_at?: string | null;
           outcome?: "approved" | "rejected" | null;
           rejection_kind?: "hard" | "soft" | null;
           rejection_reasons?: Json | null;
           decided_at?: string | null;
+          listing_translations_enc?: string | null;
+          created_at?: string;
         };
         Update: {
           id?: string;
           account_id?: string;
           source_game_id?: string | null;
           publication_game_id?: string | null;
-          requested_at?: string;
+          submitted_at?: string | null;
           outcome?: "approved" | "rejected" | null;
           rejection_kind?: "hard" | "soft" | null;
           rejection_reasons?: Json | null;
           decided_at?: string | null;
+          listing_translations_enc?: string | null;
+          created_at?: string;
         };
         Relationships: [];
       };
@@ -571,6 +583,7 @@ export interface Database {
             | "game_edit"
             | "game_analysis"
             | "game_text_generation"
+            | "game_translation"
             | "memory_update"
             | "voice_minutes";
           provider: string;
@@ -602,6 +615,7 @@ export interface Database {
             | "game_edit"
             | "game_analysis"
             | "game_text_generation"
+            | "game_translation"
             | "memory_update"
             | "voice_minutes";
           provider: string;
@@ -633,6 +647,7 @@ export interface Database {
             | "game_edit"
             | "game_analysis"
             | "game_text_generation"
+            | "game_translation"
             | "memory_update"
             | "voice_minutes";
           provider?: string;

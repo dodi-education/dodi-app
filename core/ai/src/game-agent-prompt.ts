@@ -15,7 +15,13 @@ import type { GamePerspective } from "@dodi/types/games";
 
 export interface AgentPromptContext {
   age?: number;
+  /** Display name of the child's language for prose (e.g. "German"). */
   language: string;
+  /**
+   * The child's language as a locale code (e.g. "de") — the sourceLocale the
+   * agent must write into the game's embedded translations block.
+   */
+  sourceLocale: string;
   /**
    * Learning context (memory + parent notes) for the audience kid(s). Used ONLY
    * to shape difficulty/visuals/concept — never copied into game content.
@@ -142,12 +148,32 @@ ${designLanguageDoc(context.perspective)}
 - Touch-friendly controls (minimum 44x44px touch targets)
 - Kid-safe content — no violence, scary themes, or inappropriate content
 - Age-appropriate difficulty based on the child's age
-- All visible text in the game should be in the child's configured language (${context.language})
+- ALL visible text goes through dodi.translate() — see In-Game Text & Translations below
 - Follow the Visual Design Language above — it is a hard requirement, not a suggestion${
     context.perspective
       ? `\n- REQUIRED PERSPECTIVE: ${PERSPECTIVE_LABELS[context.perspective]} — the game MUST be designed from this perspective (see the perspective rules above)`
       : ""
   }
+
+## In-Game Text & Translations (REQUIRED)
+Games are multilingual. The bundle MUST contain exactly ONE inert translations block in <head>,
+placed BEFORE any executable <script>:
+
+<script type="application/dodi-translations">
+{"sourceLocale":"${context.sourceLocale}","locales":{"${context.sourceLocale}":{"game.start":"...","score.label":"{count} ..."}}}
+</script>
+
+- Write ONLY the "${context.sourceLocale}" dictionary, in ${context.language} (the child's
+  language). Other languages are added later by the platform — never invent them yourself.
+- Render ALL text the child can see through window.dodi.translate("key", {param: value}) —
+  DOM text, canvas fillText, button labels, feedback messages, everything. The host provides
+  this function before your scripts run; NEVER define or overwrite it yourself. It resolves
+  the key against the active language (delivered in dodi:init payload.locale) and replaces
+  {param} placeholders from the second argument.
+- Literal string keys only — dodi.translate("game.start"), never a computed key.
+- Keys are lowercase dot-separated identifiers ([a-z0-9_.]+). Values are plain text — no HTML
+  tags, no '<', no line breaks; use {param} placeholders for dynamic values.
+- Never hardcode visible text anywhere else in markup or code.
 
 ## Code Quality
 - Use modern JavaScript (ES2020+)

@@ -30,10 +30,13 @@ import type {
   PublicationRejectionReason,
   RejectionKind,
 } from "@dodi/protocol";
+import { coveredLocales, extractTranslations } from "@dodi/games/translations";
+import { SUPPORTED_LOCALES } from "@dodi/intl/locales";
 import type { Database, Game, GameInsert, Json } from "@dodi/types/database";
 import { sanitizeGameBundle } from "../game-sanitizer";
 
 import { filterToCatalogTags } from "./games";
+import { upsertTranslations } from "./game-translations";
 
 type Client = SupabaseClient<Database>;
 
@@ -47,6 +50,8 @@ export interface PublicationContent {
   successDefinition: string;
   successCriteria: Json;
   previewImage: string | null;
+  /** Per-locale listing content; the gate requires every platform locale. */
+  translations?: Record<string, { title: string; description: string }>;
 }
 
 export class PublicationError extends Error {
@@ -86,6 +91,78 @@ export async function getPublication(
     .maybeSingle();
   if (error) throw error;
   return data ? castGame(data) : null;
+}
+
+/**
+ * Upsert the DRAFT publication request of a source game: the translate step's
+ * bookkeeping row (submitted_at NULL) holding the parent's paid listing
+ * translations as a vault-sealed blob. Sealed because the source game is still
+ * E2EE-private — the server may only ever hold these texts in plaintext once
+ * the parent actually submits. At most one draft per source game.
+ */
+export async function savePublicationDraft(
+  supabase: Client,
+  input: {
+    sourceGameId: string;
+    accountId: string;
+    /** enc:v1: blob of Record<locale, {title, description}>, sealed client-side. */
+    listingTranslationsEnc: string;
+  },
+): Promise<void> {
+  const { sourceGameId, accountId, listingTranslationsEnc } = input;
+
+  const { data: sourceRow, error: sourceError } = await supabase
+    .from("games")
+    .select("*")
+    .eq("id", sourceGameId)
+    .maybeSingle();
+  if (sourceError) throw sourceError;
+  const source = sourceRow ? castGame(sourceRow) : null;
+  if (
+    !source ||
+    source.account_id !== accountId ||
+    source.is_system ||
+    source.publication_requested_at
+  ) {
+    throw new PublicationError("Game not found", 404);
+  }
+
+  const { data: existingDraft, error: updateError } = await supabase
+    .from("game_publication_requests")
+    .update({ listing_translations_enc: listingTranslationsEnc })
+    .eq("source_game_id", sourceGameId)
+    .eq("account_id", accountId)
+    .is("submitted_at", null)
+    .select("id")
+    .maybeSingle();
+  if (updateError) throw updateError;
+  if (!existingDraft) {
+    const { error: insertError } = await supabase
+      .from("game_publication_requests")
+      .insert({
+        account_id: accountId,
+        source_game_id: sourceGameId,
+        listing_translations_enc: listingTranslationsEnc,
+      });
+    if (insertError) throw insertError;
+  }
+}
+
+/** The draft request's sealed listing blob, or null when no draft exists. */
+export async function getPublicationDraft(
+  supabase: Client,
+  sourceGameId: string,
+  accountId: string,
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("game_publication_requests")
+    .select("listing_translations_enc")
+    .eq("source_game_id", sourceGameId)
+    .eq("account_id", accountId)
+    .is("submitted_at", null)
+    .maybeSingle();
+  if (error) throw error;
+  return (data?.listing_translations_enc as string | null) ?? null;
 }
 
 /**
@@ -148,14 +225,15 @@ export async function submitPublication(
   }
 
   // Monthly quota: EVERY submit counts (each one triggers a paid AI review),
-  // including resubmits after a soft rejection. Count-then-insert can overrun
+  // including resubmits after a soft rejection. Drafts are free — their NULL
+  // submitted_at never passes the month filter. Count-then-insert can overrun
   // by one under concurrent submits; accepted — the worst case is one extra
   // review, not worth a DB function.
   const { count: usedCount, error: usedError } = await supabase
     .from("game_publication_requests")
     .select("id", { count: "exact", head: true })
     .eq("account_id", accountId)
-    .gte("requested_at", monthStartUtcIso());
+    .gte("submitted_at", monthStartUtcIso());
   if (usedError) throw usedError;
   if ((usedCount ?? 0) >= account.monthly_game_publication_limit) {
     throw new PublicationError("publication_limit_reached", 403);
@@ -164,6 +242,22 @@ export async function submitPublication(
   // The one place the server CAN check the bundle, because this copy is
   // plaintext: real defence-in-depth for code that other families will run.
   const code = sanitizeGameBundle(content.codeBundle).code;
+
+  // Published games must speak every platform language: the bundle's embedded
+  // translations block has to cover each locale's full key set, and the
+  // listing payload has to carry each locale's title/description. The client
+  // translates before submitting (publish dialog); this is the enforcement.
+  const { translations: block } = extractTranslations(code);
+  if (!block) {
+    throw new PublicationError("publication_translations_incomplete", 400);
+  }
+  const covered = coveredLocales(block, SUPPORTED_LOCALES);
+  for (const locale of SUPPORTED_LOCALES) {
+    const listing = content.translations?.[locale];
+    if (!covered.has(locale) || !listing?.title.trim()) {
+      throw new PublicationError("publication_translations_incomplete", 400);
+    }
+  }
 
   const payload: GameInsert = {
     account_id: accountId,
@@ -199,6 +293,7 @@ export async function submitPublication(
     rejection_kind: null,
     rejection_reasons: null,
     review_attempts: 0,
+    available_locales: [...SUPPORTED_LOCALES],
   };
 
   const existing = await getPublication(supabase, sourceGameId, accountId);
@@ -210,14 +305,46 @@ export async function submitPublication(
   if (error) throw error;
   const publication = castGame(data);
 
-  const { error: logError } = await supabase
+  // The submit log row: convert the translate step's draft when one exists
+  // (stamping submitted_at is what makes it count toward quota; the sealed
+  // listing blob is cleared — the plaintext game_translations rows written
+  // below supersede it), else append a fresh submitted row.
+  const { data: stampedDraft, error: stampError } = await supabase
     .from("game_publication_requests")
-    .insert({
-      account_id: accountId,
-      source_game_id: sourceGameId,
+    .update({
+      submitted_at: new Date().toISOString(),
       publication_game_id: publication.id,
-    });
-  if (logError) throw logError;
+      listing_translations_enc: null,
+    })
+    .eq("source_game_id", sourceGameId)
+    .eq("account_id", accountId)
+    .is("submitted_at", null)
+    .select("id")
+    .maybeSingle();
+  if (stampError) throw stampError;
+  if (!stampedDraft) {
+    const { error: logError } = await supabase
+      .from("game_publication_requests")
+      .insert({
+        account_id: accountId,
+        source_game_id: sourceGameId,
+        publication_game_id: publication.id,
+        submitted_at: new Date().toISOString(),
+      });
+    if (logError) throw logError;
+  }
+
+  // Listing translations for every locale (the gate above proved coverage).
+  // Uniformly includes the source locale, so all reads go through one path.
+  await upsertTranslations(
+    supabase,
+    publication.id,
+    SUPPORTED_LOCALES.map((locale) => ({
+      locale,
+      title: content.translations![locale]!.title,
+      description: content.translations![locale]!.description,
+    })),
+  );
 
   return publication;
 }

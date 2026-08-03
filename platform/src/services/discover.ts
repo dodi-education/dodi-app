@@ -35,13 +35,13 @@ type Client = SupabaseClient<Database>;
 const BYLINE_EMBED =
   "author:accounts!games_published_by_account_id_fkey(publication_handle)";
 
-const SUMMARY_COLUMNS = `id, is_system, title, description, tags, target_age_min, target_age_max, estimated_duration_minutes, progress_kind, preview_image, published_at, ${BYLINE_EMBED}`;
+const SUMMARY_COLUMNS = `id, is_system, title, description, tags, target_age_min, target_age_max, estimated_duration_minutes, progress_kind, preview_image, published_at, available_locales, ${BYLINE_EMBED}`;
 
 const DETAIL_COLUMNS = `${SUMMARY_COLUMNS}, code_bundle, markdown, learning_goal, success_definition, success_criteria, metadata`;
 
 /** Columns fetched when a published row must round-trip as a playable Game. */
 const PUBLIC_GAME_COLUMNS =
-  "id, is_system, title, description, target_age_min, target_age_max, estimated_duration_minutes, tags, code_bundle, markdown, learning_goal, success_definition, success_criteria, progress_kind, metadata, is_active, created_by, preview_image, publication_requested_at, published_at, approved_by, created_at, updated_at";
+  "id, is_system, title, description, target_age_min, target_age_max, estimated_duration_minutes, tags, code_bundle, markdown, learning_goal, success_definition, success_criteria, progress_kind, metadata, is_active, created_by, preview_image, publication_requested_at, published_at, approved_by, available_locales, created_at, updated_at";
 
 interface BylineRow {
   author: { publication_handle: string | null } | null;
@@ -71,6 +71,7 @@ function toSummary(row: Record<string, unknown> & BylineRow): DiscoverGameSummar
     preview_image: row.preview_image as string | null,
     published_at: row.published_at as string,
     publication_handle: row.author?.publication_handle ?? null,
+    available_locales: (row.available_locales as string[] | null) ?? null,
   };
 }
 

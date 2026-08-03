@@ -46,6 +46,7 @@ const ParentInitMessageSchema = z.object({
     gameId: z.string().uuid(),
     goal: GameGoalSchema.optional(),
     savedState: z.record(z.string(), JsonValueSchema).optional(),
+    locale: z.string().min(2).max(35).optional(),
   }),
 });
 

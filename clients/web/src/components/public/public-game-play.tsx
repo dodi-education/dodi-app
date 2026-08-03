@@ -22,10 +22,12 @@ export function PublicGamePlay({
   gameId,
   codeBundle,
   goal,
+  locale,
 }: {
   gameId: string;
   codeBundle: string;
   goal?: GameGoal;
+  locale?: string;
 }) {
   const [resetNonce, setResetNonce] = useState(0);
 
@@ -42,6 +44,7 @@ export function PublicGamePlay({
       gameId={gameId}
       codeBundle={codeBundle}
       goal={goal}
+      locale={locale}
       variant="framed"
       align="start"
     />

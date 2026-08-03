@@ -75,8 +75,8 @@ export async function GET(request: Request): Promise<NextResponse> {
     // Cross-family play & copy counts for the page (service-role aggregate).
     const statsByGame = await getGameStats(service, gameIds);
 
-    // Per-locale title/description overrides exist only for the plaintext
-    // system games; parent publications stay in the language they were written.
+    // Per-locale title/description overrides: system games (seeded) and parent
+    // publications (written by the publish gate) both carry them.
     const translations = await getTranslationsForGames(
       supabase,
       gameIds,

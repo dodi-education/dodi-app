@@ -40,6 +40,21 @@ describe("save-state bridge messages", () => {
     expect(parsed.success).toBe(true);
   });
 
+  it("parses dodi:init with and without a locale", () => {
+    const withLocale = ParentToGameMessageSchema.safeParse({
+      type: "dodi:init",
+      token,
+      payload: { gameId, locale: "de" },
+    });
+    expect(withLocale.success).toBe(true);
+    const badLocale = ParentToGameMessageSchema.safeParse({
+      type: "dodi:init",
+      token,
+      payload: { gameId, locale: "x" },
+    });
+    expect(badLocale.success).toBe(false);
+  });
+
   it("parses game:save_state with a nested state object", () => {
     const parsed = GameToParentMessageSchema.safeParse({
       type: "game:save_state",

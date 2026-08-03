@@ -33,4 +33,24 @@ describe("blocked patterns", () => {
     expect(code).toBe("<html><body>ok</body></html>");
     expect(sizeBytes).toBe(code.length);
   });
+
+  it("accepts a bundle carrying an inert translations block", () => {
+    const bundle =
+      '<html><head><script type="application/dodi-translations">' +
+      '{"sourceLocale":"de","locales":{"de":{"go":"Los!"}}}' +
+      "</script></head><body>ok</body></html>";
+    expect(() => assertSafeGameBundle(bundle)).not.toThrow();
+  });
+
+  it("still scans translation values (defense in depth, accepted false positive)", () => {
+    // The blocked patterns run over the WHOLE document, including the inert
+    // block. A translation value containing e.g. "fetch(" trips them — accepted:
+    // real kid-game text never does, and the block validator's clearer errors
+    // run first on the paths that matter.
+    const bundle =
+      '<html><head><script type="application/dodi-translations">' +
+      '{"sourceLocale":"en","locales":{"en":{"k":"call fetch(now)"}}}' +
+      "</script></head><body>ok</body></html>";
+    expect(() => assertSafeGameBundle(bundle)).toThrow(/fetch/);
+  });
 });

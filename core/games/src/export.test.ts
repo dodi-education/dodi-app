@@ -194,6 +194,23 @@ describe("round-trip", () => {
     expect(parsed.codeBundle).toBe("");
   });
 
+  it("round-trips a bundle with an embedded translations block byte-identically", () => {
+    const block =
+      '<script type="application/dodi-translations">{"sourceLocale":"de","locales":{"de":{"game.title":"Raketen"},"en":{"game.title":"Rockets"}}}</script>' +
+      "<script>document.title = dodi.translate('game.title');</script>";
+    const game = gameRow({ code_bundle: builtBundle().replace("<body>", "<body>" + block) });
+    const parsed = parseGameExportFiles(buildGameExportFiles({ game }));
+    expect(parsed.codeBundle).toBe(game.code_bundle);
+    expect(parsed.warnings).toEqual([]);
+  });
+
+  it("still imports a legacy archive whose bundle has no translations block", () => {
+    // gameRow()'s builtBundle carries no block — the import path must not
+    // require one (requireTranslations is an agent-loop-only option).
+    const parsed = parseGameExportFiles(buildGameExportFiles({ game: gameRow() }));
+    expect(parsed.codeBundle).toBe(gameRow().code_bundle);
+  });
+
   it("round-trips the preview image", () => {
     const files = buildGameExportFiles({ game: gameRow({ preview_image: PREVIEW_DATA_URL }) });
     const parsed = parseGameExportFiles(files);

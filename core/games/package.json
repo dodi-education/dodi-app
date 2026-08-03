@@ -18,6 +18,7 @@
     "./normalize-commands": "./src/normalize-commands.ts",
     "./placeholder": "./src/placeholder.ts",
     "./tags": "./src/tags.ts",
+    "./translations": "./src/translations.ts",
     "./sanitizer": "./src/sanitizer.ts",
     "./agent-validator": "./src/agent-validator.ts",
     "./export": "./src/export.ts",

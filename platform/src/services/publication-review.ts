@@ -35,7 +35,7 @@ import {
   worstRejectionKind,
 } from "@dodi/protocol";
 import type { AIProviderId } from "@dodi/types/ai";
-import type { Database, Game } from "@dodi/types/database";
+import type { Database, Game, GameTranslation } from "@dodi/types/database";
 
 import { logServerError } from "@/lib/error-logs";
 
@@ -45,6 +45,7 @@ import {
   listPendingPublications,
   rejectPublication,
 } from "./game-publications";
+import { listTranslations } from "./game-translations";
 import {
   notifyPublicationRejected,
   notifyPublisherApproved,
@@ -139,13 +140,18 @@ function criteriaLines(codes: readonly string[]): string {
  * REJECTION_CODE_CRITERIA so the prompt and the registry cannot drift; the
  * user half is the untrusted submission, clearly delimited.
  */
-export function buildReviewPrompt(publication: Game): {
+export function buildReviewPrompt(
+  publication: Game,
+  listingTranslations: GameTranslation[] = [],
+): {
   system: string;
   user: string;
 } {
   const system = `You are the automated safety and content reviewer for dodi Discover — a public catalog of self-contained HTML mini-games submitted by parents and played by other families' children (roughly ages 4-12). Decide whether the submission below may be published.
 
 How a game runs: inside a sandboxed iframe (sandbox="allow-scripts", no same-origin, no network access, loaded via srcdoc). It communicates with the host page only through a postMessage bridge and must report its progress and success through it (the "bridge protocol"). The public listing shows the author's handle, the title, description, tags and target age range.
+
+Games are multilingual: the bundle carries an inert <script type="application/dodi-translations"> JSON block with every locale's in-game strings, and the listing carries a per-locale title/description (the "Listing translations" section). Review the text of EVERY locale, not just one.
 
 Rejection codes — when rejecting, include every code that applies.
 
@@ -166,6 +172,12 @@ Respond with a single JSON object and nothing else, in exactly this shape:
 or
   {"verdict":"reject","reasons":[{"code":"<rejection code>","note":"<specific, parent-actionable explanation>"}]}`;
 
+  const translationsSection = listingTranslations.length
+    ? `\n\n## Listing translations\n${listingTranslations
+        .map((t) => `- ${t.locale}: ${t.title} — ${t.description || "(no description)"}`)
+        .join("\n")}`
+    : "";
+
   const user = `# Submission
 
 Title: ${publication.title}
@@ -176,7 +188,7 @@ Success criteria (JSON): ${JSON.stringify(publication.success_criteria)}
 Tags: ${publication.tags.join(", ") || "(none)"}
 Target age: ${publication.target_age_min}-${publication.target_age_max}
 Estimated duration: ${publication.estimated_duration_minutes} minutes
-Progress kind: ${publication.progress_kind}
+Progress kind: ${publication.progress_kind}${translationsSection}
 
 ----- BEGIN BRIEFING (markdown) -----
 ${publication.markdown}
@@ -263,7 +275,8 @@ export async function processPendingPublications(
     let verdict: ReviewVerdict;
     try {
       const provider = factory(config.provider, config.apiKey, config.model);
-      const { system, user } = buildReviewPrompt(claimed);
+      const listingTranslations = await listTranslations(supabase, claimed.id);
+      const { system, user } = buildReviewPrompt(claimed, listingTranslations);
       const raw = await provider.generateJson(system, user);
       const parsed = ReviewVerdictSchema.safeParse(raw);
       if (!parsed.success) {

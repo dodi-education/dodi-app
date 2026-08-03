@@ -426,7 +426,10 @@ export async function executeTool(
       const hasBackgroundImage =
         context.freshBackgroundImage !== undefined ||
         (context.carriedBackgroundImage !== undefined && hasBackgroundPlaceholder(code));
-      const validation: ValidationResult = validateGameCode(code, { hasBackgroundImage });
+      const validation: ValidationResult = validateGameCode(code, {
+        hasBackgroundImage,
+        requireTranslations: true,
+      });
 
       return {
         result: JSON.stringify({

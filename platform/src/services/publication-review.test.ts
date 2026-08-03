@@ -11,9 +11,11 @@ vi.mock("@/lib/error-logs", () => ({ logServerError: vi.fn() }));
 
 import {
   MAX_REVIEW_ATTEMPTS,
+  buildReviewPrompt,
   loadReviewAgentConfig,
   processPendingPublications,
 } from "./publication-review";
+import type { Game, GameTranslation } from "@dodi/types/database";
 
 const ACCOUNT = "acc-1";
 
@@ -85,11 +87,15 @@ type Tables = {
   games: Row[];
   accounts: Row[];
   game_publication_requests: Row[];
+  game_translations: Row[];
 };
 
 function makeDb(tables: Partial<Tables> = {}) {
   return fakeDb<Tables>({
     games: [pendingPublication()],
+    game_translations: [
+      { id: "tr-1", game_id: "pub-1", locale: "de", title: "Kometen zählen", description: "" },
+    ],
     accounts: [
       {
         id: ACCOUNT,
@@ -103,7 +109,7 @@ function makeDb(tables: Partial<Tables> = {}) {
         account_id: ACCOUNT,
         source_game_id: "game-1",
         publication_game_id: "pub-1",
-        requested_at: "2026-07-22T10:00:00Z",
+        submitted_at: "2026-07-22T10:00:00Z",
         outcome: null,
       },
     ],
@@ -142,6 +148,32 @@ beforeEach(() => {
 
 afterEach(() => {
   clearAgentEnv();
+});
+
+describe("buildReviewPrompt", () => {
+  it("renders every listing translation and the multilingual instruction", () => {
+    const { system, user } = buildReviewPrompt(
+      pendingPublication() as unknown as Game,
+      [
+        {
+          id: "tr-1",
+          game_id: "pub-1",
+          locale: "de",
+          title: "Kometen zählen",
+          description: "Zähle die Kometen",
+        },
+      ] as unknown as GameTranslation[],
+    );
+    expect(system).toContain("application/dodi-translations");
+    expect(system).toContain("soft_translation_quality");
+    expect(user).toContain("## Listing translations");
+    expect(user).toContain("de: Kometen zählen");
+  });
+
+  it("omits the listing section when no rows exist (legacy/system)", () => {
+    const { user } = buildReviewPrompt(pendingPublication() as unknown as Game);
+    expect(user).not.toContain("## Listing translations");
+  });
 });
 
 describe("loadReviewAgentConfig", () => {

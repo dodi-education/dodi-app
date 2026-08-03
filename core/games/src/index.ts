@@ -15,6 +15,7 @@ export * from "./command-markers";
 export * from "./normalize-commands";
 export * from "./placeholder";
 export * from "./tags";
+export * from "./translations";
 export * from "./sanitizer";
 export * from "./agent-validator";
 export * from "./export";

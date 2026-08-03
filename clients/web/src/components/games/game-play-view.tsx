@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 
 import {
   type GameProgressUpdate,
@@ -123,6 +123,8 @@ export function GamePlayView({
 }: GamePlayViewProps) {
   const t = useTranslations("games");
   const tSnapshots = useTranslations("snapshots");
+  // In kid view this resolves to the kid's language (dodi-kid-locale cookie).
+  const locale = useLocale();
 
   // Declare Dodi context for this game (or snapshot session)
   useDodiContext({
@@ -1101,6 +1103,7 @@ export function GamePlayView({
           codeBundle={codeBundle}
           goal={goal}
           savedState={snapshot?.savedState ?? autosave.savedState}
+          locale={locale}
           align="start"
           reserved={STAGE.reservedKid}
           onStateChange={handleStateChange}

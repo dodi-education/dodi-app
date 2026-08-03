@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { buildAgentSystemPrompt } from "./game-agent-prompt";
 
-const BASE = { language: "German" };
+const BASE = { language: "German", sourceLocale: "de" };
 
 describe("buildAgentSystemPrompt", () => {
   it("injects the visual design language quality floor", () => {
@@ -36,6 +36,14 @@ describe("buildAgentSystemPrompt", () => {
     expect(buildAgentSystemPrompt({ ...BASE, narrationLanguage: "  " })).not.toContain(
       "## Working Aloud",
     );
+  });
+
+  it("requires the translations block with the child's source locale", () => {
+    const prompt = buildAgentSystemPrompt(BASE);
+    expect(prompt).toContain("## In-Game Text & Translations (REQUIRED)");
+    expect(prompt).toContain('"sourceLocale":"de"');
+    expect(prompt).toContain('dodi.translate("key", {param: value})');
+    expect(prompt).toContain("exactly ONE inert translations block");
   });
 
   it("teaches the generate_text content-slot convention", () => {

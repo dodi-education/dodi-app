@@ -36,6 +36,9 @@ The game MUST implement this postMessage bridge pattern:
 1. Listen for 'message' events on window
 2. On receiving 'dodi:init' message:
    - Store the bridge token from message.token
+   - payload.locale (when present) is the viewer's display language — the host's
+     dodi.translate() already resolves it, so render (or re-render) all visible text
+     on/after init through dodi.translate and it comes out in the right language
    - Send 'game:ready' to parent with { capabilities: string[], state: object }
 3. On receiving 'dodi:command' message:
    - Execute the command from message.payload.command (has .type and .payload)

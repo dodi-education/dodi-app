@@ -9,9 +9,11 @@ import { serviceClient } from "@/lib/supabase";
 import {
   PublicationError,
   getPublication,
+  getPublicationDraft,
   submitPublication,
   withdrawPublication,
 } from "@/services/game-publications";
+import { listTranslations } from "@/services/game-translations";
 import { notifyPublicationSubmitted } from "@/services/publication-notifications";
 
 /**
@@ -33,6 +35,18 @@ const SubmitPublicationSchema = z.object({
   successDefinition: z.string().max(2_000),
   successCriteria: z.record(z.string(), z.unknown()),
   previewImage: z.string().max(1_500_000).nullable(),
+  // Per-locale listing content. Schema-optional so a stale client gets the
+  // named `publication_translations_incomplete` service error (with parent
+  // copy) instead of an opaque zod 400; the service enforces full coverage.
+  translations: z
+    .record(
+      z.string().max(35),
+      z.object({
+        title: z.string().trim().min(1).max(200),
+        description: z.string().max(5_000),
+      }),
+    )
+    .optional(),
 });
 
 interface RouteContext {
@@ -51,8 +65,22 @@ export async function GET(
   const { accountId } = auth;
 
   try {
-    const publication = await getPublication(serviceClient(), id, accountId);
-    return NextResponse.json({ publication });
+    const service = serviceClient();
+    const publication = await getPublication(service, id, accountId);
+    // Paid translations ride along so they are never generated twice: the
+    // live copy's plaintext listing rows, and — for a translate-then-leave
+    // round trip before any submit — the draft request's sealed blob.
+    const [translations, draftListingTranslationsEnc] = await Promise.all([
+      publication
+        ? listTranslations(service, publication.id)
+        : Promise.resolve([]),
+      getPublicationDraft(service, id, accountId),
+    ]);
+    return NextResponse.json({
+      publication,
+      translations,
+      draftListingTranslationsEnc,
+    });
   } catch (error) {
     return serverErrorResponse(
       error,

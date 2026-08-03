@@ -8,8 +8,10 @@ import {
   PublicationError,
   approvePublication,
   getPublication,
+  getPublicationDraft,
   listPendingPublications,
   rejectPublication,
+  savePublicationDraft,
   submitPublication,
   withdrawPublication,
 } from "./game-publications";
@@ -17,15 +19,26 @@ import {
 const ACCOUNT = "acc-1";
 const SOURCE_ID = "game-1";
 
+// Bundle with a translations block covering every platform locale — the gate
+// requires full coverage (see the dedicated gate tests below).
+const TRANSLATED_BUNDLE =
+  '<html><head><script type="application/dodi-translations">' +
+  '{"sourceLocale":"en","locales":{"en":{"go":"Go!"},"de":{"go":"Los!"}}}' +
+  "</script></head><body>hi</body></html>";
+
 const CONTENT = {
   title: "Counting Comets",
   description: "Count the comets",
-  codeBundle: "<html><body>hi</body></html>",
+  codeBundle: TRANSLATED_BUNDLE,
   markdown: "# Briefing",
   learningGoal: "Count to ten",
   successDefinition: "3 sums",
   successCriteria: { description: "3 sums" },
   previewImage: null,
+  translations: {
+    en: { title: "Counting Comets", description: "Count the comets" },
+    de: { title: "Kometen zählen", description: "Zähle die Kometen" },
+  },
 };
 
 function sourceGame(overrides: Row = {}): Row {
@@ -52,6 +65,7 @@ let db: ReturnType<
     games: Row[];
     accounts: Row[];
     game_publication_requests: Row[];
+    game_translations: Row[];
   }>
 >;
 
@@ -67,6 +81,7 @@ beforeEach(() => {
       },
     ],
     game_publication_requests: [],
+    game_translations: [],
   });
 });
 
@@ -116,6 +131,89 @@ describe("submitPublication", () => {
     expect(pub.tags).toEqual(["math"]);
     expect(pub.target_age_min).toBe(5);
     expect(pub.progress_kind).toBe("goal");
+  });
+
+  it("stamps available_locales and writes a translation row per locale", async () => {
+    const pub = (await submitPublication(db.client, {
+      sourceGameId: SOURCE_ID,
+      accountId: ACCOUNT,
+      content: CONTENT,
+    })) as unknown as Row;
+
+    expect(pub.available_locales).toEqual(["en", "de"]);
+    const rows = db.tables.game_translations.filter((r) => r.game_id === pub.id);
+    expect(rows.map((r) => r.locale).sort()).toEqual(["de", "en"]);
+    expect(rows.find((r) => r.locale === "de")!.title).toBe("Kometen zählen");
+  });
+
+  it("replaces translation rows on re-submit instead of accumulating", async () => {
+    await submitPublication(db.client, {
+      sourceGameId: SOURCE_ID,
+      accountId: ACCOUNT,
+      content: CONTENT,
+    });
+    await submitPublication(db.client, {
+      sourceGameId: SOURCE_ID,
+      accountId: ACCOUNT,
+      content: {
+        ...CONTENT,
+        translations: {
+          en: { title: "Counting Comets 2", description: "" },
+          de: { title: "Kometen zählen 2", description: "" },
+        },
+      },
+    });
+    const rows = db.tables.game_translations;
+    expect(rows).toHaveLength(2);
+    expect(rows.find((r) => r.locale === "en")!.title).toBe("Counting Comets 2");
+  });
+
+  it("rejects a bundle without a translations block", async () => {
+    await expect(
+      submitPublication(db.client, {
+        sourceGameId: SOURCE_ID,
+        accountId: ACCOUNT,
+        content: { ...CONTENT, codeBundle: "<html><body>hi</body></html>" },
+      }),
+    ).rejects.toMatchObject({ message: "publication_translations_incomplete" });
+  });
+
+  it("rejects a block that does not cover every platform locale", async () => {
+    const partial =
+      '<html><head><script type="application/dodi-translations">' +
+      '{"sourceLocale":"en","locales":{"en":{"go":"Go!"}}}' +
+      "</script></head><body>hi</body></html>";
+    await expect(
+      submitPublication(db.client, {
+        sourceGameId: SOURCE_ID,
+        accountId: ACCOUNT,
+        content: { ...CONTENT, codeBundle: partial },
+      }),
+    ).rejects.toMatchObject({ message: "publication_translations_incomplete" });
+  });
+
+  it("rejects a locale dict missing keys of the source locale", async () => {
+    const gappy =
+      '<html><head><script type="application/dodi-translations">' +
+      '{"sourceLocale":"en","locales":{"en":{"go":"Go!","stop":"Stop!"},"de":{"go":"Los!"}}}' +
+      "</script></head><body>hi</body></html>";
+    await expect(
+      submitPublication(db.client, {
+        sourceGameId: SOURCE_ID,
+        accountId: ACCOUNT,
+        content: { ...CONTENT, codeBundle: gappy },
+      }),
+    ).rejects.toMatchObject({ message: "publication_translations_incomplete" });
+  });
+
+  it("rejects a submission without listing translations", async () => {
+    await expect(
+      submitPublication(db.client, {
+        sourceGameId: SOURCE_ID,
+        accountId: ACCOUNT,
+        content: { ...CONTENT, translations: undefined },
+      }),
+    ).rejects.toMatchObject({ message: "publication_translations_incomplete" });
   });
 
   it("replaces the existing copy on re-submit and sends it back to review", async () => {
@@ -190,12 +288,37 @@ describe("submitPublication quota", () => {
     });
   });
 
+  it("converts the translate step's draft into the submit log row", async () => {
+    await savePublicationDraft(db.client, {
+      sourceGameId: SOURCE_ID,
+      accountId: ACCOUNT,
+      listingTranslationsEnc: "enc:v1:k1:aaa:bbb",
+    });
+    expect(db.tables.game_publication_requests).toHaveLength(1);
+
+    const pub = (await submitPublication(db.client, {
+      sourceGameId: SOURCE_ID,
+      accountId: ACCOUNT,
+      content: CONTENT,
+    })) as unknown as Row;
+
+    // Still ONE row: the draft was stamped, not duplicated; the sealed blob
+    // is cleared (the plaintext game_translations rows supersede it).
+    expect(db.tables.game_publication_requests).toHaveLength(1);
+    expect(db.tables.game_publication_requests[0]).toMatchObject({
+      source_game_id: SOURCE_ID,
+      publication_game_id: pub.id,
+      listing_translations_enc: null,
+    });
+    expect(db.tables.game_publication_requests[0].submitted_at).toBeTruthy();
+  });
+
   it("refuses the submit that would exceed the monthly limit", async () => {
     const thisMonth = new Date().toISOString();
     db.tables.game_publication_requests.push(
-      { id: "r1", account_id: ACCOUNT, requested_at: thisMonth },
-      { id: "r2", account_id: ACCOUNT, requested_at: thisMonth },
-      { id: "r3", account_id: ACCOUNT, requested_at: thisMonth },
+      { id: "r1", account_id: ACCOUNT, submitted_at: thisMonth },
+      { id: "r2", account_id: ACCOUNT, submitted_at: thisMonth },
+      { id: "r3", account_id: ACCOUNT, submitted_at: thisMonth },
     );
     await expect(
       submitPublication(db.client, {
@@ -212,15 +335,37 @@ describe("submitPublication quota", () => {
 
   it("does not count previous months or other accounts", async () => {
     db.tables.game_publication_requests.push(
-      { id: "r1", account_id: ACCOUNT, requested_at: "2020-01-05T00:00:00Z" },
-      { id: "r2", account_id: ACCOUNT, requested_at: "2020-01-06T00:00:00Z" },
-      { id: "r3", account_id: ACCOUNT, requested_at: "2020-01-07T00:00:00Z" },
+      { id: "r1", account_id: ACCOUNT, submitted_at: "2020-01-05T00:00:00Z" },
+      { id: "r2", account_id: ACCOUNT, submitted_at: "2020-01-06T00:00:00Z" },
+      { id: "r3", account_id: ACCOUNT, submitted_at: "2020-01-07T00:00:00Z" },
       {
         id: "r4",
         account_id: "someone-else",
-        requested_at: new Date().toISOString(),
+        submitted_at: new Date().toISOString(),
       },
     );
+    await expect(
+      submitPublication(db.client, {
+        sourceGameId: SOURCE_ID,
+        accountId: ACCOUNT,
+        content: CONTENT,
+      }),
+    ).resolves.toBeTruthy();
+  });
+
+  it("does not count drafts toward the quota", async () => {
+    db.tables.game_publication_requests.push(
+      { id: "r1", account_id: ACCOUNT, submitted_at: new Date().toISOString() },
+      { id: "r2", account_id: ACCOUNT, submitted_at: new Date().toISOString() },
+      {
+        id: "draft",
+        account_id: ACCOUNT,
+        source_game_id: SOURCE_ID,
+        submitted_at: null,
+        listing_translations_enc: "enc:v1:k1:aaa:bbb",
+      },
+    );
+    // Limit is 3: two submitted + one draft must still leave room.
     await expect(
       submitPublication(db.client, {
         sourceGameId: SOURCE_ID,
@@ -398,6 +543,49 @@ describe("rejectPublication", () => {
         reasons: [{ code: "soft_quality_below_bar", note: "" }],
       }),
     ).rejects.toMatchObject({ status: 404 });
+  });
+});
+
+describe("publication drafts", () => {
+  it("upserts a single draft per source game and reads it back", async () => {
+    await savePublicationDraft(db.client, {
+      sourceGameId: SOURCE_ID,
+      accountId: ACCOUNT,
+      listingTranslationsEnc: "enc:v1:k1:aaa:bbb",
+    });
+    await savePublicationDraft(db.client, {
+      sourceGameId: SOURCE_ID,
+      accountId: ACCOUNT,
+      listingTranslationsEnc: "enc:v1:k1:ccc:ddd",
+    });
+
+    expect(db.tables.game_publication_requests).toHaveLength(1);
+    expect(db.tables.game_publication_requests[0].submitted_at ?? null).toBeNull();
+    await expect(
+      getPublicationDraft(db.client, SOURCE_ID, ACCOUNT),
+    ).resolves.toBe("enc:v1:k1:ccc:ddd");
+  });
+
+  it("returns null when no draft exists (only submitted rows)", async () => {
+    await submitPublication(db.client, {
+      sourceGameId: SOURCE_ID,
+      accountId: ACCOUNT,
+      content: CONTENT,
+    });
+    await expect(
+      getPublicationDraft(db.client, SOURCE_ID, ACCOUNT),
+    ).resolves.toBeNull();
+  });
+
+  it("refuses a draft for a game the caller does not own", async () => {
+    await expect(
+      savePublicationDraft(db.client, {
+        sourceGameId: SOURCE_ID,
+        accountId: "someone-else",
+        listingTranslationsEnc: "enc:v1:k1:aaa:bbb",
+      }),
+    ).rejects.toMatchObject({ status: 404 });
+    expect(db.tables.game_publication_requests).toHaveLength(0);
   });
 });
 
