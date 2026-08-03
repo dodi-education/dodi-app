@@ -40,7 +40,10 @@ export function PublicGamePlay({
 
   return (
     <GameStage
-      key={resetNonce}
+      // Locale in the key: the game's language is fixed at init, so a locale
+      // switch (cookie refresh or /{locale}/ navigation) must remount the
+      // sandbox — without this the page UI would switch but the game wouldn't.
+      key={`${resetNonce}:${locale ?? ""}`}
       gameId={gameId}
       codeBundle={codeBundle}
       goal={goal}

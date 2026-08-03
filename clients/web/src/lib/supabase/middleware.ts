@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
 
 import { canonicalRedirectHost } from "@/lib/canonical-host";
+import { locales } from "@/i18n/config";
 
 const KID_ROUTE_PREFIXES = ["/home", "/games", "/snapshots", "/friends"];
 
@@ -111,10 +112,14 @@ export async function updateSession(
 
   // Public routes that don't require auth
   const publicRoutes = ["/", "/login", "/register", "/reset-password"];
-  // A single game page is public — the SEO inbound channel. Only published
-  // games render there (the server page redirects everything else to /login);
-  // the /games library and all other kid routes stay gated.
-  const isPublicGamePage = /^\/games\/[^/]+$/.test(pathname);
+  // A single game page is public — the SEO inbound channel — both unprefixed
+  // (/games/[id], language-negotiated) and locale-prefixed (/{locale}/games/
+  // [id], the crawlable per-language variants). Only published games render
+  // there (the server page redirects everything else to /login); the /games
+  // library and all other kid routes stay gated.
+  const isPublicGamePage = new RegExp(
+    `^/(?:(?:${locales.join("|")})/)?games/[^/]+$`,
+  ).test(pathname);
   const isPublicRoute =
     publicRoutes.includes(pathname) ||
     pathname.startsWith("/auth/") ||

@@ -32,15 +32,23 @@ const TRANSLATIONS_BLOCK_RE =
   /<script\s+type=["']application\/dodi-translations["'][^>]*>([\s\S]*?)<\/script>/gi;
 
 /** Budgets for the block itself (the 512KB bundle cap applies on top). */
-export const MAX_TRANSLATIONS_BLOCK_BYTES = 64 * 1024;
+export const MAX_TRANSLATIONS_BLOCK_BYTES = 128 * 1024;
 export const MAX_TRANSLATION_KEYS_PER_LOCALE = 400;
-export const MAX_TRANSLATION_VALUE_CHARS = 500;
+/**
+ * Per-value cap. Story-sized on purpose: long-form passages (reading texts,
+ * fairy tales) are translations like any other visible text -- there is ONE
+ * translation system, never a shadow one in game data. Matches the
+ * `generate_text` slot cap (MAX_SLOT_TEXT_CHARS in @dodi/ai/game-content).
+ */
+export const MAX_TRANSLATION_VALUE_CHARS = 4_000;
 
 const TRANSLATION_KEY_RE = /^[a-z0-9_.]+$/i;
 const LOCALE_CODE_RE = /^[a-z]{2}(-[a-z]{2})?$/i;
 // `<` would let a value smuggle markup (or a literal `</script` that terminates
-// the inert block during HTML parsing); control chars have no place in UI text.
-const FORBIDDEN_VALUE_RE = /[<\u0000-\u001f\u007f]/;
+// the inert block during HTML parsing); control chars have no place in UI text
+// -- except newlines, which story-length passages use for paragraphs (they are
+// JSON-encoded inside the block, so no raw newline reaches the HTML parser).
+const FORBIDDEN_VALUE_RE = /[<\u0000-\u0009\u000b-\u001f\u007f]/;
 
 /** Shared guard for a single translation value (also used by AI-output parsing). */
 export function isSafeTranslationValue(value: string): boolean {
@@ -50,7 +58,8 @@ export function isSafeTranslationValue(value: string): boolean {
 const TranslationValueSchema = z
   .string()
   .refine(isSafeTranslationValue, {
-    message: "translation values must not contain '<' or control characters",
+    message:
+      "translation values must not contain '<' or control characters (line breaks are allowed)",
   });
 
 const LocaleDictSchema = z.record(

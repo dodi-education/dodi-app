@@ -32,10 +32,17 @@ export interface LocaleSignals {
 /**
  * Decide the UI locale for a request.
  *
- * Precedence: kid-view kid language → explicit user preference
- * (`NEXT_LOCALE`) → `Accept-Language` → default.
+ * Precedence: URL locale prefix (public SEO routes) → kid-view kid language →
+ * explicit user preference (`NEXT_LOCALE`) → `Accept-Language` → default.
  */
 export function resolveLocale(signals: LocaleSignals): Locale {
+  // 0. An explicit locale prefix (/{locale}/games/… — the crawlable public
+  // game pages) outranks every cookie: there, the URL IS the language choice.
+  const prefix = (signals.pathname ?? "").split("/")[1];
+  if (isLocale(prefix)) {
+    return prefix;
+  }
+
   // The parent area always uses the parent's own UI language. We decide this
   // from the actual request path rather than the `dodi-view` cookie, which can
   // go stale (it only flips back to "parent" via the in-app switch link, so a

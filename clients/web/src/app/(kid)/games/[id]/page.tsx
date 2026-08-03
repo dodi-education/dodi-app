@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { getLocale, getTranslations } from "next-intl/server";
+import { getLocale } from "next-intl/server";
 
 import { GamePlayPage } from "@/components/games/game-play-page";
 import { PublicGamePage } from "@/components/public/public-game-page";
+import { publicGameMetadata } from "@/lib/public-game-metadata";
 import { getPopularGames, getPublicGame } from "@/lib/public-games";
 
 /**
@@ -13,8 +14,11 @@ import { getPopularGames, getPublicGame } from "@/lib/public-games";
  *   KidChrome). The client re-derives the id from the URL itself, so the
  *   offline detail-shell substitution keeps working.
  * - Anonymous: the server-rendered PUBLIC page for published games — the SEO
- *   inbound channel. Anything not published redirects to /login uniformly, so
- *   the route never reveals whether a private game exists.
+ *   inbound channel, language-negotiated (cookie/Accept-Language) and doubling
+ *   as the hreflang x-default. The crawlable per-language variants live at
+ *   /{locale}/games/[id] (see app/[locale]/games/[id]). Anything not published
+ *   redirects to /login uniformly, so the route never reveals whether a
+ *   private game exists.
  * The auth signal is the `x-dodi-authed` header stamped by middleware.
  */
 interface PageProps {
@@ -23,20 +27,6 @@ interface PageProps {
 
 async function isAuthed(): Promise<boolean> {
   return (await headers()).get("x-dodi-authed") === "1";
-}
-
-function appUrl(): string {
-  return (process.env.NEXT_PUBLIC_APP_URL ?? "https://app.dodi.app").replace(
-    /\/+$/,
-    "",
-  );
-}
-
-/** Trim to a metadata-friendly length on a word boundary. */
-function metaDescription(text: string): string {
-  const clean = text.trim().replace(/\s+/g, " ");
-  if (clean.length <= 160) return clean;
-  return `${clean.slice(0, 157).replace(/\s+\S*$/, "")}…`;
 }
 
 export async function generateMetadata({
@@ -54,31 +44,9 @@ export async function generateMetadata({
   // redirect() there degrades to a 200 + meta refresh.
   if (!game) redirect(`/login?next=${encodeURIComponent(`/games/${id}`)}`);
 
-  const t = await getTranslations("publicGames");
-  const title = `${game.title}: ${t("metaTitleSuffix")}`;
-  const description = metaDescription(game.description);
-  const canonical = `${appUrl()}/games/${game.id}`;
-  // Only system games carry same-origin path previews; parent publications
-  // store data URLs, which OG scrapers reject — those pages go without image.
-  const previewUrl = game.preview_image?.startsWith("/")
-    ? `${appUrl()}${game.preview_image}`
-    : undefined;
-
-  return {
-    title,
-    description,
-    alternates: { canonical },
-    robots: { index: true, follow: true },
-    openGraph: {
-      type: "website",
-      siteName: "dodi",
-      url: canonical,
-      title,
-      description,
-      locale,
-      ...(previewUrl ? { images: [{ url: previewUrl }] } : {}),
-    },
-  };
+  // The canonical stays the stable negotiated URL regardless of the visitor's
+  // cookie locale — crawlers must always see the same canonical here.
+  return publicGameMetadata(game, locale, `/games/${game.id}`);
 }
 
 export default async function GamePage({ params }: PageProps) {

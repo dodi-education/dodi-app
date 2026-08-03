@@ -4,6 +4,7 @@ import { useTranslations } from "next-intl";
 
 import { Icon } from "@/components/shared/icon";
 import { tagStyle } from "@/components/parent/games/tag-style";
+import { publicGamePath } from "@/lib/public-game-urls";
 import { siteUrl } from "@/lib/site-links";
 import type { PublicGameSummary } from "@dodi/types/games";
 
@@ -49,7 +50,9 @@ export function PopularGamesCard({
               className="border-b border-border last:border-0"
             >
               <Link
-                href={`/games/${game.id}`}
+                // Same-language linking: from a /de page every rail row leads
+                // to the /de variant, so crawlers stay inside one language.
+                href={publicGamePath(game.id, locale)}
                 className="-mx-1 flex items-start gap-3 rounded-lg px-1 py-3 transition-colors outline-none hover:bg-card focus-visible:ring-2 focus-visible:ring-primary-soft-2"
               >
                 {game.preview_image ? (

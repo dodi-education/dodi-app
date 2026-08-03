@@ -172,7 +172,11 @@ placed BEFORE any executable <script>:
   {param} placeholders from the second argument.
 - Literal string keys only — dodi.translate("game.start"), never a computed key.
 - Keys are lowercase dot-separated identifiers ([a-z0-9_.]+). Values are plain text — no HTML
-  tags, no '<', no line breaks; use {param} placeholders for dynamic values.
+  tags, no '<'; use {param} placeholders for dynamic values. Line breaks ARE allowed in values.
+- Long-form content is a translation too: preset stories, reading passages, riddles and
+  similar texts the child reads belong in the block (e.g. "story.1", "story.1.title") and are
+  rendered via dodi.translate — NEVER as hardcoded data arrays in code. Values may be up to
+  ~4000 characters.
 - Never hardcode visible text anywhere else in markup or code.
 
 ## Code Quality

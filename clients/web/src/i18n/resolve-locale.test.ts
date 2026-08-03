@@ -14,6 +14,26 @@ function signals(overrides: Partial<LocaleSignals> = {}): LocaleSignals {
 }
 
 describe("resolveLocale", () => {
+  it("gives a URL locale prefix top precedence over every cookie", () => {
+    expect(
+      resolveLocale(
+        signals({
+          pathname: "/de/games/abc",
+          view: "kid",
+          kidLocale: "en",
+          userLocale: "en",
+          acceptLanguage: "en",
+        }),
+      ),
+    ).toBe("de");
+  });
+
+  it("ignores an unsupported path prefix", () => {
+    expect(
+      resolveLocale(signals({ pathname: "/fr/games/abc", userLocale: "de" })),
+    ).toBe("de");
+  });
+
   it("uses the kid language while in kid view", () => {
     expect(
       resolveLocale(

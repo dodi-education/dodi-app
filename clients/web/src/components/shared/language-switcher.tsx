@@ -1,11 +1,11 @@
 "use client";
 
 import { useLocale } from "next-intl";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState, useRef, useEffect } from "react";
 
 import { Icon } from "@/components/shared/icon";
-import { locales, type Locale } from "@/i18n/config";
+import { defaultLocale, locales, type Locale } from "@/i18n/config";
 import { dodi } from "@/lib/api";
 import { useAccountStore } from "@/stores/account-store";
 
@@ -16,6 +16,25 @@ const localeLabels: Record<Locale, string> = {
 
 function setLocaleCookie(locale: Locale) {
   document.cookie = `NEXT_LOCALE=${locale}; path=/; max-age=31536000`;
+}
+
+/** The one page family with per-locale URLs: the public game pages. */
+const PUBLIC_GAME_PATH_RE = /^\/games\/[^/]+$/;
+
+/**
+ * On a public game page — prefixed (/{locale}/games/…) or not (/games/…) —
+ * switching the language means NAVIGATING to the sibling URL, default locale
+ * unprefixed, others prefixed (mirrors lib/public-game-urls): the language
+ * versions are separately addressable pages, and switching should move
+ * between them, not vary one URL by cookie. Returns null on app pages, which
+ * have no per-locale URLs — there the cookie + refresh flow applies.
+ */
+function localizedPublicPath(pathname: string, next: Locale): string | null {
+  const [, first, ...rest] = pathname.split("/");
+  const prefixed = locales.includes(first as Locale);
+  const bare = prefixed ? `/${rest.join("/")}` : pathname;
+  if (!prefixed && !PUBLIC_GAME_PATH_RE.test(bare)) return null;
+  return next === defaultLocale ? bare : `/${next}${bare}`;
 }
 
 /**
@@ -41,6 +60,7 @@ function persistLocale(locale: Locale) {
 export function LanguageSwitcher({ dropUp = false }: { dropUp?: boolean }) {
   const locale = useLocale();
   const router = useRouter();
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -58,6 +78,14 @@ export function LanguageSwitcher({ dropUp = false }: { dropUp?: boolean }) {
     setLocaleCookie(newLocale);
     persistLocale(newLocale);
     setOpen(false);
+    const localizedTarget = localizedPublicPath(pathname, newLocale);
+    if (localizedTarget && localizedTarget !== pathname) {
+      router.push(localizedTarget);
+    }
+    // Always refresh, even after a push: a soft navigation re-renders the
+    // page but reuses the cached ROOT layout, whose NextIntlClientProvider
+    // (the source of useLocale for this switcher and every client component)
+    // would otherwise keep serving the old locale until a hard reload.
     router.refresh();
   }
 

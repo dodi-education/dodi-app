@@ -9,6 +9,7 @@ import { PublicActionButtons } from "@/components/public/public-action-buttons";
 import { PublicFooter } from "@/components/public/public-footer";
 import { PublicGamePlay } from "@/components/public/public-game-play";
 import { PublicHeader } from "@/components/public/public-header";
+import { publicGamePath } from "@/lib/public-game-urls";
 import { siteUrl } from "@/lib/site-links";
 import {
   coerceProgressKind,
@@ -60,7 +61,7 @@ export function PublicGamePage({
     "@type": ["Game", "LearningResource"],
     name: game.title,
     description: game.description,
-    url: `${appUrl}/games/${game.id}`,
+    url: `${appUrl}${publicGamePath(game.id, locale)}`,
     inLanguage: locale,
     typicalAgeRange: `${game.target_age_min}-${game.target_age_max}`,
     timeRequired: `PT${game.estimated_duration_minutes}M`,

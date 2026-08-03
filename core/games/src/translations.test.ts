@@ -72,7 +72,7 @@ describe("extractTranslations", () => {
   it.each([
     ["markup in value", { "k": "<b>hi</b>" }],
     ["script-close in value", { "k": "</script><script>evil()" }],
-    ["control char in value", { "k": "line1\nline2" }],
+    ["control char in value", { "k": "a\u0000b" }],
     ["bad key characters", { "bad key!": "hi" }],
   ])("rejects %s", (_label, dict) => {
     const bad = { sourceLocale: "de", locales: { de: dict } };
@@ -81,6 +81,20 @@ describe("extractTranslations", () => {
     );
     expect(result.translations).toBeNull();
     expect(result.errors.length).toBeGreaterThan(0);
+  });
+
+  it("accepts a story-length value with paragraph breaks", () => {
+    const story = ("Es war einmal ein kleiner Drache.\n\n" + "Er flog weit. ".repeat(150)).trim();
+    expect(story.length).toBeGreaterThan(2000);
+    const block = {
+      sourceLocale: "de",
+      locales: { de: { "story.1": story } },
+    };
+    const result = extractTranslations(
+      bundleWith(`<script type="application/dodi-translations">${JSON.stringify(block)}</script>`),
+    );
+    expect(result.errors).toEqual([]);
+    expect(result.translations?.locales.de["story.1"]).toBe(story);
   });
 
   it("rejects a locale dict over the key cap", () => {

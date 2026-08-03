@@ -48,7 +48,7 @@ export function buildGameTranslationPrompt(
     "You translate the text of a children's learning game.",
     "The audience is young children: keep wording friendly, simple, and age-appropriate — translate naturally, never word-for-word.",
     "Preserve every {param} placeholder EXACTLY as written — never translate, remove, or add placeholders.",
-    "String values are plain text: no HTML, no '<' characters, no line breaks. Keep each translation's length comparable to its source so game layouts still fit.",
+    "String values are plain text: no HTML, no '<' characters. Preserve the source's paragraph and line-break structure. Keep each translation's length comparable to its source so game layouts still fit.",
     "The title and description describe the game in a public catalog for parents; translate them idiomatically.",
     'Respond with a single JSON object: {"locales": {"<locale>": {"title": "<text>", "description": "<text>", "strings": {"<key>": "<text>", ...}}}} with EXACTLY one entry per requested target locale and EXACTLY the source string keys. No other keys, no markdown, no code fences.',
   ].join("\n");
