@@ -302,6 +302,10 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
   // Reference images staged for the next message (downscaled data URLs).
   const [pendingImages, setPendingImages] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // File drag-over on the agent inbox: depth counter ignores enter/leave of
+  // child nodes so the drop overlay doesn't flicker.
+  const [isDragOver, setIsDragOver] = useState(false);
+  const dragDepthRef = useRef(0);
   const [thinking, setThinking] = useState(false);
   // Keep the screen awake while the agent runs — on mobile, screen dim → lock
   // kills the in-flight provider fetch and the whole build with it.
@@ -861,8 +865,8 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
 
   // ----- End version history ---------------------------------------------
 
-  // Stage picked/pasted reference images: read → downscale to a bounded JPEG →
-  // append (capped). Non-images and unreadable files are skipped silently.
+  // Stage picked/pasted/dropped reference images: read → downscale to a bounded
+  // JPEG → append (capped). Non-images and unreadable files are skipped silently.
   const addImages = async (files: File[]): Promise<void> => {
     const scaled: string[] = [];
     for (const file of files) {
@@ -878,6 +882,47 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     if (scaled.length) {
       setPendingImages((prev) => capImages(prev, scaled, MAX_ATTACHMENTS));
     }
+  };
+
+  // True when the OS drag payload includes files (not e.g. text selections).
+  const hasFileDrag = (e: React.DragEvent): boolean =>
+    Array.from(e.dataTransfer.types).includes("Files");
+
+  const clearDragOver = (): void => {
+    dragDepthRef.current = 0;
+    setIsDragOver(false);
+  };
+
+  const onInboxDragEnter = (e: React.DragEvent): void => {
+    if (composerLocked || !hasFileDrag(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    dragDepthRef.current += 1;
+    setIsDragOver(true);
+  };
+
+  const onInboxDragLeave = (e: React.DragEvent): void => {
+    if (!isDragOver) return;
+    e.preventDefault();
+    e.stopPropagation();
+    dragDepthRef.current -= 1;
+    if (dragDepthRef.current <= 0) clearDragOver();
+  };
+
+  const onInboxDragOver = (e: React.DragEvent): void => {
+    if (composerLocked || !hasFileDrag(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "copy";
+  };
+
+  const onInboxDrop = (e: React.DragEvent): void => {
+    e.preventDefault();
+    e.stopPropagation();
+    clearDragOver();
+    if (composerLocked) return;
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length) void addImages(files);
   };
 
   // The loop runs inside this tab — warn before any action that would kill it.
@@ -1695,7 +1740,8 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
 
         {/* Chat sidebar — the right menu stays hidden for a brand-new game
             until the draft is saved (which mints the game id and unlocks the
-            studio); the settings form fills the pane on its own until then. */}
+            studio); the settings form fills the pane on its own until then.
+            Drop zone for reference images (same path as paste / file picker). */}
         <div
           style={vertical ? undefined : { width: sideWidth }}
           className={cn(
@@ -1705,7 +1751,28 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
               ? cn("w-full flex-1", mtab !== "chat" && "hidden")
               : "flex-none border-l",
           )}
+          onDragEnter={onInboxDragEnter}
+          onDragLeave={onInboxDragLeave}
+          onDragOver={onInboxDragOver}
+          onDrop={onInboxDrop}
         >
+          {/* Drop overlay — visible while files are dragged over the inbox. */}
+          {isDragOver && !composerLocked && (
+            <div
+              className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-primary-soft/90 px-6 text-center backdrop-blur-[2px]"
+              aria-hidden
+            >
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl border-2 border-dashed border-primary bg-card/80 text-primary">
+                <Icon name="photo" size={28} />
+              </div>
+              <p className="text-sm font-semibold text-primary">{t("dropImages")}</p>
+              <p className="text-xs font-medium text-primary/80">
+                {pendingImages.length >= MAX_ATTACHMENTS
+                  ? t("attachLimitReached")
+                  : t("dropImagesHint")}
+              </p>
+            </div>
+          )}
           {/* Resize handle (horizontal layout only) */}
           {!vertical && (
             <div

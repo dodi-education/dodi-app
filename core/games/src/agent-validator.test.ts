@@ -59,6 +59,16 @@ describe("validateGameCode — capabilities", () => {
     expect(r.valid).toBe(false);
     expect(r.errors.some((e) => e.includes("set_generated_text"))).toBe(true);
   });
+
+  it("checks generate_voice via its set_generated_voice handler", () => {
+    const withHandler = bundle(`if (type === 'set_generated_voice') {}`);
+    expect(validateGameCode(withHandler, { capabilities: ["generate_voice"] }).valid).toBe(true);
+
+    const without = bundle(`if (type === 'submit_answer') {}`);
+    const r = validateGameCode(without, { capabilities: ["generate_voice"] });
+    expect(r.valid).toBe(false);
+    expect(r.errors.some((e) => e.includes("set_generated_voice"))).toBe(true);
+  });
 });
 
 describe("validateGameCode — background image placeholder", () => {

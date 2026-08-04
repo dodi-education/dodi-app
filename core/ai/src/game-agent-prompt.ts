@@ -127,7 +127,14 @@ format you parse yourself. To trigger generation from inside the game (a "new st
 once on first start), post game:event { event: 'request_generate_text', request: '<what to
 write>' } and wait for set_generated_text; the app rate-limits these requests, so always handle
 the error delivery. Document every slot and
-the filled-content fields in the markdown State Fields section. Every stateful
+the filled-content fields in the markdown State Fields section. If the game benefits from spoken
+feedback (reading a displayed text, letter, word, or instruction aloud — e.g. reading games,
+letter learning, story pages), declare generate_voice: post game:event
+{ event: 'request_generate_voice', text: '<exact text to read>' } and Dodi reads it aloud with
+her own voice; implement the set_generated_voice command the app sends back ({ ok: true } when
+she is about to speak, { ok: false, error } when she can't right now — clear any speaking
+indicator and fail quietly, never auto-retry). Keep the texts short (one or two sentences), the
+app rate-limits these requests, and the game MUST stay fully playable when voice is unavailable. Every stateful
 game MUST implement full save/restore (see the bridge interface: 'dodi:get_save_state' →
 'game:save_state', and restoring 'dodi:init' payload.savedState) and declare save_state — this is
 what lets the child save and share snapshots of your game.

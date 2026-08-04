@@ -442,10 +442,6 @@ parent-defined goal — and, in future, generate challenges like "Solve 3 math g
 
 ## TODO
 
-
-- Add translation standardization for games ()
-- Add translation service to publication process (all published games should be translated to the default languages)
-
 - Enhance usability of game-studio
  - Step 1 ("Sketch"): should be a skipable step where you can draw or upload a "Sketch" of the game UI.
  - Step 2 ("Description"): Describe game (attach sketch) and based on both inputs ask questions regarding functionality scope. User can add more context and request questions, or continue. During "Description" step Agent should already prefill Settings.
@@ -501,7 +497,6 @@ parent-defined goal — and, in future, generate challenges like "Solve 3 math g
 - Investigate sessionResumption for google voice
 
 - New system games:
-  - Reading: Generate short stories, let kid read the text, then ask questions about the text.
   - Writing / Reading: Divide generated sentences into text blocks which are randomly laid out. Kid must put the blocks into correct order and read the sentence.
   - Math tower: Dodi must climb a tower, tower is sinking into water, kid must solve calculation to jump to upper floor, before water reaches the current floor. 10 calculations per level, each level creates harder calculations. At the top, dodi reaches a hot air ballon where she can jump in and fly away. E.g.:
     - Level 1: Addition, 2 numbers, range of numbers <= 10

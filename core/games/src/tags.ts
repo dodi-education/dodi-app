@@ -7,7 +7,8 @@
  * translated in the web app under the `tags` i18n namespace — never hard-code a
  * human label here.
  *
- * Kid view renders tags as icons; parent view renders their translated titles.
+ * List views render tags as icons (label via aria/title); editor chips and
+ * filters show the translated title alongside the icon.
  *
  * `ai` and `ai-image` are capability tags, layered on top of any subject tags:
  * add `ai` to games that generate AI text and `ai-image` to games that generate

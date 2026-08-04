@@ -302,6 +302,41 @@ export const STANDARD_TOOLS: StandardTool[] = [
       "the app rate-limits these requests. Declare 'generate_text' in capabilities to support this.",
   },
 
+  // ── Spoken feedback (game-initiated; never a voice tool) ──
+  {
+    name: "generate_voice",
+    kind: "client",
+    voiceExposed: false,
+    declarable: true,
+    deliveryCommand: "set_generated_voice",
+    description:
+      "Game→app request: have Dodi read a short game text aloud to the child through the live " +
+      "voice session (displayed texts, letters, words, instructions). Game-initiated only — " +
+      "Dodi herself speaks directly and never calls this.",
+    parameters: {
+      type: "object",
+      properties: {
+        text: {
+          type: "string",
+          description: "The exact text Dodi should read aloud, in the game's language.",
+        },
+      },
+      required: ["text"],
+    },
+    implementationNote:
+      "The APP has Dodi read the text aloud with her own voice, then sends you a " +
+      "set_generated_voice command: { ok: true } when she is about to speak, or " +
+      "{ ok: false, error } when she can't right now (voice_unavailable when Dodi is muted, " +
+      "asleep, or offline; rate_limited; empty_text). Use it for short spoken feedback — " +
+      "reading a displayed text, letter, word, or instruction aloud. To request it, post " +
+      "game:event { event: 'request_generate_voice', text: '<exact text to read>' } and wait " +
+      "for set_generated_voice — the app rate-limits these requests, so never queue several at " +
+      "once and never auto-repeat on failure. Keep texts short (one or two sentences). The game " +
+      "MUST stay fully playable without voice. Implement set_generated_voice (clear any " +
+      "speaking/loading indicator; on error fail quietly — the text stays visible); do NOT " +
+      "implement generate_voice yourself. Declare 'generate_voice' in capabilities to support this.",
+  },
+
   // ── Universal ──
   {
     name: "restart_game",
@@ -423,6 +458,34 @@ export const STANDARD_TOOLS: StandardTool[] = [
       "payload.error is set (slots is then empty), the generation failed: leave the current " +
       "content unchanged, clear any loading UI, and offer a retry. Implied when you declare " +
       "'generate_text'; not declared on its own.",
+  },
+  {
+    name: "set_generated_voice",
+    kind: "internal",
+    voiceExposed: false,
+    declarable: false,
+    description:
+      "App→game: outcome of a request_generate_voice request (Dodi reads the text aloud).",
+    parameters: {
+      type: "object",
+      properties: {
+        ok: {
+          type: "boolean",
+          description: "True when Dodi is about to read the requested text aloud.",
+        },
+        error: {
+          type: "string",
+          description:
+            "Set when ok is false: why Dodi can't speak right now " +
+            "(voice_unavailable, rate_limited, empty_text).",
+        },
+      },
+      required: ["ok"],
+    },
+    implementationNote:
+      "On set_generated_voice, clear any speaking/loading indicator. When payload.ok is false " +
+      "(payload.error says why), fail quietly — keep the text visible and don't auto-retry. " +
+      "Implied when you declare 'generate_voice'; not declared on its own.",
   },
 ];
 

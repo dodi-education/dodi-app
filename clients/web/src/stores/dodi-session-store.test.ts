@@ -825,6 +825,73 @@ describe("dodi session store — generate_drawing deferral", () => {
 });
 
 // ---------------------------------------------------------------------------
+// speakGameVoiceText: game-initiated spoken feedback (request_generate_voice)
+// injects a read-aloud turn into the LIVE session — and only into a live one:
+// deaf/sleep/disconnected must return the stable "voice_unavailable" code so
+// mute always means mute.
+// ---------------------------------------------------------------------------
+
+describe("dodi session store — speakGameVoiceText (request_generate_voice)", () => {
+  beforeEach(() => {
+    installTestEnv();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  async function connectGame(pid: string) {
+    useDodiSessionStore.setState({
+      state: "disconnected",
+      context: {
+        type: "game",
+        gameId: "g1",
+        markdown: "",
+        codeBundle: "",
+        gameState: {},
+        capabilities: ["generate_voice"],
+      },
+    });
+    await useDodiSessionStore.getState().connect(pid);
+    await flush();
+    fire({ type: "setupComplete" });
+    await flush();
+  }
+
+  const activeClient = () => createdClients.current[0] as MockVoiceClient;
+
+  it("submits a read-aloud turn to the live session and reports ok", async () => {
+    await connectGame(PID);
+
+    const result = useDodiSessionStore.getState().speakGameVoiceText("B like in Ball!");
+
+    expect(result).toEqual({ ok: true });
+    expect(activeClient().sendText).toHaveBeenCalledTimes(1);
+    const turn = activeClient().sendText.mock.calls[0][0] as string;
+    // The game text rides inside a read-aloud framing — quoted material, not
+    // instructions — and arrives verbatim.
+    expect(turn).toContain("B like in Ball!");
+    expect(turn).toContain("exactly as written");
+  });
+
+  it("returns voice_unavailable while deaf (mute means mute) and sends nothing", async () => {
+    await connectGame(PID);
+    useDodiSessionStore.getState().deactivate();
+    expect(useDodiSessionStore.getState().state).toBe("deaf");
+
+    const result = useDodiSessionStore.getState().speakGameVoiceText("read me");
+
+    expect(result).toEqual({ ok: false, error: "voice_unavailable" });
+    expect(activeClient().sendText).not.toHaveBeenCalled();
+  });
+
+  it("returns voice_unavailable when no session exists at all", () => {
+    const result = useDodiSessionStore.getState().speakGameVoiceText("read me");
+    expect(result).toEqual({ ok: false, error: "voice_unavailable" });
+  });
+});
+
+// ---------------------------------------------------------------------------
 // AI-activity tracking: a single ref-counted map (keyed by provider category)
 // drives the companion's "thinking" avatar so ANY in-game AI call lights it up,
 // not just image generation. Analysis and drawing both flip it through the same

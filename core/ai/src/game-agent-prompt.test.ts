@@ -54,4 +54,11 @@ describe("buildAgentSystemPrompt", () => {
     expect(prompt).toContain("request_generate_text");
     expect(prompt).toContain("NEVER put undefined in state");
   });
+
+  it("teaches the generate_voice spoken-feedback convention", () => {
+    const prompt = buildAgentSystemPrompt(BASE);
+    expect(prompt).toContain("generate_voice");
+    expect(prompt).toContain("request_generate_voice");
+    expect(prompt).toContain("set_generated_voice");
+  });
 });

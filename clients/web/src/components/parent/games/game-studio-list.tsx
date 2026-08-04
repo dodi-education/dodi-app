@@ -238,13 +238,17 @@ export function GameStudioList({ items, onDelete }: GameStudioListProps) {
                     const tag = raw.trim().toLowerCase();
                     if (!tag) return null;
                     const ts = tagStyle(tag);
+                    const label = tagLabel(tag);
                     return (
                       <span
                         key={tag}
-                        className="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold"
+                        role="img"
+                        aria-label={label}
+                        title={label}
+                        className="flex size-[18px] shrink-0 items-center justify-center rounded-md"
                         style={{ background: ts.bg, color: ts.fg }}
                       >
-                        {tagLabel(tag)}
+                        <Icon name={ts.icon} size={13} stroke={2} />
                       </span>
                     );
                   })}

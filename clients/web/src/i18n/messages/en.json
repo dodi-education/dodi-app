@@ -646,6 +646,8 @@
     "perspectiveIsometric": "Isometric 2.5D",
     "attachImage": "Attach a reference image",
     "attachLimitReached": "Up to 3 images per message",
+    "dropImages": "Drop images here",
+    "dropImagesHint": "Attached as reference images for dodi",
     "removeImage": "Remove image",
     "backgroundImageLabel": "Background image",
     "backgroundImageToggle": "Generate a background image with AI",

@@ -67,6 +67,23 @@ describe("standard toolbox registry", () => {
     expect(DECLARABLE_CAPABILITY_NAMES).toContain("generate_text");
     expect(DECLARABLE_CAPABILITY_NAMES).not.toContain("set_generated_text");
   });
+
+  it("generate_voice is declarable but never voice-exposed, delivering via set_generated_voice", () => {
+    const tool = STANDARD_TOOLS_BY_NAME["generate_voice"];
+    expect(tool.kind).toBe("client");
+    // Dodi speaks directly through the live session — the request is
+    // game-initiated only, so it must never register as a voice tool.
+    expect(tool.voiceExposed).toBe(false);
+    expect(tool.declarable).toBe(true);
+    expect(tool.deliveryCommand).toBe("set_generated_voice");
+
+    const delivery = STANDARD_TOOLS_BY_NAME["set_generated_voice"];
+    expect(delivery.kind).toBe("internal");
+    expect(delivery.voiceExposed).toBe(false);
+    expect(delivery.declarable).toBe(false);
+    expect(DECLARABLE_CAPABILITY_NAMES).toContain("generate_voice");
+    expect(DECLARABLE_CAPABILITY_NAMES).not.toContain("set_generated_voice");
+  });
 });
 
 describe("buildGameToolDeclarations", () => {
@@ -88,6 +105,13 @@ describe("buildGameToolDeclarations", () => {
     const names = buildGameToolDeclarations(["generate_text"]).map((t) => t.name);
     expect(names).toContain("generate_text");
     expect(names).not.toContain("set_generated_text");
+  });
+
+  it("generate_voice capability registers no voice tool at all", () => {
+    const names = buildGameToolDeclarations(["generate_voice"]).map((t) => t.name);
+    expect(names).not.toContain("generate_voice");
+    expect(names).not.toContain("set_generated_voice");
+    expect(names.sort()).toEqual([...META_TOOL_NAMES].sort());
   });
 
   it("ignores unknown names and non-voice (internal) capabilities", () => {

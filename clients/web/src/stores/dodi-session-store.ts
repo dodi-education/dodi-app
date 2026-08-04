@@ -129,6 +129,16 @@ export interface DodiSessionState {
     error?: string;
   }) => void;
 
+  // Have Dodi read a short game-provided text aloud through the LIVE voice
+  // session (game:event "request_generate_voice", intercepted by the play
+  // view). Synchronous: ok=true means the read-aloud turn was submitted;
+  // ok=false with the stable "voice_unavailable" code means she can't speak
+  // right now (deaf/sleep/disconnected/connecting) — mute means mute, games
+  // can never force audio.
+  speakGameVoiceText: (
+    text: string,
+  ) => { ok: true } | { ok: false; error: "voice_unavailable" };
+
   // Count of kid turns ("asking Dodi") while a game is open — feeds the
   // hintsUsed metric for success evaluation. Reset per play by the play view.
   gameAssistanceCount: number;
@@ -928,6 +938,26 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
   onRunCommands: null,
   onRequestSnapshot: null,
   aiActivity: { image: 0, thinking: 0, writing: 0 },
+
+  speakGameVoiceText: (text) => {
+    // Only a live, listening session can speak. Deaf is a deliberate mute —
+    // never bypass it with an injected turn.
+    if (get().state !== "active" || !client) {
+      return { ok: false, error: "voice_unavailable" };
+    }
+    resetInactivityTimer();
+    gameDebug("voice", `speakGameVoiceText (${text.length} chars)`);
+    // The text is untrusted game output — frame it as quoted material to read,
+    // never as instructions. The play view caps its length before calling.
+    client.sendText(
+      "The game asks you to read a text out loud to the child right now. " +
+        "Read it exactly as written, in the text's own language, warmly and " +
+        "clearly — no introduction, no commentary, nothing added before or " +
+        "after:\n\n" +
+        text,
+    );
+    return { ok: true };
+  },
 
   gameAssistanceCount: 0,
   resetGameAssistance: () => {

@@ -81,6 +81,17 @@ const AUTOSAVE_TITLE = "Autosave";
  */
 const GAME_TEXT_REQUEST_MAX_PER_PLAY = 20;
 const GAME_TEXT_REQUEST_COOLDOWN_MS = 5000;
+/**
+ * Caps for game-initiated voice requests (game:event "request_generate_voice").
+ * Same rationale as the text caps: the requesting code is untrusted. Each
+ * request occupies the live voice session for one spoken line, so the cooldown
+ * roughly matches how long dodi takes to say one. Only requests that actually
+ * reach the session count against the per-play cap.
+ */
+const GAME_VOICE_REQUEST_MAX_PER_PLAY = 30;
+const GAME_VOICE_REQUEST_COOLDOWN_MS = 4000;
+/** Longest text a game may have dodi read aloud in one request. */
+const GAME_VOICE_TEXT_MAX_CHARS = 400;
 
 interface GamePlayViewProps {
   gameId: string;
@@ -441,6 +452,52 @@ export function GamePlayView({
       deliverTextFailure,
     ],
   );
+
+  // `generate_voice` is a host-handled meta-command: the game asks dodi to read
+  // a short text aloud, and the session store injects a read-aloud turn into
+  // the LIVE voice session (same voice, same persona — no separate TTS
+  // pipeline). Game-initiated via game:event "request_generate_voice",
+  // rate-limited like generate_text. The game always receives a
+  // `set_generated_voice` result: { ok: true } when dodi is about to speak, or
+  // { ok: false, error } (voice_unavailable when she is muted/asleep/offline,
+  // rate_limited, empty_text) so its speaking indicator can recover.
+  const gameVoiceRequestCountRef = useRef(0);
+  const lastGameVoiceRequestAtRef = useRef(0);
+
+  const handleGenerateVoice = useCallback((command: GameCommand): void => {
+    const deliver = (payload: { ok: boolean; error?: string }): void => {
+      sandboxRef.current?.sendCommand({ type: "set_generated_voice", payload });
+    };
+
+    const text =
+      typeof command.payload?.text === "string" ? command.payload.text.trim() : "";
+    if (!text) {
+      deliver({ ok: false, error: "empty_text" });
+      return;
+    }
+    const now = Date.now();
+    if (
+      gameVoiceRequestCountRef.current >= GAME_VOICE_REQUEST_MAX_PER_PLAY ||
+      now - lastGameVoiceRequestAtRef.current < GAME_VOICE_REQUEST_COOLDOWN_MS
+    ) {
+      gameDebugWarn("playview", "request_generate_voice denied (rate limit)");
+      deliver({ ok: false, error: "rate_limited" });
+      return;
+    }
+
+    const result = useDodiSessionStore
+      .getState()
+      .speakGameVoiceText(text.slice(0, GAME_VOICE_TEXT_MAX_CHARS));
+    if (!result.ok) {
+      // Not an app failure — dodi is muted, asleep, or disconnected. The game
+      // must stay playable without voice, so no error banner.
+      deliver({ ok: false, error: result.error });
+      return;
+    }
+    gameVoiceRequestCountRef.current += 1;
+    lastGameVoiceRequestAtRef.current = now;
+    deliver({ ok: true });
+  }, []);
 
   // Request a canvas snapshot from the sandbox (used by analyze_game_state and
   // as the gallery thumbnail when saving a snapshot)
@@ -950,6 +1007,13 @@ export function GamePlayView({
         void handleGenerateText(command);
         continue;
       }
+      if (command.type === "generate_voice") {
+        // Never a voice tool, but a marker-emitted command from the text
+        // assistant could still name it — handle host-side, the sandbox
+        // doesn't implement it.
+        handleGenerateVoice(command);
+        continue;
+      }
       if (command.type === "save_snapshot") {
         void handleSaveSnapshot(command);
         continue;
@@ -961,7 +1025,7 @@ export function GamePlayView({
       gameDebug("playview", `Sending command to sandbox:`, command);
       sandboxRef.current.sendCommand(command);
     }
-  }, [t, handleGenerateDrawing, handleGenerateText, handleSaveSnapshot, handleShareSnapshot]);
+  }, [t, handleGenerateDrawing, handleGenerateText, handleGenerateVoice, handleSaveSnapshot, handleShareSnapshot]);
 
   // Register command + snapshot handlers with the Dodi session store
   useEffect(() => {
@@ -995,13 +1059,10 @@ export function GamePlayView({
 
     // Game-initiated content generation: an in-game button (or game start)
     // posts this event; the host runs the same generate_text flow, gated by
-    // the declared capability and the per-play rate limit. The canonical event
-    // is "request_generate_text"; "generate_text_request" is accepted as an
-    // alias because generation agents naturally produce that order too.
+    // the declared capability and the per-play rate limit.
     if (
       message.type === "game:event" &&
-      (message.payload.event === "request_generate_text" ||
-        message.payload.event === "generate_text_request")
+      message.payload.event === "request_generate_text"
     ) {
       if (!capabilities.includes("generate_text")) {
         gameDebugWarn(
@@ -1018,6 +1079,27 @@ export function GamePlayView({
         },
         { isGameRequested: true },
       );
+      return;
+    }
+
+    // Game-initiated spoken feedback: dodi reads a short game text aloud
+    // through the live voice session.
+    if (
+      message.type === "game:event" &&
+      message.payload.event === "request_generate_voice"
+    ) {
+      if (!capabilities.includes("generate_voice")) {
+        gameDebugWarn(
+          "playview",
+          "request_generate_voice ignored — generate_voice capability not declared",
+        );
+        return;
+      }
+      const text = (message.payload as Record<string, unknown>).text;
+      handleGenerateVoice({
+        type: "generate_voice",
+        payload: typeof text === "string" ? { text } : {},
+      });
       return;
     }
 
@@ -1049,7 +1131,7 @@ export function GamePlayView({
         );
       }
     }
-  }, [logEvent, t, capabilities, handleGenerateText]);
+  }, [logEvent, t, capabilities, handleGenerateText, handleGenerateVoice]);
 
   return (
     <GameViewShell
