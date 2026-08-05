@@ -1141,18 +1141,23 @@ export function GamePlayView({
       assistantActions={assistantActions}
       action={
         isSnapshotSession ? undefined : (
-          <div className="flex shrink-0 items-center gap-2.5">
+          <div className="flex shrink-0 items-center gap-4">
             <KidButton
-              variant="icon"
+              variant="ghost"
               size="none"
               onClick={() => void handlePhotoButton()}
               disabled={savingSnapshot || !autosave.checked}
-              title={t("chipSavePhoto")}
-              aria-label={t("chipSavePhoto")}
-              className="rounded-[12px] border border-border-strong bg-white text-ink-2 shadow-sm hover:bg-primary-soft hover:text-primary"
+              title={t("snapshotButton")}
+              aria-label={t("snapshotButton")}
+              className="gap-1.5 rounded-[12px] border border-border-strong bg-white px-3 py-2 text-[13.5px] font-extrabold text-ink-2 shadow-sm hover:bg-primary-soft hover:text-primary"
             >
               <Icon name="camera" size={20} stroke={2} />
+              {t("snapshotButton")}
             </KidButton>
+            <span
+              className="h-7 w-px shrink-0 self-center bg-border-strong"
+              aria-hidden
+            />
             <KidButton
               variant="icon"
               size="none"

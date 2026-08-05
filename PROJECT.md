@@ -442,10 +442,17 @@ parent-defined goal — and, in future, generate challenges like "Solve 3 math g
 
 ## TODO
 
+
+- Enhance game agent:
+ - Every time a version is persisted, save differences to previous versions (including manual saves)
+ - Let Code agent read all version differences to get a better understanding and avoid reintroduction of previously fixed bugs
+ - Allow surgical edits
+
+
 - Enhance usability of game-studio
- - Step 1 ("Sketch"): should be a skipable step where you can draw or upload a "Sketch" of the game UI.
+ - Step 1 ("Inspiration"): should be a skipable step where you can draw or upload inspiration (could be a "Sketch" of the game UI, or photo of a similar task, etc.).
  - Step 2 ("Description"): Describe game (attach sketch) and based on both inputs ask questions regarding functionality scope. User can add more context and request questions, or continue. During "Description" step Agent should already prefill Settings.
- - Step 3 ("Settings"): Once configured click button "Build game" -> Switch to Game preview and show sidebar. Sketch and Description Conversation should be visible in agent conversation history.
+ - Step 3 ("Settings"): Once configured click button "Build game" -> Switch to Game preview and show sidebar. Inspiration and Description Conversation should be visible in agent conversation history.
 
 - Implement plan limits
  - Add 3 transcript logging tiers: basic, advanced, full and change pricing wording to:
