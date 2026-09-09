@@ -4,7 +4,7 @@
  * registry localizes German slugs, mirrored here for the public game page's
  * header, intro card and footer. English is unprefixed, German lives under /de.
  */
-const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://dodi.app").replace(
+const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.dodi.app").replace(
   /\/+$/,
   "",
 );
