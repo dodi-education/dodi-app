@@ -1,10 +1,7 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
-
-import type { Database } from "@dodi/types/database";
+import { sql } from "kysely";
 
 import type { EmailLocale } from "@/emails/strings";
-
-type Client = SupabaseClient<Database>;
+import type { Db } from "@/lib/db";
 
 /** Fallback list used when NEWSLETTER_LISTS is unset (the general newsletter). */
 const DEFAULT_LISTS = ["newsletter"] as const;
@@ -52,27 +49,32 @@ export interface NewsletterResult {
 }
 
 /**
- * Record a newsletter signup via the record_newsletter_signup RPC, which
- * enforces the per-IP rate limit and per-list dedupe atomically. Requires a
- * service-role client (the function is revoked from anon/authenticated). Throws
- * on DB error.
+ * Record a newsletter signup via the record_newsletter_signup SQL function,
+ * which enforces the per-IP rate limit and per-list dedupe atomically. Requires
+ * the service db (the function is granted to dodi_service only). Throws on DB
+ * error.
  */
 export async function recordNewsletterSignup(
-  supabase: Client,
+  db: Db,
   input: NewsletterSubmission,
 ): Promise<NewsletterResult> {
-  const { data, error } = await supabase.rpc("record_newsletter_signup", {
-    p_email: input.email,
-    p_locale: input.locale,
-    p_list: input.list,
-    p_ip_hash: input.ipHash,
-    p_max_per_ip: input.maxPerIp,
-    p_window: input.window,
-  });
-  if (error) throw new Error(error.message);
+  const { rows } = await sql<{
+    id: string | null;
+    is_new: boolean;
+    rate_limited: boolean;
+  }>`
+    select * from public.record_newsletter_signup(
+      ${input.email},
+      ${input.locale},
+      ${input.list},
+      ${input.ipHash},
+      ${input.maxPerIp}::integer,
+      ${input.window}::interval
+    )
+  `.execute(db);
 
-  // The function RETURNS TABLE(...) → PostgREST returns a one-element array.
-  const row = data?.[0];
+  // The function RETURNS TABLE(...): exactly one row.
+  const row = rows[0];
   if (!row) throw new Error("record_newsletter_signup returned no row");
 
   return { isNew: row.is_new, rateLimited: row.rate_limited, id: row.id };

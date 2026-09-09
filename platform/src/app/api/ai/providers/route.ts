@@ -23,10 +23,10 @@ const PutSchema = z.object({
 export async function GET(request: Request): Promise<NextResponse> {
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
-  const { accountId, supabase } = auth;
+  const { accountId, db } = auth;
 
   try {
-    const encryptedProviders = await getEncryptedProviders(supabase, accountId);
+    const encryptedProviders = await getEncryptedProviders(db, accountId);
     return NextResponse.json({ encryptedProviders });
   } catch (error) {
     return serverErrorResponse(error, "Failed to fetch providers", "api/ai/providers#GET", {
@@ -39,7 +39,7 @@ export async function GET(request: Request): Promise<NextResponse> {
 export async function PUT(request: Request): Promise<NextResponse> {
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
-  const { accountId, supabase } = auth;
+  const { accountId, db } = auth;
 
   const body: unknown = await request.json();
   const parsed = PutSchema.safeParse(body);
@@ -51,7 +51,7 @@ export async function PUT(request: Request): Promise<NextResponse> {
   }
 
   try {
-    await setEncryptedProviders(supabase, accountId, parsed.data.encryptedProviders);
+    await setEncryptedProviders(db, accountId, parsed.data.encryptedProviders);
     return NextResponse.json({ ok: true });
   } catch (error) {
     return serverErrorResponse(error, "Failed to save providers", "api/ai/providers#PUT", {

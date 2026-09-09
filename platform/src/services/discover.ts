@@ -1,12 +1,12 @@
 /**
- * dodi Discover reads — the public catalog of published games.
+ * dodi Discover reads: the public catalog of published games.
  *
  * Published rows belong to their publisher's account and RLS deliberately
  * stays closed for everyone else, so every read here goes through the
- * service-role client with an EXPLICIT column projection. The projection IS
- * the privacy boundary: the publisher's `account_id`, `kid_id`,
+ * BYPASSRLS service handle with an EXPLICIT column projection. The projection
+ * IS the privacy boundary: the publisher's `account_id`, `kid_id`,
  * `published_by_account_id` and `agent_transcript_enc` never leave this
- * module — the only author field a response may carry is the public
+ * module. The only author field a response may carry is the public
  * `publication_handle` byline (embedded via the authorship FK).
  *
  * Discover is play-in-place: a family shares a published row with its kids via
@@ -19,7 +19,8 @@
  * they have no author account, so their byline is null and the client renders
  * "dodi" instead.
  */
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { sql, type ExpressionBuilder } from "kysely";
+import { jsonObjectFrom } from "kysely/helpers/postgres";
 
 import type { Database, Game, Json } from "@dodi/types/database";
 import type {
@@ -29,23 +30,83 @@ import type {
 } from "@dodi/types/games";
 import type { ProgressKind } from "@dodi/types/success";
 
-type Client = SupabaseClient<Database>;
+import type { Db } from "@/lib/db";
 
-/** Byline embed through the authorship FK — publication_handle only. */
-const BYLINE_EMBED =
-  "author:accounts!games_published_by_account_id_fkey(publication_handle)";
+/** Byline embed through the authorship FK: publication_handle only. */
+function byline(eb: ExpressionBuilder<Database, "games">) {
+  return jsonObjectFrom(
+    eb
+      .selectFrom("accounts")
+      .select("accounts.publication_handle")
+      .whereRef("accounts.id", "=", "games.published_by_account_id"),
+  ).as("author");
+}
 
-const SUMMARY_COLUMNS = `id, is_system, title, description, tags, target_age_min, target_age_max, estimated_duration_minutes, progress_kind, preview_image, published_at, available_locales, ${BYLINE_EMBED}`;
+/**
+ * The projections. These arrays are the privacy boundary: they are the only
+ * columns a Discover read ever fetches, so they stay explicit (never a
+ * selectAll) and every query below selects exactly one of them.
+ */
+const SUMMARY_COLUMNS = [
+  "id",
+  "is_system",
+  "title",
+  "description",
+  "tags",
+  "target_age_min",
+  "target_age_max",
+  "estimated_duration_minutes",
+  "progress_kind",
+  "preview_image",
+  "published_at",
+  "available_locales",
+] as const;
 
-const DETAIL_COLUMNS = `${SUMMARY_COLUMNS}, code_bundle, markdown, learning_goal, success_definition, success_criteria, metadata`;
+const DETAIL_COLUMNS = [
+  ...SUMMARY_COLUMNS,
+  "code_bundle",
+  "markdown",
+  "learning_goal",
+  "success_definition",
+  "success_criteria",
+  "metadata",
+] as const;
 
 /** Columns fetched when a published row must round-trip as a playable Game. */
-const PUBLIC_GAME_COLUMNS =
-  "id, is_system, title, description, target_age_min, target_age_max, estimated_duration_minutes, tags, code_bundle, markdown, learning_goal, success_definition, success_criteria, progress_kind, metadata, is_active, created_by, preview_image, publication_requested_at, published_at, approved_by, available_locales, created_at, updated_at";
+const PUBLIC_GAME_COLUMNS = [
+  "id",
+  "is_system",
+  "title",
+  "description",
+  "target_age_min",
+  "target_age_max",
+  "estimated_duration_minutes",
+  "tags",
+  "code_bundle",
+  "markdown",
+  "learning_goal",
+  "success_definition",
+  "success_criteria",
+  "progress_kind",
+  "metadata",
+  "is_active",
+  "created_by",
+  "preview_image",
+  "publication_requested_at",
+  "published_at",
+  "approved_by",
+  "available_locales",
+  "created_at",
+  "updated_at",
+] as const;
 
 interface BylineRow {
   author: { publication_handle: string | null } | null;
 }
+
+type SummaryRow = Pick<Game, (typeof SUMMARY_COLUMNS)[number]> & BylineRow;
+type DetailRow = Pick<Game, (typeof DETAIL_COLUMNS)[number]> & BylineRow;
+type PublicGameRow = Pick<Game, (typeof PUBLIC_GAME_COLUMNS)[number]>;
 
 export const DISCOVER_DEFAULT_PAGE_SIZE = 24;
 export const DISCOVER_MAX_PAGE_SIZE = 50;
@@ -57,21 +118,22 @@ export const DISCOVER_MAX_PAGE_SIZE = 50;
  */
 export type DiscoverGameSummaryRow = PublicGameSummary;
 
-function toSummary(row: Record<string, unknown> & BylineRow): DiscoverGameSummaryRow {
+function toSummary(row: SummaryRow): DiscoverGameSummaryRow {
   return {
-    id: row.id as string,
-    is_system: row.is_system as boolean,
-    title: row.title as string,
-    description: row.description as string,
-    tags: row.tags as string[],
-    target_age_min: row.target_age_min as number,
-    target_age_max: row.target_age_max as number,
-    estimated_duration_minutes: row.estimated_duration_minutes as number,
+    id: row.id,
+    is_system: row.is_system,
+    title: row.title,
+    description: row.description,
+    tags: row.tags,
+    target_age_min: row.target_age_min,
+    target_age_max: row.target_age_max,
+    estimated_duration_minutes: row.estimated_duration_minutes,
     progress_kind: row.progress_kind as ProgressKind,
-    preview_image: row.preview_image as string | null,
+    preview_image: row.preview_image,
+    // Every query here filters on published_at IS NOT NULL.
     published_at: row.published_at as string,
     publication_handle: row.author?.publication_handle ?? null,
-    available_locales: (row.available_locales as string[] | null) ?? null,
+    available_locales: row.available_locales ?? null,
   };
 }
 
@@ -80,7 +142,7 @@ function toSummary(row: Record<string, unknown> & BylineRow): DiscoverGameSummar
  * last `published_at` as `cursor` to continue (backed by games_published_idx).
  */
 export async function listPublishedGames(
-  service: Client,
+  service: Db,
   options: { cursor?: string; limit?: number } = {},
 ): Promise<DiscoverGameSummaryRow[]> {
   const limit = Math.min(
@@ -88,45 +150,43 @@ export async function listPublishedGames(
     DISCOVER_MAX_PAGE_SIZE,
   );
   let query = service
-    .from("games")
+    .selectFrom("games")
     .select(SUMMARY_COLUMNS)
-    .not("published_at", "is", null)
-    .order("published_at", { ascending: false })
+    .select(byline)
+    .where("published_at", "is not", null)
+    .orderBy("published_at", "desc")
     .limit(limit);
   if (options.cursor) {
-    query = query.lt("published_at", options.cursor);
+    query = query.where("published_at", "<", options.cursor);
   }
-  const { data, error } = await query;
-  if (error) throw error;
-  return ((data ?? []) as unknown as (Record<string, unknown> & BylineRow)[]).map(
-    toSummary,
-  );
+  const rows = await query.execute();
+  return rows.map(toSummary);
 }
 
 /**
  * Id-pool cap for random sampling. The catalog is tiny today (system games +
  * approved publications); if it ever outgrows this, swap the in-process sample
- * for an ORDER BY random() RPC instead of raising the cap.
+ * for an ORDER BY random() query instead of raising the cap.
  */
 const RANDOM_ID_POOL_LIMIT = 1000;
 
 /**
- * Up to `limit` RANDOM published games — the logged-out game page's "popular
+ * Up to `limit` RANDOM published games, the logged-out game page's "popular
  * games" rail. Samples in process: fetch the published ids, partial
  * Fisher-Yates with the injectable `rng`, then one summary fetch by id.
  */
 export async function listRandomPublishedGameSummaries(
-  service: Client,
+  service: Db,
   limit: number,
   rng: () => number = Math.random,
 ): Promise<DiscoverGameSummaryRow[]> {
-  const { data, error } = await service
-    .from("games")
+  const idRows = await service
+    .selectFrom("games")
     .select("id")
-    .not("published_at", "is", null)
-    .limit(RANDOM_ID_POOL_LIMIT);
-  if (error) throw error;
-  const ids = ((data ?? []) as { id: string }[]).map((row) => row.id);
+    .where("published_at", "is not", null)
+    .limit(RANDOM_ID_POOL_LIMIT)
+    .execute();
+  const ids = idRows.map((row) => row.id);
 
   // Partial Fisher-Yates: after i steps the first i slots are the sample.
   const count = Math.min(Math.max(limit, 0), ids.length);
@@ -137,37 +197,34 @@ export async function listRandomPublishedGameSummaries(
   const sampled = ids.slice(0, count);
   if (sampled.length === 0) return [];
 
-  const { data: rows, error: rowsError } = await service
-    .from("games")
+  const rows = await service
+    .selectFrom("games")
     .select(SUMMARY_COLUMNS)
-    .in("id", sampled);
-  if (rowsError) throw rowsError;
-  const byId = new Map(
-    ((rows ?? []) as unknown as (Record<string, unknown> & BylineRow)[]).map(
-      (row) => [row.id as string, toSummary(row)] as const,
-    ),
-  );
+    .select(byline)
+    .where("id", "in", sampled)
+    .execute();
+  const byId = new Map(rows.map((row) => [row.id, toSummary(row)] as const));
   return sampled.flatMap((id) => byId.get(id) ?? []);
 }
 
-/** Sitemap cap — well above any near-term catalog size. */
+/** Sitemap cap, well above any near-term catalog size. */
 const SITEMAP_LIMIT = 5000;
 
-/** Ids + timestamps of every LIVE published game, newest first — the sitemap feed. */
+/** Ids + timestamps of every LIVE published game, newest first: the sitemap feed. */
 export async function listPublishedSitemapEntries(
-  service: Client,
+  service: Db,
 ): Promise<PublishedSitemapEntry[]> {
-  const { data, error } = await service
-    .from("games")
-    .select("id, published_at, updated_at")
-    .not("published_at", "is", null)
-    .order("published_at", { ascending: false })
-    .limit(SITEMAP_LIMIT);
-  if (error) throw error;
-  return ((data ?? []) as unknown as Record<string, unknown>[]).map((row) => ({
-    id: row.id as string,
+  const rows = await service
+    .selectFrom("games")
+    .select(["id", "published_at", "updated_at"])
+    .where("published_at", "is not", null)
+    .orderBy("published_at", "desc")
+    .limit(SITEMAP_LIMIT)
+    .execute();
+  return rows.map((row) => ({
+    id: row.id,
     published_at: row.published_at as string,
-    updated_at: row.updated_at as string,
+    updated_at: row.updated_at,
   }));
 }
 
@@ -180,23 +237,26 @@ export interface GameStats {
 /**
  * Play & copy counts for a set of published games, in one round trip. Plays
  * aggregate on the single published row (play-in-place); copies are the private
- * remixes that point back at it via source_game_id. The RPC reads across every
- * family's rows, so it runs on the service-role client only. Ids with no plays
- * or copies come back as zeros; ids absent from the map default to zero.
+ * remixes that point back at it via source_game_id. The SQL function reads
+ * across every family's rows, so it runs on the service handle only. Ids with
+ * no plays or copies come back as zeros; ids absent from the map default to zero.
  */
 export async function getGameStats(
-  service: Client,
+  service: Db,
   gameIds: string[],
 ): Promise<Map<string, GameStats>> {
   const stats = new Map<string, GameStats>();
   if (gameIds.length === 0) return stats;
-  const { data, error } = await service.rpc("discover_game_stats", {
-    p_game_ids: gameIds,
-  });
-  if (error) throw error;
-  for (const row of data ?? []) {
-    // count(*) is bigint; PostgREST returns it as a JSON number, but coerce
-    // defensively in case a driver hands it back as a string.
+  const { rows } = await sql<{
+    game_id: string;
+    plays: number;
+    copies: number;
+  }>`select * from public.discover_game_stats(${sql.val(gameIds)}::uuid[])`.execute(
+    service,
+  );
+  for (const row of rows) {
+    // count(*) is bigint; the pg type parser hands it back as a number, but
+    // coerce defensively in case a driver returns a string or BigInt.
     stats.set(row.game_id, {
       plays: Number(row.plays),
       copies: Number(row.copies),
@@ -205,26 +265,25 @@ export async function getGameStats(
   return stats;
 }
 
-/** Full plaintext content of one LIVE published game — the copy (remix) source. */
+/** Full plaintext content of one LIVE published game: the copy (remix) source. */
 export async function getPublishedGameDetail(
-  service: Client,
+  service: Db,
   gameId: string,
 ): Promise<DiscoverGameDetail | null> {
-  const { data, error } = await service
-    .from("games")
+  const row: DetailRow | undefined = await service
+    .selectFrom("games")
     .select(DETAIL_COLUMNS)
-    .eq("id", gameId)
-    .not("published_at", "is", null)
-    .maybeSingle();
-  if (error) throw error;
-  if (!data) return null;
-  const row = data as unknown as Record<string, unknown> & BylineRow;
+    .select(byline)
+    .where("id", "=", gameId)
+    .where("published_at", "is not", null)
+    .executeTakeFirst();
+  if (!row) return null;
   return {
     ...toSummary(row),
-    code_bundle: row.code_bundle as string,
-    markdown: row.markdown as string,
-    learning_goal: row.learning_goal as string,
-    success_definition: row.success_definition as string,
+    code_bundle: row.code_bundle,
+    markdown: row.markdown,
+    learning_goal: row.learning_goal,
+    success_definition: row.success_definition,
     success_criteria: row.success_criteria as Json,
     metadata: row.metadata as Json,
   };
@@ -232,13 +291,13 @@ export async function getPublishedGameDetail(
 
 /**
  * Re-shape a projected published row as a full `Game` for the play paths.
- * Owner fields are nulled — this is the only Game shape a non-owner family
+ * Owner fields are nulled: this is the only Game shape a non-owner family
  * ever receives. `publication_requested_at` stays set, so the client's
  * `isEncryptableGame` predicate correctly treats the row as plaintext.
  */
-function toPublicGame(row: Record<string, unknown>): Game {
+function toPublicGame(row: PublicGameRow): Game {
   return {
-    ...(row as unknown as Game),
+    ...row,
     account_id: null,
     kid_id: null,
     published_by_account_id: null,
@@ -255,36 +314,33 @@ function toPublicGame(row: Record<string, unknown>): Game {
 
 /** One LIVE published row as a playable, sanitized `Game`, or null. */
 export async function getPublishedGame(
-  service: Client,
+  service: Db,
   gameId: string,
 ): Promise<Game | null> {
-  const { data, error } = await service
-    .from("games")
+  const row = await service
+    .selectFrom("games")
     .select(PUBLIC_GAME_COLUMNS)
-    .eq("id", gameId)
-    .not("published_at", "is", null)
-    .maybeSingle();
-  if (error) throw error;
-  return data ? toPublicGame(data as unknown as Record<string, unknown>) : null;
+    .where("id", "=", gameId)
+    .where("published_at", "is not", null)
+    .executeTakeFirst();
+  return row ? toPublicGame(row) : null;
 }
 
 /**
  * LIVE published rows by id, sanitized (the kid-library merge). Ids that are
- * not published games — e.g. stale sharing rows after an unpublish that raced
- * the CASCADE — are silently absent from the result.
+ * not published games, e.g. stale sharing rows after an unpublish that raced
+ * the CASCADE, are silently absent from the result.
  */
 export async function getPublishedGamesByIds(
-  service: Client,
+  service: Db,
   gameIds: string[],
 ): Promise<Game[]> {
   if (gameIds.length === 0) return [];
-  const { data, error } = await service
-    .from("games")
+  const rows = await service
+    .selectFrom("games")
     .select(PUBLIC_GAME_COLUMNS)
-    .in("id", gameIds)
-    .not("published_at", "is", null);
-  if (error) throw error;
-  return ((data ?? []) as unknown as Record<string, unknown>[]).map(
-    toPublicGame,
-  );
+    .where("id", "in", gameIds)
+    .where("published_at", "is not", null)
+    .execute();
+  return rows.map(toPublicGame);
 }

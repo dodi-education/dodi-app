@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { serverErrorResponse } from "@/lib/error-logs";
 import { isInternalAuthorized } from "@/lib/internal-auth";
-import { serviceClient } from "@/lib/supabase";
+import { serviceDb } from "@/lib/db";
 import { listPendingPublications } from "@/services/game-publications";
 
 /**
@@ -16,7 +16,7 @@ export async function GET(request: Request): Promise<NextResponse> {
   }
 
   try {
-    const publications = await listPendingPublications(serviceClient());
+    const publications = await listPendingPublications(serviceDb);
     return NextResponse.json({ publications });
   } catch (error) {
     return serverErrorResponse(

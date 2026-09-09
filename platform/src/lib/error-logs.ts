@@ -7,15 +7,16 @@
  * `logServerError` is the bare logging half for catch blocks with custom
  * response shapes (webhooks, retry loops).
  *
- * Inserts use the service-role client: server errors often occur before/without
- * a user context, and telemetry must not depend on the caller's RLS session.
+ * Inserts use the service db (BYPASSRLS): server errors often occur
+ * before/without a user context, and telemetry must not depend on the caller's
+ * RLS session.
  */
 import { NextResponse } from "next/server";
 
 import type { Json } from "@dodi/types/database";
 
 import { createLogger } from "@/logger";
-import { serviceClient } from "@/lib/supabase";
+import { serviceDb } from "@/lib/db";
 import { isErrorLogTypeEnabled, recordErrorLog } from "@/services/error-logs";
 
 const log = createLogger("server-error");
@@ -57,7 +58,7 @@ export function logServerError(
 
   if (!isErrorLogTypeEnabled("server")) return;
   try {
-    void recordErrorLog(serviceClient(), {
+    void recordErrorLog(serviceDb, {
       accountId: opts.accountId ?? null,
       type: "server",
       context: scope,

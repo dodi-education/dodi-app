@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { serverErrorResponse } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
-import { serviceClient } from "@/lib/supabase";
+import { serviceDb } from "@/lib/db";
 import { getPublishedGameDetail } from "@/services/discover";
 import {
   applyTranslation,
@@ -26,18 +26,18 @@ export async function GET(
 
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
-  const { accountId, supabase } = auth;
+  const { accountId, db } = auth;
 
   // Viewer locale — localizes the system games (the only translated rows), so
   // a remix starts from the title/description the family actually sees.
   const locale = new URL(request.url).searchParams.get("locale") ?? "en";
 
   try {
-    const game = await getPublishedGameDetail(serviceClient(), id);
+    const game = await getPublishedGameDetail(serviceDb, id);
     if (!game) {
       return NextResponse.json({ error: "Game not found" }, { status: 404 });
     }
-    const translation = await getTranslation(supabase, id, locale);
+    const translation = await getTranslation(db, id, locale);
     return NextResponse.json(applyTranslation(game, translation));
   } catch (error) {
     return serverErrorResponse(

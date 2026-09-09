@@ -3,7 +3,7 @@ import { z } from "zod/v4";
 
 import { serverErrorResponse } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
-import { serviceClient } from "@/lib/supabase";
+import { serviceDb } from "@/lib/db";
 import {
   getAutosaveSnapshot,
   upsertAutosaveSnapshot,
@@ -29,7 +29,7 @@ export async function GET(request: Request): Promise<NextResponse> {
   }
 
   try {
-    const snapshot = await getAutosaveSnapshot(serviceClient(), {
+    const snapshot = await getAutosaveSnapshot(serviceDb, {
       accountId: auth.accountId,
       kidId,
       gameId,
@@ -72,7 +72,7 @@ export async function PUT(request: Request): Promise<NextResponse> {
   }
 
   try {
-    const saved = await upsertAutosaveSnapshot(serviceClient(), {
+    const saved = await upsertAutosaveSnapshot(serviceDb, {
       accountId: auth.accountId,
       kidId: result.data.kidId,
       gameId: result.data.gameId,

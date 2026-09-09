@@ -1,30 +1,27 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 
 import { DateTimeSettings } from "@/components/parent/date-time-settings";
 import { FieldRow } from "@/components/parent/rows";
 import { Section } from "@/components/parent/section";
 import { LanguageSwitcher } from "@/components/shared/language-switcher";
 import { Badge } from "@/components/ui/badge";
+import { authClient } from "@/lib/auth/client";
 import { useAccountStore } from "@/stores/account-store";
-import { createClient } from "@/lib/supabase/client";
 
 export default function GeneralSettingsPage() {
   const t = useTranslations("settings");
-  const [user, setUser] = useState<{ email: string; id: string } | null>(null);
+  // Email/id from the shared auth session (cached by the auth client) —
+  // display only.
+  const { data: session } = authClient.useSession();
+  const user = session?.user ?? null;
   const tier = useAccountStore((s) => s.account?.subscribed_plan ?? "egg");
   const loadAccount = useAccountStore((s) => s.load);
 
   useEffect(() => {
     void loadAccount();
-    // Email/id from the local auth session — display only, no network hop.
-    const supabase = createClient();
-    supabase.auth.getSession().then(({ data }) => {
-      const u = data.session?.user;
-      if (u) setUser({ email: u.email ?? "", id: u.id });
-    });
   }, [loadAccount]);
 
   return (

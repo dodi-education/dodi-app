@@ -4,7 +4,7 @@
  * Under E2EE the server is a "dumb encrypted blob store": it holds ciphertext
  * plus a small amount of PLAINTEXT routing/filter metadata, and never sees
  * personal data. This port is implemented by interchangeable adapters:
- *   - SupabaseVaultStore  (P1, hosted now)
+ *   - PostgresVaultStore  (hosted now)
  *   - SqliteVaultStore    (P3, home companion / self-hosted)
  *   - VitonomiVaultStore  (deferred — Vitonomi is WIP; the architecture is
  *                          prepared for it but the adapter is not built)
@@ -13,7 +13,7 @@
  */
 import type { KemWrappedKey, PasswordWrappedKey } from "@dodi/crypto";
 
-/** Logical record kinds. Maps to a table (Supabase) or a document type (vault). */
+/** Logical record kinds. Maps to a table (Postgres) or a document type (vault). */
 export type VaultCollection =
   | "kid"
   | "persona"
@@ -60,7 +60,7 @@ export interface VaultRecordInput {
 
 /**
  * The storage contract every backend implements identically. Ownership/authz
- * (replacing Supabase RLS for non-Supabase backends) is enforced inside the
+ * (mirroring the database's row-level security) is enforced inside the
  * adapter against the authenticated account.
  */
 export interface VaultStore {

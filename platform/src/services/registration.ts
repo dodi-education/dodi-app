@@ -1,8 +1,8 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { sql } from "kysely";
 
-import type { Database, RegistrationMode } from "@dodi/types/database";
+import type { RegistrationMode } from "@dodi/types/database";
 
-type Client = SupabaseClient<Database>;
+import type { Db } from "@/lib/db";
 
 const MODES: readonly RegistrationMode[] = ["open", "invite", "closed"];
 
@@ -20,18 +20,17 @@ export function getRegistrationMode(): RegistrationMode {
 
 /**
  * Whether an active invite code with this value exists (case-insensitive).
- * Delegates to the is_invite_code_active RPC so the lower(code) match can't be
- * turned into an ILIKE wildcard by user input. Requires a service-role client.
+ * Delegates to the is_invite_code_active SQL function so the lower(code) match
+ * can't be turned into an ILIKE wildcard by user input. Requires the service db.
  */
 export async function isInviteCodeActive(
-  supabase: Client,
+  db: Db,
   code: string,
 ): Promise<boolean> {
   const trimmed = code.trim();
   if (!trimmed) return false;
-  const { data, error } = await supabase.rpc("is_invite_code_active", {
-    p_code: trimmed,
-  });
-  if (error) throw new Error(error.message);
-  return data === true;
+  const { rows } = await sql<{ ok: boolean }>`
+    select public.is_invite_code_active(${trimmed}) as ok
+  `.execute(db);
+  return rows[0]?.ok === true;
 }

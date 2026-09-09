@@ -1,17 +1,20 @@
 import { NextResponse } from "next/server";
 
-import type { SupabaseClient } from "@supabase/supabase-js";
-
-import type { Database } from "@dodi/types/database";
-
+import { auth } from "./auth";
+import { scopedDb, serviceDb, type Db } from "./db";
 import { verifyDeviceBearer } from "./device-token";
-import { anonClient, serviceClient, userClient } from "./supabase";
 
 export type AuthVia = "user" | "device";
 
 export interface AuthContext {
   accountId: string;
-  supabase: SupabaseClient<Database>;
+  /**
+   * Database handle for this request:
+   *  - user path: RLS-enforced, stamped with the account (see lib/db.ts)
+   *  - device path: the BYPASSRLS service handle; callers scope every query
+   *    to `accountId` themselves
+   */
+  db: Db;
   via: AuthVia;
 }
 
@@ -31,35 +34,30 @@ function readBearer(request: Request): string | null {
 
 /**
  * Bearer-only auth for every client. Resolves the request to an account and a
- * scoped Supabase client:
- *  - user (web/native) → Supabase access-token JWT, validated statelessly via
- *    getUser(); queries run as the user (RLS enforced).
- *  - device (agent)    → platform-signed device token (added in P7.5); queries
- *    run via the service-role client scoped to the account in app code.
+ * database handle:
+ *  - user (web/native) → Better Auth session token (bearer plugin), looked up
+ *    in auth_sessions; queries run as the user (RLS enforced).
+ *  - device (agent)    → platform-signed device token; queries run via the
+ *    service handle scoped to the account in app code.
  */
 export async function resolveAuth(request: Request): Promise<AuthContext> {
   const token = readBearer(request);
   if (!token) throw new AuthError("Missing bearer token");
 
   // Device bearer (platform-signed, stateless): the agent and other headless
-  // clients. Queries run via the service-role client and MUST be scoped to
+  // clients. Queries run via the service handle and MUST be scoped to
   // accountId in app code (RLS is bypassed for this path).
   const device = verifyDeviceBearer(token);
   if (device) {
-    return {
-      accountId: device.accountId,
-      supabase: serviceClient(),
-      via: "device",
-    };
+    return { accountId: device.accountId, db: serviceDb, via: "device" };
   }
 
-  // User JWT (web/native): validated statelessly; queries run as the user (RLS).
-  const { data, error } = await anonClient().auth.getUser(token);
-  if (error || !data.user) throw new AuthError("Invalid or expired token");
+  const session = await auth.api.getSession({ headers: request.headers });
+  if (!session) throw new AuthError("Invalid or expired token");
 
   return {
-    accountId: data.user.id,
-    supabase: userClient(token),
+    accountId: session.user.id,
+    db: scopedDb(session.user.id),
     via: "user",
   };
 }
@@ -76,7 +74,7 @@ export function unauthorizedResponse(error: unknown): NextResponse | null {
  * Route helper — resolve auth or return a 401 Response. Usage:
  *   const auth = await requireAuth(request);
  *   if (auth instanceof Response) return auth;
- *   const { accountId, supabase } = auth;
+ *   const { accountId, db } = auth;
  */
 export async function requireAuth(
   request: Request,

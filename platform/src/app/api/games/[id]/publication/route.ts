@@ -5,7 +5,7 @@ import type { Json } from "@dodi/types/database";
 
 import { serverErrorResponse } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
-import { serviceClient } from "@/lib/supabase";
+import { serviceDb } from "@/lib/db";
 import {
   PublicationError,
   getPublication,
@@ -65,16 +65,15 @@ export async function GET(
   const { accountId } = auth;
 
   try {
-    const service = serviceClient();
-    const publication = await getPublication(service, id, accountId);
+    const publication = await getPublication(serviceDb, id, accountId);
     // Paid translations ride along so they are never generated twice: the
     // live copy's plaintext listing rows, and — for a translate-then-leave
     // round trip before any submit — the draft request's sealed blob.
     const [translations, draftListingTranslationsEnc] = await Promise.all([
       publication
-        ? listTranslations(service, publication.id)
+        ? listTranslations(serviceDb, publication.id)
         : Promise.resolve([]),
-      getPublicationDraft(service, id, accountId),
+      getPublicationDraft(serviceDb, id, accountId),
     ]);
     return NextResponse.json({
       publication,
@@ -111,8 +110,7 @@ export async function POST(
   }
 
   try {
-    const service = serviceClient();
-    const publication = await submitPublication(service, {
+    const publication = await submitPublication(serviceDb, {
       sourceGameId: id,
       accountId,
       content: {
@@ -121,7 +119,7 @@ export async function POST(
       },
     });
     // Operator heads-up; fire-and-forget (never affects the response).
-    void notifyPublicationSubmitted(service, publication);
+    void notifyPublicationSubmitted(serviceDb, publication);
     return NextResponse.json({ publication }, { status: 201 });
   } catch (error) {
     if (error instanceof PublicationError) {
@@ -152,7 +150,7 @@ export async function DELETE(
   const { accountId } = auth;
 
   try {
-    await withdrawPublication(serviceClient(), id, accountId);
+    await withdrawPublication(serviceDb, id, accountId);
     return NextResponse.json({ success: true });
   } catch (error) {
     return serverErrorResponse(

@@ -1,8 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ThinkingProvider } from "@dodi/ai/thinking-providers/factory";
 
-import { type Row, fakeDb } from "../test-support/fake-supabase";
+import { createTestDb, type TestDatabase } from "../test-support/pglite-db";
 
 // Assert on decisions, not real sends / real telemetry.
 const { sendEmailMock } = vi.hoisted(() => ({ sendEmailMock: vi.fn() }));
@@ -17,14 +17,14 @@ import {
 } from "./publication-review";
 import type { Game, GameTranslation } from "@dodi/types/database";
 
-const ACCOUNT = "acc-1";
+const PUB_ID = "aaaaaaaa-1111-4111-8111-111111111111";
+const SOURCE_ID = "bbbbbbbb-2222-4222-8222-222222222222";
 
-function pendingPublication(overrides: Row = {}): Row {
+/** Plain object for the prompt builder, which never touches the database. */
+function publicationFixture(overrides: Record<string, unknown> = {}) {
   return {
-    id: "pub-1",
-    account_id: ACCOUNT,
-    published_by_account_id: ACCOUNT,
-    source_game_id: "game-1",
+    id: PUB_ID,
+    source_game_id: SOURCE_ID,
     is_system: false,
     is_active: false,
     kid_id: null,
@@ -53,7 +53,7 @@ function pendingPublication(overrides: Row = {}): Row {
   };
 }
 
-/** The security agent now reads its config from the environment, not the DB. */
+/** The security agent reads its config from the environment, not the DB. */
 const AGENT_ENV = {
   SECURITY_AGENT_PROVIDER: "anthropic",
   SECURITY_AGENT_MODEL: "claude-sonnet-4-6",
@@ -83,62 +83,6 @@ function stubFactory(generateJson: () => Promise<Record<string, unknown>>) {
     ReturnType<typeof vi.fn>;
 }
 
-type Tables = {
-  games: Row[];
-  accounts: Row[];
-  game_publication_requests: Row[];
-  game_translations: Row[];
-};
-
-function makeDb(tables: Partial<Tables> = {}) {
-  return fakeDb<Tables>({
-    games: [pendingPublication()],
-    game_translations: [
-      { id: "tr-1", game_id: "pub-1", locale: "de", title: "Kometen zählen", description: "" },
-    ],
-    accounts: [
-      {
-        id: ACCOUNT,
-        publication_handle: "fun_games",
-        flagged_for_review_at: null,
-      },
-    ],
-    game_publication_requests: [
-      {
-        id: "req-1",
-        account_id: ACCOUNT,
-        source_game_id: "game-1",
-        publication_game_id: "pub-1",
-        submitted_at: "2026-07-22T10:00:00Z",
-        outcome: null,
-      },
-    ],
-    ...tables,
-  });
-}
-
-/** The default account with a deliverable email + language, so the publisher
- *  notification actually sends (the base fixture omits an address on purpose). */
-function accountsWithEmail(notification_preferences: Row = {}): Row[] {
-  return [
-    {
-      id: ACCOUNT,
-      publication_handle: "fun_games",
-      flagged_for_review_at: null,
-      email: "parent@example.com",
-      language: "en",
-      notification_preferences,
-    },
-  ];
-}
-
-/** The publisher-addressed send among a run's emails (operator + publisher). */
-function publisherSend() {
-  return sendEmailMock.mock.calls
-    .map((c) => c[0])
-    .find((e) => e.to === "parent@example.com");
-}
-
 beforeEach(() => {
   sendEmailMock.mockReset();
   process.env.SYSTEM_NOTIFICATION_EMAIL = "ops@example.com";
@@ -153,11 +97,11 @@ afterEach(() => {
 describe("buildReviewPrompt", () => {
   it("renders every listing translation and the multilingual instruction", () => {
     const { system, user } = buildReviewPrompt(
-      pendingPublication() as unknown as Game,
+      publicationFixture() as unknown as Game,
       [
         {
           id: "tr-1",
-          game_id: "pub-1",
+          game_id: PUB_ID,
           locale: "de",
           title: "Kometen zählen",
           description: "Zähle die Kometen",
@@ -171,7 +115,7 @@ describe("buildReviewPrompt", () => {
   });
 
   it("omits the listing section when no rows exist (legacy/system)", () => {
-    const { user } = buildReviewPrompt(pendingPublication() as unknown as Game);
+    const { user } = buildReviewPrompt(publicationFixture() as unknown as Game);
     expect(user).not.toContain("## Listing translations");
   });
 });
@@ -238,19 +182,128 @@ describe("loadReviewAgentConfig", () => {
 });
 
 describe("processPendingPublications", () => {
+  let t: TestDatabase;
+  let accountId: string;
+
+  beforeAll(async () => {
+    t = await createTestDb();
+    accountId = await t.createAccount("parent@example.com");
+  }, 60_000);
+
+  afterAll(async () => {
+    await t?.close();
+  });
+
+  /** One pending publication row (a fork of a private source game). */
+  async function seed(
+    overrides: Record<string, unknown> = {},
+    options: { notificationPreferences?: Record<string, boolean> } = {},
+  ): Promise<void> {
+    await t.serviceDb.deleteFrom("game_translations").execute();
+    await t.serviceDb.deleteFrom("game_publication_requests").execute();
+    await t.serviceDb.deleteFrom("games").where("is_system", "=", false).execute();
+    await t.serviceDb
+      .updateTable("accounts")
+      .set({
+        publication_handle: "fun_games",
+        flagged_for_review_at: null,
+        language: "en",
+        notification_preferences:
+          options.notificationPreferences ?? { friend_approval_email: true },
+      } as never)
+      .where("id", "=", accountId)
+      .execute();
+
+    // The private source game the publication forked from.
+    await t.serviceDb
+      .insertInto("games")
+      .values({
+        id: SOURCE_ID,
+        account_id: accountId,
+        title: "enc:source",
+        code_bundle: "enc:bundle",
+      })
+      .execute();
+
+    await t.serviceDb
+      .insertInto("games")
+      .values({
+        ...publicationFixture(overrides),
+        account_id: accountId,
+        published_by_account_id: accountId,
+      } as never)
+      .execute();
+
+    await t.serviceDb
+      .insertInto("game_translations")
+      .values({
+        game_id: PUB_ID,
+        locale: "de",
+        title: "Kometen zählen",
+        description: "",
+      })
+      .execute();
+
+    await t.serviceDb
+      .insertInto("game_publication_requests")
+      .values({
+        account_id: accountId,
+        source_game_id: SOURCE_ID,
+        publication_game_id: PUB_ID,
+        submitted_at: "2026-07-22T10:00:00Z",
+      })
+      .execute();
+  }
+
+  async function publication() {
+    return t.serviceDb
+      .selectFrom("games")
+      .select([
+        "published_at",
+        "approved_by",
+        "rejected_at",
+        "rejection_kind",
+        "rejection_reasons",
+        "review_attempts",
+      ])
+      .where("id", "=", PUB_ID)
+      .executeTakeFirstOrThrow();
+  }
+
+  async function account() {
+    return t.serviceDb
+      .selectFrom("accounts")
+      .select("flagged_for_review_at")
+      .where("id", "=", accountId)
+      .executeTakeFirstOrThrow();
+  }
+
+  /** The publisher-addressed send among a run's emails (operator + publisher). */
+  function publisherSend() {
+    return sendEmailMock.mock.calls
+      .map((c) => c[0])
+      .find((e) => e.to === "parent@example.com");
+  }
+
+  function operatorSends() {
+    return sendEmailMock.mock.calls
+      .map((c) => c[0])
+      .filter((e) => e.to === "ops@example.com");
+  }
+
   it("reports disabled and touches nothing without config", async () => {
+    await seed();
     clearAgentEnv();
-    const db = makeDb();
-    const result = await processPendingPublications(db.client, {
+    const result = await processPendingPublications(t.serviceDb, {
       providerFactory: stubFactory(async () => ({ verdict: "approve" })),
     });
     expect(result.disabled).toBe(true);
-    expect(db.tables.games[0].published_at).toBeNull();
+    expect((await publication()).published_at).toBeNull();
   });
 
   it("approves as system on an approve verdict", async () => {
-    const db = makeDb();
-    const result = await processPendingPublications(db.client, {
+    await seed();
+    const result = await processPendingPublications(t.serviceDb, {
       providerFactory: stubFactory(async () => ({
         verdict: "approve",
         reasons: [],
@@ -258,18 +311,23 @@ describe("processPendingPublications", () => {
     });
 
     expect(result).toMatchObject({ processed: 1, approved: 1, rejected: 0 });
-    expect(db.tables.games[0].published_at).toBeTruthy();
-    expect(db.tables.games[0].approved_by).toBe("system");
-    expect(db.tables.games[0].review_attempts).toBe(1);
-    expect(db.tables.game_publication_requests[0].outcome).toBe("approved");
-    // Approval sends no operator email, and this fixture's account has no
-    // address on file, so the publisher notification is skipped too.
-    expect(sendEmailMock).not.toHaveBeenCalled();
+    const row = await publication();
+    expect(row.published_at).toBeTruthy();
+    expect(row.approved_by).toBe("system");
+    expect(row.review_attempts).toBe(1);
+    const request = await t.serviceDb
+      .selectFrom("game_publication_requests")
+      .select("outcome")
+      .executeTakeFirstOrThrow();
+    expect(request.outcome).toBe("approved");
+    // Approval sends no operator email; the publisher is told the good news.
+    expect(operatorSends()).toHaveLength(0);
+    expect(publisherSend().react.props.outcome).toBe("approved");
   });
 
   it("soft-rejects, stamps reasons and emails the operator", async () => {
-    const db = makeDb();
-    const result = await processPendingPublications(db.client, {
+    await seed();
+    const result = await processPendingPublications(t.serviceDb, {
       providerFactory: stubFactory(async () => ({
         verdict: "reject",
         reasons: [
@@ -279,19 +337,19 @@ describe("processPendingPublications", () => {
     });
 
     expect(result).toMatchObject({ processed: 1, rejected: 1 });
-    expect(db.tables.games[0].rejected_at).toBeTruthy();
-    expect(db.tables.games[0].rejection_kind).toBe("soft");
-    expect(db.tables.games[0].rejection_reasons).toEqual([
+    const row = await publication();
+    expect(row.rejected_at).toBeTruthy();
+    expect(row.rejection_kind).toBe("soft");
+    expect(row.rejection_reasons).toEqual([
       { code: "soft_contains_personal_information", note: "a real name" },
     ]);
-    expect(db.tables.accounts[0].flagged_for_review_at).toBeNull();
-    expect(sendEmailMock).toHaveBeenCalledTimes(1);
-    expect(sendEmailMock.mock.calls[0][0].to).toBe("ops@example.com");
+    expect((await account()).flagged_for_review_at).toBeNull();
+    expect(operatorSends()).toHaveLength(1);
   });
 
   it("any hard reason makes the rejection hard and flags the account", async () => {
-    const db = makeDb();
-    await processPendingPublications(db.client, {
+    await seed();
+    await processPendingPublications(t.serviceDb, {
       providerFactory: stubFactory(async () => ({
         verdict: "reject",
         reasons: [
@@ -301,26 +359,13 @@ describe("processPendingPublications", () => {
       })),
     });
 
-    expect(db.tables.games[0].rejection_kind).toBe("hard");
-    expect(db.tables.accounts[0].flagged_for_review_at).toBeTruthy();
-  });
-
-  it("emails the publisher when their submission is approved", async () => {
-    const db = makeDb({ accounts: accountsWithEmail() });
-    await processPendingPublications(db.client, {
-      providerFactory: stubFactory(async () => ({
-        verdict: "approve",
-        reasons: [],
-      })),
-    });
-    // Approval has no operator email, so the only send is the publisher's.
-    expect(sendEmailMock).toHaveBeenCalledTimes(1);
-    expect(publisherSend().react.props.outcome).toBe("approved");
+    expect((await publication()).rejection_kind).toBe("hard");
+    expect((await account()).flagged_for_review_at).toBeTruthy();
   });
 
   it("emails both the operator and the publisher on a soft rejection", async () => {
-    const db = makeDb({ accounts: accountsWithEmail() });
-    await processPendingPublications(db.client, {
+    await seed();
+    await processPendingPublications(t.serviceDb, {
       providerFactory: stubFactory(async () => ({
         verdict: "reject",
         reasons: [{ code: "soft_quality_below_bar", note: "broken" }],
@@ -335,8 +380,8 @@ describe("processPendingPublications", () => {
   });
 
   it("tells the publisher nothing about why on a hard rejection", async () => {
-    const db = makeDb({ accounts: accountsWithEmail() });
-    await processPendingPublications(db.client, {
+    await seed();
+    await processPendingPublications(t.serviceDb, {
       providerFactory: stubFactory(async () => ({
         verdict: "reject",
         reasons: [{ code: "hard_child_safety", note: "asks for a phone number" }],
@@ -347,10 +392,8 @@ describe("processPendingPublications", () => {
   });
 
   it("honours the publisher's opt-out of outcome email", async () => {
-    const db = makeDb({
-      accounts: accountsWithEmail({ publication_outcome_email: false }),
-    });
-    await processPendingPublications(db.client, {
+    await seed({}, { notificationPreferences: { publication_outcome_email: false } });
+    await processPendingPublications(t.serviceDb, {
       providerFactory: stubFactory(async () => ({
         verdict: "approve",
         reasons: [],
@@ -360,23 +403,24 @@ describe("processPendingPublications", () => {
   });
 
   it("a provider error burns an attempt and leaves the item pending", async () => {
-    const db = makeDb();
-    const result = await processPendingPublications(db.client, {
+    await seed();
+    const result = await processPendingPublications(t.serviceDb, {
       providerFactory: stubFactory(async () => {
         throw new Error("provider down");
       }),
     });
 
     expect(result).toMatchObject({ processed: 1, errors: 1, approved: 0 });
-    expect(db.tables.games[0].published_at).toBeNull();
-    expect(db.tables.games[0].rejected_at).toBeNull();
-    expect(db.tables.games[0].review_attempts).toBe(1);
+    const row = await publication();
+    expect(row.published_at).toBeNull();
+    expect(row.rejected_at).toBeNull();
+    expect(row.review_attempts).toBe(1);
     expect(sendEmailMock).not.toHaveBeenCalled();
   });
 
   it("a malformed verdict fails closed — never an approval", async () => {
-    const db = makeDb();
-    const result = await processPendingPublications(db.client, {
+    await seed();
+    const result = await processPendingPublications(t.serviceDb, {
       providerFactory: stubFactory(async () => ({
         verdict: "reject", // reject with no reasons violates the contract
         reasons: [],
@@ -384,88 +428,61 @@ describe("processPendingPublications", () => {
     });
 
     expect(result.errors).toBe(1);
-    expect(db.tables.games[0].published_at).toBeNull();
-    expect(db.tables.games[0].rejected_at).toBeNull();
+    const row = await publication();
+    expect(row.published_at).toBeNull();
+    expect(row.rejected_at).toBeNull();
   });
 
   it("an unknown rejection code fails closed too", async () => {
-    const db = makeDb();
-    const result = await processPendingPublications(db.client, {
+    await seed();
+    const result = await processPendingPublications(t.serviceDb, {
       providerFactory: stubFactory(async () => ({
         verdict: "reject",
         reasons: [{ code: "hard_invented_by_the_model", note: "" }],
       })),
     });
     expect(result.errors).toBe(1);
-    expect(db.tables.games[0].rejected_at).toBeNull();
+    expect((await publication()).rejected_at).toBeNull();
   });
 
   it("skips items whose attempt budget is exhausted", async () => {
-    const db = makeDb();
-    db.tables.games[0].review_attempts = MAX_REVIEW_ATTEMPTS;
+    await seed({ review_attempts: MAX_REVIEW_ATTEMPTS });
     const factory = stubFactory(async () => ({ verdict: "approve" }));
-    const result = await processPendingPublications(db.client, {
+    const result = await processPendingPublications(t.serviceDb, {
       providerFactory: factory,
     });
 
     expect(result.processed).toBe(0);
     expect(factory).not.toHaveBeenCalled();
-    expect(db.tables.games[0].published_at).toBeNull();
+    expect((await publication()).published_at).toBeNull();
   });
 
-  it("skips an item claimed by a concurrent worker (attempt counter moved)", async () => {
-    const db = makeDb();
-    const factory = stubFactory(async () => ({ verdict: "approve" }));
-    // Simulate another worker bumping the counter between list and claim: the
-    // fake's list returns live references, so pre-bump via a wrapped factory
-    // is not possible — instead bump after listing by intercepting the claim.
-    // Simplest deterministic simulation: make the row's counter differ from
-    // what the claim predicate expects by bumping it now and handing the
-    // service a stale copy through a custom from().
-    const stale = { ...db.tables.games[0], review_attempts: 0 };
-    db.tables.games[0].review_attempts = 1; // the other worker's claim
-    let listed = false;
-    const client = {
-      from: (table: string) => {
-        if (table === "games" && !listed) {
-          listed = true;
-          return {
-            select: () => ({
-              not: () => ({
-                is: () => ({
-                  is: () => ({
-                    order: () => ({
-                      limit: () => ({
-                        lt: () => Promise.resolve({ data: [stale], error: null }),
-                      }),
-                    }),
-                  }),
-                }),
-              }),
-            }),
-          };
-        }
-        return (db.client as unknown as { from: (t: string) => unknown }).from(
-          table,
-        );
-      },
-    } as unknown as typeof db.client;
+  it("only one of two concurrent workers claims the same item", async () => {
+    await seed();
+    // Both runs list the item while its counter is still 0; the compare-and-swap
+    // on review_attempts lets exactly one of them claim it.
+    const [first, second] = await Promise.all([
+      processPendingPublications(t.serviceDb, {
+        providerFactory: stubFactory(async () => ({ verdict: "approve", reasons: [] })),
+      }),
+      processPendingPublications(t.serviceDb, {
+        providerFactory: stubFactory(async () => ({ verdict: "approve", reasons: [] })),
+      }),
+    ]);
 
-    const result = await processPendingPublications(client, {
-      providerFactory: factory,
-    });
-    expect(result.skipped).toBe(1);
-    expect(factory).not.toHaveBeenCalled();
+    expect([first.processed, second.processed].sort()).toEqual([0, 1]);
+    expect([first.skipped, second.skipped].sort()).toEqual([0, 1]);
+    expect((await publication()).review_attempts).toBe(1);
   });
 
   it("counts a withdrawn-during-review item as skipped, not an error", async () => {
-    const db = makeDb();
+    await seed();
     const factory = stubFactory(async () => {
       // Withdrawal happens while the agent is thinking.
-      db.tables.games.length = 0;
+      await t.serviceDb.deleteFrom("games").where("id", "=", PUB_ID).execute();
       return { verdict: "reject", reasons: [{ code: "hard_child_safety", note: "" }] };
     });
-    const result = await processPendingPublications(db.client, {
+    const result = await processPendingPublications(t.serviceDb, {
       providerFactory: factory,
     });
     expect(result).toMatchObject({ processed: 1, skipped: 1, rejected: 0 });

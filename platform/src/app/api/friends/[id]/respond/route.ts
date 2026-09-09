@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 
 import { requireAuth } from "@/lib/resolve-auth";
-import { serviceClient } from "@/lib/supabase";
+import { serviceDb } from "@/lib/db";
 import { respondToRequest } from "@/services/friends";
 import { notifyPendingApproval } from "@/services/notifications";
 
@@ -37,8 +37,8 @@ export async function POST(
   }
 
   try {
-    const supabase = serviceClient();
-    const row = await respondToRequest(supabase, {
+    const db = serviceDb;
+    const row = await respondToRequest(db, {
       accountId: auth.accountId,
       kidId: result.data.kidId,
       friendshipId: id,
@@ -50,7 +50,7 @@ export async function POST(
     // affect the kid's response. This edge fires at most once (respondToRequest
     // throws unless the row was still `pending`).
     if (row.status === "awaiting_parent") {
-      void notifyPendingApproval(supabase, row);
+      void notifyPendingApproval(db, row);
     }
     return NextResponse.json({ id: row.id, status: row.status });
   } catch (error) {

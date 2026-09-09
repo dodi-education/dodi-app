@@ -8,8 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PinInput } from "@/components/ui/pin-input";
+import { authClient } from "@/lib/auth/client";
 import { markParentUnlocked } from "@/lib/parent-lock";
-import { createClient } from "@/lib/supabase/client";
 import { useAccountStore } from "@/stores/account-store";
 import { useVaultStore } from "@/stores/vault-store";
 
@@ -17,8 +17,9 @@ import { useVaultStore } from "@/stores/vault-store";
  * Shown by `ParentPinGate` when a parent PIN is set and the device session is
  * locked. Verifies the 4-digit PIN by decrypting the stored ciphertext with the
  * (already-unlocked) VaultSession — server is never involved. A "forgot PIN"
- * escape re-verifies the account password via Supabase auth, which (unlike the
- * vault store's unlock) never mutates vault status, so this prompt stays mounted.
+ * escape re-verifies the account password server-side (POST /api/auth/
+ * password/verify, no new session), which (unlike the vault store's unlock)
+ * never mutates vault status, so this prompt stays mounted.
  */
 export function ParentPinPrompt() {
   const t = useTranslations("parentPin");
@@ -47,19 +48,13 @@ export function ParentPinPrompt() {
     setPwError(null);
     setPwBusy(true);
     try {
-      const supabase = createClient();
-      // Email from the local session (no network) — signInWithPassword is the
-      // actual server-side verification.
-      const {
-        data: { session: authSession },
-      } = await supabase.auth.getSession();
-      const email = authSession?.user.email;
-      if (!email) throw new Error("no-email");
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-      if (signInError) {
+      // Server-side proof of the password on the current session; the bearer
+      // identifies the account, so no email is needed.
+      const { data, error } = await authClient.$fetch<{ ok: boolean }>(
+        "/password/verify",
+        { method: "POST", body: { password } },
+      );
+      if (error || !data?.ok) {
         setPwError(t("passwordWrong"));
         return;
       }

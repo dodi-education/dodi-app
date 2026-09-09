@@ -1,0 +1,41 @@
+# Build context for platform/Dockerfile and clients/web/Dockerfile is the repo
+# root (turbo prune needs the whole workspace). Keep the context lean and keep
+# secrets and local state out of the image layers.
+.git
+.github
+.claude
+.vscode
+.turbo
+**/.turbo
+node_modules
+**/node_modules
+.next
+**/.next
+out
+**/out
+coverage
+**/coverage
+logs
+**/logs
+*.log
+certs
+**/certs
+*.pem
+.env
+.env.*
+*.env
+*.env.*
+**/.env
+**/.env.*
+**/*.env
+**/*.env.*
+*.tsbuildinfo
+**/*.tsbuildinfo
+# Root-level content the apps do not import (images live in each app's src/assets).
+assets
+docs
+# Local CLI state.
+# Not needed inside the image.
+docker-compose*.yml
+**/Dockerfile
+**/.dockerignore

@@ -1,19 +1,11 @@
-import { createClient } from "@/lib/supabase/client";
+import { getAccessToken } from "@/lib/auth/client";
 import { API_VERSION, VERSION_HEADER } from "@dodi/billing-contract";
-
-// Lazy: building the Supabase client needs env at construction time, and this
-// module is imported from AI-resolution code that unit tests load without env.
-let supabase: ReturnType<typeof createClient> | null = null;
-
-function getSupabase(): ReturnType<typeof createClient> {
-  if (!supabase) supabase = createClient();
-  return supabase;
-}
 
 /**
  * Client for the commercial dodi AI control plane (ai.dodi.app — dodi-com,
- * NOT the OSS platform). Same Supabase login: requests carry the platform
- * access token as a bearer.
+ * NOT the OSS platform). Same login as the platform: requests carry the
+ * Better Auth session token as a bearer, which ai.dodi.app verifies against
+ * the platform's `/api/auth/get-session`.
  *
  * `NEXT_PUBLIC_DODI_AI_URL` unset ⇒ self-host mode: every dodi AI surface is
  * hidden and no request is ever made (PROJECT.md: "Self-host / no cloud AI
@@ -29,8 +21,7 @@ export async function dodiAIRequest(
 ): Promise<Response> {
   const base = process.env.NEXT_PUBLIC_DODI_AI_URL;
   if (!base) throw new Error("dodi AI is not configured (NEXT_PUBLIC_DODI_AI_URL)");
-  const { data } = await getSupabase().auth.getSession();
-  const token = data.session?.access_token ?? "";
+  const token = getAccessToken();
   return fetch(`${base}${path}`, {
     ...init,
     headers: {

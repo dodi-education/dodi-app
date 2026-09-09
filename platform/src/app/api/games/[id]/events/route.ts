@@ -4,7 +4,7 @@ import { z } from "zod/v4";
 import { serverErrorResponse } from "@/lib/error-logs";
 import { isPlausiblePlayTimestamp } from "@/lib/play-timestamps";
 import { requireAuth } from "@/lib/resolve-auth";
-import { serviceClient } from "@/lib/supabase";
+import { serviceDb } from "@/lib/db";
 import { getPlayableGame } from "@/services/games";
 import { getKid } from "@/services/kids";
 import { logActivity } from "@/services/activities";
@@ -33,7 +33,7 @@ export async function POST(
 
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
-  const { accountId, supabase } = auth;
+  const { accountId, db } = auth;
 
   const body: unknown = await request.json();
   const parsed = LogGameEventSchema.safeParse(body);
@@ -54,14 +54,14 @@ export async function POST(
   }
 
   try {
-    const kid = await getKid(supabase, kidId);
+    const kid = await getKid(db, kidId);
     if (!kid || kid.account_id !== accountId) {
       return NextResponse.json({ error: "Kid not found" }, { status: 404 });
     }
 
     // Service-role fallback: play events on a shared published Discover row
     // must resolve the game even though RLS hides it from this account.
-    const game = await getPlayableGame(supabase, serviceClient(), id);
+    const game = await getPlayableGame(db, serviceDb, id);
     if (!game) {
       return NextResponse.json({ error: "Game not found" }, { status: 404 });
     }
@@ -69,7 +69,7 @@ export async function POST(
     // The title is E2EE, so it must never be interpolated into the plaintext
     // activities.message. Reference the game instead; the parent feed resolves
     // the name client-side from the decrypted game cache.
-    await logActivity(supabase, {
+    await logActivity(db, {
       kid_id: kid.id,
       account_id: accountId,
       persona_id: kid.active_persona?.id ?? null,

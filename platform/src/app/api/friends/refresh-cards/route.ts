@@ -3,7 +3,7 @@ import { z } from "zod/v4";
 
 import { serverErrorResponse } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
-import { serviceClient } from "@/lib/supabase";
+import { serviceDb } from "@/lib/db";
 import { refreshFriendCards } from "@/services/friends";
 
 const RefreshSchema = z.object({
@@ -39,7 +39,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
 
   try {
-    const updated = await refreshFriendCards(serviceClient(), {
+    const updated = await refreshFriendCards(serviceDb, {
       accountId: auth.accountId,
       kidId: result.data.kidId,
       cards: result.data.cards,

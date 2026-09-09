@@ -45,10 +45,10 @@ export async function GET(
   const { id: kidId } = await context.params;
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
-  const { accountId, supabase } = auth;
+  const { accountId, db } = auth;
 
   try {
-    const kid = await getKid(supabase, kidId);
+    const kid = await getKid(db, kidId);
     if (!kid || kid.account_id !== accountId) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
@@ -60,7 +60,7 @@ export async function GET(
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
         return NextResponse.json({ error: "Invalid date" }, { status: 400 });
       }
-      const transcript = await getTranscriptByDay(supabase, kidId, date);
+      const transcript = await getTranscriptByDay(db, kidId, date);
       return NextResponse.json(transcript);
     }
 
@@ -70,7 +70,7 @@ export async function GET(
       100,
     );
 
-    const transcripts = await listTranscripts(supabase, kidId, {
+    const transcripts = await listTranscripts(db, kidId, {
       status: status ?? undefined,
       limit,
     });
@@ -98,10 +98,10 @@ export async function POST(
   const { id: kidId } = await context.params;
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
-  const { accountId, supabase } = auth;
+  const { accountId, db } = auth;
 
   try {
-    const kid = await getKid(supabase, kidId);
+    const kid = await getKid(db, kidId);
     if (!kid || kid.account_id !== accountId) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
@@ -116,7 +116,7 @@ export async function POST(
     }
 
     const { localDate, personaId, contentEnc, entries } = parsed.data;
-    const transcript = await upsertTranscript(supabase, {
+    const transcript = await upsertTranscript(db, {
       accountId,
       kidId,
       localDate,
@@ -126,7 +126,7 @@ export async function POST(
     });
 
     const inserted = await insertTranscriptEntries(
-      supabase,
+      db,
       entries.map((e) => ({
         id: e.id,
         transcript_id: transcript.id,

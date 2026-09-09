@@ -1,6 +1,4 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
-
-import type { Database } from "@dodi/types/database";
+import type { Json } from "@dodi/types/database";
 import type {
   AIProviderId,
   AccountModelConfig,
@@ -8,7 +6,7 @@ import type {
 } from "@dodi/types/ai";
 import { getProviderDefinition } from "@dodi/ai/providers";
 
-type Client = SupabaseClient<Database>;
+import type { Db } from "@/lib/db";
 
 // ---------------------------------------------------------------------------
 // E2EE provider keys: `accounts.encrypted_api_keys` now holds a single opaque
@@ -18,59 +16,54 @@ type Client = SupabaseClient<Database>;
 // ---------------------------------------------------------------------------
 
 export async function getEncryptedProviders(
-  supabase: Client,
+  db: Db,
   accountId: string,
 ): Promise<string | null> {
-  const { data, error } = await supabase
-    .from("accounts")
+  const row = await db
+    .selectFrom("accounts")
     .select("encrypted_api_keys")
-    .eq("id", accountId)
-    .single();
-  if (error) throw error;
-  return (data.encrypted_api_keys as unknown as string | null) ?? null;
+    .where("id", "=", accountId)
+    .executeTakeFirstOrThrow();
+  return (row.encrypted_api_keys as unknown as string | null) ?? null;
 }
 
 export async function setEncryptedProviders(
-  supabase: Client,
+  db: Db,
   accountId: string,
   blob: string,
 ): Promise<void> {
-  const { error } = await supabase
-    .from("accounts")
-    .update({
-      encrypted_api_keys:
-        blob as unknown as Database["public"]["Tables"]["accounts"]["Update"]["encrypted_api_keys"],
-    })
-    .eq("id", accountId);
-  if (error) throw error;
+  await db
+    .updateTable("accounts")
+    .set({ encrypted_api_keys: blob as unknown as Json })
+    .where("id", "=", accountId)
+    .execute();
 }
 
 export async function removeProvider(
-  supabase: Client,
+  db: Db,
   accountId: string,
   providerId: AIProviderId,
 ): Promise<void> {
-  const { data, error } = await supabase
-    .from("accounts")
-    .select("encrypted_api_keys, model_config")
-    .eq("id", accountId)
-    .single();
-
-  if (error) throw error;
+  const row = await db
+    .selectFrom("accounts")
+    .select(["encrypted_api_keys", "model_config"])
+    .where("id", "=", accountId)
+    .executeTakeFirstOrThrow();
 
   const existingKeys =
-    (data.encrypted_api_keys as unknown as StoredAPIKeys) ?? {};
+    (row.encrypted_api_keys as unknown as StoredAPIKeys) ?? {};
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { [providerId]: _removed, ...remainingKeys } = existingKeys;
 
-  const updates: Record<string, unknown> = {
+  const updates: { encrypted_api_keys: Json | null; model_config?: Json | null } = {
     encrypted_api_keys:
-      Object.keys(remainingKeys).length > 0 ? remainingKeys : null,
+      Object.keys(remainingKeys).length > 0
+        ? (remainingKeys as unknown as Json)
+        : null,
   };
 
   // Clear model_config if the removed provider was the active voice/game provider
-  const modelConfig =
-    data.model_config as unknown as AccountModelConfig | null;
+  const modelConfig = row.model_config as unknown as AccountModelConfig | null;
   if (modelConfig) {
     let configChanged = false;
     const newConfig = { ...modelConfig };
@@ -111,54 +104,49 @@ export async function removeProvider(
     }
 
     if (configChanged && updates.model_config !== null) {
-      updates.model_config = newConfig;
+      updates.model_config = newConfig as unknown as Json;
     }
   }
 
-  const { error: updateError } = await supabase
-    .from("accounts")
-    .update(updates)
-    .eq("id", accountId);
-
-  if (updateError) throw updateError;
+  await db
+    .updateTable("accounts")
+    .set(updates)
+    .where("id", "=", accountId)
+    .execute();
 }
 
 export async function getModelConfig(
-  supabase: Client,
+  db: Db,
   accountId: string,
 ): Promise<AccountModelConfig | null> {
-  const { data, error } = await supabase
-    .from("accounts")
+  const row = await db
+    .selectFrom("accounts")
     .select("model_config")
-    .eq("id", accountId)
-    .single();
-
-  if (error) throw error;
-  return (data.model_config as unknown as AccountModelConfig) ?? null;
+    .where("id", "=", accountId)
+    .executeTakeFirstOrThrow();
+  return (row.model_config as unknown as AccountModelConfig) ?? null;
 }
 
 /** Reset the account to the unconfigured state (dodi AI disabled, no BYOK fallback). */
 export async function clearModelConfig(
-  supabase: Client,
+  db: Db,
   accountId: string,
 ): Promise<void> {
-  const { error } = await supabase
-    .from("accounts")
-    .update({ model_config: null })
-    .eq("id", accountId);
-
-  if (error) throw error;
+  await db
+    .updateTable("accounts")
+    .set({ model_config: null })
+    .where("id", "=", accountId)
+    .execute();
 }
 
 export async function updateModelConfig(
-  supabase: Client,
+  db: Db,
   accountId: string,
   config: AccountModelConfig,
 ): Promise<void> {
-  const { error } = await supabase
-    .from("accounts")
-    .update({ model_config: config as unknown as Database["public"]["Tables"]["accounts"]["Update"]["model_config"] })
-    .eq("id", accountId);
-
-  if (error) throw error;
+  await db
+    .updateTable("accounts")
+    .set({ model_config: config as unknown as Json })
+    .where("id", "=", accountId)
+    .execute();
 }

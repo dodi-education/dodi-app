@@ -1,29 +1,26 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 
 import { SignOutButton } from "@/components/parent/sign-out-button";
+import { authClient } from "@/lib/auth/client";
 import { useAccountStore } from "@/stores/account-store";
-import { createClient } from "@/lib/supabase/client";
 
 /**
- * Client-side account badge: email from the local auth session (no network),
- * tier from the shared account store (one /api/account fetch app-wide).
+ * Client-side account badge: email from the shared auth session (one
+ * /get-session fetch app-wide, cached by the auth client), tier from the
+ * shared account store (one /api/account fetch app-wide).
  */
 export function AccountBadge() {
   const t = useTranslations("settings");
-  const [email, setEmail] = useState("");
+  const { data: session } = authClient.useSession();
+  const email = session?.user.email ?? "";
   const tier = useAccountStore((s) => s.account?.subscribed_plan ?? "egg");
   const loadAccount = useAccountStore((s) => s.load);
 
   useEffect(() => {
     void loadAccount();
-    const supabase = createClient();
-    supabase.auth
-      .getSession()
-      .then(({ data }) => setEmail(data.session?.user.email ?? ""))
-      .catch(() => {});
   }, [loadAccount]);
 
   const initial = (email[0] ?? "?").toUpperCase();

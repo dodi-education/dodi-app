@@ -27,6 +27,8 @@ function corsHeaders(origin: string | null): Headers {
   }
   headers.set("access-control-allow-methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
   headers.set("access-control-allow-headers", "authorization,content-type");
+  // The Better Auth bearer plugin returns the session token in this header.
+  headers.set("access-control-expose-headers", "set-auth-token");
   headers.set("access-control-max-age", "86400");
   headers.set("vary", "Origin");
   return headers;

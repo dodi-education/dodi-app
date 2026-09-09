@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { issueChallenge } from "@/lib/device-token";
-import { serviceClient } from "@/lib/supabase";
+import { serviceDb } from "@/lib/db";
 import { getActiveDevice } from "@/services/devices";
 
 /** Public: an active device requests a challenge nonce to sign. */
@@ -11,7 +11,7 @@ export async function POST(request: Request): Promise<Response> {
   if (!deviceId) {
     return NextResponse.json({ error: "deviceId is required" }, { status: 400 });
   }
-  const device = await getActiveDevice(serviceClient(), deviceId);
+  const device = await getActiveDevice(serviceDb, deviceId);
   if (!device) {
     return NextResponse.json(
       { error: "Unknown or inactive device" },

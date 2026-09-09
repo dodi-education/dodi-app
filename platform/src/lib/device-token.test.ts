@@ -26,7 +26,7 @@ describe("device-token", () => {
     });
   });
 
-  it("treats a Supabase-JWT-shaped token as not-a-device-token", () => {
+  it("treats a JWT-shaped token as not-a-device-token", () => {
     expect(verifyDeviceBearer("header.payload.signature")).toBeNull();
   });
 

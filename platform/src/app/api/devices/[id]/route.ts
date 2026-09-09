@@ -13,7 +13,7 @@ export async function DELETE(request: Request, context: Ctx): Promise<Response> 
   if (auth instanceof Response) return auth;
   const { id } = await context.params;
   try {
-    await deleteDevice(auth.supabase, auth.accountId, id);
+    await deleteDevice(auth.db, auth.accountId, id);
     return NextResponse.json({ ok: true });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 400 });

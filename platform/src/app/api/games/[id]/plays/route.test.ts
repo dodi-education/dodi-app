@@ -1,9 +1,10 @@
+import { DatabaseError } from "pg";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * The offline-sync POST contract: client-supplied play ids are idempotency
  * keys. A replay of an own play answers 200 with the same id; a foreign id
- * (RLS-hidden row → pkey violation, or a visible foreign row) answers 409;
+ * (RLS-hidden row = pkey violation, or a visible foreign row) answers 409;
  * an implausible startedAt answers 400 before touching the DB.
  */
 
@@ -17,9 +18,9 @@ const { getKidMock, getPlayableGameMock, visibleMock, startPlayMock, getPlayMock
   }));
 
 vi.mock("@/lib/resolve-auth", () => ({
-  requireAuth: vi.fn(async () => ({ accountId: "acc-1", supabase: {} })),
+  requireAuth: vi.fn(async () => ({ accountId: "acc-1", db: {} })),
 }));
-vi.mock("@/lib/supabase", () => ({ serviceClient: () => ({}) }));
+vi.mock("@/lib/db", () => ({ serviceDb: {} }));
 vi.mock("@/lib/error-logs", () => ({
   serverErrorResponse: vi.fn(
     () => new Response(JSON.stringify({ error: "server" }), { status: 500 }),
@@ -123,10 +124,10 @@ describe("POST /api/games/[id]/plays", () => {
     expect(res.status).toBe(409);
   });
 
-  it("maps an RLS-hidden pkey collision (23505) to 409", async () => {
-    startPlayMock.mockRejectedValue(
-      Object.assign(new Error("duplicate key"), { code: "23505" }),
-    );
+  it("maps an RLS-hidden pkey collision (unique violation) to 409", async () => {
+    const violation = new DatabaseError("duplicate key", 0, "error");
+    violation.code = "23505";
+    startPlayMock.mockRejectedValue(violation);
     const res = await POST(makeRequest({ kidId: KID, playId: PLAY }), context);
     expect(res.status).toBe(409);
   });

@@ -3,7 +3,7 @@ import { z } from "zod/v4";
 
 import { serverErrorResponse } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
-import { serviceClient } from "@/lib/supabase";
+import { serviceDb } from "@/lib/db";
 import { getPublishedGame } from "@/services/discover";
 import { getGameSharing, replaceGameSharings } from "@/services/games";
 
@@ -34,15 +34,15 @@ export async function GET(
 
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
-  const { accountId, supabase } = auth;
+  const { accountId, db } = auth;
 
   try {
-    const game = await getPublishedGame(serviceClient(), id);
+    const game = await getPublishedGame(serviceDb, id);
     if (!game) {
       return NextResponse.json({ error: "Game not found" }, { status: 404 });
     }
     // RLS scopes the rows to the caller's account — this is THEIR audience.
-    const sharing = await getGameSharing(supabase, id);
+    const sharing = await getGameSharing(db, id);
     return NextResponse.json({ sharing });
   } catch (error) {
     return serverErrorResponse(
@@ -62,7 +62,7 @@ export async function PUT(
 
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
-  const { accountId, supabase } = auth;
+  const { accountId, db } = auth;
 
   const body: unknown = await request.json();
   const parsed = PutSharingSchema.safeParse(body);
@@ -74,15 +74,15 @@ export async function PUT(
   }
 
   try {
-    const game = await getPublishedGame(serviceClient(), id);
+    const game = await getPublishedGame(serviceDb, id);
     if (!game) {
       return NextResponse.json({ error: "Game not found" }, { status: 404 });
     }
-    await replaceGameSharings(supabase, id, accountId, {
+    await replaceGameSharings(db, id, accountId, {
       family: parsed.data.isFamily,
       kidIds: parsed.data.audienceIds,
     });
-    const sharing = await getGameSharing(supabase, id);
+    const sharing = await getGameSharing(db, id);
     return NextResponse.json({ sharing });
   } catch (error) {
     return serverErrorResponse(

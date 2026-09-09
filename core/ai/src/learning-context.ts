@@ -7,7 +7,7 @@
  * cannot decrypt them — so the browser decrypts via the vault and assembles this
  * string, then passes it to the agent route. This module is the single source of
  * truth for that formatting (shared by the client assembler and any defensive
- * server-side use), with no supabase/node imports so it stays browser-safe.
+ * server-side use), with no database/node imports so it stays browser-safe.
  */
 
 /** Per-kid character cap so family-scope context doesn't balloon the prompt. */

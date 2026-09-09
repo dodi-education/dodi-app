@@ -28,7 +28,7 @@ const CreateActivitySchema = z.object({
 export async function GET(request: Request): Promise<NextResponse> {
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
-  const { accountId, supabase } = auth;
+  const { accountId, db } = auth;
 
   const { searchParams } = new URL(request.url);
   const kidId = searchParams.get("kidId") ?? undefined;
@@ -41,7 +41,7 @@ export async function GET(request: Request): Promise<NextResponse> {
   const offset = parseInt(searchParams.get("offset") ?? "0", 10) || 0;
 
   try {
-    const rows = await listActivities(supabase, accountId, {
+    const rows = await listActivities(db, accountId, {
       kidId,
       personaId,
       event,
@@ -64,7 +64,7 @@ export async function GET(request: Request): Promise<NextResponse> {
 export async function POST(request: Request): Promise<NextResponse> {
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
-  const { accountId, supabase } = auth;
+  const { accountId, db } = auth;
 
   const body: unknown = await request.json();
   const parsed = CreateActivitySchema.safeParse(body);
@@ -76,12 +76,12 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
 
   try {
-    const kid = await getKid(supabase, parsed.data.kidId);
+    const kid = await getKid(db, parsed.data.kidId);
     if (!kid || kid.account_id !== accountId) {
       return NextResponse.json({ error: "Kid not found" }, { status: 404 });
     }
 
-    await logActivity(supabase, {
+    await logActivity(db, {
       kid_id: kid.id,
       account_id: accountId,
       persona_id:

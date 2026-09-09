@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { serverErrorResponse } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
-import { serviceClient } from "@/lib/supabase";
+import { serviceDb } from "@/lib/db";
 import { listFriends } from "@/services/friends";
 
 /** Accepted friends of a kid. Requires ?kidId=. */
@@ -16,7 +16,7 @@ export async function GET(request: Request): Promise<NextResponse> {
   }
 
   try {
-    const friends = await listFriends(serviceClient(), {
+    const friends = await listFriends(serviceDb, {
       accountId: auth.accountId,
       kidId,
     });

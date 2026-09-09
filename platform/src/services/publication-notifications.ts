@@ -12,10 +12,8 @@
  */
 import { createElement } from "react";
 
-import type { SupabaseClient } from "@supabase/supabase-js";
-
 import type { PublicationRejectionReason, RejectionKind } from "@dodi/protocol";
-import type { Database, Game } from "@dodi/types/database";
+import type { Game } from "@dodi/types/database";
 
 import { PublicationOutcomeEmail } from "@/emails/publication-outcome";
 import {
@@ -27,9 +25,8 @@ import {
   normalizeEmailLocale,
   publicationOutcomeCopy,
 } from "@/emails/strings";
+import type { Db } from "@/lib/db";
 import { sendEmail } from "@/lib/email";
-
-type Client = SupabaseClient<Database>;
 
 function operatorEmail(): string | null {
   const to = process.env.SYSTEM_NOTIFICATION_EMAIL;
@@ -48,30 +45,34 @@ function appUrl(): string {
 
 /** The author's public byline, for operator context. Never throws. */
 async function loadHandle(
-  supabase: Client,
+  db: Db,
   publication: Game,
 ): Promise<string | null> {
   if (!publication.published_by_account_id) return null;
-  const { data, error } = await supabase
-    .from("accounts")
-    .select("publication_handle")
-    .eq("id", publication.published_by_account_id)
-    .maybeSingle();
-  if (error) {
-    console.error("[notify] failed to load publication handle:", error.message);
+  try {
+    const row = await db
+      .selectFrom("accounts")
+      .select("publication_handle")
+      .where("id", "=", publication.published_by_account_id)
+      .executeTakeFirst();
+    return row?.publication_handle ?? null;
+  } catch (error) {
+    console.error(
+      "[notify] failed to load publication handle:",
+      error instanceof Error ? error.message : error,
+    );
     return null;
   }
-  return data?.publication_handle ?? null;
 }
 
 export async function notifyPublicationSubmitted(
-  supabase: Client,
+  db: Db,
   publication: Game,
 ): Promise<void> {
   try {
     const to = operatorEmail();
     if (!to) return;
-    const handle = await loadHandle(supabase, publication);
+    const handle = await loadHandle(db, publication);
     await sendEmail({
       to,
       subject: `dodi Discover: new publication request — ${publication.title}`,
@@ -88,7 +89,7 @@ export async function notifyPublicationSubmitted(
 }
 
 export async function notifyPublicationRejected(
-  supabase: Client,
+  db: Db,
   publication: Game,
   kind: RejectionKind,
   reasons: PublicationRejectionReason[],
@@ -96,7 +97,7 @@ export async function notifyPublicationRejected(
   try {
     const to = operatorEmail();
     if (!to) return;
-    const handle = await loadHandle(supabase, publication);
+    const handle = await loadHandle(db, publication);
     await sendEmail({
       to,
       subject: `dodi Discover: publication ${kind}-rejected — ${publication.title}`,
@@ -137,26 +138,32 @@ interface Publisher {
  * throws — a lookup failure just means no publisher mail.
  */
 async function loadPublisher(
-  supabase: Client,
+  db: Db,
   publication: Game,
 ): Promise<Publisher | null> {
   const accountId =
     publication.published_by_account_id ?? publication.account_id;
   if (!accountId) return null;
-  const { data, error } = await supabase
-    .from("accounts")
-    .select("email, language, notification_preferences")
-    .eq("id", accountId)
-    .maybeSingle();
-  if (error) {
-    console.error("[notify] failed to load publisher account:", error.message);
+  let row:
+    | {
+        email: string | null;
+        language: string | null;
+        notification_preferences: unknown;
+      }
+    | undefined;
+  try {
+    row = await db
+      .selectFrom("accounts")
+      .select(["email", "language", "notification_preferences"])
+      .where("id", "=", accountId)
+      .executeTakeFirst();
+  } catch (error) {
+    console.error(
+      "[notify] failed to load publisher account:",
+      error instanceof Error ? error.message : error,
+    );
     return null;
   }
-  const row = data as {
-    email: string | null;
-    language: string | null;
-    notification_preferences: unknown;
-  } | null;
   if (!row?.email) return null;
   if (!wantsOutcomeEmail(row.notification_preferences)) return null;
   return { email: row.email, locale: normalizeEmailLocale(row.language) };
@@ -164,11 +171,11 @@ async function loadPublisher(
 
 /** Tell the publisher their game passed review and is live on Discover. */
 export async function notifyPublisherApproved(
-  supabase: Client,
+  db: Db,
   publication: Game,
 ): Promise<void> {
   try {
-    const publisher = await loadPublisher(supabase, publication);
+    const publisher = await loadPublisher(db, publication);
     if (!publisher) return;
     await sendEmail({
       to: publisher.email,
@@ -194,13 +201,13 @@ export async function notifyPublisherApproved(
  * leak to the parent.
  */
 export async function notifyPublisherRejected(
-  supabase: Client,
+  db: Db,
   publication: Game,
   kind: RejectionKind,
   reasons: PublicationRejectionReason[],
 ): Promise<void> {
   try {
-    const publisher = await loadPublisher(supabase, publication);
+    const publisher = await loadPublisher(db, publication);
     if (!publisher) return;
     const copy = publicationOutcomeCopy(publisher.locale);
     await sendEmail({

@@ -3,7 +3,7 @@ import { z } from "zod/v4";
 
 import { serverErrorResponse } from "@/lib/error-logs";
 import { isInternalAuthorized } from "@/lib/internal-auth";
-import { serviceClient } from "@/lib/supabase";
+import { serviceDb } from "@/lib/db";
 import { backfillGameLocales } from "@/services/game-locale-backfill";
 
 /**
@@ -57,7 +57,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   const startedAt = Date.now();
   try {
-    const result = await backfillGameLocales(serviceClient(), parsed.data);
+    const result = await backfillGameLocales(serviceDb, parsed.data);
     logRunSummary(scope, result, Date.now() - startedAt);
     return NextResponse.json(result);
   } catch (error) {

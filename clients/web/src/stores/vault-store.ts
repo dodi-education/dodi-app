@@ -65,7 +65,11 @@ interface VaultStoreState {
    * password and seal it locally — NO server write, NO session. The caller drops
    * the password immediately after this resolves.
    */
-  createLocalVault: (password: string, importedNsec?: string) => Promise<void>;
+  createLocalVault: (
+    email: string,
+    password: string,
+    importedNsec?: string,
+  ) => Promise<void>;
   /**
    * After the OTP code establishes a session: persist the sealed vault, activate
    * the session, and reveal the nsec account key. Retry-safe on a failed save.
@@ -73,7 +77,16 @@ interface VaultStoreState {
   finalizeVault: () => Promise<void>;
   /** Drop the pending local vault + sealed blob (e.g. "use a different email"). */
   discardLocalVault: () => Promise<void>;
-  unlockOrBootstrap: (password: string) => Promise<{ created: boolean }>;
+  /**
+   * Sign-in path. Unlocks the stored vault, or — when the account has none yet —
+   * adopts the vault sealed at registration for this same email before falling
+   * back to generating a fresh one. Adoption is what preserves an imported nsec
+   * when the emailed code was only entered on a later attempt.
+   */
+  unlockOrBootstrap: (
+    password: string,
+    email?: string,
+  ) => Promise<{ created: boolean }>;
   unlockWithPassword: (password: string) => Promise<void>;
   unlockWithNsec: (nsec: string) => Promise<void>;
   unlockSilently: () => Promise<boolean>;
@@ -81,7 +94,7 @@ interface VaultStoreState {
    * Cold forgot-password reset: verify the nsec account key, re-wrap the vault
    * under the new password, and unlock this device. `onVerified` runs AFTER the
    * nsec checks out but BEFORE the vault is re-wrapped — the caller uses it to
-   * update the Supabase auth password, so a wrong nsec never mutates auth and
+   * update the auth password, so a wrong nsec never mutates auth and
    * the two stay in sync.
    */
   resetPasswordWithNsec: (
@@ -187,7 +200,7 @@ export const useVaultStore = create<VaultStoreState>((set, get) => {
       }
     },
 
-    createLocalVault: async (password, importedNsec) => {
+    createLocalVault: async (email, password, importedNsec) => {
       // Build the vault in memory and seal it for the OTP window. No server write
       // (there's no session yet) and no status change (the user is still on the
       // public /register page, outside VaultGate). The device key is created here
@@ -199,7 +212,9 @@ export const useVaultStore = create<VaultStoreState>((set, get) => {
         device: deviceRegistration(device),
         importedNsec,
       });
-      await stashSealedSecret(JSON.stringify({ storedKeys, nsec }));
+      // The email binds the seal to its account: a later sign-in only adopts
+      // it for that same address, never for whoever signs in next.
+      await stashSealedSecret(JSON.stringify({ storedKeys, nsec, email }));
     },
 
     finalizeVault: async () => {
@@ -244,9 +259,34 @@ export const useVaultStore = create<VaultStoreState>((set, get) => {
       await clearSealedSecret();
     },
 
-    unlockOrBootstrap: async (password) => {
+    unlockOrBootstrap: async (password, email) => {
       const keys = await fetchVaultKeys();
       if (!keys) {
+        // No vault stored yet. Registration may have sealed one on this device
+        // (with an imported nsec) that never got persisted because the code was
+        // entered later. Consume the seal either way so it cannot linger.
+        const raw = await consumeSealedSecret();
+        if (raw) {
+          try {
+            const pending = JSON.parse(raw) as {
+              storedKeys: StoredVaultKeys;
+              nsec: string;
+              email?: string;
+            };
+            if (email && pending.email === email) {
+              set({
+                pendingVault: {
+                  storedKeys: pending.storedKeys,
+                  nsec: pending.nsec,
+                },
+              });
+              await get().finalizeVault();
+              return { created: true };
+            }
+          } catch {
+            // Unreadable seal: fall through and bootstrap a fresh vault.
+          }
+        }
         await get().bootstrap(password);
         return { created: true };
       }

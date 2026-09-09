@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { requireAuth } from "@/lib/resolve-auth";
-import { serviceClient } from "@/lib/supabase";
+import { serviceDb } from "@/lib/db";
 import { unblockFriend } from "@/services/friends";
 
 interface RouteContext {
@@ -25,7 +25,7 @@ export async function POST(
   }
 
   try {
-    await unblockFriend(serviceClient(), {
+    await unblockFriend(serviceDb, {
       accountId: auth.accountId,
       kidId: body.kidId,
       friendshipId: id,

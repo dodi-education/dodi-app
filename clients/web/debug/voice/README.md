@@ -4,8 +4,8 @@ Offline reproduction / measurement rig for the Gemini Live voice companion. It
 connects to the Live API over WebSocket exactly like
 `clients/web/src/lib/ai/gemini-live-client.ts`, using the real game-voice system
 instruction + tool declarations (mirrored from `core/ai/src/dodi-context.ts` and
-the Drawing briefing in `platform/supabase/remote-drawing-game-patch.sql`), and
-drives the "draw a dog" scenario. No browser / vault / Supabase needed.
+the Drawing briefing in the system-game rows of the schema baseline), and
+drives the "draw a dog" scenario. No browser / vault / database needed.
 
 > Note: the system instruction + tool declarations are **mirrored** (copied) from
 > the source files, not imported, so the harness stays a zero-build standalone

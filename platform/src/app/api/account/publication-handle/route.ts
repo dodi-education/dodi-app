@@ -8,8 +8,8 @@ import {
 } from "@dodi/protocol/publication-handle";
 
 import { serverErrorResponse } from "@/lib/error-logs";
+import { serviceDb } from "@/lib/db";
 import { requireAuth } from "@/lib/resolve-auth";
-import { serviceClient } from "@/lib/supabase";
 import {
   isPublicationHandleAvailable,
   setAccountPublicationHandle,
@@ -36,7 +36,7 @@ export async function GET(request: Request): Promise<NextResponse> {
   }
 
   try {
-    const available = await isPublicationHandleAvailable(serviceClient(), handle);
+    const available = await isPublicationHandleAvailable(serviceDb, handle);
     return NextResponse.json({ available, handle });
   } catch (error) {
     return serverErrorResponse(
@@ -51,7 +51,7 @@ export async function GET(request: Request): Promise<NextResponse> {
 export async function PUT(request: Request): Promise<NextResponse> {
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
-  const { accountId, supabase } = auth;
+  const { accountId, db } = auth;
 
   const body: unknown = await request.json();
   const parsed = SetHandleSchema.safeParse(body);
@@ -71,7 +71,7 @@ export async function PUT(request: Request): Promise<NextResponse> {
   }
 
   try {
-    const ok = await setAccountPublicationHandle(supabase, accountId, handle);
+    const ok = await setAccountPublicationHandle(db, accountId, handle);
     if (!ok) {
       return NextResponse.json(
         { error: "That handle is already taken", reason: "taken" },

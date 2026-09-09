@@ -1,7 +1,8 @@
 /**
  * Tiny client-side cookie helpers. Used for non-sensitive UI state that the
- * browser needs to read synchronously (e.g. the active kid). Server
- * auth still lives in the Supabase session cookie, not here.
+ * browser needs to read synchronously (e.g. the active kid). The auth
+ * bearer and its `dodi-session` cookie mirror live in lib/auth/client.ts,
+ * not here.
  */
 
 /** Read a cookie value by name (client-only; returns null during SSR). */

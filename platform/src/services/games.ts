@@ -3,7 +3,7 @@
  *
  * The eight content fields (title, description, code_bundle, markdown,
  * learning_goal, success_definition, success_criteria, preview_image) arrive
- * here already SEALED for private games — the browser encrypts them under the
+ * here already SEALED for private games: the browser encrypts them under the
  * account VMK before the request leaves it, so nothing in this file may inspect,
  * compare or transform them. In particular the bundle is sanitized client-side
  * (@dodi/games/sanitizer) rather than here; the one place the server can and does
@@ -13,10 +13,7 @@
  * Plaintext, and therefore still queryable here: ids, FKs, tags, ages, duration,
  * progress_kind, metadata, flags and timestamps.
  */
-import type { SupabaseClient } from "@supabase/supabase-js";
-
 import type {
-  Database,
   Game,
   GameInsert,
   GameSharingInsert,
@@ -28,9 +25,10 @@ import type { GameMetadata, GameSharingState } from "@dodi/types/games";
 import type { ProgressKind, SuccessCriteria } from "@dodi/types/success";
 import { GAME_TAG_IDS } from "@dodi/games/tags";
 
-import { getPublishedGame, getPublishedGamesByIds } from "./discover";
+import type { Db } from "@/lib/db";
+import { isUniqueViolation } from "@/lib/db-errors";
 
-type Client = SupabaseClient<Database>;
+import { getPublishedGame, getPublishedGamesByIds } from "./discover";
 
 const CATALOG_TAGS = new Set<string>(GAME_TAG_IDS);
 
@@ -58,16 +56,16 @@ export interface ListGamesOptions {
   includeSystem?: boolean;
   tags?: string[];
   /**
-   * Scopes sharing lookups to this account. Redundant under an RLS user client
-   * but REQUIRED under a service client (device auth), where an unscoped
-   * sharing query would see every family's rows.
+   * Scopes sharing lookups to this account. Redundant under an RLS-scoped
+   * handle but REQUIRED under the service handle (device auth), where an
+   * unscoped sharing query would see every family's rows.
    */
   accountId?: string;
 }
 
 export interface CreateCustomGameInput {
   accountId: string;
-  /** Owning kid — set ONLY when a kid created the game; null otherwise. */
+  /** Owning kid: set ONLY when a kid created the game; null otherwise. */
   kidId?: string | null;
   sourceGameId?: string | null;
   title: string;
@@ -86,14 +84,10 @@ export interface CreateCustomGameInput {
   successDefinition?: string;
   successCriteria?: SuccessCriteria;
   progressKind?: ProgressKind;
-  /** 100×100 list preview (sealed for private games — import/remix carry one). */
+  /** 100x100 list preview (sealed for private games; import/remix carry one). */
   previewImage?: string | null;
   /** enc:v1: sealed studio conversation transcript (server-blind). */
   agentTranscriptEnc?: string | null;
-}
-
-function castGame(row: unknown): Game {
-  return row as Game;
 }
 
 export function getGameMetadata(game: Pick<Game, "metadata">): GameMetadata {
@@ -110,14 +104,14 @@ export type SharingMap = Map<string, { family: boolean; kidIds: Set<string> }>;
 /**
  * Whether a game is visible to a given kid. Custom games must be active AND
  * either owned by the kid or shared with it (family-wide or specifically).
- * Inactive custom games are hidden from kids regardless of sharing — they live
+ * Inactive custom games are hidden from kids regardless of sharing: they live
  * only in the parent studio.
  *
- * Published Discover rows — another family's plaintext catalog entries, and
- * the system games dodi publishes itself — are a second case: visible iff THIS
+ * Published Discover rows, another family's plaintext catalog entries and the
+ * system games dodi publishes itself, are a second case: visible iff THIS
  * family shared them with the kid. `is_active` is irrelevant, a catalog
  * listing is never a library entry by itself. (New kids get the system games
- * auto-shared on creation — see {@link shareSystemGamesWithKid}.)
+ * auto-shared on creation, see {@link shareSystemGamesWithKid}.)
  */
 export function isVisibleToKid(
   game: Pick<Game, "id" | "is_active" | "kid_id" | "published_at">,
@@ -136,20 +130,19 @@ export function isVisibleToKid(
 
 /**
  * Fetch the sharing rows for the current account and index them by game id.
- * `accountId` scopes the query under a service client; an RLS user client
+ * `accountId` scopes the query under the service handle; an RLS-scoped handle
  * already limits rows to the caller's account.
  */
 async function loadSharingMap(
-  supabase: Client,
+  db: Db,
   accountId?: string,
 ): Promise<SharingMap> {
-  let query = supabase.from("game_sharings").select("game_id, kid_id");
-  if (accountId) query = query.eq("account_id", accountId);
-  const { data, error } = await query;
-  if (error) throw error;
+  let query = db.selectFrom("game_sharings").select(["game_id", "kid_id"]);
+  if (accountId) query = query.where("account_id", "=", accountId);
+  const rows = await query.execute();
 
   const map: SharingMap = new Map();
-  for (const row of data ?? []) {
+  for (const row of rows) {
     let entry = map.get(row.game_id);
     if (!entry) {
       entry = { family: false, kidIds: new Set<string>() };
@@ -165,50 +158,47 @@ async function loadSharingMap(
 }
 
 export async function listGames(
-  supabase: Client,
+  db: Db,
   options: ListGamesOptions,
   /**
-   * Service-role client for fetching PUBLISHED Discover rows the family shared
-   * (they belong to other accounts, so RLS hides them from `supabase`). Omit
-   * it to skip the Discover merge (e.g. the parent studio list).
+   * Service handle for fetching PUBLISHED Discover rows the family shared
+   * (they belong to other accounts, so RLS hides them from `db`). Omit it to
+   * skip the Discover merge (e.g. the parent studio list).
    */
-  service?: Client,
+  service?: Db,
 ): Promise<Game[]> {
   const { kidId, includeSystem = true, tags, accountId } = options;
 
-  let query = supabase
-    .from("games")
-    .select("*")
+  let query = db
+    .selectFrom("games")
+    .selectAll()
     // Publication copies are catalog submissions, not library entries.
-    .is("publication_requested_at", null)
-    .order("is_system", { ascending: false })
-    .order("created_at", { ascending: false });
+    .where("publication_requested_at", "is", null)
+    .orderBy("is_system", "desc")
+    .orderBy("created_at", "desc");
 
   if (kidId) {
     // RLS already limits custom rows to this account; fetch account + system
     // games and apply audience visibility (owner / shared / family) in JS so
     // games shared with this kid by another kid are included. System rows are
-    // dodi-published catalog entries and share-gate like any Discover row —
+    // dodi-published catalog entries and share-gate like any Discover row;
     // they merely ride along here because the SELECT policy exposes them.
     if (!includeSystem) {
-      query = query.eq("is_system", false);
+      query = query.where("is_system", "=", false);
     }
   } else {
-    query = query.eq("is_system", true);
+    query = query.where("is_system", "=", true);
   }
 
-  const { data, error } = await query;
-  if (error) throw error;
-
-  const base = (data ?? []).map(castGame);
+  const base: Game[] = await query.execute();
 
   // Sharing rows are only needed when filtering for a specific kid.
   const sharings: SharingMap = kidId
-    ? await loadSharingMap(supabase, accountId)
+    ? await loadSharingMap(db, accountId)
     : new Map();
 
   // Shared game ids that are not in the RLS-visible set are Discover rows this
-  // family added — fetch them (sanitized) through the service client.
+  // family added: fetch them (sanitized) through the service handle.
   if (kidId && service && sharings.size > 0) {
     const baseIds = new Set(base.map((game) => game.id));
     const discoverIds = [...sharings.keys()].filter((id) => !baseIds.has(id));
@@ -232,45 +222,37 @@ export async function listGames(
 
 /**
  * List all custom (non-system) games owned by an account, newest first.
- * Publication copies are excluded — they are submissions to the public catalog,
+ * Publication copies are excluded: they are submissions to the public catalog,
  * managed from their source game's studio page, not separate studio entries.
  */
 export async function listAccountGames(
-  supabase: Client,
+  db: Db,
   accountId: string,
 ): Promise<Game[]> {
-  const { data, error } = await supabase
-    .from("games")
-    .select("*")
-    .eq("account_id", accountId)
-    .eq("is_system", false)
-    .is("publication_requested_at", null)
-    .order("updated_at", { ascending: false });
-
-  if (error) throw error;
-  return (data ?? []).map(castGame);
+  return await db
+    .selectFrom("games")
+    .selectAll()
+    .where("account_id", "=", accountId)
+    .where("is_system", "=", false)
+    .where("publication_requested_at", "is", null)
+    .orderBy("updated_at", "desc")
+    .execute();
 }
 
 export async function getGame(
-  supabase: Client,
+  db: Db,
   gameId: string,
 ): Promise<Game | null> {
-  const { data, error } = await supabase
-    .from("games")
-    .select("*")
-    .eq("id", gameId)
-    .single();
-
-  if (error) {
-    if (error.code === "PGRST116") return null;
-    throw error;
-  }
-
-  return castGame(data);
+  const row = await db
+    .selectFrom("games")
+    .selectAll()
+    .where("id", "=", gameId)
+    .executeTakeFirst();
+  return row ?? null;
 }
 
 export async function createCustomGame(
-  supabase: Client,
+  db: Db,
   input: CreateCustomGameInput,
 ): Promise<Game> {
   const payload: GameInsert = {
@@ -287,7 +269,7 @@ export async function createCustomGame(
     tags: filterToCatalogTags(input.tags),
     code_bundle: input.codeBundle,
     markdown: input.markdown ?? "",
-    metadata: (input.metadata ?? {}) as GameInsert["metadata"],
+    metadata: (input.metadata ?? {}) as unknown as Json,
     created_by: input.createdBy ?? "kid",
     learning_goal: input.learningGoal ?? "",
     success_definition: input.successDefinition ?? "",
@@ -297,24 +279,21 @@ export async function createCustomGame(
     agent_transcript_enc: input.agentTranscriptEnc ?? null,
   };
 
-  const { data, error } = await supabase
-    .from("games")
-    .insert(payload)
-    .select("*")
-    .single();
-
-  if (error) throw error;
-  const game = castGame(data);
+  const game = await db
+    .insertInto("games")
+    .values(payload)
+    .returningAll()
+    .executeTakeFirstOrThrow();
 
   // Every custom game starts its version history at creation (agent build,
   // import, kid voice-create all land here).
-  const version = await insertGameVersion(supabase, game, game.code_bundle, null);
-  return await setCurrentVersion(supabase, game.id, version.id);
+  const version = await insertGameVersion(db, game, game.code_bundle, null);
+  return await setCurrentVersion(db, game.id, version.id);
 }
 
 /** Append a version row for a game. `previousId` = the chain link (null for the first). */
 async function insertGameVersion(
-  supabase: Client,
+  db: Db,
   game: Pick<Game, "id" | "account_id">,
   codeBundle: string,
   previousId: string | null,
@@ -322,33 +301,29 @@ async function insertGameVersion(
   if (!game.account_id) {
     throw new Error("Cannot version a game without an owning account");
   }
-  const { data, error } = await supabase
-    .from("game_versions")
-    .insert({
+  return await db
+    .insertInto("game_versions")
+    .values({
       game_id: game.id,
       account_id: game.account_id,
       code_bundle: codeBundle,
       previous_game_version_id: previousId,
     })
-    .select("*")
-    .single();
-  if (error) throw error;
-  return data as GameVersion;
+    .returningAll()
+    .executeTakeFirstOrThrow();
 }
 
 async function setCurrentVersion(
-  supabase: Client,
+  db: Db,
   gameId: string,
   versionId: string,
 ): Promise<Game> {
-  const { data, error } = await supabase
-    .from("games")
-    .update({ current_game_version_id: versionId })
-    .eq("id", gameId)
-    .select("*")
-    .single();
-  if (error) throw error;
-  return castGame(data);
+  return await db
+    .updateTable("games")
+    .set({ current_game_version_id: versionId })
+    .where("id", "=", gameId)
+    .returningAll()
+    .executeTakeFirstOrThrow();
 }
 
 export interface UpdateCustomGameOptions {
@@ -362,12 +337,12 @@ export interface UpdateCustomGameOptions {
 }
 
 export async function updateCustomGame(
-  supabase: Client,
+  db: Db,
   gameId: string,
   updates: GameUpdate,
   options: UpdateCustomGameOptions = {},
 ): Promise<Game> {
-  const existing = await getGame(supabase, gameId);
+  const existing = await getGame(db, gameId);
   if (!existing) {
     throw new Error("Game not found");
   }
@@ -383,7 +358,7 @@ export async function updateCustomGame(
 
   // Sending `code_bundle` at all IS the change signal: the studio only includes
   // it after a real build or a manual editor save. Comparing values would be
-  // meaningless anyway — resealing the same code yields different ciphertext
+  // meaningless anyway: resealing the same code yields different ciphertext
   // every time (fresh nonce), so a value compare would append a version row on
   // every save.
   const codeChanged = Boolean(nextUpdates.code_bundle);
@@ -391,14 +366,14 @@ export async function updateCustomGame(
     const newCode = nextUpdates.code_bundle as string;
     if (options.createVersion === false && existing.current_game_version_id) {
       // Overwrite the head version so it keeps matching the game's code.
-      const { error } = await supabase
-        .from("game_versions")
-        .update({ code_bundle: newCode })
-        .eq("id", existing.current_game_version_id);
-      if (error) throw error;
+      await db
+        .updateTable("game_versions")
+        .set({ code_bundle: newCode })
+        .where("id", "=", existing.current_game_version_id)
+        .execute();
     } else {
       const version = await insertGameVersion(
-        supabase,
+        db,
         existing,
         newCode,
         existing.current_game_version_id,
@@ -407,18 +382,15 @@ export async function updateCustomGame(
     }
   }
 
-  const { data, error } = await supabase
-    .from("games")
-    .update(nextUpdates)
-    .eq("id", gameId)
-    .select("*")
-    .single();
-
-  if (error) throw error;
-  return castGame(data);
+  return await db
+    .updateTable("games")
+    .set(nextUpdates)
+    .where("id", "=", gameId)
+    .returningAll()
+    .executeTakeFirstOrThrow();
 }
 
-/** Lean version-history entry — everything but the code blob. */
+/** Lean version-history entry: everything but the code blob. */
 export interface GameVersionSummary {
   id: string;
   previous_game_version_id: string | null;
@@ -427,45 +399,43 @@ export interface GameVersionSummary {
 
 /** A game's version history, newest first (no code payloads). */
 export async function listGameVersions(
-  supabase: Client,
+  db: Db,
   gameId: string,
 ): Promise<GameVersionSummary[]> {
-  const { data, error } = await supabase
-    .from("game_versions")
-    .select("id, previous_game_version_id, created_at")
-    .eq("game_id", gameId)
-    .order("created_at", { ascending: false });
-  if (error) throw error;
-  return (data ?? []) as GameVersionSummary[];
+  return await db
+    .selectFrom("game_versions")
+    .select(["id", "previous_game_version_id", "created_at"])
+    .where("game_id", "=", gameId)
+    .orderBy("created_at", "desc")
+    .execute();
 }
 
 /** A single version row incl. its code. Returns null if it doesn't belong to the game. */
 export async function getGameVersion(
-  supabase: Client,
+  db: Db,
   gameId: string,
   versionId: string,
 ): Promise<GameVersion | null> {
-  const { data, error } = await supabase
-    .from("game_versions")
-    .select("*")
-    .eq("id", versionId)
-    .eq("game_id", gameId)
-    .maybeSingle();
-  if (error) throw error;
-  return (data as GameVersion | null) ?? null;
+  const row = await db
+    .selectFrom("game_versions")
+    .selectAll()
+    .where("id", "=", versionId)
+    .where("game_id", "=", gameId)
+    .executeTakeFirst();
+  return row ?? null;
 }
 
 /**
  * Switch a game to an existing version: copy that version's code into
  * games.code_bundle and point current_game_version_id at it. No new version
- * row is created — the head just moves (revert = restore the head's previous).
+ * row is created; the head just moves (revert = restore the head's previous).
  */
 export async function restoreGameVersion(
-  supabase: Client,
+  db: Db,
   gameId: string,
   versionId: string,
 ): Promise<Game> {
-  const existing = await getGame(supabase, gameId);
+  const existing = await getGame(db, gameId);
   if (!existing) {
     throw new Error("Game not found");
   }
@@ -473,29 +443,27 @@ export async function restoreGameVersion(
     throw new Error("Cannot update system game directly");
   }
 
-  const version = await getGameVersion(supabase, gameId, versionId);
+  const version = await getGameVersion(db, gameId, versionId);
   if (!version) {
     throw new Error("Version not found");
   }
 
-  const { data, error } = await supabase
-    .from("games")
-    .update({
+  return await db
+    .updateTable("games")
+    .set({
       code_bundle: version.code_bundle,
       current_game_version_id: version.id,
     })
-    .eq("id", gameId)
-    .select("*")
-    .single();
-  if (error) throw error;
-  return castGame(data);
+    .where("id", "=", gameId)
+    .returningAll()
+    .executeTakeFirstOrThrow();
 }
 
 export async function deleteCustomGame(
-  supabase: Client,
+  db: Db,
   gameId: string,
 ): Promise<void> {
-  const existing = await getGame(supabase, gameId);
+  const existing = await getGame(db, gameId);
   if (!existing) {
     throw new Error("Game not found");
   }
@@ -504,35 +472,36 @@ export async function deleteCustomGame(
     throw new Error("Cannot delete system game");
   }
 
-  // Withdraw any pending/live publication first. The FK is ON DELETE SET NULL,
-  // so leaving it would orphan a plaintext public copy with no way back to its
-  // owner — and deleting the original is a clear signal to unpublish.
-  // HARD-rejected copies are retained as moderation evidence (see
-  // withdrawPublication) — they survive with source_game_id nulled by the FK.
-  const { error: publicationError } = await supabase
-    .from("games")
-    .delete()
-    .eq("source_game_id", gameId)
-    .not("publication_requested_at", "is", null)
-    .or("rejection_kind.is.null,rejection_kind.neq.hard");
-  if (publicationError) throw publicationError;
+  // One transaction: the cascade below must not leave a half-deleted game.
+  await db.transaction().execute(async (trx) => {
+    // Withdraw any pending/live publication first. The FK is ON DELETE SET
+    // NULL, so leaving it would orphan a plaintext public copy with no way back
+    // to its owner, and deleting the original is a clear signal to unpublish.
+    // HARD-rejected copies are retained as moderation evidence (see
+    // withdrawPublication): they survive with source_game_id nulled by the FK.
+    await trx
+      .deleteFrom("games")
+      .where("source_game_id", "=", gameId)
+      .where("publication_requested_at", "is not", null)
+      .where((eb) =>
+        eb.or([
+          eb("rejection_kind", "is", null),
+          eb("rejection_kind", "!=", "hard"),
+        ]),
+      )
+      .execute();
 
-  // Autosave slots die with their game (manual snapshots are self-contained
-  // and survive via the FK's ON DELETE SET NULL; an autosave without its game
-  // could never be restored).
-  const { error: autosaveError } = await supabase
-    .from("game_snapshots")
-    .delete()
-    .eq("game_id", gameId)
-    .eq("origin", "autosave");
-  if (autosaveError) throw autosaveError;
+    // Autosave slots die with their game (manual snapshots are self-contained
+    // and survive via the FK's ON DELETE SET NULL; an autosave without its game
+    // could never be restored).
+    await trx
+      .deleteFrom("game_snapshots")
+      .where("game_id", "=", gameId)
+      .where("origin", "=", "autosave")
+      .execute();
 
-  const { error } = await supabase
-    .from("games")
-    .delete()
-    .eq("id", gameId);
-
-  if (error) throw error;
+    await trx.deleteFrom("games").where("id", "=", gameId).execute();
+  });
 }
 
 /**
@@ -541,21 +510,20 @@ export async function deleteCustomGame(
  * kid id. An empty, non-family target leaves the game shared with nobody.
  */
 export async function replaceGameSharings(
-  supabase: Client,
+  db: Db,
   gameId: string,
   accountId: string,
   sharing: GameSharingState,
 ): Promise<void> {
   // Scoped by account: several families hold sharing rows for the same
   // PUBLISHED game, and replacing one family's audience must not touch the
-  // others' (RLS enforces this for user clients; the filter covers service
-  // clients too).
-  const { error: deleteError } = await supabase
-    .from("game_sharings")
-    .delete()
-    .eq("game_id", gameId)
-    .eq("account_id", accountId);
-  if (deleteError) throw deleteError;
+  // others' (RLS enforces this for scoped handles; the filter covers the
+  // service handle too).
+  await db
+    .deleteFrom("game_sharings")
+    .where("game_id", "=", gameId)
+    .where("account_id", "=", accountId)
+    .execute();
 
   const rows: GameSharingInsert[] = sharing.family
     ? [{ game_id: gameId, account_id: accountId, kid_id: null }]
@@ -567,42 +535,39 @@ export async function replaceGameSharings(
 
   if (rows.length === 0) return;
 
-  const { error: insertError } = await supabase
-    .from("game_sharings")
-    .insert(rows);
-  if (insertError) throw insertError;
+  await db.insertInto("game_sharings").values(rows).execute();
 }
 
 /**
  * Default-on system games: share every dodi-published system game with a newly
  * created kid (one per-kid row each), so a fresh profile starts with the
- * official games in its library. Games already covering the kid — via a
- * family-wide row or an existing per-kid row — are skipped, so the call is
+ * official games in its library. Games already covering the kid, via a
+ * family-wide row or an existing per-kid row, are skipped, so the call is
  * idempotent. From here on the rows are ordinary Discover sharings the parent
  * can remove.
  */
 export async function shareSystemGamesWithKid(
-  supabase: Client,
+  db: Db,
   accountId: string,
   kidId: string,
 ): Promise<void> {
-  const { data: systemGames, error } = await supabase
-    .from("games")
+  const systemGames = await db
+    .selectFrom("games")
     .select("id")
-    .eq("is_system", true);
-  if (error) throw error;
-  const gameIds = (systemGames ?? []).map((row) => row.id);
+    .where("is_system", "=", true)
+    .execute();
+  const gameIds = systemGames.map((row) => row.id);
   if (gameIds.length === 0) return;
 
-  const { data: existing, error: sharingsError } = await supabase
-    .from("game_sharings")
-    .select("game_id, kid_id")
-    .eq("account_id", accountId)
-    .in("game_id", gameIds);
-  if (sharingsError) throw sharingsError;
+  const existing = await db
+    .selectFrom("game_sharings")
+    .select(["game_id", "kid_id"])
+    .where("account_id", "=", accountId)
+    .where("game_id", "in", gameIds)
+    .execute();
 
   const covered = new Set(
-    (existing ?? [])
+    existing
       .filter((row) => row.kid_id === null || row.kid_id === kidId)
       .map((row) => row.game_id),
   );
@@ -615,29 +580,26 @@ export async function shareSystemGamesWithKid(
     }));
   if (rows.length === 0) return;
 
-  const { error: insertError } = await supabase
-    .from("game_sharings")
-    .insert(rows);
-  if (insertError) throw insertError;
+  await db.insertInto("game_sharings").values(rows).execute();
 }
 
 /**
  * Read the normalized sharing state for every game in an account, keyed by game
  * id (for the parent studio list). Games with no sharing rows are absent from
- * the map — the caller defaults them to "shared with nobody".
+ * the map; the caller defaults them to "shared with nobody".
  */
 export async function getAccountSharingByGame(
-  supabase: Client,
+  db: Db,
   accountId: string,
 ): Promise<Record<string, GameSharingState>> {
-  const { data, error } = await supabase
-    .from("game_sharings")
-    .select("game_id, kid_id")
-    .eq("account_id", accountId);
-  if (error) throw error;
+  const rows = await db
+    .selectFrom("game_sharings")
+    .select(["game_id", "kid_id"])
+    .where("account_id", "=", accountId)
+    .execute();
 
   const map: Record<string, GameSharingState> = {};
-  for (const row of data ?? []) {
+  for (const row of rows) {
     let entry = map[row.game_id];
     if (!entry) {
       entry = { family: false, kidIds: [] };
@@ -651,18 +613,18 @@ export async function getAccountSharingByGame(
 
 /** Read the normalized sharing state for a single game (for the studio UI). */
 export async function getGameSharing(
-  supabase: Client,
+  db: Db,
   gameId: string,
 ): Promise<GameSharingState> {
-  const { data, error } = await supabase
-    .from("game_sharings")
+  const rows = await db
+    .selectFrom("game_sharings")
     .select("kid_id")
-    .eq("game_id", gameId);
-  if (error) throw error;
+    .where("game_id", "=", gameId)
+    .execute();
 
   const kidIds: string[] = [];
   let family = false;
-  for (const row of data ?? []) {
+  for (const row of rows) {
     if (row.kid_id === null) family = true;
     else kidIds.push(row.kid_id);
   }
@@ -671,11 +633,11 @@ export async function getGameSharing(
 
 /**
  * Single-game visibility check (kid deep-link / play gate). `accountId` scopes
- * the sharing lookup to the kid's family — essential for published Discover
+ * the sharing lookup to the kid's family, essential for published Discover
  * rows, where several families may hold sharing rows for the same game.
  */
 export async function isGameVisibleToKid(
-  supabase: Client,
+  db: Db,
   game: Pick<Game, "id" | "is_active" | "kid_id" | "published_at">,
   kidId: string,
   accountId: string,
@@ -685,70 +647,74 @@ export async function isGameVisibleToKid(
     if (game.kid_id === kidId) return true;
   }
 
-  const { data, error } = await supabase
-    .from("game_sharings")
+  const rows = await db
+    .selectFrom("game_sharings")
     .select("kid_id")
-    .eq("game_id", game.id)
-    .eq("account_id", accountId);
-  if (error) throw error;
+    .where("game_id", "=", game.id)
+    .where("account_id", "=", accountId)
+    .execute();
 
-  return (data ?? []).some(
-    (row) => row.kid_id === null || row.kid_id === kidId,
-  );
+  return rows.some((row) => row.kid_id === null || row.kid_id === kidId);
 }
 
 /**
  * The game a kid may load for play: the family's own (or a system) row via the
- * caller's RLS client, else — when the id points at a published Discover row —
- * the sanitized public shape via the service client. Callers still gate with
- * {@link isGameVisibleToKid}; this only resolves the row.
+ * caller's RLS-scoped handle, else, when the id points at a published Discover
+ * row, the sanitized public shape via the service handle. Callers still gate
+ * with {@link isGameVisibleToKid}; this only resolves the row.
  */
 export async function getPlayableGame(
-  supabase: Client,
-  service: Client,
+  db: Db,
+  service: Db,
   gameId: string,
 ): Promise<Game | null> {
-  const own = await getGame(supabase, gameId);
+  const own = await getGame(db, gameId);
   if (own) return own;
   return await getPublishedGame(service, gameId);
 }
 
 /** Game ids the given kid has favorited (RLS scopes to the current account). */
 export async function getFavoriteGameIds(
-  supabase: Client,
+  db: Db,
   kidId: string,
 ): Promise<Set<string>> {
-  const { data, error } = await supabase
-    .from("game_favorites")
+  const rows = await db
+    .selectFrom("game_favorites")
     .select("game_id")
-    .eq("kid_id", kidId);
-  if (error) throw error;
-  return new Set((data ?? []).map((row) => row.game_id));
+    .where("kid_id", "=", kidId)
+    .execute();
+  return new Set(rows.map((row) => row.game_id));
 }
 
-/** Mark a game as a kid's favorite. Idempotent — a duplicate favorite is a no-op. */
+/** Mark a game as a kid's favorite. Idempotent: a duplicate favorite is a no-op. */
 export async function addFavorite(
-  supabase: Client,
+  db: Db,
   input: { accountId: string; kidId: string; gameId: string },
 ): Promise<void> {
-  const { error } = await supabase.from("game_favorites").insert({
-    account_id: input.accountId,
-    kid_id: input.kidId,
-    game_id: input.gameId,
-  });
-  // 23505 = unique_violation → already favorited; treat as success.
-  if (error && error.code !== "23505") throw error;
+  try {
+    await db
+      .insertInto("game_favorites")
+      .values({
+        account_id: input.accountId,
+        kid_id: input.kidId,
+        game_id: input.gameId,
+      })
+      .execute();
+  } catch (error) {
+    // unique_violation = already favorited; treat as success.
+    if (isUniqueViolation(error)) return;
+    throw error;
+  }
 }
 
 /** Remove a kid's favorite. Idempotent. */
 export async function removeFavorite(
-  supabase: Client,
+  db: Db,
   input: { kidId: string; gameId: string },
 ): Promise<void> {
-  const { error } = await supabase
-    .from("game_favorites")
-    .delete()
-    .eq("kid_id", input.kidId)
-    .eq("game_id", input.gameId);
-  if (error) throw error;
+  await db
+    .deleteFrom("game_favorites")
+    .where("kid_id", "=", input.kidId)
+    .where("game_id", "=", input.gameId)
+    .execute();
 }

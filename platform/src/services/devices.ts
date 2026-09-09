@@ -1,9 +1,7 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
-
 import { generateSocialId } from "@dodi/crypto/social-id";
-import type { Database, Device, DeviceStatus } from "@dodi/types/database";
+import type { Device, DeviceStatus, DeviceUpdate } from "@dodi/types/database";
 
-type Client = SupabaseClient<Database>;
+import type { Db } from "@/lib/db";
 
 export interface EnrollInput {
   deviceId: string;
@@ -14,13 +12,13 @@ export interface EnrollInput {
 
 /** Create a pending (unclaimed) device with a short pairing code. Service-role. */
 export async function createPendingDevice(
-  supabase: Client,
+  db: Db,
   input: EnrollInput,
 ): Promise<{ id: string; pairingCode: string }> {
   const pairingCode = generateSocialId(8);
-  const { data, error } = await supabase
-    .from("devices")
-    .insert({
+  const { id } = await db
+    .insertInto("devices")
+    .values({
       device_id: input.deviceId,
       kem_public_key: input.kemPublicKey,
       sign_public_key: input.signPublicKey,
@@ -28,111 +26,104 @@ export async function createPendingDevice(
       status: "pending",
       pairing_code: pairingCode,
     })
-    .select("id")
-    .single();
-  if (error) throw new Error(error.message);
-  return { id: (data as { id: string }).id, pairingCode };
+    .returning("id")
+    .executeTakeFirstOrThrow();
+  return { id, pairingCode };
 }
 
 /** Claim a pending device by pairing code, binding it to the account. Service-role. */
 export async function claimDevice(
-  supabase: Client,
+  db: Db,
   pairingCode: string,
   accountId: string,
 ): Promise<Device> {
-  const { data: pending, error: findErr } = await supabase
-    .from("devices")
-    .select("*")
-    .eq("pairing_code", pairingCode)
-    .eq("status", "pending")
-    .is("account_id", null)
-    .maybeSingle();
-  if (findErr) throw new Error(findErr.message);
-  const found = pending as Device | null;
+  const found = await db
+    .selectFrom("devices")
+    .selectAll()
+    .where("pairing_code", "=", pairingCode)
+    .where("status", "=", "pending")
+    .where("account_id", "is", null)
+    .executeTakeFirst();
   if (!found) throw new Error("No pending device for that pairing code");
 
-  const { data, error } = await supabase
-    .from("devices")
-    .update({ account_id: accountId, pairing_code: null })
-    .eq("id", found.id)
-    .select("*")
-    .single();
-  if (error) throw new Error(error.message);
-  return data as Device;
+  return db
+    .updateTable("devices")
+    .set({ account_id: accountId, pairing_code: null })
+    .where("id", "=", found.id)
+    .returningAll()
+    .executeTakeFirstOrThrow();
 }
 
-export async function listDevices(
-  supabase: Client,
-  accountId: string,
-): Promise<Device[]> {
-  const { data, error } = await supabase
-    .from("devices")
-    .select("*")
-    .eq("account_id", accountId)
-    .order("created_at", { ascending: false });
-  if (error) throw new Error(error.message);
-  return (data ?? []) as Device[];
+export async function listDevices(db: Db, accountId: string): Promise<Device[]> {
+  return db
+    .selectFrom("devices")
+    .selectAll()
+    .where("account_id", "=", accountId)
+    .orderBy("created_at", "desc")
+    .execute();
 }
 
 async function setStatus(
-  supabase: Client,
+  db: Db,
   accountId: string,
   id: string,
   status: DeviceStatus,
-  extra: Record<string, unknown> = {},
+  extra: DeviceUpdate = {},
 ): Promise<Device> {
-  const { data, error } = await supabase
-    .from("devices")
-    .update({ status, ...extra })
-    .eq("id", id)
-    .eq("account_id", accountId)
-    .select("*")
-    .single();
-  if (error) throw new Error(error.message);
-  return data as Device;
+  return db
+    .updateTable("devices")
+    .set({ status, ...extra })
+    .where("id", "=", id)
+    .where("account_id", "=", accountId)
+    .returningAll()
+    .executeTakeFirstOrThrow();
 }
 
-export function activateDevice(supabase: Client, accountId: string, id: string) {
-  return setStatus(supabase, accountId, id, "active", {
+export function activateDevice(db: Db, accountId: string, id: string) {
+  return setStatus(db, accountId, id, "active", {
     enrolled_at: new Date().toISOString(),
   });
 }
 
-export function revokeDevice(supabase: Client, accountId: string, id: string) {
-  return setStatus(supabase, accountId, id, "revoked");
+export function revokeDevice(db: Db, accountId: string, id: string) {
+  return setStatus(db, accountId, id, "revoked");
 }
 
 export async function deleteDevice(
-  supabase: Client,
+  db: Db,
   accountId: string,
   id: string,
 ): Promise<void> {
-  const { error } = await supabase
-    .from("devices")
-    .delete()
-    .eq("id", id)
-    .eq("account_id", accountId);
-  if (error) throw new Error(error.message);
+  await db
+    .deleteFrom("devices")
+    .where("id", "=", id)
+    .where("account_id", "=", accountId)
+    .execute();
 }
 
 /** Load an active device by its device_id (for challenge/token). Service-role. */
 export async function getActiveDevice(
-  supabase: Client,
+  db: Db,
   deviceId: string,
 ): Promise<Device | null> {
-  const { data, error } = await supabase
-    .from("devices")
-    .select("*")
-    .eq("device_id", deviceId)
-    .eq("status", "active")
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  return (data ?? null) as Device | null;
+  const row = await db
+    .selectFrom("devices")
+    .selectAll()
+    .where("device_id", "=", deviceId)
+    .where("status", "=", "active")
+    .executeTakeFirst();
+  return row ?? null;
 }
 
-export async function touchLastSeen(supabase: Client, id: string): Promise<void> {
-  await supabase
-    .from("devices")
-    .update({ last_seen_at: new Date().toISOString() })
-    .eq("id", id);
+/** Best-effort last-seen stamp: a failure never blocks token issuance. */
+export async function touchLastSeen(db: Db, id: string): Promise<void> {
+  try {
+    await db
+      .updateTable("devices")
+      .set({ last_seen_at: new Date().toISOString() })
+      .where("id", "=", id)
+      .execute();
+  } catch {
+    // Ignored on purpose (the former client swallowed this error too).
+  }
 }

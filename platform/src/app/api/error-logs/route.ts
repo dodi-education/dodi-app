@@ -44,7 +44,7 @@ const ErrorLogReportSchema = z.object({
 export async function POST(request: Request): Promise<Response> {
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
-  const { accountId, supabase } = auth;
+  const { accountId, db } = auth;
 
   const body: unknown = await request.json();
   const parsed = ErrorLogReportSchema.safeParse(body);
@@ -62,7 +62,7 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   try {
-    const event = await recordErrorLog(supabase, {
+    const event = await recordErrorLog(db, {
       accountId,
       type: "client",
       ...report,

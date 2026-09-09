@@ -44,7 +44,7 @@ const UpdateAccountSchema = z.object({
 export async function GET(request: Request): Promise<Response> {
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
-  const account = await getAccount(auth.supabase, auth.accountId);
+  const account = await getAccount(auth.db, auth.accountId);
   return NextResponse.json({ account });
 }
 
@@ -52,7 +52,7 @@ export async function GET(request: Request): Promise<Response> {
 export async function PATCH(request: Request): Promise<Response> {
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
-  const { accountId, supabase } = auth;
+  const { accountId, db } = auth;
 
   const body: unknown = await request.json();
   const result = UpdateAccountSchema.safeParse(body);
@@ -68,17 +68,17 @@ export async function PATCH(request: Request): Promise<Response> {
 
   try {
     const savedDatePreferences = datePreferences
-      ? await updateAccountDatePreferences(supabase, accountId, datePreferences)
+      ? await updateAccountDatePreferences(db, accountId, datePreferences)
       : undefined;
     if (language !== undefined) {
-      await updateAccountLanguage(supabase, accountId, language);
+      await updateAccountLanguage(db, accountId, language);
     }
     if (parentPinEnc !== undefined) {
-      await updateAccountParentPin(supabase, accountId, parentPinEnc);
+      await updateAccountParentPin(db, accountId, parentPinEnc);
     }
     const savedNotificationPreferences = notificationPreferences
       ? await updateAccountNotificationPreferences(
-          supabase,
+          db,
           accountId,
           notificationPreferences,
         )

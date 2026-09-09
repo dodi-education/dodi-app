@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 
+import { serviceDb } from "@/lib/db";
+import { describeDbError } from "@/lib/db-errors";
 import { logServerError, serverErrorResponse } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
-import { serviceClient } from "@/lib/supabase";
 import { createLogger } from "@/logger";
 import { getKid } from "@/services/kids";
 
@@ -23,20 +24,6 @@ import {
   getTranslationsForGames,
   applyTranslation,
 } from "@/services/game-translations";
-
-/** Extract a useful message from an Error or a Supabase PostgrestError-like object. */
-function describeError(e: unknown): string {
-  if (e instanceof Error) return e.message;
-  if (e && typeof e === "object") {
-    const o = e as Record<string, unknown>;
-    const parts = [o.message, o.details, o.hint].filter(
-      (x): x is string => typeof x === "string" && x.length > 0,
-    );
-    if (parts.length) return parts.join(" — ");
-    if (typeof o.code === "string") return `Database error ${o.code}`;
-  }
-  return "Failed to save game";
-}
 
 /**
  * POST body — create a game. `codeBundle` is required and arrives SEALED: for a
@@ -83,7 +70,7 @@ const CreateGameSchema = z.object({
 export async function GET(request: Request): Promise<NextResponse> {
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
-  const { accountId, supabase } = auth;
+  const { accountId, db } = auth;
 
   const { searchParams } = new URL(request.url);
   const scope = searchParams.get("scope");
@@ -100,11 +87,11 @@ export async function GET(request: Request): Promise<NextResponse> {
   if (scope === "account") {
     try {
       const [games, sharingByGame] = await Promise.all([
-        listAccountGames(supabase, accountId),
-        getAccountSharingByGame(supabase, accountId),
+        listAccountGames(db, accountId),
+        getAccountSharingByGame(db, accountId),
       ]);
       const statsByGame = await getGameStats(
-        serviceClient(),
+        serviceDb,
         games.map((game) => game.id),
       );
       const withSharing = games.map((game) => {
@@ -126,7 +113,7 @@ export async function GET(request: Request): Promise<NextResponse> {
 
   let locale = "en";
   if (kidId) {
-    const kid = await getKid(supabase, kidId);
+    const kid = await getKid(db, kidId);
     if (!kid || kid.account_id !== accountId) {
       return NextResponse.json({ error: "Kid not found" }, { status: 404 });
     }
@@ -137,13 +124,13 @@ export async function GET(request: Request): Promise<NextResponse> {
     // The service client lets the kid library include published Discover rows
     // this family shared (they belong to other accounts, hidden by RLS).
     const games = await listGames(
-      supabase,
+      db,
       { kidId, includeSystem, tags, accountId },
-      kidId ? serviceClient() : undefined,
+      kidId ? serviceDb : undefined,
     );
 
     const translations = await getTranslationsForGames(
-      supabase,
+      db,
       games.map((g) => g.id),
       locale,
     );
@@ -151,7 +138,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     // Kid view carries a per-kid favorite flag so the library can split the grid
     // into favorites vs the rest. Non-kid scopes have no favorites.
     const favoriteIds = kidId
-      ? await getFavoriteGameIds(supabase, kidId)
+      ? await getFavoriteGameIds(db, kidId)
       : new Set<string>();
 
     const translatedGames = games.map((game) => ({
@@ -170,7 +157,7 @@ export async function GET(request: Request): Promise<NextResponse> {
 export async function POST(request: Request): Promise<NextResponse> {
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
-  const { accountId, supabase } = auth;
+  const { accountId, db } = auth;
 
   const body: unknown = await request.json();
   const parsed = CreateGameSchema.safeParse(body);
@@ -186,7 +173,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   const { kidId } = data;
 
   try {
-    const kid = await getKid(supabase, kidId);
+    const kid = await getKid(db, kidId);
     if (!kid || kid.account_id !== accountId) {
       return NextResponse.json({ error: "Kid not found" }, { status: 404 });
     }
@@ -195,7 +182,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     // game?" and "should kids see it?" are all decided by the client, which is
     // the only side that can read the bundle's placeholder marker and the
     // success definition — hence the conservative defaults (inactive, open).
-    const created = await createCustomGame(supabase, {
+    const created = await createCustomGame(db, {
       accountId: accountId,
       kidId,
       sourceGameId: data.sourceGameId,
@@ -219,7 +206,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     });
 
     if (data.audience) {
-      await replaceGameSharings(supabase, created.id, accountId, {
+      await replaceGameSharings(db, created.id, accountId, {
         family: data.audience.isFamily,
         kidIds: data.audience.audienceIds,
       });
@@ -228,7 +215,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     log.info("game_created", { kidId, gameId: created.id });
     return NextResponse.json(created, { status: 201 });
   } catch (error) {
-    const message = describeError(error);
+    const message = describeDbError(error);
     log.error("creation_failed", { kidId, error: message });
     logServerError("api/games#POST", error, { accountId, httpStatus: 500 });
     return NextResponse.json({ error: message }, { status: 500 });

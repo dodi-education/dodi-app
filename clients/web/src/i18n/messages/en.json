@@ -50,6 +50,7 @@
     "resendFailed": "We couldn't send a new code. Please try again.",
     "wrongCode": "That code isn't right. Check it and try again.",
     "codeExpired": "That code has expired. Request a new one.",
+    "tooManyAttempts": "Too many wrong attempts. Request a new code.",
     "backToDifferentEmail": "Use a different email",
     "tryAgain": "Try again",
     "genericSignupError": "We couldn't complete your registration. Please check your details and try again.",

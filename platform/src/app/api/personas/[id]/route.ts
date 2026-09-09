@@ -28,10 +28,10 @@ export async function GET(
   const { id } = await context.params;
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
-  const { accountId, supabase } = auth;
+  const { accountId, db } = auth;
 
   try {
-    const persona = await getPersona(supabase, id);
+    const persona = await getPersona(db, id);
     if (!persona || (!persona.is_system_default && persona.account_id !== accountId)) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
@@ -53,9 +53,9 @@ export async function PATCH(
   const { id } = await context.params;
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
-  const { accountId, supabase } = auth;
+  const { accountId, db } = auth;
 
-  const existing = await getPersona(supabase, id);
+  const existing = await getPersona(db, id);
   if (!existing || existing.account_id !== accountId) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
@@ -78,7 +78,7 @@ export async function PATCH(
   }
 
   try {
-    const persona = await updatePersona(supabase, id, result.data);
+    const persona = await updatePersona(db, id, result.data);
     return NextResponse.json(persona);
   } catch (error) {
     return serverErrorResponse(
@@ -97,9 +97,9 @@ export async function DELETE(
   const { id } = await context.params;
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
-  const { accountId, supabase } = auth;
+  const { accountId, db } = auth;
 
-  const existing = await getPersona(supabase, id);
+  const existing = await getPersona(db, id);
   if (!existing || existing.account_id !== accountId) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
@@ -112,7 +112,7 @@ export async function DELETE(
   }
 
   try {
-    await deletePersona(supabase, id);
+    await deletePersona(db, id);
     return NextResponse.json({ success: true });
   } catch (error) {
     return serverErrorResponse(

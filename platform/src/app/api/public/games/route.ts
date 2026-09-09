@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { serverErrorResponse } from "@/lib/error-logs";
-import { serviceClient } from "@/lib/supabase";
+import { serviceDb } from "@/lib/db";
 import { listPublishedSitemapEntries } from "@/services/discover";
 
 /**
@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(): Promise<NextResponse> {
   try {
-    const games = await listPublishedSitemapEntries(serviceClient());
+    const games = await listPublishedSitemapEntries(serviceDb);
     return NextResponse.json({ games });
   } catch (error) {
     return serverErrorResponse(

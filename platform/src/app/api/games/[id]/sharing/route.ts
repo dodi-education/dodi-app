@@ -16,15 +16,15 @@ export async function GET(
 
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
-  const { accountId, supabase } = auth;
+  const { accountId, db } = auth;
 
   try {
-    const game = await getGame(supabase, id);
+    const game = await getGame(db, id);
     if (!game || game.account_id !== accountId) {
       return NextResponse.json({ error: "Game not found" }, { status: 404 });
     }
 
-    const sharing = await getGameSharing(supabase, game.id);
+    const sharing = await getGameSharing(db, game.id);
     return NextResponse.json(sharing);
   } catch (error) {
     return serverErrorResponse(error, "Failed to fetch sharing", "api/games/[id]/sharing#GET", {

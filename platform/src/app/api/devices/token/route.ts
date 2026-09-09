@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { fromBase64Url, utf8ToBytes, verify } from "@dodi/crypto";
 
 import { issueDeviceBearer, verifyChallenge } from "@/lib/device-token";
-import { serviceClient } from "@/lib/supabase";
+import { serviceDb } from "@/lib/db";
 import { getActiveDevice, touchLastSeen } from "@/services/devices";
 
 /** Public: a device proves possession of its ML-DSA key by signing the nonce,
@@ -25,8 +25,8 @@ export async function POST(request: Request): Promise<Response> {
       { status: 401 },
     );
   }
-  const supabase = serviceClient();
-  const device = await getActiveDevice(supabase, deviceId);
+  const db = serviceDb;
+  const device = await getActiveDevice(db, deviceId);
   if (!device || !device.account_id) {
     return NextResponse.json(
       { error: "Unknown or inactive device" },
@@ -44,7 +44,7 @@ export async function POST(request: Request): Promise<Response> {
       { status: 401 },
     );
   }
-  await touchLastSeen(supabase, device.id);
+  await touchLastSeen(db, device.id);
   return NextResponse.json({
     token: issueDeviceBearer(device.account_id, deviceId),
   });

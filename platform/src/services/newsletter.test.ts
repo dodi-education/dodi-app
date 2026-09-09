@@ -1,7 +1,6 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
-import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database } from "@dodi/types/database";
+import { createTestDb, type TestDatabase } from "@/test-support/pglite-db";
 
 import {
   getNewsletterLists,
@@ -36,78 +35,111 @@ describe("getNewsletterLists", () => {
   });
 });
 
-function fakeClient(result: {
-  data?: unknown;
-  error?: { message: string } | null;
-}): { client: SupabaseClient<Database>; rpc: ReturnType<typeof vi.fn> } {
-  const rpc = vi.fn().mockResolvedValue(result);
-  return { client: { rpc } as unknown as SupabaseClient<Database>, rpc };
-}
-
 const base = {
-  email: "kid@example.com",
   locale: "en" as const,
   list: "newsletter",
-  ipHash: "abc123",
+  ipHash: null,
   maxPerIp: 5,
   window: "01:00:00",
 };
 
 describe("recordNewsletterSignup", () => {
-  it("forwards the submission to the rpc with the right arg names", async () => {
-    const { client, rpc } = fakeClient({
-      data: [{ id: "id-1", is_new: true, rate_limited: false }],
+  let t: TestDatabase;
+
+  beforeAll(async () => {
+    t = await createTestDb();
+  }, 60_000);
+
+  afterAll(async () => {
+    await t?.close();
+  });
+
+  it("stores a new signup and reports it as new", async () => {
+    const result = await recordNewsletterSignup(t.serviceDb, {
+      ...base,
+      email: "new@example.com",
     });
-    await recordNewsletterSignup(client, base);
-    expect(rpc).toHaveBeenCalledWith("record_newsletter_signup", {
-      p_email: "kid@example.com",
-      p_locale: "en",
-      p_list: "newsletter",
-      p_ip_hash: "abc123",
-      p_max_per_ip: 5,
-      p_window: "01:00:00",
+    expect(result.isNew).toBe(true);
+    expect(result.rateLimited).toBe(false);
+    expect(result.id).toMatch(/^[0-9a-f-]{36}$/);
+
+    const row = await t.serviceDb
+      .selectFrom("newsletter_signups")
+      .select(["email", "locale", "list", "ip_hash"])
+      .where("id", "=", result.id!)
+      .executeTakeFirstOrThrow();
+    expect(row).toEqual({
+      email: "new@example.com",
+      locale: "en",
+      list: "newsletter",
+      ip_hash: null,
     });
   });
 
-  it("maps a new-row result", async () => {
-    const { client } = fakeClient({
-      data: [{ id: "id-1", is_new: true, rate_limited: false }],
+  it("dedupes an existing email on the same list (case-insensitive)", async () => {
+    const first = await recordNewsletterSignup(t.serviceDb, {
+      ...base,
+      email: "dupe@example.com",
     });
-    expect(await recordNewsletterSignup(client, base)).toEqual({
-      id: "id-1",
-      isNew: true,
-      rateLimited: false,
+    const again = await recordNewsletterSignup(t.serviceDb, {
+      ...base,
+      email: "DUPE@example.com",
     });
+    expect(again).toEqual({ id: first.id, isNew: false, rateLimited: false });
   });
 
-  it("maps a deduped (existing) result", async () => {
-    const { client } = fakeClient({
-      data: [{ id: "id-1", is_new: false, rate_limited: false }],
+  it("keeps the same email separate across lists", async () => {
+    process.env.NEWSLETTER_LISTS = "newsletter,product-updates";
+    const a = await recordNewsletterSignup(t.serviceDb, {
+      ...base,
+      email: "multi@example.com",
     });
-    expect(await recordNewsletterSignup(client, base)).toMatchObject({
-      isNew: false,
-      rateLimited: false,
+    const b = await recordNewsletterSignup(t.serviceDb, {
+      ...base,
+      list: "product-updates",
+      email: "multi@example.com",
     });
+    expect(a.isNew).toBe(true);
+    expect(b.isNew).toBe(true);
+    expect(b.id).not.toBe(a.id);
   });
 
-  it("maps a rate-limited result", async () => {
-    const { client } = fakeClient({
-      data: [{ id: null, is_new: false, rate_limited: true }],
+  it("rate-limits by ip hash within the window and stores nothing", async () => {
+    const ipHash = "ip-limited";
+    for (let i = 0; i < 2; i++) {
+      const ok = await recordNewsletterSignup(t.serviceDb, {
+        ...base,
+        ipHash,
+        maxPerIp: 2,
+        email: `rl-${i}@example.com`,
+      });
+      expect(ok.rateLimited).toBe(false);
+    }
+    const limited = await recordNewsletterSignup(t.serviceDb, {
+      ...base,
+      ipHash,
+      maxPerIp: 2,
+      email: "rl-3@example.com",
     });
-    expect(await recordNewsletterSignup(client, base)).toEqual({
-      id: null,
-      isNew: false,
-      rateLimited: true,
-    });
+    expect(limited).toEqual({ id: null, isNew: false, rateLimited: true });
+
+    const stored = await t.serviceDb
+      .selectFrom("newsletter_signups")
+      .select(({ fn }) => fn.countAll<number>().as("count"))
+      .where("email", "=", "rl-3@example.com")
+      .executeTakeFirstOrThrow();
+    expect(stored.count).toBe(0);
   });
 
-  it("throws when the rpc errors", async () => {
-    const { client } = fakeClient({ error: { message: "boom" } });
-    await expect(recordNewsletterSignup(client, base)).rejects.toThrow("boom");
-  });
-
-  it("throws when the rpc returns no row", async () => {
-    const { client } = fakeClient({ data: [] });
-    await expect(recordNewsletterSignup(client, base)).rejects.toThrow("no row");
+  it("skips the per-ip limit when no hash is available", async () => {
+    for (let i = 0; i < 4; i++) {
+      const result = await recordNewsletterSignup(t.serviceDb, {
+        ...base,
+        ipHash: null,
+        maxPerIp: 1,
+        email: `anon-${i}@example.com`,
+      });
+      expect(result.rateLimited).toBe(false);
+    }
   });
 });

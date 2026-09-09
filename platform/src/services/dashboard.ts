@@ -1,8 +1,4 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
-
-import type { Database } from "@dodi/types/database";
-
-type Client = SupabaseClient<Database>;
+import type { Db } from "@/lib/db";
 
 export interface DashboardStats {
   sessionsToday: number;
@@ -12,7 +8,7 @@ export interface DashboardStats {
 
 /** Aggregate counts for the parent dashboard stat strip. */
 export async function getDashboardStats(
-  supabase: Client,
+  db: Db,
   accountId: string,
 ): Promise<DashboardStats> {
   const startOfToday = new Date();
@@ -20,30 +16,33 @@ export async function getDashboardStats(
   const startOfWeek = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
   const [today, week, games] = await Promise.all([
-    supabase
-      .from("activities")
-      .select("id", { count: "exact", head: true })
-      .eq("account_id", accountId)
-      .eq("event", "session_start")
-      .gte("created_at", startOfToday.toISOString()),
-    supabase
-      .from("activities")
-      .select("id", { count: "exact", head: true })
-      .eq("account_id", accountId)
-      .eq("event", "session_start")
-      .gte("created_at", startOfWeek.toISOString()),
-    supabase
-      .from("games")
-      .select("id", { count: "exact", head: true })
-      .eq("account_id", accountId)
-      .eq("is_system", false)
+    db
+      .selectFrom("activities")
+      .select(({ fn }) => fn.countAll<number>().as("count"))
+      .where("account_id", "=", accountId)
+      .where("event", "=", "session_start")
+      .where("created_at", ">=", startOfToday.toISOString())
+      .executeTakeFirstOrThrow(),
+    db
+      .selectFrom("activities")
+      .select(({ fn }) => fn.countAll<number>().as("count"))
+      .where("account_id", "=", accountId)
+      .where("event", "=", "session_start")
+      .where("created_at", ">=", startOfWeek.toISOString())
+      .executeTakeFirstOrThrow(),
+    db
+      .selectFrom("games")
+      .select(({ fn }) => fn.countAll<number>().as("count"))
+      .where("account_id", "=", accountId)
+      .where("is_system", "=", false)
       // Publication copies duplicate a game the parent already made.
-      .is("publication_requested_at", null),
+      .where("publication_requested_at", "is", null)
+      .executeTakeFirstOrThrow(),
   ]);
 
   return {
-    sessionsToday: today.count ?? 0,
-    sessionsThisWeek: week.count ?? 0,
-    gamesCreated: games.count ?? 0,
+    sessionsToday: Number(today.count ?? 0),
+    sessionsThisWeek: Number(week.count ?? 0),
+    gamesCreated: Number(games.count ?? 0),
   };
 }

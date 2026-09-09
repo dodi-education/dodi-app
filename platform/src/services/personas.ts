@@ -1,13 +1,6 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Persona, PersonaInsert, PersonaUpdate } from "@dodi/types/database";
 
-import type {
-  Database,
-  Persona,
-  PersonaInsert,
-  PersonaUpdate,
-} from "@dodi/types/database";
-
-type Client = SupabaseClient<Database>;
+import type { Db } from "@/lib/db";
 
 /** Seed value for the global default persona. Used in migrations only. */
 export const DEFAULT_DODI_SOUL = `# Dodi
@@ -71,19 +64,19 @@ export const DEFAULT_DODI_SOUL = `# Dodi
 - When uncertain, err on the side of remembering — parents can always edit the memory`;
 
 export async function listPersonas(
-  supabase: Client,
+  db: Db,
   accountId: string,
 ): Promise<Persona[]> {
-  const { data, error } = await supabase
-    .from("personas")
-    .select("*")
-    .or(`account_id.eq.${accountId},account_id.is.null`)
-    .order("created_at", { ascending: true });
-
-  if (error) throw error;
+  const personas = await db
+    .selectFrom("personas")
+    .selectAll()
+    .where((eb) =>
+      eb.or([eb("account_id", "=", accountId), eb("account_id", "is", null)]),
+    )
+    .orderBy("created_at", "asc")
+    .execute();
 
   // Sort system default first
-  const personas = (data ?? []) as unknown as Persona[];
   personas.sort((a, b) => {
     if (a.is_system_default && !b.is_system_default) return -1;
     if (!a.is_system_default && b.is_system_default) return 1;
@@ -94,77 +87,51 @@ export async function listPersonas(
 }
 
 export async function getPersona(
-  supabase: Client,
+  db: Db,
   personaId: string,
 ): Promise<Persona | null> {
-  const { data, error } = await supabase
-    .from("personas")
-    .select("*")
-    .eq("id", personaId)
-    .single();
-
-  if (error) {
-    if (error.code === "PGRST116") return null;
-    throw error;
-  }
-  return data as unknown as Persona;
+  const persona = await db
+    .selectFrom("personas")
+    .selectAll()
+    .where("id", "=", personaId)
+    .executeTakeFirst();
+  return persona ?? null;
 }
 
-export async function getGlobalDefaultPersona(
-  supabase: Client,
-): Promise<Persona | null> {
-  const { data, error } = await supabase
-    .from("personas")
-    .select("*")
-    .eq("is_system_default", true)
+export async function getGlobalDefaultPersona(db: Db): Promise<Persona | null> {
+  const persona = await db
+    .selectFrom("personas")
+    .selectAll()
+    .where("is_system_default", "=", true)
     .limit(1)
-    .single();
-
-  if (error) {
-    if (error.code === "PGRST116") return null;
-    throw error;
-  }
-  return data as unknown as Persona;
+    .executeTakeFirst();
+  return persona ?? null;
 }
 
 export async function createPersona(
-  supabase: Client,
+  db: Db,
   persona: PersonaInsert,
 ): Promise<Persona> {
-  const { data, error } = await supabase
-    .from("personas")
-    .insert(persona)
-    .select()
-    .single();
-
-  if (error) throw error;
-  return data as unknown as Persona;
+  return db
+    .insertInto("personas")
+    .values(persona)
+    .returningAll()
+    .executeTakeFirstOrThrow();
 }
 
 export async function updatePersona(
-  supabase: Client,
+  db: Db,
   personaId: string,
   updates: PersonaUpdate,
 ): Promise<Persona> {
-  const { data, error } = await supabase
-    .from("personas")
-    .update(updates)
-    .eq("id", personaId)
-    .select()
-    .single();
-
-  if (error) throw error;
-  return data as unknown as Persona;
+  return db
+    .updateTable("personas")
+    .set(updates)
+    .where("id", "=", personaId)
+    .returningAll()
+    .executeTakeFirstOrThrow();
 }
 
-export async function deletePersona(
-  supabase: Client,
-  personaId: string,
-): Promise<void> {
-  const { error } = await supabase
-    .from("personas")
-    .delete()
-    .eq("id", personaId);
-
-  if (error) throw error;
+export async function deletePersona(db: Db, personaId: string): Promise<void> {
+  await db.deleteFrom("personas").where("id", "=", personaId).execute();
 }

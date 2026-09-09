@@ -20,15 +20,15 @@ export async function GET(
 
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
-  const { accountId, supabase } = auth;
+  const { accountId, db } = auth;
 
   try {
-    const game = await getGame(supabase, id);
+    const game = await getGame(db, id);
     if (!game) {
       return NextResponse.json({ error: "Game not found" }, { status: 404 });
     }
 
-    const versions = await listGameVersions(supabase, id);
+    const versions = await listGameVersions(db, id);
     return NextResponse.json({ versions });
   } catch (error) {
     return serverErrorResponse(

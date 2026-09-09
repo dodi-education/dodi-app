@@ -1,0 +1,40 @@
+# Local development database only (the apps still run with `pnpm dev`).
+#
+#   docker compose -f docker-compose.dev.yml up -d
+#   docker compose -f docker-compose.dev.yml down        # keep data
+#   docker compose -f docker-compose.dev.yml down -v     # wipe data (re-runs init)
+#
+# First start runs platform/db/docker/init/00-roles-and-dbs.sh, which creates the
+# roles (dodi_migrator, dodi_app, dodi_service, dodi_com) and the databases
+# (dodi_platform, dodi_commercial) exactly like production. Connection strings
+# for .env.local (defaults below, override via the environment or a root .env):
+#   DATABASE_URL_APP=postgres://dodi_app:dodi_app@127.0.0.1:5432/dodi_platform
+#   DATABASE_URL_SERVICE=postgres://dodi_service:dodi_service@127.0.0.1:5432/dodi_platform
+#   DATABASE_URL_MIGRATOR=postgres://dodi_migrator:dodi_migrator@127.0.0.1:5432/dodi_platform
+#   COM_DATABASE_URL=postgres://dodi_com:dodi_com@127.0.0.1:5432/dodi_commercial (dodi-com/ai)
+
+name: dodi-dev
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5432:5432"
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      DODI_MIGRATOR_PASSWORD: ${DODI_MIGRATOR_PASSWORD:-dodi_migrator}
+      DODI_APP_PASSWORD: ${DODI_APP_PASSWORD:-dodi_app}
+      DODI_SERVICE_PASSWORD: ${DODI_SERVICE_PASSWORD:-dodi_service}
+      DODI_COM_PASSWORD: ${DODI_COM_PASSWORD:-dodi_com}
+    volumes:
+      - pgdata_dev:/var/lib/postgresql/data
+      - ./platform/db/docker/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata_dev:

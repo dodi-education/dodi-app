@@ -51,10 +51,10 @@ export async function GET(
   const { id } = await context.params;
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
-  const { accountId, supabase } = auth;
+  const { accountId, db } = auth;
 
   try {
-    const kid = await getKid(supabase, id);
+    const kid = await getKid(db, id);
     if (!kid || kid.account_id !== accountId) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
@@ -74,10 +74,10 @@ export async function PATCH(
   const { id } = await context.params;
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
-  const { accountId, supabase } = auth;
+  const { accountId, db } = auth;
 
   // Verify ownership
-  const existing = await getKid(supabase, id);
+  const existing = await getKid(db, id);
   if (!existing || existing.account_id !== accountId) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
@@ -93,7 +93,7 @@ export async function PATCH(
   }
 
   try {
-    const kid = await updateKid(supabase, id, result.data);
+    const kid = await updateKid(db, id, result.data);
     return NextResponse.json(kid);
   } catch (error) {
     return serverErrorResponse(error, "Failed to update kid", "api/kids/[id]#PATCH", {
@@ -109,16 +109,16 @@ export async function DELETE(
   const { id } = await context.params;
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
-  const { accountId, supabase } = auth;
+  const { accountId, db } = auth;
 
   // Verify ownership
-  const existing = await getKid(supabase, id);
+  const existing = await getKid(db, id);
   if (!existing || existing.account_id !== accountId) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
   try {
-    await deleteKid(supabase, id);
+    await deleteKid(db, id);
     return NextResponse.json({ success: true });
   } catch (error) {
     return serverErrorResponse(error, "Failed to delete kid", "api/kids/[id]#DELETE", {

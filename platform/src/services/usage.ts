@@ -3,15 +3,13 @@
  * game-plays service shape. Cost is NOT tracked (BYOK: the provider's own
  * dashboards are the source of truth for money) — this records usage only.
  * Per-call context sizes land in typed `meta_*` columns. `aggregateMonthly` is
- * pure so it's unit-testable without supabase.
+ * pure so it's unit-testable without a database.
  */
 
-import type { SupabaseClient } from "@supabase/supabase-js";
-
-import type { Database, AiUsageLog, AiUsageLogInsert } from "@dodi/types/database";
+import type { AiUsageLog, AiUsageLogInsert } from "@dodi/types/database";
 import type { TokenUsage, UsageEventType, UsageMeta } from "@dodi/types/usage";
 
-type Client = SupabaseClient<Database>;
+import type { Db } from "@/lib/db";
 
 export interface RecordUsageInput {
   accountId: string;
@@ -26,7 +24,7 @@ export interface RecordUsageInput {
 }
 
 export async function recordUsage(
-  supabase: Client,
+  db: Db,
   input: RecordUsageInput,
 ): Promise<AiUsageLog> {
   const m = input.meta ?? {};
@@ -55,14 +53,11 @@ export async function recordUsage(
     meta_persona_chars: m.personaChars ?? null,
   };
 
-  const { data, error } = await supabase
-    .from("ai_usage_logs")
-    .insert(payload)
-    .select("*")
-    .single();
-
-  if (error) throw error;
-  return data as unknown as AiUsageLog;
+  return db
+    .insertInto("ai_usage_logs")
+    .values(payload)
+    .returningAll()
+    .executeTakeFirstOrThrow();
 }
 
 /** The subset of an ai_usage_logs row `aggregateMonthly` needs. */
@@ -169,21 +164,29 @@ function addUtcMonth(d: Date, n: number): Date {
 }
 
 export async function getMonthlyUsage(
-  supabase: Client,
+  db: Db,
   accountId: string,
   monthStart: Date,
 ): Promise<MonthlyUsage> {
   const start = startOfUtcMonth(monthStart);
   const end = addUtcMonth(start, 1);
-  const { data, error } = await supabase
-    .from("ai_usage_logs")
-    .select(
-      "event_type,provider,model,kid_id,input_tokens,output_tokens,cache_write_tokens,cache_read_tokens,voice_seconds",
-    )
-    .eq("account_id", accountId)
-    .gte("created_at", start.toISOString())
-    .lt("created_at", end.toISOString());
+  const rows = await db
+    .selectFrom("ai_usage_logs")
+    .select([
+      "event_type",
+      "provider",
+      "model",
+      "kid_id",
+      "input_tokens",
+      "output_tokens",
+      "cache_write_tokens",
+      "cache_read_tokens",
+      "voice_seconds",
+    ])
+    .where("account_id", "=", accountId)
+    .where("created_at", ">=", start.toISOString())
+    .where("created_at", "<", end.toISOString())
+    .execute();
 
-  if (error) throw error;
-  return aggregateMonthly((data ?? []) as UsageRow[]);
+  return aggregateMonthly(rows);
 }

@@ -53,7 +53,7 @@ const UsageReportSchema = z.object({
 export async function POST(request: Request): Promise<Response> {
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
-  const { accountId, supabase } = auth;
+  const { accountId, db } = auth;
 
   const body: unknown = await request.json();
   const parsed = UsageReportSchema.safeParse(body);
@@ -68,13 +68,13 @@ export async function POST(request: Request): Promise<Response> {
   try {
     // Attribution must belong to the caller's account (like the plays route).
     if (report.kidId) {
-      const kid = await getKid(supabase, report.kidId);
+      const kid = await getKid(db, report.kidId);
       if (!kid || kid.account_id !== accountId) {
         return NextResponse.json({ error: "Kid not found" }, { status: 404 });
       }
     }
 
-    const event = await recordUsage(supabase, { accountId, ...report });
+    const event = await recordUsage(db, { accountId, ...report });
     return NextResponse.json({ id: event.id }, { status: 201 });
   } catch (error) {
     return serverErrorResponse(error, "Failed to record usage", "api/usage#POST", {
@@ -91,10 +91,10 @@ export async function POST(request: Request): Promise<Response> {
 export async function GET(request: Request): Promise<Response> {
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
-  const { accountId, supabase } = auth;
+  const { accountId, db } = auth;
 
   try {
-    const monthly = await getMonthlyUsage(supabase, accountId, new Date());
+    const monthly = await getMonthlyUsage(db, accountId, new Date());
     return NextResponse.json({
       perModel: monthly.perModel,
       perKid: monthly.perKid,

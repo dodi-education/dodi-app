@@ -7,12 +7,12 @@ import { Section } from "@/components/parent/section";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createClient } from "@/lib/supabase/client";
+import { authClient } from "@/lib/auth/client";
 import { useVaultStore } from "@/stores/vault-store";
 
 /**
  * Change-password form for a signed-in parent whose vault is already unlocked
- * (the parent layout's VaultGate guarantees this). It updates the Supabase auth
+ * (the parent layout's VaultGate guarantees this). It updates the auth
  * password and re-wraps the vault under it in one step — no old password or
  * nsec needed, since the in-memory VMK proves vault access.
  */
@@ -40,11 +40,15 @@ export function ChangePassword() {
 
     setBusy(true);
     try {
-      const supabase = createClient();
       // Auth first (validates length/session); only then re-wrap the vault, so a
       // rejected auth update leaves the vault untouched.
-      const { error: authError } = await supabase.auth.updateUser({ password });
-      if (authError) throw new Error(authError.message);
+      const { error: authError } = await authClient.$fetch("/password/set", {
+        method: "POST",
+        body: { password },
+      });
+      if (authError) {
+        throw new Error(authError.message ?? t("changePasswordFailed"));
+      }
       await useVaultStore.getState().changePassword(password);
       setDone(true);
       setPassword("");

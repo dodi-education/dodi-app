@@ -13,7 +13,7 @@ const SelectPlanSchema = z.object({ handle: z.string().min(1) });
 export async function POST(request: Request): Promise<Response> {
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
-  const { accountId, supabase } = auth;
+  const { accountId, db } = auth;
 
   const body: unknown = await request.json();
   const parsed = SelectPlanSchema.safeParse(body);
@@ -25,7 +25,7 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   try {
-    await applyPlanToAccount(supabase, accountId, parsed.data.handle);
+    await applyPlanToAccount(db, accountId, parsed.data.handle);
     return NextResponse.json({ ok: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to set plan";

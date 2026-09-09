@@ -29,10 +29,10 @@ const UpdateConfigSchema = z.object({
 export async function GET(request: Request): Promise<NextResponse> {
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
-  const { accountId, supabase } = auth;
+  const { accountId, db } = auth;
 
   try {
-    const config = await getModelConfig(supabase, accountId);
+    const config = await getModelConfig(db, accountId);
     return NextResponse.json(config);
   } catch (error) {
     return serverErrorResponse(error, "Failed to fetch config", "api/ai/config#GET", {
@@ -45,7 +45,7 @@ export async function GET(request: Request): Promise<NextResponse> {
 export async function PATCH(request: Request): Promise<NextResponse> {
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
-  const { accountId, supabase } = auth;
+  const { accountId, db } = auth;
 
   const body: unknown = await request.json();
   const result = UpdateConfigSchema.safeParse(body);
@@ -69,7 +69,7 @@ export async function PATCH(request: Request): Promise<NextResponse> {
       imageProvider: result.data.imageProvider,
       imageModel: result.data.imageModel,
     };
-    await updateModelConfig(supabase, accountId, config);
+    await updateModelConfig(db, accountId, config);
     return NextResponse.json(config);
   } catch (error) {
     return serverErrorResponse(error, "Failed to update config", "api/ai/config#PATCH", {
@@ -86,10 +86,10 @@ export async function PATCH(request: Request): Promise<NextResponse> {
 export async function DELETE(request: Request): Promise<NextResponse> {
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
-  const { accountId, supabase } = auth;
+  const { accountId, db } = auth;
 
   try {
-    await clearModelConfig(supabase, accountId);
+    await clearModelConfig(db, accountId);
     return NextResponse.json({ cleared: true });
   } catch (error) {
     return serverErrorResponse(error, "Failed to clear config", "api/ai/config#DELETE", {

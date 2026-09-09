@@ -4,9 +4,9 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 
 import { Icon } from "@/components/shared/icon";
+import { signOut } from "@/lib/auth/client";
 import { offlineCache } from "@/lib/offline/offline-cache";
 import { clearParentUnlocked } from "@/lib/parent-lock";
-import { createClient } from "@/lib/supabase/client";
 import { useAccountStore } from "@/stores/account-store";
 import { useDodiAIBillingStore } from "@/stores/dodi-ai-billing-store";
 import { useDodiAIKeyStore } from "@/stores/dodi-ai-key-store";
@@ -28,8 +28,7 @@ export function SignOutButton() {
     // Offline caches persist in IndexedDB — wipe them so another account on
     // this device never inherits cached (ciphertext) rows or vault keys.
     await offlineCache.clearAll();
-    const supabase = createClient();
-    await supabase.auth.signOut();
+    await signOut();
     router.push("/login");
     router.refresh();
   }

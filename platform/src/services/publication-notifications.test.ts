@@ -1,10 +1,18 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { randomUUID } from "node:crypto";
 
-import type { Game } from "@dodi/types/database";
+import {
+  Kysely,
+  PostgresAdapter,
+  PostgresIntrospector,
+  PostgresQueryCompiler,
+} from "kysely";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+import type { Database, Game, Json } from "@dodi/types/database";
 
 import { publicationOutcomeCopy } from "@/emails/strings";
+import { createTestDb, type TestDatabase } from "@/test-support/pglite-db";
 
-import { type Row, fakeDb } from "../test-support/fake-supabase";
 import {
   notifyPublisherApproved,
   notifyPublisherRejected,
@@ -14,32 +22,65 @@ import {
 const { sendEmailMock } = vi.hoisted(() => ({ sendEmailMock: vi.fn() }));
 vi.mock("@/lib/email", () => ({ sendEmail: sendEmailMock }));
 
-const ACCOUNT = "acc-1";
+let t: TestDatabase;
+/** The publisher's real account (email parent@example.com). */
+let account: string;
+
+beforeAll(async () => {
+  t = await createTestDb();
+  account = await t.createAccount("parent@example.com");
+}, 60_000);
+
+afterAll(async () => {
+  await t?.close();
+});
+
+/** A handle whose every query fails: exercises the "never throws" contract. */
+function failingDb(): Kysely<Database> {
+  return new Kysely<Database>({
+    dialect: {
+      createAdapter: () => new PostgresAdapter(),
+      createQueryCompiler: () => new PostgresQueryCompiler(),
+      createIntrospector: (db) => new PostgresIntrospector(db),
+      createDriver: () => ({
+        init: async () => {},
+        acquireConnection: async () => {
+          throw new Error("boom");
+        },
+        beginTransaction: async () => {},
+        commitTransaction: async () => {},
+        rollbackTransaction: async () => {},
+        releaseConnection: async () => {},
+        destroy: async () => {},
+      }),
+    },
+  });
+}
 
 function publication(overrides: Partial<Game> = {}): Game {
   return {
     id: "pub-1",
-    account_id: ACCOUNT,
-    published_by_account_id: ACCOUNT,
+    account_id: account,
+    published_by_account_id: account,
     source_game_id: "game-1",
     title: "Counting Comets",
     ...overrides,
   } as Game;
 }
 
-/** One-account DB; override columns (email/language/prefs) per test. */
-function makeDb(account: Row = {}) {
-  return fakeDb<{ accounts: Row[] }>({
-    accounts: [
-      {
-        id: ACCOUNT,
-        email: "parent@example.com",
-        language: "en",
-        notification_preferences: {},
-        ...account,
-      },
-    ],
-  });
+/** Override the publisher's plaintext columns (language/prefs) per test. */
+async function setAccount(fields: {
+  language?: string;
+  notification_preferences?: Json;
+}): Promise<void> {
+  await t.serviceDb
+    .updateTable("accounts")
+    .set({
+      language: fields.language ?? "en",
+      notification_preferences: fields.notification_preferences ?? {},
+    })
+    .where("id", "=", account)
+    .execute();
 }
 
 /** The one send this notifier makes, for terse assertions. */
@@ -47,16 +88,16 @@ function lastSend() {
   return sendEmailMock.mock.calls.at(-1)?.[0];
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   sendEmailMock.mockReset();
   sendEmailMock.mockResolvedValue(true);
   process.env.NEXT_PUBLIC_APP_URL = "https://app.dodi.app";
+  await setAccount({});
 });
 
 describe("notifyPublisherApproved", () => {
   it("emails the publisher a detail-free approval", async () => {
-    const db = makeDb();
-    await notifyPublisherApproved(db.client, publication());
+    await notifyPublisherApproved(t.serviceDb, publication());
 
     expect(sendEmailMock).toHaveBeenCalledTimes(1);
     expect(lastSend().to).toBe("parent@example.com");
@@ -66,15 +107,14 @@ describe("notifyPublisherApproved", () => {
   });
 
   it("localizes the subject to the publisher's language", async () => {
-    const db = makeDb({ language: "de" });
-    await notifyPublisherApproved(db.client, publication());
+    await setAccount({ language: "de" });
+    await notifyPublisherApproved(t.serviceDb, publication());
     expect(lastSend().subject).toBe(publicationOutcomeCopy("de").approvedSubject);
   });
 
   it("falls back to account_id when published_by_account_id is null", async () => {
-    const db = makeDb();
     await notifyPublisherApproved(
-      db.client,
+      t.serviceDb,
       publication({ published_by_account_id: null }),
     );
     expect(sendEmailMock).toHaveBeenCalledTimes(1);
@@ -83,11 +123,10 @@ describe("notifyPublisherApproved", () => {
 
 describe("notifyPublisherRejected", () => {
   it("passes the reasons and a resubmit path on a soft rejection", async () => {
-    const db = makeDb();
     const reasons = [
       { code: "soft_quality_below_bar" as const, note: "broken" },
     ];
-    await notifyPublisherRejected(db.client, publication(), "soft", reasons);
+    await notifyPublisherRejected(t.serviceDb, publication(), "soft", reasons);
 
     expect(lastSend().subject).toBe(publicationOutcomeCopy("en").softSubject);
     expect(lastSend().react.props.outcome).toBe("soft");
@@ -96,11 +135,10 @@ describe("notifyPublisherRejected", () => {
   });
 
   it("shares NO reasons on a hard rejection (details are dropped, not hidden)", async () => {
-    const db = makeDb();
     const reasons = [
       { code: "hard_child_safety" as const, note: "asked for a phone number" },
     ];
-    await notifyPublisherRejected(db.client, publication(), "hard", reasons);
+    await notifyPublisherRejected(t.serviceDb, publication(), "hard", reasons);
 
     expect(lastSend().subject).toBe(publicationOutcomeCopy("en").hardSubject);
     expect(lastSend().react.props.outcome).toBe("hard");
@@ -110,29 +148,33 @@ describe("notifyPublisherRejected", () => {
 
 describe("publisher-email gating", () => {
   it("suppresses the email when the toggle is off", async () => {
-    const db = makeDb({
+    await setAccount({
       notification_preferences: { publication_outcome_email: false },
     });
-    await notifyPublisherApproved(db.client, publication());
+    await notifyPublisherApproved(t.serviceDb, publication());
     expect(sendEmailMock).not.toHaveBeenCalled();
   });
 
   it("sends when the toggle is absent (opt-out default is on)", async () => {
-    const db = makeDb({ notification_preferences: null });
-    await notifyPublisherApproved(db.client, publication());
+    await setAccount({ notification_preferences: {} });
+    await notifyPublisherApproved(t.serviceDb, publication());
     expect(sendEmailMock).toHaveBeenCalledTimes(1);
   });
 
-  it("skips when the account has no email on file", async () => {
-    const db = makeDb({ email: null });
-    await notifyPublisherRejected(db.client, publication(), "soft", []);
+  it("never throws when the account row is missing", async () => {
+    const missing = randomUUID();
+    await expect(
+      notifyPublisherApproved(
+        t.serviceDb,
+        publication({ account_id: missing, published_by_account_id: missing }),
+      ),
+    ).resolves.toBeUndefined();
     expect(sendEmailMock).not.toHaveBeenCalled();
   });
 
-  it("never throws when the account row is missing", async () => {
-    const db = fakeDb<{ accounts: Row[] }>({ accounts: [] });
+  it("never throws when the account lookup fails", async () => {
     await expect(
-      notifyPublisherApproved(db.client, publication()),
+      notifyPublisherRejected(failingDb(), publication(), "soft", []),
     ).resolves.toBeUndefined();
     expect(sendEmailMock).not.toHaveBeenCalled();
   });

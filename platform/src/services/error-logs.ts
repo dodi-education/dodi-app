@@ -14,12 +14,10 @@
  * never prompts, kid content, or provider keys.
  */
 
-import type { SupabaseClient } from "@supabase/supabase-js";
-
-import type { Database, ErrorLogInsert, Json } from "@dodi/types/database";
+import type { ErrorLogInsert, Json } from "@dodi/types/database";
 import type { ErrorLogType } from "@dodi/types/error-logs";
 
-type Client = SupabaseClient<Database>;
+import type { Db } from "@/lib/db";
 
 /** Server-side caps — a report must stay a small diagnostic record. */
 export const ERROR_LOG_LIMITS = {
@@ -72,7 +70,7 @@ export interface RecordErrorLogInput {
 }
 
 export async function recordErrorLog(
-  supabase: Client,
+  db: Db,
   input: RecordErrorLogInput,
 ): Promise<{ id: string }> {
   const payload: ErrorLogInsert = {
@@ -90,24 +88,15 @@ export async function recordErrorLog(
     user_agent: clampText(input.userAgent, ERROR_LOG_LIMITS.USER_AGENT_CHARS),
   };
 
-  const { data, error } = await supabase
-    .from("error_logs")
-    .insert(payload)
-    .select("id")
-    .single();
+  const insert = (row: ErrorLogInsert) =>
+    db.insertInto("error_logs").values(row).returning("id").executeTakeFirstOrThrow();
 
-  if (error && (input.kidId || input.gameId)) {
+  try {
+    return await insert(payload);
+  } catch (error) {
+    if (!(input.kidId || input.gameId)) throw error;
     // Telemetry must be resilient: a stale kid/game id (deleted meanwhile)
     // fails the FK — retry once without attribution rather than lose the report.
-    const { data: retryData, error: retryError } = await supabase
-      .from("error_logs")
-      .insert({ ...payload, kid_id: null, game_id: null })
-      .select("id")
-      .single();
-    if (retryError) throw retryError;
-    return { id: (retryData as { id: string }).id };
+    return insert({ ...payload, kid_id: null, game_id: null });
   }
-
-  if (error) throw error;
-  return { id: (data as { id: string }).id };
 }

@@ -19,8 +19,9 @@ import { Label } from "@/components/ui/label";
 import { PinInput } from "@/components/ui/pin-input";
 import { isValidNsec } from "@dodi/crypto";
 import { NpubConflictError } from "@dodi/protocol/client";
+import { otpErrorMessage } from "@/components/auth/verify-code-form";
 import { dodi } from "@/lib/api";
-import { createClient } from "@/lib/supabase/client";
+import { authClient } from "@/lib/auth/client";
 import { useVaultStore } from "@/stores/vault-store";
 
 type RegistrationMode = "open" | "invite" | "closed";
@@ -42,8 +43,8 @@ export default function RegisterPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Email-OTP sub-step: after signUp (confirmation on) we stay in-page and ask
-  // for the emailed code, then finalize the vault. All client state — no
+  // Email-OTP sub-step: after /register accepts the sign-up we stay in-page and
+  // ask for the emailed code, then finalize the vault. All client state — no
   // navigation — so the middleware reverse-guard never bounces the still-
   // unauthenticated step.
   const [step, setStep] = useState<"form" | "awaitingOtp">("form");
@@ -64,8 +65,8 @@ export default function RegisterPage() {
         const data = (await res.json()) as { mode?: RegistrationMode };
         if (!cancelled) setMode(data.mode ?? "open");
       } catch {
-        // The before_user_created hook is the real gate, so failing open for the
-        // UI is safe — a closed/invite server will still reject the signup.
+        // The platform's registration gate is the real gate, so failing open for
+        // the UI is safe — a closed/invite server will still reject the signup.
         if (!cancelled) setMode("open");
       }
     })();
@@ -81,9 +82,9 @@ export default function RegisterPage() {
     return () => clearTimeout(id);
   }, [resendCooldown]);
 
-  // Map a server/hook rejection (surfaced via signUp's error.message) to
-  // localized copy. Never echo raw Supabase errors (e.g. "User already
-  // registered") — that would leak account existence.
+  // Map a /register rejection (registration closed, bad invite code) to
+  // localized copy. Never echo raw auth errors — that could leak account
+  // existence.
   function mapSignUpError(message: string): string {
     const m = message.toLowerCase();
     if (m.includes("invite")) return t("invalidInviteCode");
@@ -114,55 +115,48 @@ export default function RegisterPage() {
 
     setLoading(true);
 
-    const supabase = createClient();
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        // No emailRedirectTo → GoTrue's confirmation email carries the {{ .Token }}
-        // code (entered in-page below), not a magic link.
-        // Passed through to raw_user_meta_data; the before_user_created hook
-        // validates it and handle_new_user() records the redemption.
-        data:
-          mode === "invite" ? { invite_code: inviteCode.trim() } : undefined,
-      },
-    });
+    // The platform's /register front door (not Better Auth's own sign-up): it
+    // applies the registration gate and validates the invite code, emails the
+    // 6-digit confirmation code, and answers `{ ok: true }` for ANY well-formed
+    // email — new or already registered — so nothing here leaks account
+    // existence.
+    let rejection: string | null = null;
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL ?? ""}/api/auth/register`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            email,
+            password,
+            inviteCode: mode === "invite" ? inviteCode.trim() : undefined,
+          }),
+        },
+      );
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        rejection = body?.error ?? "";
+      }
+    } catch {
+      rejection = "";
+    }
 
-    if (error) {
-      setError(mapSignUpError(error.message));
+    if (rejection !== null) {
+      setError(mapSignUpError(rejection));
       setLoading(false);
       return;
     }
 
-    // Confirmation disabled → we have a session; bootstrap the E2EE vault now.
-    if (data.session) {
-      try {
-        await useVaultStore
-          .getState()
-          .bootstrap(password, importedNsec.trim() || undefined);
-      } catch (err) {
-        console.error("[register] vault bootstrap failed", err);
-        setError(
-          err instanceof NpubConflictError
-            ? t("nsecTaken")
-            : t("vaultSetupFailed"),
-        );
-        setLoading(false);
-        return;
-      }
-      router.push("/vault-setup");
-      router.refresh();
-      return;
-    }
-
-    // Confirmation on (no session): build + seal the vault while the password is
-    // in hand, then drop the password and move to the in-page code step. This is
-    // the uniform response for ANY email (new, unconfirmed, or already-registered)
-    // — never branch on identities, which would leak account existence.
+    // No session yet (the email must be confirmed first): build + seal the
+    // vault while the password is in hand, then drop the password and move to
+    // the in-page code step.
     try {
       await useVaultStore
         .getState()
-        .createLocalVault(password, importedNsec.trim() || undefined);
+        .createLocalVault(email, password, importedNsec.trim() || undefined);
     } catch (err) {
       console.error("[register] local vault creation failed", err);
       setError(t("vaultSetupFailed"));
@@ -205,20 +199,18 @@ export default function RegisterPage() {
     setVerifying(true);
     setOtpError(null);
 
-    const supabase = createClient();
-    const { error } = await supabase.auth.verifyOtp({
+    const { error } = await authClient.emailOtp.verifyEmail({
       email,
-      token: code,
-      type: "signup",
+      otp: code,
     });
     if (error) {
-      const errCode = (error as { code?: string }).code;
-      setOtpError(errCode === "otp_expired" ? t("codeExpired") : t("wrongCode"));
+      setOtpError(otpErrorMessage(error.code, t));
       setOtp("");
       setVerifying(false);
       return;
     }
-    // Session established in this tab → persist the sealed vault + reveal phrase.
+    // Verified ⇒ signed in (the bearer arrived with the response) → persist the
+    // sealed vault + reveal phrase.
     await finalize();
   }
 
@@ -226,8 +218,10 @@ export default function RegisterPage() {
     if (resendCooldown > 0) return;
     setOtpError(null);
     setResendInfo(null);
-    const supabase = createClient();
-    const { error } = await supabase.auth.resend({ type: "signup", email });
+    const { error } = await authClient.emailOtp.sendVerificationOtp({
+      email,
+      type: "email-verification",
+    });
     if (error) {
       setOtpError(t("resendFailed"));
       return;

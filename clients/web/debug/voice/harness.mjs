@@ -6,10 +6,10 @@
  * `clients/web/src/lib/ai/gemini-live-client.ts`, using the real game-voice
  * system instruction + tool declarations (mirrored from
  * `core/ai/src/dodi-context.ts` and the Drawing briefing in
- * `platform/supabase/remote-drawing-game-patch.sql`). It drives the "draw a dog"
+ * the system-game rows of the schema baseline). It drives the "draw a dog"
  * scenario and records the model's audio-chunk timing + transcript so voice
  * behaviors (e.g. the repeat-the-same-line-while-generating bug) can be
- * reproduced and measured offline — no browser / vault / Supabase needed.
+ * reproduced and measured offline — no browser / vault / database needed.
  *
  * You supply a raw Gemini API key via GEMINI_API_KEY (see run.sh / key.env).
  *
@@ -93,7 +93,7 @@ const GEMINI_WS_BASE =
 
 // ---------------------------------------------------------------------------
 // System instruction + tools — mirrored from core/ai/src/dodi-context.ts and the
-// Drawing briefing in platform/supabase/remote-drawing-game-patch.sql.
+// Drawing briefing from the system-game rows of the schema baseline.
 //
 // Two variants of the generate_drawing guidance:
 //   ACK_GUIDANCE      current prod wording ("speak a short acknowledgment")

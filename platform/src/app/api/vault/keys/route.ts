@@ -26,10 +26,10 @@ const log = createLogger("vault-keys");
 export async function GET(request: Request): Promise<NextResponse> {
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
-  const { accountId, supabase } = auth;
+  const { accountId, db } = auth;
 
   try {
-    const vaultKeys = await getStoredVaultKeys(supabase, accountId);
+    const vaultKeys = await getStoredVaultKeys(db, accountId);
     return NextResponse.json({ vaultKeys });
   } catch (error) {
     logServerError("api/vault/keys#GET", error, {
@@ -46,7 +46,7 @@ export async function GET(request: Request): Promise<NextResponse> {
 export async function PUT(request: Request): Promise<NextResponse> {
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
-  const { accountId, supabase } = auth;
+  const { accountId, db } = auth;
 
   const body: unknown = await request.json();
   const parsed = PutVaultKeysBodySchema.safeParse(body);
@@ -64,12 +64,12 @@ export async function PUT(request: Request): Promise<NextResponse> {
     // Claim the npub BEFORE storing keys: a double-bound npub must abort the
     // whole bootstrap, not persist a vault the client then can't identify.
     if (npub) {
-      const claimed = await claimAccountNpub(supabase, accountId, npub);
+      const claimed = await claimAccountNpub(db, accountId, npub);
       if (!claimed) {
         return NextResponse.json({ error: "npub-conflict" }, { status: 409 });
       }
     }
-    await setStoredVaultKeys(supabase, accountId, keys as StoredVaultKeys);
+    await setStoredVaultKeys(db, accountId, keys as StoredVaultKeys);
     return NextResponse.json({ ok: true });
   } catch (error) {
     logServerError("api/vault/keys#PUT", error, {

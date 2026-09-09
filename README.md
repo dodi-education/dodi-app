@@ -30,11 +30,11 @@ See [`PROJECT.md`](PROJECT.md) for the full product specification and [`CLAUDE.m
 
 ## Tech stack
 
-Next.js (App Router) · React 19 · TypeScript · Tailwind CSS · shadcn/ui · Supabase, organized as a pnpm + Turborepo monorepo:
+Next.js (App Router) · React 19 · TypeScript · Tailwind CSS · shadcn/ui · PostgreSQL, organized as a pnpm + Turborepo monorepo:
 
 ```
 clients/web   — kid- and parent-facing Next.js app
-platform      — backend-for-frontend, API routes, AI proxy, Supabase migrations
+platform      — backend-for-frontend, API routes, AI proxy, database migrations
 core/*        — shared packages: ai, games, crypto, vault, protocol, types
 ```
 

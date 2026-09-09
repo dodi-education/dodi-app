@@ -1,46 +1,10 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
-import { describe, expect, it } from "vitest";
+import { randomUUID } from "node:crypto";
 
-import type { Database } from "@dodi/types/database";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+
+import { createTestDb, type TestDatabase } from "@/test-support/pglite-db";
 
 import { clampText, parseErrorLogSettings, recordErrorLog } from "./error-logs";
-
-// ---------------------------------------------------------------------------
-// Minimal fake of the one chain the service uses:
-// from("error_logs").insert(payload).select("id").single()
-// Queued results are consumed FIFO so the FK-retry path can be exercised.
-// ---------------------------------------------------------------------------
-
-interface QueuedResult {
-  data: { id: string } | null;
-  error: { code: string; message: string } | null;
-}
-
-function fakeClient(results: QueuedResult[]) {
-  const inserts: Array<Record<string, unknown>> = [];
-  const client = {
-    from: (table: string) => {
-      expect(table).toBe("error_logs");
-      return {
-        insert: (payload: Record<string, unknown>) => {
-          inserts.push(payload);
-          return {
-            select: () => ({
-              single: () => Promise.resolve(results.shift()!),
-            }),
-          };
-        },
-      };
-    },
-  };
-  return { client: client as unknown as SupabaseClient<Database>, inserts };
-}
-
-const ok = (id: string): QueuedResult => ({ data: { id }, error: null });
-const fkError: QueuedResult = {
-  data: null,
-  error: { code: "23503", message: "violates foreign key constraint" },
-};
 
 describe("parseErrorLogSettings", () => {
   it("defaults to everything on when unset/empty/all", () => {
@@ -77,19 +41,38 @@ describe("clampText", () => {
 });
 
 describe("recordErrorLog", () => {
+  let t: TestDatabase;
+  let accountId: string;
+
+  beforeAll(async () => {
+    t = await createTestDb();
+    accountId = await t.createAccount("parent@example.com");
+  }, 60_000);
+
+  afterAll(async () => {
+    await t?.close();
+  });
+
+  /** The persisted row, for assertions on what actually landed. */
+  async function stored(id: string) {
+    return t.serviceDb
+      .selectFrom("error_logs")
+      .selectAll()
+      .where("id", "=", id)
+      .executeTakeFirstOrThrow();
+  }
+
   it("persists the type and collapses missing fields to null", async () => {
-    const { client, inserts } = fakeClient([ok("e1")]);
-    const result = await recordErrorLog(client, {
-      accountId: "acc-1",
+    const result = await recordErrorLog(t.serviceDb, {
+      accountId,
       type: "client",
       context: "game_build",
       provider: "anthropic",
       errorName: "APIConnectionError",
     });
 
-    expect(result.id).toBe("e1");
-    expect(inserts[0]).toMatchObject({
-      account_id: "acc-1",
+    expect(await stored(result.id)).toMatchObject({
+      account_id: accountId,
       type: "client",
       context: "game_build",
       provider: "anthropic",
@@ -105,15 +88,14 @@ describe("recordErrorLog", () => {
   });
 
   it("allows account-less server errors", async () => {
-    const { client, inserts } = fakeClient([ok("e2")]);
-    await recordErrorLog(client, {
+    const result = await recordErrorLog(t.serviceDb, {
       type: "server",
       context: "api/games#POST",
       errorName: "Error",
       errorMessage: "boom",
       httpStatus: 500,
     });
-    expect(inserts[0]).toMatchObject({
+    expect(await stored(result.id)).toMatchObject({
       account_id: null,
       type: "server",
       context: "api/games#POST",
@@ -122,25 +104,41 @@ describe("recordErrorLog", () => {
   });
 
   it("retries without kid/game attribution when the insert fails", async () => {
-    const { client, inserts } = fakeClient([fkError, ok("e3")]);
-    const result = await recordErrorLog(client, {
-      accountId: "acc-1",
-      kidId: "kid-gone",
-      gameId: "game-gone",
+    // Stale ids (a kid/game deleted meanwhile) violate the FK on the first try.
+    const result = await recordErrorLog(t.serviceDb, {
+      accountId,
+      kidId: randomUUID(),
+      gameId: randomUUID(),
       type: "client",
       context: "game_update",
     });
 
-    expect(result.id).toBe("e3");
-    expect(inserts).toHaveLength(2);
-    expect(inserts[0]).toMatchObject({ kid_id: "kid-gone", game_id: "game-gone" });
-    expect(inserts[1]).toMatchObject({ kid_id: null, game_id: null });
+    expect(await stored(result.id)).toMatchObject({
+      account_id: accountId,
+      context: "game_update",
+      kid_id: null,
+      game_id: null,
+    });
   });
 
   it("throws when the un-attributed insert fails too", async () => {
-    const { client } = fakeClient([fkError]);
+    // An unknown account fails the FK on both attempts.
     await expect(
-      recordErrorLog(client, { type: "client", context: "game_build" }),
+      recordErrorLog(t.serviceDb, {
+        accountId: randomUUID(),
+        kidId: randomUUID(),
+        type: "client",
+        context: "game_build",
+      }),
     ).rejects.toMatchObject({ message: expect.stringContaining("foreign key") });
+  });
+
+  it("runs under RLS for a user-authed report", async () => {
+    const result = await recordErrorLog(t.scopedDb(accountId), {
+      accountId,
+      type: "client",
+      context: "game_save",
+    });
+    expect((await stored(result.id)).account_id).toBe(accountId);
   });
 });

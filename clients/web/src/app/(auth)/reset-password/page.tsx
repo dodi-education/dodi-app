@@ -17,7 +17,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PinInput } from "@/components/ui/pin-input";
-import { createClient } from "@/lib/supabase/client";
+import { otpErrorMessage } from "@/components/auth/verify-code-form";
+import { authClient } from "@/lib/auth/client";
 
 const RESEND_COOLDOWN_SECONDS = 60;
 
@@ -28,9 +29,9 @@ export default function ResetPasswordPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // In-page OTP step (mirrors registration): the recovery email carries a code,
-  // entered here; verifyOtp establishes a recovery session in the same tab and we
-  // navigate to /update-password to set the new password (+ re-wrap the vault).
+  // In-page OTP step (mirrors registration): the email carries a sign-in code,
+  // entered here; the code signs the user in in the same tab and we navigate to
+  // /update-password to set the new password (+ re-wrap the vault).
   const [step, setStep] = useState<"form" | "awaitingOtp">("form");
   const [otp, setOtp] = useState("");
   const [otpError, setOtpError] = useState<string | null>(null);
@@ -49,17 +50,11 @@ export default function ResetPasswordPage() {
     setError(null);
     setLoading(true);
 
-    const supabase = createClient();
-    // No redirectTo → the recovery email carries the {{ .Token }} code, entered
-    // in-page below. resetPasswordForEmail does not reveal whether the email
-    // exists (anti-enumeration), so the OTP step is the uniform response.
-    const { error } = await supabase.auth.resetPasswordForEmail(email);
-
-    if (error) {
-      setError(error.message);
-      setLoading(false);
-      return;
-    }
+    // A sign-in code (not a password-reset one): entering it signs the user
+    // in, and /update-password then sets the new password on that session.
+    // The OTP step is the uniform response whether or not the email exists
+    // (anti-enumeration), so a rejected send still advances.
+    await authClient.emailOtp.sendVerificationOtp({ email, type: "sign-in" });
 
     setStep("awaitingOtp");
     setResendCooldown(RESEND_COOLDOWN_SECONDS);
@@ -71,20 +66,14 @@ export default function ResetPasswordPage() {
     setVerifying(true);
     setOtpError(null);
 
-    const supabase = createClient();
-    const { error } = await supabase.auth.verifyOtp({
-      email,
-      token: code,
-      type: "recovery",
-    });
+    const { error } = await authClient.signIn.emailOtp({ email, otp: code });
     if (error) {
-      const errCode = (error as { code?: string }).code;
-      setOtpError(errCode === "otp_expired" ? t("codeExpired") : t("wrongCode"));
+      setOtpError(otpErrorMessage(error.code, t));
       setOtp("");
       setVerifying(false);
       return;
     }
-    // Recovery session established → set the new password + re-wrap the vault.
+    // Signed in (bearer stored) → set the new password + re-wrap the vault.
     router.push("/update-password");
     router.refresh();
   }
@@ -93,9 +82,10 @@ export default function ResetPasswordPage() {
     if (resendCooldown > 0) return;
     setOtpError(null);
     setResendInfo(null);
-    // Recovery has no `resend` type; re-issuing the reset email sends a new code.
-    const supabase = createClient();
-    const { error } = await supabase.auth.resetPasswordForEmail(email);
+    const { error } = await authClient.emailOtp.sendVerificationOtp({
+      email,
+      type: "sign-in",
+    });
     if (error) {
       setOtpError(t("resendFailed"));
       return;

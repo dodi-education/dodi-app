@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
-// The reporter module pulls in the dodi API client, whose module scope builds
-// a Supabase browser client (needs env) — stub it, the pure fns don't use it.
+// The reporter module pulls in the dodi API client (and with it the auth
+// client) — stub it, the pure fns don't use it.
 vi.mock("@/lib/api", () => ({ dodi: { request: vi.fn() } }));
 
 import { describeError, redactSecrets } from "./report-error-log";

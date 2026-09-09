@@ -4,7 +4,7 @@ import { z } from "zod/v4";
 import type { PublicGameSummary } from "@dodi/types/games";
 
 import { serverErrorResponse } from "@/lib/error-logs";
-import { serviceClient } from "@/lib/supabase";
+import { serviceDb } from "@/lib/db";
 import { listRandomPublishedGameSummaries } from "@/services/discover";
 import {
   applyTranslation,
@@ -41,13 +41,12 @@ export async function GET(request: Request): Promise<NextResponse> {
   }
 
   try {
-    const service = serviceClient();
     const rows = await listRandomPublishedGameSummaries(
-      service,
+      serviceDb,
       parsed.data.limit ?? PUBLIC_POPULAR_MAX,
     );
     const translations = await getTranslationsForGames(
-      service,
+      serviceDb,
       rows.map((row) => row.id),
       parsed.data.locale ?? "en",
     );

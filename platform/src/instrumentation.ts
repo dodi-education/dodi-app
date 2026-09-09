@@ -13,7 +13,7 @@ export const onRequestError: Instrumentation.onRequestError = async (
 ) => {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
   // Dynamic import: instrumentation is loaded in every runtime; only pull the
-  // supabase-backed logger where it actually runs.
+  // database-backed logger where it actually runs.
   const { logServerError } = await import("@/lib/error-logs");
   logServerError(`uncaught:${context.routePath || request.path}`, err, {
     meta: { method: request.method, routerKind: context.routerKind },

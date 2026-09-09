@@ -10,9 +10,9 @@ import {
   discardMemoryByParent,
   discardMemoryBySystem,
   listMemories,
-  listMemorySources,
-  listTranscriptEntriesByIds,
+  listMemorySourcesWithEntries,
 } from "@/services/memory";
+import type { MemorySourceWithEntry } from "@dodi/types/database";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -47,10 +47,10 @@ export async function GET(
   const { id: kidId } = await context.params;
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
-  const { accountId, supabase } = auth;
+  const { accountId, db } = auth;
 
   try {
-    const kid = await getKid(supabase, kidId);
+    const kid = await getKid(db, kidId);
     if (!kid || kid.account_id !== accountId) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
@@ -59,7 +59,7 @@ export async function GET(
     const status = searchParams.get("status") as "active" | "discarded" | null;
     const includeSources = searchParams.get("includeSources") === "1";
 
-    const memories = await listMemories(supabase, kidId, {
+    const memories = await listMemories(db, kidId, {
       status: status ?? undefined,
     });
 
@@ -67,23 +67,16 @@ export async function GET(
       return NextResponse.json(memories);
     }
 
-    const sources = await listMemorySources(
-      supabase,
+    // Each source carries its cited entry (slim projection, joined server-side)
+    // so dossier citations resolve to their transcript turn without a second fetch.
+    const sources = await listMemorySourcesWithEntries(
+      db,
       memories.map((m) => m.id),
     );
-    // Embed the cited entry (slim projection) on each source so dossier
-    // citations resolve to their transcript turn without a second fetch.
-    const entries = await listTranscriptEntriesByIds(supabase, [
-      ...new Set(sources.map((s) => s.transcript_entry_id)),
-    ]);
-    const entryById = new Map(entries.map((e) => [e.id, e]));
-    const byMem = new Map<
-      string,
-      Array<(typeof sources)[number] & { entry: (typeof entries)[number] | null }>
-    >();
+    const byMem = new Map<string, MemorySourceWithEntry[]>();
     for (const s of sources) {
       const list = byMem.get(s.memory_id) ?? [];
-      list.push({ ...s, entry: entryById.get(s.transcript_entry_id) ?? null });
+      list.push(s);
       byMem.set(s.memory_id, list);
     }
 
@@ -111,10 +104,10 @@ export async function POST(
   const { id: kidId } = await context.params;
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
-  const { accountId, supabase } = auth;
+  const { accountId, db } = auth;
 
   try {
-    const kid = await getKid(supabase, kidId);
+    const kid = await getKid(db, kidId);
     if (!kid || kid.account_id !== accountId) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
@@ -128,7 +121,7 @@ export async function POST(
       );
     }
 
-    const memory = await createMemory(supabase, {
+    const memory = await createMemory(db, {
       account_id: accountId,
       kid_id: kidId,
       content_enc: parsed.data.content_enc,
@@ -137,7 +130,7 @@ export async function POST(
     });
 
     const sources = await createMemorySources(
-      supabase,
+      db,
       (parsed.data.sources ?? []).map((s) => ({
         memory_id: memory.id,
         transcript_entry_id: s.transcript_entry_id,
@@ -168,10 +161,10 @@ export async function PATCH(
   const { id: kidId } = await context.params;
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
-  const { accountId, supabase } = auth;
+  const { accountId, db } = auth;
 
   try {
-    const kid = await getKid(supabase, kidId);
+    const kid = await getKid(db, kidId);
     if (!kid || kid.account_id !== accountId) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
@@ -188,7 +181,7 @@ export async function PATCH(
     const { memoryId, by, transcriptEntryId } = parsed.data;
 
     // Ownership: memory must belong to this kid
-    const existing = await listMemories(supabase, kidId);
+    const existing = await listMemories(db, kidId);
     if (!existing.some((m) => m.id === memoryId)) {
       return NextResponse.json({ error: "Memory not found" }, { status: 404 });
     }
@@ -200,14 +193,14 @@ export async function PATCH(
           { status: 400 },
         );
       }
-      const result = await discardMemoryBySystem(supabase, {
+      const result = await discardMemoryBySystem(db, {
         memoryId,
         transcriptEntryId,
       });
       return NextResponse.json(result);
     }
 
-    const memory = await discardMemoryByParent(supabase, memoryId);
+    const memory = await discardMemoryByParent(db, memoryId);
     return NextResponse.json({ memory });
   } catch (error) {
     return serverErrorResponse(

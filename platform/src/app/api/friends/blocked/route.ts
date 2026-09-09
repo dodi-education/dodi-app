@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { serverErrorResponse } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
-import { serviceClient } from "@/lib/supabase";
+import { serviceDb } from "@/lib/db";
 import { listBlocked } from "@/services/friends";
 
 /** Kids this kid has blocked. ?kidId= required. */
@@ -16,7 +16,7 @@ export async function GET(request: Request): Promise<NextResponse> {
   }
 
   try {
-    const blocked = await listBlocked(serviceClient(), {
+    const blocked = await listBlocked(serviceDb, {
       accountId: auth.accountId,
       kidId,
     });

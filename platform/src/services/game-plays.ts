@@ -1,36 +1,36 @@
 /**
- * Game plays — persistence of gameplay outcomes.
+ * Game plays: persistence of gameplay outcomes.
  *
  * Each time a child plays a game we record a `game_plays` row capturing the
  * final progress, the standardized metrics, and whether the success goal was
  * met. This is the operational substrate the (future) challenge engine reasons
- * over — e.g. "Solve 3 math games today" via {@link countSucceededPlays}.
+ * over, e.g. "Solve 3 math games today" via {@link countSucceededPlays}.
  */
+import { sql } from "kysely";
 
-import type { SupabaseClient } from "@supabase/supabase-js";
-
-import type { Database, GamePlay, GamePlayInsert, Json } from "@dodi/types/database";
+import type {
+  GamePlay,
+  GamePlayInsert,
+  GamePlayUpdate,
+  Json,
+} from "@dodi/types/database";
 import type { MetricsSummary, ProgressKind } from "@dodi/types/success";
 
-type Client = SupabaseClient<Database>;
-
-function castPlay(row: unknown): GamePlay {
-  return row as GamePlay;
-}
+import type { Db } from "@/lib/db";
 
 export interface StartPlayInput {
   accountId: string;
   kidId: string;
   gameId: string;
   progressKind: ProgressKind;
-  /** Client-generated id (offline sync); omitted → DB default. */
+  /** Client-generated id (offline sync); omitted = DB default. */
   playId?: string;
-  /** Real start time for late-synced plays; omitted → DB default (now). */
+  /** Real start time for late-synced plays; omitted = DB default (now). */
   startedAt?: string;
 }
 
 export async function startPlay(
-  supabase: Client,
+  db: Db,
   input: StartPlayInput,
 ): Promise<GamePlay> {
   const payload: GamePlayInsert = {
@@ -42,14 +42,11 @@ export async function startPlay(
     ...(input.startedAt ? { started_at: input.startedAt } : {}),
   };
 
-  const { data, error } = await supabase
-    .from("game_plays")
-    .insert(payload)
-    .select("*")
-    .single();
-
-  if (error) throw error;
-  return castPlay(data);
+  return await db
+    .insertInto("game_plays")
+    .values(payload)
+    .returningAll()
+    .executeTakeFirstOrThrow();
 }
 
 export interface UpdatePlayInput {
@@ -67,12 +64,12 @@ export interface UpdatePlayInput {
 }
 
 export async function updatePlay(
-  supabase: Client,
+  db: Db,
   playId: string,
   input: UpdatePlayInput,
 ): Promise<GamePlay> {
   const now = input.at ?? new Date().toISOString();
-  const updates: Database["public"]["Tables"]["game_plays"]["Update"] = {};
+  const updates: GamePlayUpdate = {};
 
   if (typeof input.finalProgress === "number") {
     updates.final_progress = Math.max(0, Math.min(1, input.finalProgress));
@@ -88,15 +85,12 @@ export async function updatePlay(
     updates.ended_at = input.endedAt ?? now;
   }
 
-  const { data, error } = await supabase
-    .from("game_plays")
-    .update(updates)
-    .eq("id", playId)
-    .select("*")
-    .single();
-
-  if (error) throw error;
-  return castPlay(data);
+  return await db
+    .updateTable("game_plays")
+    .set(updates)
+    .where("id", "=", playId)
+    .returningAll()
+    .executeTakeFirstOrThrow();
 }
 
 export interface CountSucceededPlaysInput {
@@ -108,12 +102,12 @@ export interface CountSucceededPlaysInput {
 }
 
 /**
- * Count succeeded plays for a kid — the query that powers challenges like
+ * Count succeeded plays for a kid: the query that powers challenges like
  * "Solve 3 math games today". Subject was dropped from game_plays, so a tag
  * filter joins through to the game's `tags` array instead.
  */
 export async function countSucceededPlays(
-  supabase: Client,
+  db: Db,
   input: CountSucceededPlaysInput,
 ): Promise<number> {
   const cutoff =
@@ -122,42 +116,36 @@ export async function countSucceededPlays(
       : null;
 
   if (input.tag) {
-    let query = supabase
-      .from("game_plays")
-      .select("id, games!inner(tags)", { count: "exact", head: true })
-      .eq("kid_id", input.kidId)
-      .eq("succeeded", true)
-      .contains("games.tags", [input.tag]);
-    if (cutoff) query = query.gte("started_at", cutoff);
-    const { count, error } = await query;
-    if (error) throw error;
-    return count ?? 0;
+    let query = db
+      .selectFrom("game_plays")
+      .innerJoin("games", "games.id", "game_plays.game_id")
+      .select(({ fn }) => fn.countAll<number>().as("count"))
+      .where("game_plays.kid_id", "=", input.kidId)
+      .where("game_plays.succeeded", "=", true)
+      .where("games.tags", "@>", sql<string[]>`${sql.val([input.tag])}::text[]`);
+    if (cutoff) query = query.where("game_plays.started_at", ">=", cutoff);
+    const { count } = await query.executeTakeFirstOrThrow();
+    return Number(count ?? 0);
   }
 
-  let query = supabase
-    .from("game_plays")
-    .select("id", { count: "exact", head: true })
-    .eq("kid_id", input.kidId)
-    .eq("succeeded", true);
-  if (cutoff) query = query.gte("started_at", cutoff);
-  const { count, error } = await query;
-  if (error) throw error;
-  return count ?? 0;
+  let query = db
+    .selectFrom("game_plays")
+    .select(({ fn }) => fn.countAll<number>().as("count"))
+    .where("kid_id", "=", input.kidId)
+    .where("succeeded", "=", true);
+  if (cutoff) query = query.where("started_at", ">=", cutoff);
+  const { count } = await query.executeTakeFirstOrThrow();
+  return Number(count ?? 0);
 }
 
 export async function getPlay(
-  supabase: Client,
+  db: Db,
   playId: string,
 ): Promise<GamePlay | null> {
-  const { data, error } = await supabase
-    .from("game_plays")
-    .select("*")
-    .eq("id", playId)
-    .single();
-
-  if (error) {
-    if (error.code === "PGRST116") return null;
-    throw error;
-  }
-  return castPlay(data);
+  const row = await db
+    .selectFrom("game_plays")
+    .selectAll()
+    .where("id", "=", playId)
+    .executeTakeFirst();
+  return row ?? null;
 }

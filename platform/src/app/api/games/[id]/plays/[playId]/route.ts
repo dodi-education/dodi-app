@@ -29,7 +29,7 @@ export async function PATCH(
 
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
-  const { accountId, supabase } = auth;
+  const { accountId, db } = auth;
 
   const body: unknown = await request.json();
   const parsed = UpdatePlaySchema.safeParse(body);
@@ -50,12 +50,12 @@ export async function PATCH(
   }
 
   try {
-    const play = await getPlay(supabase, playId);
+    const play = await getPlay(db, playId);
     if (!play || play.account_id !== accountId) {
       return NextResponse.json({ error: "Play not found" }, { status: 404 });
     }
 
-    const updated = await updatePlay(supabase, playId, {
+    const updated = await updatePlay(db, playId, {
       finalProgress: parsed.data.finalProgress,
       metrics: parsed.data.metrics,
       succeeded: parsed.data.succeeded,

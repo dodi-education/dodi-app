@@ -3,7 +3,7 @@ import { z } from "zod/v4";
 
 import { serverErrorResponse } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
-import { serviceClient } from "@/lib/supabase";
+import { serviceDb } from "@/lib/db";
 import {
   PublicationError,
   savePublicationDraft,
@@ -45,7 +45,7 @@ export async function PUT(
   }
 
   try {
-    await savePublicationDraft(serviceClient(), {
+    await savePublicationDraft(serviceDb, {
       sourceGameId: id,
       accountId,
       listingTranslationsEnc: parsed.data.listingTranslationsEnc,

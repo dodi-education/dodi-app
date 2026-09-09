@@ -1,0 +1,25 @@
+{
+  "columns": {
+    "accounts.memory_tier": "Generated<'basic' | 'advanced' | 'full'>",
+    "platform_plans.memory_tier": "'basic' | 'advanced' | 'full'",
+    "ai_usage_logs.event_type": "'game_create' | 'game_edit' | 'game_analysis' | 'game_text_generation' | 'game_translation' | 'memory_update' | 'voice_minutes'",
+    "error_logs.type": "'client' | 'server'",
+    "friendships.status": "Generated<'pending' | 'awaiting_parent' | 'accepted' | 'rejected' | 'blocked'>",
+    "game_plays.progress_kind": "Generated<'goal' | 'open'>",
+    "games.progress_kind": "Generated<'goal' | 'open'>",
+    "games.created_by": "Generated<'system' | 'parent' | 'kid'>",
+    "games.approved_by": "'system' | 'admin' | null",
+    "games.rejection_kind": "'hard' | 'soft' | null",
+    "game_publication_requests.rejection_kind": "'hard' | 'soft' | null",
+    "game_publication_requests.outcome": "'approved' | 'rejected' | null",
+    "game_snapshots.origin": "Generated<'own' | 'received' | 'autosave'>",
+    "memories.status": "Generated<'active' | 'discarded'>",
+    "memories.discarded_by": "'system' | 'parent' | null",
+    "memory_sources.relation": "'supports' | 'contradicts'",
+    "newsletter_signups.locale": "Generated<'en' | 'de'>",
+    "newsletter_signups.status": "Generated<'confirmed' | 'unsubscribed'>",
+    "transcript_entries.role": "'dodi' | 'kid'",
+    "transcripts.status": "Generated<'open' | 'processed'>",
+    "devices.status": "Generated<'pending' | 'active' | 'revoked'>"
+  }
+}

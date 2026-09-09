@@ -24,7 +24,7 @@ export async function POST(
   const { id } = await context.params;
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
-  const { accountId, supabase } = auth;
+  const { accountId, db } = auth;
 
   const body: unknown = await request.json().catch(() => null);
   const result = FriendKeysSchema.safeParse(body);
@@ -36,7 +36,7 @@ export async function POST(
   }
 
   try {
-    await publishFriendKeys(supabase, {
+    await publishFriendKeys(db, {
       accountId,
       kidId: id,
       kemPublicKey: result.data.kemPublicKey,

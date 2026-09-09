@@ -4,12 +4,12 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 
+import { VerifyCodeForm, otpErrorMessage } from "@/components/auth/verify-code-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PasswordInput } from "@/components/ui/password-input";
-import { clearSealedSecret } from "@/lib/sealed-secret";
-import { createClient } from "@/lib/supabase/client";
+import { authClient } from "@/lib/auth/client";
 import { useAccountStore } from "@/stores/account-store";
 import { useVaultStore } from "@/stores/vault-store";
 
@@ -61,32 +61,20 @@ export function LoginForm({ next }: LoginFormProps) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  // An account that never confirmed its email gets a fresh code emailed on
+  // sign-in; the code step here is the same one registration uses.
+  const [step, setStep] = useState<"form" | "awaitingOtp">("form");
 
-  async function handleLogin(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setLoading(true);
-
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (error) {
-      setError(error.message);
-      setLoading(false);
-      return;
-    }
-
-    // Signing in directly (not via the OTP step) makes any vault sealed at
-    // registration moot — drop it so it never lingers as ciphertext.
-    void clearSealedSecret();
-
-    // Unlock the E2EE vault with the same password (bootstraps one if this
-    // account predates the vault).
+  /** Signed in (bearer stored): unlock the vault, adopt the locale, navigate. */
+  async function finishSignIn(): Promise<void> {
+    // Unlock the E2EE vault with the same password. When the account has no
+    // vault yet, this adopts the one registration sealed for this same email
+    // (preserving an imported nsec) before falling back to a fresh vault; the
+    // seal is consumed either way, so it never lingers as ciphertext.
     try {
-      const unlockPromise = useVaultStore.getState().unlockOrBootstrap(password);
+      const unlockPromise = useVaultStore
+        .getState()
+        .unlockOrBootstrap(password, email);
       // Adopt the account's saved UI language onto this device before we render
       // the parent app (so a returning parent on a new device sees their
       // language). Needs only the auth session, so it loads concurrently with
@@ -106,8 +94,68 @@ export function LoginForm({ next }: LoginFormProps) {
       }
     } catch {
       setError(t("unlockAfterLoginFailed"));
+      setStep("form");
       setLoading(false);
     }
+  }
+
+  async function handleLogin(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+
+    const { error: signInError } = await authClient.signIn.email({
+      email,
+      password,
+    });
+
+    if (signInError) {
+      if (signInError.code === "EMAIL_NOT_VERIFIED") {
+        // The platform has already emailed a fresh code; keep the password in
+        // state so the vault unlocks once the code checks out.
+        setStep("awaitingOtp");
+        setLoading(false);
+        return;
+      }
+      setError(signInError.message ?? signInError.statusText);
+      setLoading(false);
+      return;
+    }
+
+    await finishSignIn();
+  }
+
+  async function handleVerify(code: string): Promise<string | null> {
+    const { error: verifyError } = await authClient.emailOtp.verifyEmail({
+      email,
+      otp: code,
+    });
+    if (verifyError) return otpErrorMessage(verifyError.code, t);
+    // Verified ⇒ signed in (the bearer arrived with the response).
+    await finishSignIn();
+    return null;
+  }
+
+  async function handleResend(): Promise<string | null> {
+    const { error: resendError } = await authClient.emailOtp.sendVerificationOtp({
+      email,
+      type: "email-verification",
+    });
+    return resendError ? t("resendFailed") : null;
+  }
+
+  if (step === "awaitingOtp") {
+    return (
+      <VerifyCodeForm
+        description={t("enterCodeDescription", { email })}
+        onVerify={handleVerify}
+        onResend={handleResend}
+        onBack={() => {
+          setStep("form");
+          setError(null);
+        }}
+      />
+    );
   }
 
   return (

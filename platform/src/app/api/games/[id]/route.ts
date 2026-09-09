@@ -3,7 +3,7 @@ import { z } from "zod/v4";
 
 import { serverErrorResponse } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
-import { serviceClient } from "@/lib/supabase";
+import { serviceDb } from "@/lib/db";
 import type { GameUpdate, Json } from "@dodi/types/database";
 import {
   deleteCustomGame,
@@ -72,7 +72,7 @@ export async function GET(
 
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
-  const { accountId, supabase } = auth;
+  const { accountId, db } = auth;
 
   const { searchParams } = new URL(request.url);
   const kidId = searchParams.get("kidId") ?? undefined;
@@ -83,8 +83,8 @@ export async function GET(
     // belong to other accounts (RLS-hidden), so the kid path resolves through
     // the sanitized service-role fallback. Parent reads stay RLS-only.
     const game = kidId
-      ? await getPlayableGame(supabase, serviceClient(), id)
-      : await getGame(supabase, id);
+      ? await getPlayableGame(db, serviceDb, id)
+      : await getGame(db, id);
     if (!game) {
       return NextResponse.json({ error: "Game not found" }, { status: 404 });
     }
@@ -92,17 +92,17 @@ export async function GET(
     // Kid deep-link: scope the read to a kid — derive its locale and gate on
     // visibility so inactive/unshared games 404 even via a direct URL.
     if (kidId) {
-      const kid = await getKid(supabase, kidId);
+      const kid = await getKid(db, kidId);
       if (!kid || kid.account_id !== accountId) {
         return NextResponse.json({ error: "Game not found" }, { status: 404 });
       }
       locale = kid.language;
-      if (!(await isGameVisibleToKid(supabase, game, kidId, accountId))) {
+      if (!(await isGameVisibleToKid(db, game, kidId, accountId))) {
         return NextResponse.json({ error: "Game not found" }, { status: 404 });
       }
     }
 
-    const translation = await getTranslation(supabase, game.id, locale);
+    const translation = await getTranslation(db, game.id, locale);
     return NextResponse.json(applyTranslation(game, translation));
   } catch (error) {
     return serverErrorResponse(error, "Failed to fetch game", "api/games/[id]#GET", {
@@ -119,7 +119,7 @@ export async function PATCH(
 
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
-  const { accountId, supabase } = auth;
+  const { accountId, db } = auth;
 
   const body: unknown = await request.json();
   const parsed = UpdateGameSchema.safeParse(body);
@@ -132,7 +132,7 @@ export async function PATCH(
   }
 
   try {
-    const existing = await getGame(supabase, id);
+    const existing = await getGame(db, id);
     if (!existing) {
       return NextResponse.json({ error: "Game not found" }, { status: 404 });
     }
@@ -173,7 +173,7 @@ export async function PATCH(
     }
 
     if (restoreVersionId) {
-      const game = await restoreGameVersion(supabase, id, restoreVersionId);
+      const game = await restoreGameVersion(db, id, restoreVersionId);
       return NextResponse.json(game);
     }
 
@@ -199,11 +199,11 @@ export async function PATCH(
     // re-sanitizes the plaintext copy it receives.
     const game =
       Object.keys(updates).length > 0
-        ? await updateCustomGame(supabase, id, updates, { createVersion })
+        ? await updateCustomGame(db, id, updates, { createVersion })
         : existing;
 
     if (audience) {
-      await replaceGameSharings(supabase, id, accountId, {
+      await replaceGameSharings(db, id, accountId, {
         family: audience.isFamily,
         kidIds: audience.audienceIds,
       });
@@ -225,10 +225,10 @@ export async function DELETE(
 
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
-  const { accountId, supabase } = auth;
+  const { accountId, db } = auth;
 
   try {
-    const existing = await getGame(supabase, id);
+    const existing = await getGame(db, id);
     if (!existing) {
       return NextResponse.json({ error: "Game not found" }, { status: 404 });
     }
@@ -240,7 +240,7 @@ export async function DELETE(
       );
     }
 
-    await deleteCustomGame(supabase, id);
+    await deleteCustomGame(db, id);
     return NextResponse.json({ success: true });
   } catch (error) {
     return serverErrorResponse(error, "Failed to delete game", "api/games/[id]#DELETE", {

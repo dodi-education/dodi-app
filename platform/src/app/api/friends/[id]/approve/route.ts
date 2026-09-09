@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 
 import { requireAuth } from "@/lib/resolve-auth";
-import { serviceClient } from "@/lib/supabase";
+import { serviceDb } from "@/lib/db";
 import { setParentApproval } from "@/services/friends";
 
 const ApproveSchema = z.object({
@@ -33,7 +33,7 @@ export async function POST(
   }
 
   try {
-    const row = await setParentApproval(serviceClient(), {
+    const row = await setParentApproval(serviceDb, {
       accountId: auth.accountId,
       friendshipId: id,
       side: result.data.side,

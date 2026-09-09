@@ -1,6 +1,8 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { type Row, fakeDb } from "../test-support/fake-supabase";
+import type { GameInsert } from "@dodi/types/database";
+
+import { createTestDb, type TestDatabase } from "../test-support/pglite-db";
 
 import {
   getGameStats,
@@ -12,21 +14,36 @@ import {
   listRandomPublishedGameSummaries,
 } from "./discover";
 
+/** The two seeded system games (dodi's own published rows). */
+const SYSTEM_DRAWING = "560b130f-80a6-4353-a750-deac44224c53";
+const SYSTEM_MANDALA = "00079709-ce39-4669-98e8-a3181640b4fb";
+
+const SOURCE = "0d15c0de-0000-4000-8000-000000000005";
+const PUB_1 = "0d15c0de-0000-4000-8000-000000000001";
+const PUB_2 = "0d15c0de-0000-4000-8000-000000000002";
+const PENDING = "0d15c0de-0000-4000-8000-000000000003";
+const PRIVATE = "0d15c0de-0000-4000-8000-000000000004";
+const MISSING = "0d15c0de-0000-4000-8000-0000000000ff";
+
+let t: TestDatabase;
+let publisher: string;
+let publisherKid: string;
+let versionId: string;
+
 /**
- * The fake builder ignores column projections, so every row below carries the
- * publisher fields a real projected read would never fetch — which makes the
- * assertions here meaningful for `toPublicGame`'s belt-and-suspenders nulling.
- * (The `author` embed is simulated as the joined object PostgREST returns.)
+ * Real rows carry every publisher field a projected read must never fetch,
+ * which is what makes the assertions here meaningful for the projections and
+ * for `toPublicGame`'s belt-and-suspenders nulling.
  */
-function publishedRow(overrides: Row = {}): Row {
+function publishedRow(overrides: Partial<GameInsert> = {}): GameInsert {
   return {
-    id: "pub-1",
-    account_id: "publisher-acc",
-    kid_id: "publisher-kid",
-    published_by_account_id: "publisher-acc",
+    id: PUB_1,
+    account_id: publisher,
+    kid_id: publisherKid,
+    published_by_account_id: publisher,
     agent_transcript_enc: "enc:v1:k1:aaa:bbb",
-    current_game_version_id: "ver-1",
-    source_game_id: "game-1",
+    current_game_version_id: versionId,
+    source_game_id: null,
     system_key: null,
     is_system: false,
     is_active: false,
@@ -48,118 +65,159 @@ function publishedRow(overrides: Row = {}): Row {
     publication_requested_at: "2026-07-01T10:00:00Z",
     published_at: "2026-07-02T10:00:00Z",
     approved_by: "system",
-    author: { publication_handle: "fun_games" },
     created_at: "2026-07-01T10:00:00Z",
     updated_at: "2026-07-02T10:00:00Z",
     ...overrides,
   };
 }
 
-let db: ReturnType<typeof fakeDb<{ games: Row[] }>>;
+beforeAll(async () => {
+  t = await createTestDb();
+  publisher = await t.createAccount("publisher@example.com");
+  await t.serviceDb
+    .updateTable("accounts")
+    .set({ publication_handle: "fun_games" })
+    .where("id", "=", publisher)
+    .execute();
+  const kid = await t.serviceDb
+    .insertInto("kids")
+    .values({ account_id: publisher, display_name: "enc:v1:kid", social_id: "kid-pub" })
+    .returning("id")
+    .executeTakeFirstOrThrow();
+  publisherKid = kid.id;
+});
 
-beforeEach(() => {
-  db = fakeDb({
-    games: [
-      publishedRow(),
-      publishedRow({ id: "pub-2", published_at: "2026-07-10T10:00:00Z" }),
+afterAll(async () => {
+  await t.close();
+});
+
+beforeEach(async () => {
+  await t.serviceDb.deleteFrom("game_plays").execute();
+  await t.serviceDb.deleteFrom("games").where("is_system", "=", false).execute();
+  // The private source game with one version row: the publication copy points
+  // at both so the nulling of owner fields is exercised on real references.
+  await t.serviceDb
+    .insertInto("games")
+    .values({
+      id: SOURCE,
+      account_id: publisher,
+      kid_id: publisherKid,
+      title: "enc:v1:k1:title",
+      code_bundle: "enc:v1:k1:code",
+      created_by: "parent",
+      progress_kind: "goal",
+    })
+    .execute();
+  const version = await t.serviceDb
+    .insertInto("game_versions")
+    .values({ game_id: SOURCE, account_id: publisher, code_bundle: "enc:v1:k1:code" })
+    .returning("id")
+    .executeTakeFirstOrThrow();
+  versionId = version.id;
+  await t.serviceDb
+    .insertInto("games")
+    .values([
+      publishedRow({ source_game_id: SOURCE }),
+      publishedRow({ id: PUB_2, published_at: "2026-07-10T10:00:00Z" }),
       // A pending (not yet published) submission and a private game.
-      publishedRow({ id: "pending-1", published_at: null, approved_by: null }),
+      publishedRow({ id: PENDING, published_at: null, approved_by: null }),
       publishedRow({
-        id: "private-1",
+        id: PRIVATE,
         published_at: null,
         approved_by: null,
         publication_requested_at: null,
       }),
-    ],
-  });
+    ])
+    .execute();
 });
 
 describe("listPublishedGames", () => {
   it("lists only LIVE games, newest first, with the byline", async () => {
-    const rows = await listPublishedGames(db.client);
-    expect(rows.map((r) => r.id)).toEqual(["pub-2", "pub-1"]);
+    const rows = await listPublishedGames(t.serviceDb);
+    expect(rows.map((r) => r.id)).toEqual([
+      PUB_2,
+      PUB_1,
+      SYSTEM_MANDALA,
+      SYSTEM_DRAWING,
+    ]);
     expect(rows[0].publication_handle).toBe("fun_games");
   });
 
   it("paginates by published_at cursor", async () => {
-    const rows = await listPublishedGames(db.client, {
+    const rows = await listPublishedGames(t.serviceDb, {
       cursor: "2026-07-10T10:00:00Z",
     });
-    expect(rows.map((r) => r.id)).toEqual(["pub-1"]);
+    expect(rows.map((r) => r.id)).toEqual([PUB_1, SYSTEM_MANDALA, SYSTEM_DRAWING]);
   });
 
-  it("lists dodi's system rows like any publication — flagged, no byline", async () => {
-    db.tables.games.push(
-      publishedRow({
-        id: "sys-1",
-        is_system: true,
-        system_key: "drawing-basic",
-        account_id: null,
-        kid_id: null,
-        published_by_account_id: null,
-        publication_requested_at: null,
-        approved_by: "system",
-        published_at: "2026-07-11T10:00:00Z",
-        author: null,
-      }),
+  it("lists dodi's system rows like any publication: flagged, no byline", async () => {
+    const rows = await listPublishedGames(t.serviceDb);
+    const system = rows.filter((r) => r.is_system);
+    expect(system.map((r) => r.id).sort()).toEqual(
+      [SYSTEM_DRAWING, SYSTEM_MANDALA].sort(),
     );
-    const rows = await listPublishedGames(db.client);
-    expect(rows.map((r) => r.id)).toEqual(["sys-1", "pub-2", "pub-1"]);
-    expect(rows[0].is_system).toBe(true);
-    expect(rows[0].publication_handle).toBeNull();
+    for (const row of system) expect(row.publication_handle).toBeNull();
   });
 
   it("never exposes publisher ids in the summary shape", async () => {
-    const rows = await listPublishedGames(db.client);
-    for (const row of rows as unknown as Row[]) {
+    const rows = await listPublishedGames(t.serviceDb);
+    for (const row of rows) {
       expect(row).not.toHaveProperty("account_id");
       expect(row).not.toHaveProperty("kid_id");
       expect(row).not.toHaveProperty("published_by_account_id");
       expect(row).not.toHaveProperty("agent_transcript_enc");
       expect(row).not.toHaveProperty("code_bundle");
+      expect(row).not.toHaveProperty("author");
     }
   });
 });
 
 describe("listRandomPublishedGameSummaries", () => {
-  /** rng stub yielding a fixed sequence (repeating the last value). */
-  function sequenceRng(values: number[]): () => number {
-    let i = 0;
-    return () => values[Math.min(i++, values.length - 1)];
-  }
+  const LIVE = [PUB_1, PUB_2, SYSTEM_DRAWING, SYSTEM_MANDALA].sort();
 
   it("samples only LIVE games, honoring the limit", async () => {
-    const rows = await listRandomPublishedGameSummaries(db.client, 1);
+    const rows = await listRandomPublishedGameSummaries(t.serviceDb, 1);
     expect(rows).toHaveLength(1);
-    expect(["pub-1", "pub-2"]).toContain(rows[0].id);
+    expect(LIVE).toContain(rows[0].id);
   });
 
   it("is deterministic under an injected rng", async () => {
-    // Pool is [pub-1, pub-2]; rng 0.99 swaps the last candidate into slot 0.
-    const rows = await listRandomPublishedGameSummaries(
-      db.client,
-      2,
-      sequenceRng([0.99, 0]),
-    );
-    expect(rows.map((r) => r.id)).toEqual(["pub-2", "pub-1"]);
+    const first = await listRandomPublishedGameSummaries(t.serviceDb, 4, () => 0.99);
+    const second = await listRandomPublishedGameSummaries(t.serviceDb, 4, () => 0.99);
+    expect(first.map((r) => r.id)).toEqual(second.map((r) => r.id));
+    expect(first.map((r) => r.id).sort()).toEqual(LIVE);
   });
 
   it("returns the whole catalog when limit exceeds it", async () => {
-    const rows = await listRandomPublishedGameSummaries(db.client, 10);
-    expect(rows.map((r) => r.id).sort()).toEqual(["pub-1", "pub-2"]);
+    const rows = await listRandomPublishedGameSummaries(t.serviceDb, 10);
+    expect(rows.map((r) => r.id).sort()).toEqual(LIVE);
   });
 
   it("returns [] for an empty catalog", async () => {
-    db.tables.games.length = 0;
-    await expect(
-      listRandomPublishedGameSummaries(db.client, 10),
-    ).resolves.toEqual([]);
+    // Unpublish everything (system rows included) and restore them after.
+    await t.serviceDb.updateTable("games").set({ published_at: null }).execute();
+    try {
+      await expect(
+        listRandomPublishedGameSummaries(t.serviceDb, 10),
+      ).resolves.toEqual([]);
+    } finally {
+      await t.serviceDb
+        .updateTable("games")
+        .set({ published_at: "2026-03-06T16:44:19.288505Z" })
+        .where("id", "=", SYSTEM_DRAWING)
+        .execute();
+      await t.serviceDb
+        .updateTable("games")
+        .set({ published_at: "2026-03-06T16:44:20.288505Z" })
+        .where("id", "=", SYSTEM_MANDALA)
+        .execute();
+    }
   });
 
   it("never exposes publisher ids or content in the summary shape", async () => {
-    const rows = await listRandomPublishedGameSummaries(db.client, 10);
+    const rows = await listRandomPublishedGameSummaries(t.serviceDb, 10);
     expect(rows.length).toBeGreaterThan(0);
-    for (const row of rows as unknown as Row[]) {
+    for (const row of rows) {
       expect(row).not.toHaveProperty("account_id");
       expect(row).not.toHaveProperty("kid_id");
       expect(row).not.toHaveProperty("published_by_account_id");
@@ -169,42 +227,33 @@ describe("listRandomPublishedGameSummaries", () => {
   });
 
   it("maps the byline for parent publications and system rows", async () => {
-    db.tables.games.push(
-      publishedRow({
-        id: "sys-1",
-        is_system: true,
-        system_key: "drawing-basic",
-        account_id: null,
-        kid_id: null,
-        published_by_account_id: null,
-        publication_requested_at: null,
-        approved_by: "system",
-        published_at: "2026-07-11T10:00:00Z",
-        author: null,
-      }),
-    );
-    const rows = await listRandomPublishedGameSummaries(db.client, 10);
+    const rows = await listRandomPublishedGameSummaries(t.serviceDb, 10);
     const byId = new Map(rows.map((r) => [r.id, r]));
-    expect(byId.get("pub-1")?.publication_handle).toBe("fun_games");
-    expect(byId.get("sys-1")?.publication_handle).toBeNull();
-    expect(byId.get("sys-1")?.is_system).toBe(true);
+    expect(byId.get(PUB_1)?.publication_handle).toBe("fun_games");
+    expect(byId.get(SYSTEM_DRAWING)?.publication_handle).toBeNull();
+    expect(byId.get(SYSTEM_DRAWING)?.is_system).toBe(true);
   });
 });
 
 describe("listPublishedSitemapEntries", () => {
   it("returns id + timestamps of LIVE games only, newest first", async () => {
-    const entries = await listPublishedSitemapEntries(db.client);
-    expect(entries.map((e) => e.id)).toEqual(["pub-2", "pub-1"]);
+    const entries = await listPublishedSitemapEntries(t.serviceDb);
+    expect(entries.map((e) => e.id)).toEqual([
+      PUB_2,
+      PUB_1,
+      SYSTEM_MANDALA,
+      SYSTEM_DRAWING,
+    ]);
     expect(entries[0]).toEqual({
-      id: "pub-2",
-      published_at: "2026-07-10T10:00:00Z",
-      updated_at: "2026-07-02T10:00:00Z",
+      id: PUB_2,
+      published_at: "2026-07-10T10:00:00.000Z",
+      updated_at: "2026-07-02T10:00:00.000Z",
     });
   });
 
   it("carries nothing beyond the three sitemap fields", async () => {
-    const entries = await listPublishedSitemapEntries(db.client);
-    for (const entry of entries as unknown as Row[]) {
+    const entries = await listPublishedSitemapEntries(t.serviceDb);
+    for (const entry of entries) {
       expect(Object.keys(entry).sort()).toEqual([
         "id",
         "published_at",
@@ -216,24 +265,25 @@ describe("listPublishedSitemapEntries", () => {
 
 describe("getPublishedGameDetail", () => {
   it("returns the full content for a LIVE game, without publisher ids", async () => {
-    const detail = await getPublishedGameDetail(db.client, "pub-1");
+    const detail = await getPublishedGameDetail(t.serviceDb, PUB_1);
     expect(detail?.code_bundle).toContain("<html>");
     expect(detail?.publication_handle).toBe("fun_games");
-    expect(detail as unknown as Row).not.toHaveProperty("account_id");
-    expect(detail as unknown as Row).not.toHaveProperty("published_by_account_id");
+    expect(detail).not.toHaveProperty("account_id");
+    expect(detail).not.toHaveProperty("published_by_account_id");
+    expect(detail).not.toHaveProperty("author");
   });
 
   it("returns null for pending and private rows", async () => {
-    await expect(getPublishedGameDetail(db.client, "pending-1")).resolves.toBeNull();
-    await expect(getPublishedGameDetail(db.client, "private-1")).resolves.toBeNull();
+    await expect(getPublishedGameDetail(t.serviceDb, PENDING)).resolves.toBeNull();
+    await expect(getPublishedGameDetail(t.serviceDb, PRIVATE)).resolves.toBeNull();
   });
 });
 
-describe("getPublishedGame(s) — the playable Game shape", () => {
+describe("getPublishedGame(s): the playable Game shape", () => {
   it("nulls every owner field on the way out", async () => {
-    const game = await getPublishedGame(db.client, "pub-1");
+    const game = await getPublishedGame(t.serviceDb, PUB_1);
     expect(game).toMatchObject({
-      id: "pub-1",
+      id: PUB_1,
       account_id: null,
       kid_id: null,
       published_by_account_id: null,
@@ -247,77 +297,61 @@ describe("getPublishedGame(s) — the playable Game shape", () => {
   });
 
   it("returns null for anything not LIVE", async () => {
-    await expect(getPublishedGame(db.client, "pending-1")).resolves.toBeNull();
-    await expect(getPublishedGame(db.client, "private-1")).resolves.toBeNull();
+    await expect(getPublishedGame(t.serviceDb, PENDING)).resolves.toBeNull();
+    await expect(getPublishedGame(t.serviceDb, PRIVATE)).resolves.toBeNull();
   });
 
   it("getPublishedGamesByIds drops ids that are not published", async () => {
-    const games = await getPublishedGamesByIds(db.client, [
-      "pub-1",
-      "pending-1",
-      "missing",
+    const games = await getPublishedGamesByIds(t.serviceDb, [
+      PUB_1,
+      PENDING,
+      MISSING,
     ]);
-    expect(games.map((g) => g.id)).toEqual(["pub-1"]);
+    expect(games.map((g) => g.id)).toEqual([PUB_1]);
     expect(games[0].account_id).toBeNull();
   });
 
   it("getPublishedGamesByIds short-circuits on an empty id list", async () => {
-    await expect(getPublishedGamesByIds(db.client, [])).resolves.toEqual([]);
+    await expect(getPublishedGamesByIds(t.serviceDb, [])).resolves.toEqual([]);
   });
 });
 
 describe("getGameStats", () => {
-  /** Minimal rpc-only stand-in — the real client's rpc surface. */
-  function rpcClient(
-    handler: (fn: string, args: unknown) => { data: unknown; error: unknown },
-  ) {
-    const calls: { fn: string; args: unknown }[] = [];
-    const client = {
-      rpc: (fn: string, args: unknown) => {
-        calls.push({ fn, args });
-        return Promise.resolve(handler(fn, args));
-      },
-    } as unknown as typeof db.client;
-    return { client, calls };
-  }
+  it("aggregates plays on the published row and remixes pointing back at it", async () => {
+    await t.serviceDb
+      .insertInto("game_plays")
+      .values([
+        { account_id: publisher, kid_id: publisherKid, game_id: PUB_1, progress_kind: "goal" },
+        { account_id: publisher, kid_id: publisherKid, game_id: PUB_1, progress_kind: "goal" },
+      ])
+      .execute();
+    // A private remix of PUB_1 (source_game_id set, no publication request).
+    await t.serviceDb
+      .insertInto("games")
+      .values({
+        account_id: publisher,
+        kid_id: publisherKid,
+        source_game_id: PUB_1,
+        title: "enc:v1:k1:remix",
+        code_bundle: "enc:v1:k1:code",
+        created_by: "parent",
+        progress_kind: "goal",
+      })
+      .execute();
 
-  it("maps rpc rows to a per-game plays/copies map", async () => {
-    const { client, calls } = rpcClient(() => ({
-      data: [
-        { game_id: "pub-1", plays: 12, copies: 3 },
-        { game_id: "pub-2", plays: 0, copies: 0 },
-      ],
-      error: null,
-    }));
-    const stats = await getGameStats(client, ["pub-1", "pub-2"]);
-    expect(stats.get("pub-1")).toEqual({ plays: 12, copies: 3 });
-    expect(stats.get("pub-2")).toEqual({ plays: 0, copies: 0 });
-    expect(calls).toEqual([
-      { fn: "discover_game_stats", args: { p_game_ids: ["pub-1", "pub-2"] } },
-    ]);
+    const stats = await getGameStats(t.serviceDb, [PUB_1, PUB_2]);
+    expect(stats.get(PUB_1)).toEqual({ plays: 2, copies: 1 });
+    expect(stats.get(PUB_2)).toEqual({ plays: 0, copies: 0 });
   });
 
-  it("coerces bigint-as-string counts to numbers", async () => {
-    const { client } = rpcClient(() => ({
-      data: [{ game_id: "pub-1", plays: "9", copies: "2" }],
-      error: null,
-    }));
-    const stats = await getGameStats(client, ["pub-1"]);
-    expect(stats.get("pub-1")).toEqual({ plays: 9, copies: 2 });
+  it("does not count a publication copy as a remix", async () => {
+    // PUB_1 is the publication copy of SOURCE: a submission, not a copy.
+    const stats = await getGameStats(t.serviceDb, [SOURCE]);
+    expect(stats.get(SOURCE)).toEqual({ plays: 0, copies: 0 });
   });
 
-  it("short-circuits (no rpc) on an empty id list", async () => {
-    const { client, calls } = rpcClient(() => ({ data: [], error: null }));
-    const stats = await getGameStats(client, []);
+  it("short-circuits (no query) on an empty id list", async () => {
+    const stats = await getGameStats(t.serviceDb, []);
     expect(stats.size).toBe(0);
-    expect(calls).toEqual([]);
-  });
-
-  it("propagates an rpc error", async () => {
-    const { client } = rpcClient(() => ({
-      data: null,
-      error: { message: "boom" },
-    }));
-    await expect(getGameStats(client, ["pub-1"])).rejects.toBeTruthy();
   });
 });

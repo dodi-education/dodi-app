@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { serverErrorResponse } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
-import { serviceClient } from "@/lib/supabase";
+import { serviceDb } from "@/lib/db";
 import { listCardRefreshTargets } from "@/services/friends";
 
 /**
@@ -20,7 +20,7 @@ export async function GET(request: Request): Promise<NextResponse> {
   }
 
   try {
-    const targets = await listCardRefreshTargets(serviceClient(), {
+    const targets = await listCardRefreshTargets(serviceDb, {
       accountId: auth.accountId,
       kidId,
     });

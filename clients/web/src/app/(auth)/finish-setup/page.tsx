@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createClient } from "@/lib/supabase/client";
+import { authClient, getSessionUser } from "@/lib/auth/client";
 import { useVaultStore } from "@/stores/vault-store";
 
 type SetupResult =
@@ -27,8 +27,7 @@ type SetupResult =
  * with auth), then bootstrap-or-unlock the E2EE vault.
  */
 async function runSetup(email: string, password: string): Promise<SetupResult> {
-  const supabase = createClient();
-  const { error: signInError } = await supabase.auth.signInWithPassword({
+  const { error: signInError } = await authClient.signIn.email({
     email,
     password,
   });
@@ -62,13 +61,12 @@ export default function FinishSetupPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    const supabase = createClient();
-    void supabase.auth.getUser().then(({ data }) => {
-      if (!data.user) {
+    void getSessionUser().then((user) => {
+      if (!user) {
         router.replace("/login");
         return;
       }
-      setEmail(data.user.email ?? null);
+      setEmail(user.email || null);
       setChecking(false);
     });
   }, [router]);

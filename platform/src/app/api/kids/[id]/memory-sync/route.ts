@@ -82,10 +82,10 @@ export async function POST(
   const { id: kidId } = await context.params;
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
-  const { accountId, supabase } = auth;
+  const { accountId, db } = auth;
 
   try {
-    const kid = await getKid(supabase, kidId);
+    const kid = await getKid(db, kidId);
     if (!kid || kid.account_id !== accountId) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
@@ -109,7 +109,7 @@ export async function POST(
 
     const created = [];
     for (const c of creates) {
-      const memory = await createMemory(supabase, {
+      const memory = await createMemory(db, {
         account_id: accountId,
         kid_id: kidId,
         content_enc: c.content_enc,
@@ -117,7 +117,7 @@ export async function POST(
         status: "active",
       });
       const sources = await createMemorySources(
-        supabase,
+        db,
         c.sources.map((s) => ({
           memory_id: memory.id,
           transcript_entry_id: s.transcript_entry_id,
@@ -130,7 +130,7 @@ export async function POST(
     const reinforced = [];
     for (const r of reinforces) {
       const sources = await createMemorySources(
-        supabase,
+        db,
         r.sources.map((s) => ({
           memory_id: r.memoryId,
           transcript_entry_id: s.transcript_entry_id,
@@ -143,7 +143,7 @@ export async function POST(
     const discarded = [];
     for (const d of discards) {
       discarded.push(
-        await discardMemoryBySystem(supabase, {
+        await discardMemoryBySystem(db, {
           memoryId: d.memoryId,
           transcriptEntryId: d.transcriptEntryId,
         }),
@@ -152,14 +152,14 @@ export async function POST(
 
     const now = new Date().toISOString();
     for (const tid of markProcessedTranscriptIds) {
-      await updateTranscript(supabase, tid, {
+      await updateTranscript(db, tid, {
         status: "processed",
         processed_at: now,
       });
     }
 
     if (memoryDossierEnc !== undefined) {
-      await updateKid(supabase, kidId, { memory: memoryDossierEnc });
+      await updateKid(db, kidId, { memory: memoryDossierEnc });
     }
 
     return NextResponse.json({

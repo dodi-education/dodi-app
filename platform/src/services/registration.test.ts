@@ -1,7 +1,6 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
-import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database } from "@dodi/types/database";
+import { createTestDb, type TestDatabase } from "@/test-support/pglite-db";
 
 import { getRegistrationMode, isInviteCodeActive } from "./registration";
 
@@ -34,35 +33,42 @@ describe("getRegistrationMode", () => {
 });
 
 describe("isInviteCodeActive", () => {
-  function fakeClient(result: {
-    data?: unknown;
-    error?: { message: string } | null;
-  }): { client: SupabaseClient<Database>; rpc: ReturnType<typeof vi.fn> } {
-    const rpc = vi.fn().mockResolvedValue(result);
-    return { client: { rpc } as unknown as SupabaseClient<Database>, rpc };
-  }
+  let t: TestDatabase;
+
+  beforeAll(async () => {
+    t = await createTestDb();
+    await t.serviceDb
+      .insertInto("invite_codes")
+      .values([
+        { code: "FRIENDS-2026", is_active: true, note: "active" },
+        { code: "OLD-CODE", is_active: false, note: "retired" },
+      ])
+      .execute();
+  }, 60_000);
+
+  afterAll(async () => {
+    await t?.close();
+  });
 
   it("returns false for blank codes without touching the db", async () => {
-    const { client, rpc } = fakeClient({ data: true });
-    expect(await isInviteCodeActive(client, "   ")).toBe(false);
-    expect(rpc).not.toHaveBeenCalled();
+    expect(await isInviteCodeActive(t.serviceDb, "   ")).toBe(false);
   });
 
-  it("passes the trimmed code to the rpc and returns its boolean", async () => {
-    const { client, rpc } = fakeClient({ data: true });
-    expect(await isInviteCodeActive(client, "  DODI-BETA ")).toBe(true);
-    expect(rpc).toHaveBeenCalledWith("is_invite_code_active", {
-      p_code: "DODI-BETA",
-    });
+  it("matches an active code case-insensitively, trimming whitespace", async () => {
+    expect(await isInviteCodeActive(t.serviceDb, "  friends-2026 ")).toBe(true);
+    expect(await isInviteCodeActive(t.serviceDb, "FRIENDS-2026")).toBe(true);
   });
 
-  it("returns false when the rpc reports inactive", async () => {
-    const { client } = fakeClient({ data: false });
-    expect(await isInviteCodeActive(client, "NOPE")).toBe(false);
+  it("returns false for an inactive code", async () => {
+    expect(await isInviteCodeActive(t.serviceDb, "OLD-CODE")).toBe(false);
   });
 
-  it("throws when the rpc errors", async () => {
-    const { client } = fakeClient({ error: { message: "boom" } });
-    await expect(isInviteCodeActive(client, "X")).rejects.toThrow("boom");
+  it("returns false for an unknown code", async () => {
+    expect(await isInviteCodeActive(t.serviceDb, "NOPE")).toBe(false);
+  });
+
+  it("does not treat wildcard characters as a pattern", async () => {
+    expect(await isInviteCodeActive(t.serviceDb, "%")).toBe(false);
+    expect(await isInviteCodeActive(t.serviceDb, "FRIENDS-____")).toBe(false);
   });
 });

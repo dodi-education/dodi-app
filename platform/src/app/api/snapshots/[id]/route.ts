@@ -3,7 +3,7 @@ import { z } from "zod/v4";
 
 import { serverErrorResponse } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
-import { serviceClient } from "@/lib/supabase";
+import { serviceDb } from "@/lib/db";
 import {
   deleteSnapshot,
   getSnapshot,
@@ -24,7 +24,7 @@ export async function GET(
   if (auth instanceof Response) return auth;
 
   try {
-    const snapshot = await getSnapshot(serviceClient(), {
+    const snapshot = await getSnapshot(serviceDb, {
       accountId: auth.accountId,
       id,
     });
@@ -65,7 +65,7 @@ export async function PATCH(
   }
 
   try {
-    await markSnapshotViewed(serviceClient(), { accountId: auth.accountId, id });
+    await markSnapshotViewed(serviceDb, { accountId: auth.accountId, id });
     return NextResponse.json({ ok: true });
   } catch (error) {
     const message =
@@ -83,7 +83,7 @@ export async function DELETE(
   if (auth instanceof Response) return auth;
 
   try {
-    await deleteSnapshot(serviceClient(), { accountId: auth.accountId, id });
+    await deleteSnapshot(serviceDb, { accountId: auth.accountId, id });
     return NextResponse.json({ ok: true });
   } catch (error) {
     const message =

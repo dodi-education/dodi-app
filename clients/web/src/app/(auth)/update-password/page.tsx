@@ -17,19 +17,20 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { isValidNsec } from "@dodi/crypto";
-import { createClient } from "@/lib/supabase/client";
+import { authClient } from "@/lib/auth/client";
 import { fetchVaultKeys } from "@/lib/vault-client";
 import { useVaultStore } from "@/stores/vault-store";
 
 /**
  * Second step of password reset. The user arrives here from /reset-password after
- * entering the emailed OTP code (verifyOtp type "recovery"), which has already
- * established a Supabase session, so they can set a new auth password here.
+ * entering the emailed sign-in code, which has already signed them in, so they
+ * can set a new auth password here (POST /api/auth/password/set on that
+ * session; the platform revokes every other session).
  *
  * Because data is end-to-end encrypted and the old password is unknown, the
  * vault must be re-encrypted under the new password using the nsec account key.
- * This page keeps the Supabase auth password and the vault wrap in sync; the
- * nsec is verified before either is changed.
+ * This page keeps the auth password and the vault wrap in sync; the nsec is
+ * verified before either is changed.
  */
 export default function UpdatePasswordPage() {
   const t = useTranslations("auth");
@@ -67,12 +68,16 @@ export default function UpdatePasswordPage() {
     }
 
     setLoading(true);
-    const supabase = createClient();
 
     try {
       const updateAuthPassword = async () => {
-        const { error: authError } = await supabase.auth.updateUser({ password });
-        if (authError) throw new Error(authError.message);
+        const { error: authError } = await authClient.$fetch("/password/set", {
+          method: "POST",
+          body: { password },
+        });
+        if (authError) {
+          throw new Error(authError.message ?? t("updatePasswordFailed"));
+        }
       };
 
       if (hasVault) {

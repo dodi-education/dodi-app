@@ -7,6 +7,6 @@ import { listDevices } from "@/services/devices";
 export async function GET(request: Request): Promise<Response> {
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
-  const devices = await listDevices(auth.supabase, auth.accountId);
+  const devices = await listDevices(auth.db, auth.accountId);
   return NextResponse.json({ devices });
 }

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 
 import { requireAuth } from "@/lib/resolve-auth";
-import { serviceClient } from "@/lib/supabase";
+import { serviceDb } from "@/lib/db";
 import { shareSnapshot } from "@/services/snapshots";
 
 const ShareSchema = z.object({
@@ -36,7 +36,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
 
   try {
-    const shared = await shareSnapshot(serviceClient(), {
+    const shared = await shareSnapshot(serviceDb, {
       senderAccountId: auth.accountId,
       senderKidId: result.data.senderKidId,
       friendshipId: result.data.friendshipId,

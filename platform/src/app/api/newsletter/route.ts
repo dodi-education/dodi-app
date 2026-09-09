@@ -5,7 +5,7 @@ import { z } from "zod/v4";
 import { clientIp, hashIp } from "@/lib/client-ip";
 import { sendEmail } from "@/lib/email";
 import { serverErrorResponse } from "@/lib/error-logs";
-import { serviceClient } from "@/lib/supabase";
+import { serviceDb } from "@/lib/db";
 import { NewsletterWelcomeEmail } from "@/emails/newsletter-welcome";
 import { newsletterWelcomeCopy } from "@/emails/strings";
 import {
@@ -76,7 +76,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   let outcome;
   try {
-    outcome = await recordNewsletterSignup(serviceClient(), {
+    outcome = await recordNewsletterSignup(serviceDb, {
       email: normalizedEmail,
       locale,
       list,

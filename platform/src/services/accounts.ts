@@ -1,45 +1,36 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Updateable } from "kysely";
 
 import type { StoredDatePreferences } from "@dodi/intl";
-import type { Database } from "@dodi/types/database";
+import type { Account, Database, Json } from "@dodi/types/database";
 
-type Client = SupabaseClient<Database>;
-type Account = Database["public"]["Tables"]["accounts"]["Row"];
-type AccountUpdate = Database["public"]["Tables"]["accounts"]["Update"];
+import type { Db } from "@/lib/db";
+import { isUniqueViolation } from "@/lib/db-errors";
+
+type AccountUpdate = Updateable<Database["accounts"]>;
 
 export async function getAccount(
-  supabase: Client,
+  db: Db,
   accountId: string,
 ): Promise<Account | null> {
-  const { data, error } = await supabase
-    .from("accounts")
-    .select("*")
-    .eq("id", accountId)
-    .single();
-
-  if (error) {
-    if (error.code === "PGRST116") return null;
-    throw error;
-  }
-  // Type assertion needed until types are auto-generated from Supabase
-  return data as unknown as Account;
+  const row = await db
+    .selectFrom("accounts")
+    .selectAll()
+    .where("id", "=", accountId)
+    .executeTakeFirst();
+  return row ?? null;
 }
 
 export async function updateAccount(
-  supabase: Client,
+  db: Db,
   accountId: string,
   updates: AccountUpdate,
 ): Promise<Account> {
-  const { data, error } = await supabase
-    .from("accounts")
-    .update(updates)
-    .eq("id", accountId)
-    .select()
-    .single();
-
-  if (error) throw error;
-  // Type assertion needed until types are auto-generated from Supabase
-  return data as unknown as Account;
+  return db
+    .updateTable("accounts")
+    .set(updates)
+    .where("id", "=", accountId)
+    .returningAll()
+    .executeTakeFirstOrThrow();
 }
 
 /**
@@ -49,16 +40,15 @@ export async function updateAccount(
  * across devices.
  */
 export async function updateAccountLanguage(
-  supabase: Client,
+  db: Db,
   accountId: string,
   language: string,
 ): Promise<void> {
-  const { error } = await supabase
-    .from("accounts")
-    .update({ language } as AccountUpdate)
-    .eq("id", accountId);
-
-  if (error) throw error;
+  await db
+    .updateTable("accounts")
+    .set({ language })
+    .where("id", "=", accountId)
+    .execute();
 }
 
 /**
@@ -67,19 +57,15 @@ export async function updateAccountLanguage(
  * explicit timezone, when present, is already sealed (`enc:v1:`) by the client.
  */
 export async function updateAccountDatePreferences(
-  supabase: Client,
+  db: Db,
   accountId: string,
   datePreferences: StoredDatePreferences,
 ): Promise<StoredDatePreferences> {
-  const { error } = await supabase
-    .from("accounts")
-    .update({
-      date_preferences:
-        datePreferences as unknown as AccountUpdate["date_preferences"],
-    })
-    .eq("id", accountId);
-
-  if (error) throw error;
+  await db
+    .updateTable("accounts")
+    .set({ date_preferences: datePreferences as unknown as Json })
+    .where("id", "=", accountId)
+    .execute();
   return datePreferences;
 }
 
@@ -99,29 +85,25 @@ export interface NotificationPreferences {
  * updating one toggle never clobbers the others) and return the merged result.
  */
 export async function updateAccountNotificationPreferences(
-  supabase: Client,
+  db: Db,
   accountId: string,
   prefs: NotificationPreferences,
 ): Promise<NotificationPreferences> {
-  const { data: existing, error: readError } = await supabase
-    .from("accounts")
+  const existing = await db
+    .selectFrom("accounts")
     .select("notification_preferences")
-    .eq("id", accountId)
-    .single();
-  if (readError) throw readError;
+    .where("id", "=", accountId)
+    .executeTakeFirstOrThrow();
 
-  const current = (existing?.notification_preferences ??
+  const current = (existing.notification_preferences ??
     {}) as NotificationPreferences;
   const merged: NotificationPreferences = { ...current, ...prefs };
 
-  const { error } = await supabase
-    .from("accounts")
-    .update({
-      notification_preferences:
-        merged as unknown as AccountUpdate["notification_preferences"],
-    })
-    .eq("id", accountId);
-  if (error) throw error;
+  await db
+    .updateTable("accounts")
+    .set({ notification_preferences: merged as unknown as Json })
+    .where("id", "=", accountId)
+    .execute();
 
   return merged;
 }
@@ -135,18 +117,21 @@ export async function updateAccountNotificationPreferences(
  * answer 409 rather than 500.
  */
 export async function setAccountPublicationHandle(
-  supabase: Client,
+  db: Db,
   accountId: string,
   handle: string,
 ): Promise<boolean> {
-  const { error } = await supabase
-    .from("accounts")
-    .update({ publication_handle: handle } as AccountUpdate)
-    .eq("id", accountId);
-
-  // 23505 = unique_violation → the handle is taken.
-  if (error && error.code === "23505") return false;
-  if (error) throw error;
+  try {
+    await db
+      .updateTable("accounts")
+      .set({ publication_handle: handle })
+      .where("id", "=", accountId)
+      .execute();
+  } catch (error) {
+    // unique_violation on accounts_publication_handle_key: the handle is taken.
+    if (isUniqueViolation(error, "accounts_publication_handle_key")) return false;
+    throw error;
+  }
   return true;
 }
 
@@ -158,40 +143,42 @@ export async function setAccountPublicationHandle(
  * the nsec never reaches the server.
  */
 export async function claimAccountNpub(
-  supabase: Client,
+  db: Db,
   accountId: string,
   npub: string,
 ): Promise<boolean> {
-  const { data, error } = await supabase
-    .from("accounts")
-    .update({ npub } as AccountUpdate)
-    .eq("id", accountId)
-    // npub is regex-validated lowercase hex, so it is safe inside the filter.
-    .or(`npub.is.null,npub.eq.${npub}`)
-    .select("id");
-
-  // 23505 = unique_violation → the npub is bound to another account.
-  if (error && error.code === "23505") return false;
-  if (error) throw error;
-  return (data?.length ?? 0) > 0;
+  let rows: { id: string }[];
+  try {
+    rows = await db
+      .updateTable("accounts")
+      .set({ npub })
+      .where("id", "=", accountId)
+      .where((eb) => eb.or([eb("npub", "is", null), eb("npub", "=", npub)]))
+      .returning("id")
+      .execute();
+  } catch (error) {
+    // unique_violation on accounts_npub_key: the npub is bound to another account.
+    if (isUniqueViolation(error, "accounts_npub_key")) return false;
+    throw error;
+  }
+  return rows.length > 0;
 }
 
 /**
- * Whether a handle is free. Needs the service-role client: RLS scopes account
- * reads to the caller, and a "taken?" answer must span every account. Returns
- * only a boolean — never a browsable list, same contract as friend lookup.
+ * Whether a handle is free. Needs the service db: RLS scopes account reads to
+ * the caller, and a "taken?" answer must span every account. Returns only a
+ * boolean — never a browsable list, same contract as friend lookup.
  */
 export async function isPublicationHandleAvailable(
-  serviceSupabase: Client,
+  serviceDb: Db,
   handle: string,
 ): Promise<boolean> {
-  const { data, error } = await serviceSupabase
-    .from("accounts")
+  const row = await serviceDb
+    .selectFrom("accounts")
     .select("id")
-    .eq("publication_handle", handle)
-    .maybeSingle();
-  if (error) throw error;
-  return data === null;
+    .where("publication_handle", "=", handle)
+    .executeTakeFirst();
+  return row === undefined;
 }
 
 /**
@@ -200,14 +187,13 @@ export async function isPublicationHandleAvailable(
  * sees the plaintext — it only stores/returns the opaque blob.
  */
 export async function updateAccountParentPin(
-  supabase: Client,
+  db: Db,
   accountId: string,
   parentPinEnc: string | null,
 ): Promise<void> {
-  const { error } = await supabase
-    .from("accounts")
-    .update({ parent_pin_enc: parentPinEnc } as AccountUpdate)
-    .eq("id", accountId);
-
-  if (error) throw error;
+  await db
+    .updateTable("accounts")
+    .set({ parent_pin_enc: parentPinEnc })
+    .where("id", "=", accountId)
+    .execute();
 }

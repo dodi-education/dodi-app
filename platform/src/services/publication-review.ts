@@ -22,7 +22,6 @@
  * overlapping cron runs — and withdraw-during-review — skip instead of
  * double-processing.
  */
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod/v4";
 
 import { getProviderDefinition } from "@dodi/ai/providers";
@@ -35,8 +34,9 @@ import {
   worstRejectionKind,
 } from "@dodi/protocol";
 import type { AIProviderId } from "@dodi/types/ai";
-import type { Database, Game, GameTranslation } from "@dodi/types/database";
+import type { Game, GameTranslation } from "@dodi/types/database";
 
+import type { Db } from "@/lib/db";
 import { logServerError } from "@/lib/error-logs";
 
 import {
@@ -52,8 +52,6 @@ import {
   notifyPublisherRejected,
 } from "./publication-notifications";
 
-type Client = SupabaseClient<Database>;
-
 /** Attempts before an item parks for the operator (also the claim ceiling). */
 export const MAX_REVIEW_ATTEMPTS = 3;
 
@@ -64,10 +62,6 @@ export interface ReviewAgentConfig {
   provider: AIProviderId;
   model: string;
   apiKey: string;
-}
-
-function castGame(row: unknown): Game {
-  return row as Game;
 }
 
 /**
@@ -220,7 +214,7 @@ export interface ReviewRunResult {
  * latency is measured in cron intervals, not milliseconds.
  */
 export async function processPendingPublications(
-  supabase: Client,
+  db: Db,
   options: {
     limit?: number;
     /** Test seam — defaults to the real provider factory. */
@@ -244,38 +238,32 @@ export async function processPendingPublications(
     return result;
   }
 
-  const pending = await listPendingPublications(
-    supabase,
-    limit,
-    MAX_REVIEW_ATTEMPTS,
-  );
+  const pending = await listPendingPublications(db, limit, MAX_REVIEW_ATTEMPTS);
 
   for (const item of pending) {
     // Optimistic claim: bump the attempt counter only if nobody else has, and
-    // only while the item is still pending. Zero rows = lost the race or the
-    // parent withdrew — skip either way.
-    const { data: claimedRow, error: claimError } = await supabase
-      .from("games")
-      .update({ review_attempts: item.review_attempts + 1 })
-      .eq("id", item.id)
-      .eq("review_attempts", item.review_attempts)
-      .not("publication_requested_at", "is", null)
-      .is("published_at", null)
-      .is("rejected_at", null)
-      .select("*")
-      .maybeSingle();
-    if (claimError) throw claimError;
-    if (!claimedRow) {
+    // only while the item is still pending. A single UPDATE ... RETURNING:
+    // no row back = lost the race or the parent withdrew, skip either way.
+    const claimed = await db
+      .updateTable("games")
+      .set({ review_attempts: item.review_attempts + 1 })
+      .where("id", "=", item.id)
+      .where("review_attempts", "=", item.review_attempts)
+      .where("publication_requested_at", "is not", null)
+      .where("published_at", "is", null)
+      .where("rejected_at", "is", null)
+      .returningAll()
+      .executeTakeFirst();
+    if (!claimed) {
       result.skipped += 1;
       continue;
     }
-    const claimed = castGame(claimedRow);
     result.processed += 1;
 
     let verdict: ReviewVerdict;
     try {
       const provider = factory(config.provider, config.apiKey, config.model);
-      const listingTranslations = await listTranslations(supabase, claimed.id);
+      const listingTranslations = await listTranslations(db, claimed.id);
       const { system, user } = buildReviewPrompt(claimed, listingTranslations);
       const raw = await provider.generateJson(system, user);
       const parsed = ReviewVerdictSchema.safeParse(raw);
@@ -292,24 +280,24 @@ export async function processPendingPublications(
 
     try {
       if (verdict.verdict === "approve") {
-        const approved = await approvePublication(supabase, claimed.id, "system");
+        const approved = await approvePublication(db, claimed.id, "system");
         result.approved += 1;
-        await notifyPublisherApproved(supabase, approved);
+        await notifyPublisherApproved(db, approved);
       } else {
         const kind = worstRejectionKind(verdict.reasons);
-        const publication = await rejectPublication(supabase, claimed.id, {
+        const publication = await rejectPublication(db, claimed.id, {
           kind,
           reasons: verdict.reasons,
         });
         result.rejected += 1;
         await notifyPublicationRejected(
-          supabase,
+          db,
           publication,
           kind,
           verdict.reasons,
         );
         await notifyPublisherRejected(
-          supabase,
+          db,
           publication,
           kind,
           verdict.reasons,

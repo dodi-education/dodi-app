@@ -17,10 +17,10 @@ const CreatePersonaSchema = z.object({
 export async function GET(request: Request): Promise<NextResponse> {
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
-  const { accountId, supabase } = auth;
+  const { accountId, db } = auth;
 
   try {
-    const personas = await listPersonas(supabase, accountId);
+    const personas = await listPersonas(db, accountId);
     return NextResponse.json(personas);
   } catch (error) {
     return serverErrorResponse(
@@ -35,7 +35,7 @@ export async function GET(request: Request): Promise<NextResponse> {
 export async function POST(request: Request): Promise<NextResponse> {
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
-  const { accountId, supabase } = auth;
+  const { accountId, db } = auth;
 
   const body: unknown = await request.json();
   const result = CreatePersonaSchema.safeParse(body);
@@ -49,8 +49,8 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   // Entitlement gate: cap custom personas at the account's copied max_custom_personas
   // (listPersonas also returns the global default, which has a null account_id).
-  const account = await getAccount(supabase, accountId);
-  const personas = await listPersonas(supabase, accountId);
+  const account = await getAccount(db, accountId);
+  const personas = await listPersonas(db, accountId);
   const customCount = personas.filter((p) => p.account_id === accountId).length;
   if (account && customCount >= account.max_custom_personas) {
     return NextResponse.json(
@@ -60,7 +60,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
 
   try {
-    const persona = await createPersona(supabase, {
+    const persona = await createPersona(db, {
       account_id: accountId,
       name: result.data.name,
       soul: result.data.soul,

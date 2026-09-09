@@ -1,9 +1,15 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  Kysely,
+  PostgresAdapter,
+  PostgresIntrospector,
+  PostgresQueryCompiler,
+} from "kysely";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { Database, Friendship } from "@dodi/types/database";
+import type { Database, Friendship, Json } from "@dodi/types/database";
 
 import { friendApprovalCopy } from "@/emails/strings";
+import { createTestDb, type TestDatabase } from "@/test-support/pglite-db";
 
 import { notifyPendingApproval } from "./notifications";
 
@@ -11,67 +17,81 @@ import { notifyPendingApproval } from "./notifications";
 const { sendEmailMock } = vi.hoisted(() => ({ sendEmailMock: vi.fn() }));
 vi.mock("@/lib/email", () => ({ sendEmail: sendEmailMock }));
 
-interface FakeAccount {
-  id: string;
-  email: string | null;
-  language: string | null;
-  notification_preferences: unknown;
+let t: TestDatabase;
+/** Two real accounts: the friendship's requester and addressee side. */
+let req: string;
+let addr: string;
+
+beforeAll(async () => {
+  t = await createTestDb();
+  req = await t.createAccount("acc-req@example.com");
+  addr = await t.createAccount("acc-addr@example.com");
+}, 60_000);
+
+afterAll(async () => {
+  await t?.close();
+});
+
+/** Reset the plaintext account fields a test may have changed. */
+async function setAccount(
+  id: string,
+  fields: { language?: string; notification_preferences?: Json },
+): Promise<void> {
+  await t.serviceDb
+    .updateTable("accounts")
+    .set({
+      language: fields.language ?? "en",
+      notification_preferences: fields.notification_preferences ?? {},
+    })
+    .where("id", "=", id)
+    .execute();
 }
 
-/** Minimal fake of the one query notifyPendingApproval makes. */
-function fakeSupabase(
-  accounts: FakeAccount[],
-  opts: { error?: string } = {},
-): SupabaseClient<Database> {
-  return {
-    from: () => ({
-      select: () => ({
-        in: (_col: string, ids: string[]) =>
-          Promise.resolve(
-            opts.error
-              ? { data: null, error: { message: opts.error } }
-              : {
-                  data: accounts.filter((a) => ids.includes(a.id)),
-                  error: null,
-                },
-          ),
+/** A handle whose every query fails: exercises the "never throws" contract. */
+function failingDb(): Kysely<Database> {
+  return new Kysely<Database>({
+    dialect: {
+      createAdapter: () => new PostgresAdapter(),
+      createQueryCompiler: () => new PostgresQueryCompiler(),
+      createIntrospector: (db) => new PostgresIntrospector(db),
+      createDriver: () => ({
+        init: async () => {},
+        acquireConnection: async () => {
+          throw new Error("boom");
+        },
+        beginTransaction: async () => {},
+        commitTransaction: async () => {},
+        rollbackTransaction: async () => {},
+        releaseConnection: async () => {},
+        destroy: async () => {},
       }),
-    }),
-  } as unknown as SupabaseClient<Database>;
+    },
+  });
 }
 
 function friendship(overrides: Partial<Friendship>): Friendship {
   return {
-    requester_account_id: "acc-req",
-    addressee_account_id: "acc-addr",
+    requester_account_id: req,
+    addressee_account_id: addr,
     requester_parent_ok: null,
     addressee_parent_ok: null,
     ...overrides,
   } as Friendship;
 }
 
-const account = (over: Partial<FakeAccount> & { id: string }): FakeAccount => ({
-  email: `${over.id}@example.com`,
-  language: "en",
-  notification_preferences: {},
-  ...over,
-});
-
-beforeEach(() => {
+beforeEach(async () => {
   sendEmailMock.mockReset();
   sendEmailMock.mockResolvedValue(true);
   process.env.NEXT_PUBLIC_APP_URL = "https://app.dodi.app";
+  await setAccount(req, {});
+  await setAccount(addr, {});
 });
 
 describe("notifyPendingApproval", () => {
   it("emails only the side(s) whose parent approval is pending", async () => {
-    const supabase = fakeSupabase([
-      account({ id: "acc-req" }),
-      account({ id: "acc-addr" }),
-    ]);
     // Only the addressee's parent must approve.
     await notifyPendingApproval(
-      supabase,
+      t.serviceDb,
       friendship({ addressee_parent_ok: false }),
     );
 
@@ -80,12 +100,8 @@ describe("notifyPendingApproval", () => {
   });
 
   it("emails both parents when both sides are pending", async () => {
-    const supabase = fakeSupabase([
-      account({ id: "acc-req" }),
-      account({ id: "acc-addr" }),
-    ]);
     await notifyPendingApproval(
-      supabase,
+      t.serviceDb,
       friendship({ requester_parent_ok: false, addressee_parent_ok: false }),
     );
 
@@ -94,12 +110,11 @@ describe("notifyPendingApproval", () => {
   });
 
   it("dedupes to a single email when both sides are the same account", async () => {
-    const supabase = fakeSupabase([account({ id: "acc-solo" })]);
     await notifyPendingApproval(
-      supabase,
+      t.serviceDb,
       friendship({
-        requester_account_id: "acc-solo",
-        addressee_account_id: "acc-solo",
+        requester_account_id: addr,
+        addressee_account_id: addr,
         requester_parent_ok: false,
         addressee_parent_ok: false,
       }),
@@ -109,14 +124,11 @@ describe("notifyPendingApproval", () => {
   });
 
   it("suppresses the email when the toggle is off", async () => {
-    const supabase = fakeSupabase([
-      account({
-        id: "acc-addr",
-        notification_preferences: { friend_approval_email: false },
-      }),
-    ]);
+    await setAccount(addr, {
+      notification_preferences: { friend_approval_email: false },
+    });
     await notifyPendingApproval(
-      supabase,
+      t.serviceDb,
       friendship({ addressee_parent_ok: false }),
     );
 
@@ -124,11 +136,9 @@ describe("notifyPendingApproval", () => {
   });
 
   it("sends when the toggle is absent (opt-out default is on)", async () => {
-    const supabase = fakeSupabase([
-      account({ id: "acc-addr", notification_preferences: null }),
-    ]);
+    await setAccount(addr, { notification_preferences: {} });
     await notifyPendingApproval(
-      supabase,
+      t.serviceDb,
       friendship({ addressee_parent_ok: false }),
     );
 
@@ -136,9 +146,9 @@ describe("notifyPendingApproval", () => {
   });
 
   it("localizes the subject to the account's language", async () => {
-    const supabase = fakeSupabase([account({ id: "acc-addr", language: "de" })]);
+    await setAccount(addr, { language: "de" });
     await notifyPendingApproval(
-      supabase,
+      t.serviceDb,
       friendship({ addressee_parent_ok: false }),
     );
 
@@ -149,9 +159,8 @@ describe("notifyPendingApproval", () => {
 
   it("defaults the email's app origin to app.dodi.app when the env is unset", async () => {
     delete process.env.NEXT_PUBLIC_APP_URL;
-    const supabase = fakeSupabase([account({ id: "acc-addr" })]);
     await notifyPendingApproval(
-      supabase,
+      t.serviceDb,
       friendship({ addressee_parent_ok: false }),
     );
     // appUrl is passed to the email element; drives logo + dashboard/settings links.
@@ -162,9 +171,8 @@ describe("notifyPendingApproval", () => {
 
   it("uses NEXT_PUBLIC_APP_URL for the email's app origin when set", async () => {
     process.env.NEXT_PUBLIC_APP_URL = "https://staging.dodi.app";
-    const supabase = fakeSupabase([account({ id: "acc-addr" })]);
     await notifyPendingApproval(
-      supabase,
+      t.serviceDb,
       friendship({ addressee_parent_ok: false }),
     );
     expect(sendEmailMock.mock.calls[0][0].react.props.appUrl).toBe(
@@ -173,15 +181,16 @@ describe("notifyPendingApproval", () => {
   });
 
   it("does nothing when no side needs approval", async () => {
-    const supabase = fakeSupabase([account({ id: "acc-addr" })]);
-    await notifyPendingApproval(supabase, friendship({}));
+    await notifyPendingApproval(t.serviceDb, friendship({}));
     expect(sendEmailMock).not.toHaveBeenCalled();
   });
 
   it("never throws when the account lookup fails", async () => {
-    const supabase = fakeSupabase([], { error: "boom" });
     await expect(
-      notifyPendingApproval(supabase, friendship({ addressee_parent_ok: false })),
+      notifyPendingApproval(
+        failingDb(),
+        friendship({ addressee_parent_ok: false }),
+      ),
     ).resolves.toBeUndefined();
     expect(sendEmailMock).not.toHaveBeenCalled();
   });

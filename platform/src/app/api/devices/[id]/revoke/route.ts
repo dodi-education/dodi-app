@@ -14,7 +14,7 @@ export async function POST(request: Request, context: Ctx): Promise<Response> {
   if (auth instanceof Response) return auth;
   const { id } = await context.params;
   try {
-    const device = await revokeDevice(auth.supabase, auth.accountId, id);
+    const device = await revokeDevice(auth.db, auth.accountId, id);
     return NextResponse.json({ device });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 400 });

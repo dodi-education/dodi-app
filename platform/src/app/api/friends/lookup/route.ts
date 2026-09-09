@@ -3,7 +3,7 @@ import { z } from "zod/v4";
 
 import { serverErrorResponse } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
-import { serviceClient } from "@/lib/supabase";
+import { serviceDb } from "@/lib/db";
 import { lookupFriendTarget } from "@/services/friends";
 
 const LookupSchema = z.object({ socialId: z.string().min(3).max(30) });
@@ -27,7 +27,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
 
   try {
-    const target = await lookupFriendTarget(serviceClient(), result.data.socialId);
+    const target = await lookupFriendTarget(serviceDb, result.data.socialId);
     if (!target) {
       return NextResponse.json(
         { error: "No kid found for that friend code" },

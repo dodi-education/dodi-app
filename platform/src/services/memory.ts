@@ -3,14 +3,14 @@
  * client ciphertext (content_enc); the server never decrypts.
  */
 
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { jsonObjectFrom } from "kysely/helpers/postgres";
 
 import type {
-  Database,
   Memory,
   MemoryInsert,
   MemorySource,
   MemorySourceInsert,
+  MemorySourceWithEntry,
   MemoryUpdate,
   Transcript,
   TranscriptEntry,
@@ -19,7 +19,7 @@ import type {
   TranscriptUpdate,
 } from "@dodi/types/database";
 
-type Client = SupabaseClient<Database>;
+import type { Db } from "@/lib/db";
 
 // ---------------------------------------------------------------------------
 // Transcripts
@@ -27,7 +27,7 @@ type Client = SupabaseClient<Database>;
 
 /** Upsert the day-batch row for (kid_id, local_date); returns the row. */
 export async function upsertTranscript(
-  supabase: Client,
+  db: Db,
   input: {
     accountId: string;
     kidId: string;
@@ -48,82 +48,81 @@ export async function upsertTranscript(
   };
   if (input.contentEnc !== undefined) payload.content_enc = input.contentEnc;
 
-  const { data, error } = await supabase
-    .from("transcripts")
-    .upsert(payload, { onConflict: "kid_id,local_date" })
-    .select("*")
-    .single();
-
-  if (error) throw error;
-  return data as unknown as Transcript;
+  return db
+    .insertInto("transcripts")
+    .values(payload)
+    .onConflict((oc) =>
+      oc.columns(["kid_id", "local_date"]).doUpdateSet((eb) => ({
+        // Every column the payload carries is overwritten on conflict, exactly
+        // like the former PostgREST upsert (merge-duplicates semantics).
+        account_id: eb.ref("excluded.account_id"),
+        persona_id: eb.ref("excluded.persona_id"),
+        status: eb.ref("excluded.status"),
+        updated_at: eb.ref("excluded.updated_at"),
+        ...(input.contentEnc !== undefined
+          ? { content_enc: eb.ref("excluded.content_enc") }
+          : {}),
+      })),
+    )
+    .returningAll()
+    .executeTakeFirstOrThrow();
 }
 
 export async function getTranscriptByDay(
-  supabase: Client,
+  db: Db,
   kidId: string,
   localDate: string,
 ): Promise<Transcript | null> {
-  const { data, error } = await supabase
-    .from("transcripts")
-    .select("*")
-    .eq("kid_id", kidId)
-    .eq("local_date", localDate)
-    .maybeSingle();
-
-  if (error) throw error;
-  return (data as Transcript | null) ?? null;
+  const row = await db
+    .selectFrom("transcripts")
+    .selectAll()
+    .where("kid_id", "=", kidId)
+    .where("local_date", "=", localDate)
+    .executeTakeFirst();
+  return row ?? null;
 }
 
 export async function listTranscripts(
-  supabase: Client,
+  db: Db,
   kidId: string,
   options: { status?: Transcript["status"]; limit?: number } = {},
 ): Promise<Transcript[]> {
-  let q = supabase
-    .from("transcripts")
-    .select("*")
-    .eq("kid_id", kidId)
-    .order("local_date", { ascending: false });
+  let q = db
+    .selectFrom("transcripts")
+    .selectAll()
+    .where("kid_id", "=", kidId)
+    .orderBy("local_date", "desc");
 
-  if (options.status) q = q.eq("status", options.status);
+  if (options.status) q = q.where("status", "=", options.status);
   if (options.limit) q = q.limit(options.limit);
 
-  const { data, error } = await q;
-  if (error) throw error;
-  return (data ?? []) as unknown as Transcript[];
+  return q.execute();
 }
 
 export async function updateTranscript(
-  supabase: Client,
+  db: Db,
   transcriptId: string,
   patch: TranscriptUpdate,
 ): Promise<Transcript> {
-  const { data, error } = await supabase
-    .from("transcripts")
-    .update({ ...patch, updated_at: new Date().toISOString() })
-    .eq("id", transcriptId)
-    .select("*")
-    .single();
-
-  if (error) throw error;
-  return data as unknown as Transcript;
+  return db
+    .updateTable("transcripts")
+    .set({ ...patch, updated_at: new Date().toISOString() })
+    .where("id", "=", transcriptId)
+    .returningAll()
+    .executeTakeFirstOrThrow();
 }
 
 /** Slim projections of entries cited by memory sources (content stays E2EE). */
 export async function listTranscriptEntriesByIds(
-  supabase: Client,
+  db: Db,
   entryIds: string[],
 ): Promise<Array<Pick<TranscriptEntry, "id" | "role" | "content_enc" | "occurred_at">>> {
   if (entryIds.length === 0) return [];
-  const { data, error } = await supabase
-    .from("transcript_entries")
-    .select("id, role, content_enc, occurred_at")
-    .in("id", entryIds);
-
-  if (error) throw error;
-  return (data ?? []) as unknown as Array<
-    Pick<TranscriptEntry, "id" | "role" | "content_enc" | "occurred_at">
-  >;
+  return db
+    .selectFrom("transcript_entries")
+    .select(["id", "role", "content_enc", "occurred_at"])
+    .where("id", "in", entryIds)
+    .execute();
 }
 
 /**
@@ -131,18 +130,17 @@ export async function listTranscriptEntriesByIds(
  * same ids and are ignored (idempotent). Returns the newly inserted rows.
  */
 export async function insertTranscriptEntries(
-  supabase: Client,
+  db: Db,
   entries: TranscriptEntryInsert[],
 ): Promise<TranscriptEntry[]> {
   if (entries.length === 0) return [];
 
-  const { data, error } = await supabase
-    .from("transcript_entries")
-    .upsert(entries, { onConflict: "id", ignoreDuplicates: true })
-    .select("*");
-
-  if (error) throw error;
-  return (data ?? []) as unknown as TranscriptEntry[];
+  return db
+    .insertInto("transcript_entries")
+    .values(entries)
+    .onConflict((oc) => oc.column("id").doNothing())
+    .returningAll()
+    .execute();
 }
 
 // ---------------------------------------------------------------------------
@@ -150,51 +148,40 @@ export async function insertTranscriptEntries(
 // ---------------------------------------------------------------------------
 
 export async function listMemories(
-  supabase: Client,
+  db: Db,
   kidId: string,
   options: { status?: Memory["status"] } = {},
 ): Promise<Memory[]> {
-  let q = supabase
-    .from("memories")
-    .select("*")
-    .eq("kid_id", kidId)
-    .order("created_at", { ascending: true });
+  let q = db
+    .selectFrom("memories")
+    .selectAll()
+    .where("kid_id", "=", kidId)
+    .orderBy("created_at", "asc");
 
-  if (options.status) q = q.eq("status", options.status);
+  if (options.status) q = q.where("status", "=", options.status);
 
-  const { data, error } = await q;
-  if (error) throw error;
-  return (data ?? []) as unknown as Memory[];
+  return q.execute();
 }
 
-export async function createMemory(
-  supabase: Client,
-  input: MemoryInsert,
-): Promise<Memory> {
-  const { data, error } = await supabase
-    .from("memories")
-    .insert(input)
-    .select("*")
-    .single();
-
-  if (error) throw error;
-  return data as unknown as Memory;
+export async function createMemory(db: Db, input: MemoryInsert): Promise<Memory> {
+  return db
+    .insertInto("memories")
+    .values(input)
+    .returningAll()
+    .executeTakeFirstOrThrow();
 }
 
 export async function updateMemory(
-  supabase: Client,
+  db: Db,
   memoryId: string,
   patch: MemoryUpdate,
 ): Promise<Memory> {
-  const { data, error } = await supabase
-    .from("memories")
-    .update(patch)
-    .eq("id", memoryId)
-    .select("*")
-    .single();
-
-  if (error) throw error;
-  return data as unknown as Memory;
+  return db
+    .updateTable("memories")
+    .set(patch)
+    .where("id", "=", memoryId)
+    .returningAll()
+    .executeTakeFirstOrThrow();
 }
 
 /**
@@ -203,35 +190,66 @@ export async function updateMemory(
  * Returns only the newly inserted rows.
  */
 export async function createMemorySources(
-  supabase: Client,
+  db: Db,
   sources: MemorySourceInsert[],
 ): Promise<MemorySource[]> {
   if (sources.length === 0) return [];
-  const { data, error } = await supabase
-    .from("memory_sources")
-    .upsert(sources, {
-      onConflict: "memory_id,transcript_entry_id,relation",
-      ignoreDuplicates: true,
-    })
-    .select("*");
-
-  if (error) throw error;
-  return (data ?? []) as unknown as MemorySource[];
+  return db
+    .insertInto("memory_sources")
+    .values(sources)
+    .onConflict((oc) =>
+      oc.columns(["memory_id", "transcript_entry_id", "relation"]).doNothing(),
+    )
+    .returningAll()
+    .execute();
 }
 
 export async function listMemorySources(
-  supabase: Client,
+  db: Db,
   memoryIds: string[],
 ): Promise<MemorySource[]> {
   if (memoryIds.length === 0) return [];
-  const { data, error } = await supabase
-    .from("memory_sources")
-    .select("*")
-    .in("memory_id", memoryIds)
-    .order("created_at", { ascending: true });
+  return db
+    .selectFrom("memory_sources")
+    .selectAll()
+    .where("memory_id", "in", memoryIds)
+    .orderBy("created_at", "asc")
+    .execute();
+}
 
-  if (error) throw error;
-  return (data ?? []) as unknown as MemorySource[];
+/**
+ * Memory sources with their cited transcript entry embedded (slim projection,
+ * content_enc stays E2EE) so dossier citations resolve without a second fetch.
+ * `entry` is null when the entry row is gone.
+ */
+export async function listMemorySourcesWithEntries(
+  db: Db,
+  memoryIds: string[],
+): Promise<MemorySourceWithEntry[]> {
+  if (memoryIds.length === 0) return [];
+  return db
+    .selectFrom("memory_sources")
+    .selectAll("memory_sources")
+    .select((eb) =>
+      jsonObjectFrom(
+        eb
+          .selectFrom("transcript_entries")
+          .select([
+            "transcript_entries.id",
+            "transcript_entries.role",
+            "transcript_entries.content_enc",
+            "transcript_entries.occurred_at",
+          ])
+          .whereRef(
+            "transcript_entries.id",
+            "=",
+            "memory_sources.transcript_entry_id",
+          ),
+      ).as("entry"),
+    )
+    .where("memory_sources.memory_id", "in", memoryIds)
+    .orderBy("memory_sources.created_at", "asc")
+    .execute();
 }
 
 /**
@@ -239,50 +257,54 @@ export async function listMemorySources(
  * with discard_memory_source_id (satisfies CHECK constraints).
  */
 export async function discardMemoryBySystem(
-  supabase: Client,
+  db: Db,
   input: {
     memoryId: string;
     transcriptEntryId: string;
   },
 ): Promise<{ memory: Memory; source: MemorySource }> {
-  let [source] = await createMemorySources(supabase, [
-    {
-      memory_id: input.memoryId,
-      transcript_entry_id: input.transcriptEntryId,
-      relation: "contradicts",
-    },
-  ]);
+  const run = async (trx: Db) => {
+    let [source] = await createMemorySources(trx, [
+      {
+        memory_id: input.memoryId,
+        transcript_entry_id: input.transcriptEntryId,
+        relation: "contradicts",
+      },
+    ]);
 
-  if (!source) {
-    // The contradicts link already exists (duplicate-tolerant insert returned
-    // nothing) — reuse it so the discard fields still point at a real source.
-    const { data, error } = await supabase
-      .from("memory_sources")
-      .select("*")
-      .eq("memory_id", input.memoryId)
-      .eq("transcript_entry_id", input.transcriptEntryId)
-      .eq("relation", "contradicts")
-      .single();
-    if (error) throw error;
-    source = data as unknown as MemorySource;
-  }
+    if (!source) {
+      // The contradicts link already exists (duplicate-tolerant insert returned
+      // nothing) — reuse it so the discard fields still point at a real source.
+      source = await trx
+        .selectFrom("memory_sources")
+        .selectAll()
+        .where("memory_id", "=", input.memoryId)
+        .where("transcript_entry_id", "=", input.transcriptEntryId)
+        .where("relation", "=", "contradicts")
+        .executeTakeFirstOrThrow();
+    }
 
-  const memory = await updateMemory(supabase, input.memoryId, {
-    status: "discarded",
-    discarded_at: new Date().toISOString(),
-    discarded_by: "system",
-    discard_memory_source_id: source.id,
-  });
+    const memory = await updateMemory(trx, input.memoryId, {
+      status: "discarded",
+      discarded_at: new Date().toISOString(),
+      discarded_by: "system",
+      discard_memory_source_id: source.id,
+    });
 
-  return { memory, source };
+    return { memory, source };
+  };
+
+  // Two writes that must land together: the citation and the discard fields
+  // that point at it. Nested calls reuse the caller's transaction.
+  return db.isTransaction ? run(db) : db.transaction().execute(run);
 }
 
 /** Parent discard: no triggering source required. */
 export async function discardMemoryByParent(
-  supabase: Client,
+  db: Db,
   memoryId: string,
 ): Promise<Memory> {
-  return updateMemory(supabase, memoryId, {
+  return updateMemory(db, memoryId, {
     status: "discarded",
     discarded_at: new Date().toISOString(),
     discarded_by: "parent",

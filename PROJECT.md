@@ -186,14 +186,14 @@ Dodi is a personalized, AI-powered learning platform that creates fun, targeted 
 
 | Layer | Technology | Rationale |
 |-------|-----------|-----------|
-| **Frontend** | Next.js 15 (App Router) + React 19 | SSR/SSG, excellent ecosystem, Vercel-native |
+| **Frontend** | Next.js 16 (App Router) + React 19 | SSR/SSG, excellent ecosystem, runs anywhere Node does |
 | **Styling** | Tailwind CSS + shadcn/ui | Rapid UI development, consistent design system |
 | **State** | Zustand or Jotai | Lightweight, no boilerplate |
 | **Animation** | Lottie (lottie-react) | Rich character animation, performant |
-| **Backend** | Supabase | Auth, PostgreSQL, Realtime, Storage, Row-Level Security |
+| **Backend** | PostgreSQL 17 + Kysely, Better Auth | Self-hosted, Row-Level Security, no vendor data API |
 | **AI Integration** | Multi-provider SDK abstraction | Unified interface over Gemini, OpenAI, Anthropic, xAI APIs |
 | **Voice** | AI provider native TTS/STT + Live APIs | Smooth conversational voice, provider-dependent |
-| **Deployment** | Vercel | Native Next.js support, edge functions, CI/CD |
+| **Deployment** | Docker Compose on one host (Caddy TLS) | Database next to the apps, no provider lock-in |
 | **i18n** | next-intl or next-i18next | Type-safe translations, SSR-compatible |
 | **Testing** | Vitest + Playwright | Unit + E2E coverage |
 
@@ -201,7 +201,7 @@ Dodi is a personalized, AI-powered learning platform that creates fun, targeted 
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                      Vercel Edge                        │
+│                    Host (Docker Compose)                │
 │  ┌──────────────────────────────────────────────────┐   │
 │  │              Next.js App (App Router)             │   │
 │  │  ┌────────────┐  ┌────────────┐  ┌───────────┐  │   │
@@ -228,18 +228,18 @@ Dodi is a personalized, AI-powered learning platform that creates fun, targeted 
    └─────────────┘
               │
    ┌──────────┴──────────────────────┐
-   │         Supabase                │
-   │  ┌──────┐ ┌─────┐ ┌─────────┐  │
-   │  │ Auth │ │ DB  │ │ Storage │  │
-   │  │      │ │(PG) │ │ (Games) │  │
-   │  └──────┘ └─────┘ └─────────┘  │
+   │      PostgreSQL 17 (same host)  │
+   │  ┌──────────┐ ┌──────────────┐  │
+   │  │Better    │ │ Application  │  │
+   │  │Auth rows │ │ tables       │  │
+   │  └──────────┘ └──────────────┘  │
    │  Row-Level Security + Encryption│
    └─────────────────────────────────┘
 ```
 
 ### Database Schema (Conceptual)
 
-Defined in platform/supabase/migrations/20260613120000_baseline.sql
+Defined in platform/db/migrations/20260910120000_baseline.sql
 
 ### Memory Document Format
 
@@ -366,7 +366,7 @@ AI-generated games run in a strictly sandboxed iframe:
 The MVP focuses on delivering a functional, delightful core experience:
 
 ### Phase 1: Foundation
-- [x] Project setup (Next.js, Supabase, Tailwind, CI/CD)
+- [x] Project setup (Next.js, PostgreSQL, Tailwind, CI/CD)
 - [x] Landing page
 - [x] Authentication (email/password)
 - [x] Account and profile management
@@ -401,7 +401,7 @@ The MVP focuses on delivering a functional, delightful core experience:
 - [ ] Dodi appearance customization
 - [ ] Onboarding tutorial
 - [ ] Performance optimization
-- [ ] Before initially deploying the DB to supabase, merge all migrations into a single schema to avoid unnecessary migration steps.
+- [x] Merge all migrations into a single schema baseline before deploying the DB.
 
 ---
 

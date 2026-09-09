@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { serverErrorResponse } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
-import { serviceClient } from "@/lib/supabase";
+import { serviceDb } from "@/lib/db";
 import { listRequests } from "@/services/friends";
 
 /** Pending requests for a kid. ?kidId= required; ?direction=incoming|outgoing. */
@@ -24,7 +24,7 @@ export async function GET(request: Request): Promise<NextResponse> {
   }
 
   try {
-    const requests = await listRequests(serviceClient(), {
+    const requests = await listRequests(serviceDb, {
       accountId: auth.accountId,
       kidId,
       direction,

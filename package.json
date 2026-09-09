@@ -13,11 +13,15 @@
     "lint": "turbo run lint",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
-    "db": "set -a; [ -f ./.env ] && . ./.env; set +a; supabase --workdir platform"
+    "db": "pnpm --filter @dodi/platform db:migrate"
   },
   "devDependencies": {
-    "supabase": "^2.105.0",
     "turbo": "^2.5.5",
     "typescript": "^5"
+  },
+  "pnpm": {
+    "overrides": {
+      "zod": "4.5.4"
+    }
   }
 }

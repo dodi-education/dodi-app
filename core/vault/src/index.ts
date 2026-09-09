@@ -1,6 +1,6 @@
 /**
  * Provider-agnostic vault storage port (interfaces only at P0).
- * Adapters land in later phases (Supabase → SQLite → Vitonomi).
+ * Adapters land in later phases (Postgres → SQLite → Vitonomi).
  */
 export * from "./types";
 export * from "./account-keys";

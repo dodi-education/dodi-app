@@ -1,7 +1,7 @@
 /**
  * Transactional email transport (Resend). This is the single place the platform
- * sends app-level email from; the same RESEND_API_KEY that backs Supabase custom
- * SMTP is reused here for the SDK. Templates live in `src/emails`.
+ * sends app-level email from: one-time sign-in codes, friend-request
+ * approvals and publication outcomes. Templates live in `src/emails`.
  *
  * Sends never throw: callers fire-and-forget (email delivery must not affect the
  * request that triggered it), so failures are logged and surfaced as a boolean.

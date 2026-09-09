@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 
 import { serverErrorResponse } from "@/lib/error-logs";
-import { serviceClient } from "@/lib/supabase";
+import { serviceDb } from "@/lib/db";
 import { getPublishedGameDetail } from "@/services/discover";
 import { applyTranslation, getTranslation } from "@/services/game-translations";
 
@@ -33,8 +33,8 @@ export async function GET(
   context: RouteContext,
 ): Promise<NextResponse> {
   const { id } = await context.params;
-  // Reject malformed ids before they reach PostgREST (a uuid cast error would
-  // surface as a 500 and distinguish them from the uniform 404).
+  // Reject malformed ids before they reach the database (a uuid cast error
+  // would surface as a 500 and distinguish them from the uniform 404).
   if (!z.string().uuid().safeParse(id).success) return notFoundResponse();
 
   const { searchParams } = new URL(request.url);
@@ -49,11 +49,10 @@ export async function GET(
   }
 
   try {
-    const service = serviceClient();
-    const game = await getPublishedGameDetail(service, id);
+    const game = await getPublishedGameDetail(serviceDb, id);
     if (!game) return notFoundResponse();
     const translation = await getTranslation(
-      service,
+      serviceDb,
       id,
       parsed.data.locale ?? "en",
     );

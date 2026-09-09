@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { serverErrorResponse } from "@/lib/error-logs";
 import { isInternalAuthorized } from "@/lib/internal-auth";
-import { serviceClient } from "@/lib/supabase";
+import { serviceDb } from "@/lib/db";
 import { processPendingPublications } from "@/services/publication-review";
 
 /**
@@ -46,7 +46,7 @@ async function run(scope: string, request: Request): Promise<NextResponse> {
   }
   const startedAt = Date.now();
   try {
-    const result = await processPendingPublications(serviceClient());
+    const result = await processPendingPublications(serviceDb);
     logRunSummary(scope, result, Date.now() - startedAt);
     return NextResponse.json(result);
   } catch (error) {

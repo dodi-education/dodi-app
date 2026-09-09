@@ -18,10 +18,10 @@ const CreateKidSchema = z.object({
 export async function GET(request: Request): Promise<NextResponse> {
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
-  const { accountId, supabase } = auth;
+  const { accountId, db } = auth;
 
   try {
-    const kids = await listKids(supabase, accountId);
+    const kids = await listKids(db, accountId);
     return NextResponse.json(kids);
   } catch (error) {
     return serverErrorResponse(error, "Failed to fetch kids", "api/kids#GET", {
@@ -34,7 +34,7 @@ export async function GET(request: Request): Promise<NextResponse> {
 export async function POST(request: Request): Promise<NextResponse> {
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
-  const { accountId, supabase } = auth;
+  const { accountId, db } = auth;
 
   const body: unknown = await request.json();
   const result = CreateKidSchema.safeParse(body);
@@ -48,8 +48,8 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   // Entitlement gate: cap kid profiles at the account's copied max_kids.
   // max_kids NULL = unlimited (every plan today), so only enforce a numeric cap.
-  const account = await getAccount(supabase, accountId);
-  const existingKids = await listKids(supabase, accountId);
+  const account = await getAccount(db, accountId);
+  const existingKids = await listKids(db, accountId);
   if (account && account.max_kids != null && existingKids.length >= account.max_kids) {
     return NextResponse.json(
       { error: "kid_limit_reached", limit: account.max_kids },
@@ -61,7 +61,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   // astronomically unlikely; retry a few times to be safe.
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
-      const kid = await createKid(supabase, {
+      const kid = await createKid(db, {
         account_id: accountId,
         display_name: result.data.display_name,
         social_id: generateSocialId(),
@@ -72,7 +72,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       // new kid; the parent removes the share in Discover like for any other
       // game. Best-effort — the profile exists either way.
       try {
-        await shareSystemGamesWithKid(supabase, accountId, kid.id);
+        await shareSystemGamesWithKid(db, accountId, kid.id);
       } catch (error) {
         logServerError("api/kids#POST", error, { accountId });
       }

@@ -36,7 +36,13 @@ vi.mock("@/stores/providers-store", () => ({
 }));
 
 vi.mock("@/stores/vault-store", () => ({
-  useVaultStore: { getState: () => ({ session: {} }) },
+  // The game store decrypts rows through this session; these cases are about
+  // where the provider key comes from, so fields pass through unchanged.
+  useVaultStore: {
+    getState: () => ({
+      session: { decryptField: (value: string | null) => value },
+    }),
+  },
 }));
 
 vi.mock("@dodi/vault", () => ({

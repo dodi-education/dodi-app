@@ -7,15 +7,12 @@
  */
 import { createElement } from "react";
 
-import type { SupabaseClient } from "@supabase/supabase-js";
-
-import type { Database, Friendship } from "@dodi/types/database";
+import type { Friendship } from "@dodi/types/database";
 
 import { FriendApprovalEmail } from "@/emails/friend-approval";
 import { friendApprovalCopy, normalizeEmailLocale } from "@/emails/strings";
+import type { Db } from "@/lib/db";
 import { sendEmail } from "@/lib/email";
-
-type Client = SupabaseClient<Database>;
 
 /** The fields of a friendship needed to decide who to notify. */
 type ApprovalFriendship = Pick<
@@ -42,7 +39,7 @@ function wantsFriendApprovalEmail(prefs: unknown): boolean {
  * same-account sibling case). Never throws — email must not affect the caller.
  */
 export async function notifyPendingApproval(
-  supabase: Client,
+  db: Db,
   friendship: ApprovalFriendship,
 ): Promise<void> {
   try {
@@ -55,14 +52,22 @@ export async function notifyPendingApproval(
     }
     if (targetIds.size === 0) return;
 
-    const { data, error } = await supabase
-      .from("accounts")
-      .select("id, email, language, notification_preferences")
-      .in("id", [...targetIds]);
-    if (error) {
+    let accounts: {
+      id: string;
+      email: string | null;
+      language: string | null;
+      notification_preferences: unknown;
+    }[];
+    try {
+      accounts = await db
+        .selectFrom("accounts")
+        .select(["id", "email", "language", "notification_preferences"])
+        .where("id", "in", [...targetIds])
+        .execute();
+    } catch (error) {
       console.error(
         "[notify] failed to load accounts for approval email:",
-        error.message,
+        error instanceof Error ? error.message : error,
       );
       return;
     }
@@ -73,12 +78,7 @@ export async function notifyPendingApproval(
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://app.dodi.app";
 
     await Promise.all(
-      (data ?? []).map(async (acct) => {
-        const row = acct as {
-          email: string | null;
-          language: string | null;
-          notification_preferences: unknown;
-        };
+      accounts.map(async (row) => {
         if (!row.email) return;
         if (!wantsFriendApprovalEmail(row.notification_preferences)) return;
         const locale = normalizeEmailLocale(row.language);

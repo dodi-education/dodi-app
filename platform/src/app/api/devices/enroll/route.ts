@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { serverErrorResponse } from "@/lib/error-logs";
-import { serviceClient } from "@/lib/supabase";
+import { serviceDb } from "@/lib/db";
 import { createPendingDevice } from "@/services/devices";
 
 /** Public: a device enrolls with its public keys and gets a pairing code. */
@@ -17,7 +17,7 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
   try {
-    const { pairingCode } = await createPendingDevice(serviceClient(), {
+    const { pairingCode } = await createPendingDevice(serviceDb, {
       deviceId,
       kemPublicKey,
       signPublicKey,

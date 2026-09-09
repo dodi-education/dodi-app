@@ -6,62 +6,52 @@
  * account columns and a single account's caps can be raised without a new plan.
  */
 
-import type { SupabaseClient } from "@supabase/supabase-js";
-
 import type {
-  Database,
   PlatformPlan,
   PlatformPlanTranslation,
 } from "@dodi/types/database";
 
+import type { Db } from "@/lib/db";
+
 import { updateAccount } from "./accounts";
 
-type Client = SupabaseClient<Database>;
-
 /** All active plans, ordered for display. */
-export async function getPlans(supabase: Client): Promise<PlatformPlan[]> {
-  const { data, error } = await supabase
-    .from("platform_plans")
-    .select("*")
-    .eq("is_active", true)
-    .order("sort_order", { ascending: true });
-
-  if (error) throw error;
-  return (data ?? []) as unknown as PlatformPlan[];
+export async function getPlans(db: Db): Promise<PlatformPlan[]> {
+  return db
+    .selectFrom("platform_plans")
+    .selectAll()
+    .where("is_active", "=", true)
+    .orderBy("sort_order", "asc")
+    .execute();
 }
 
 export async function getPlanByHandle(
-  supabase: Client,
+  db: Db,
   handle: string,
 ): Promise<PlatformPlan | null> {
-  const { data, error } = await supabase
-    .from("platform_plans")
-    .select("*")
-    .eq("handle", handle)
-    .single();
-
-  if (error) {
-    if (error.code === "PGRST116") return null;
-    throw error;
-  }
-  return data as unknown as PlatformPlan;
+  const row = await db
+    .selectFrom("platform_plans")
+    .selectAll()
+    .where("handle", "=", handle)
+    .executeTakeFirst();
+  return row ?? null;
 }
 
 async function getPlanTranslations(
-  supabase: Client,
+  db: Db,
   planIds: string[],
   locale: string,
 ): Promise<Map<string, PlatformPlanTranslation>> {
   if (planIds.length === 0) return new Map();
-  const { data, error } = await supabase
-    .from("platform_plan_translations")
-    .select("*")
-    .in("plan_id", planIds)
-    .eq("locale", locale);
+  const rows = await db
+    .selectFrom("platform_plan_translations")
+    .selectAll()
+    .where("plan_id", "in", planIds)
+    .where("locale", "=", locale)
+    .execute();
 
-  if (error) throw error;
   const map = new Map<string, PlatformPlanTranslation>();
-  for (const row of (data ?? []) as unknown as PlatformPlanTranslation[]) {
+  for (const row of rows) {
     map.set(row.plan_id, row);
   }
   return map;
@@ -74,12 +64,12 @@ export interface LocalizedPlan extends PlatformPlan {
 
 /** Active plans with `locale` title/tagline applied — the catalogue for the picker. */
 export async function getLocalizedPlans(
-  supabase: Client,
+  db: Db,
   locale: string,
 ): Promise<LocalizedPlan[]> {
-  const plans = await getPlans(supabase);
+  const plans = await getPlans(db);
   const translations = await getPlanTranslations(
-    supabase,
+    db,
     plans.map((p) => p.id),
     locale,
   );
@@ -95,15 +85,15 @@ export async function getLocalizedPlans(
  * any later plan change. Throws if the handle is unknown/inactive.
  */
 export async function applyPlanToAccount(
-  supabase: Client,
+  db: Db,
   accountId: string,
   handle: string,
 ): Promise<void> {
-  const plan = await getPlanByHandle(supabase, handle);
+  const plan = await getPlanByHandle(db, handle);
   if (!plan || !plan.is_active) {
     throw new Error(`Unknown or inactive plan handle: ${handle}`);
   }
-  await updateAccount(supabase, accountId, {
+  await updateAccount(db, accountId, {
     subscribed_plan: plan.handle,
     max_kids: plan.max_kids,
     max_custom_personas: plan.max_custom_personas,

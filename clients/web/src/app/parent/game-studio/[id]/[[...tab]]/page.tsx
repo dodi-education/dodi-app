@@ -10,7 +10,7 @@ import {
   isStudioView,
 } from "@/components/parent/games/game-studio";
 import { dodi } from "@/lib/api";
-import { createClient } from "@/lib/supabase/client";
+import { getSessionUser } from "@/lib/auth/client";
 import { useGameStore } from "@/stores/game-store";
 import { coerceProgressKind } from "@dodi/games/game-spec";
 import { isUnbuiltBundle } from "@dodi/games/placeholder";
@@ -38,16 +38,14 @@ export default function EditGameStudioPage() {
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      const supabase = createClient();
       // The store decrypts the row; StudioGame below is entirely plaintext.
-      const [{ data: userData }, game, sharingRes] = await Promise.all([
-        supabase.auth.getUser(),
+      const [user, game, sharingRes] = await Promise.all([
+        getSessionUser(),
         useGameStore.getState().loadOne(id),
         dodi.request(`/api/games/${id}/sharing`),
       ]);
       if (cancelled) return;
 
-      const user = userData.user;
       if (!game) {
         setMissing(true);
         return;

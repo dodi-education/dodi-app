@@ -3,7 +3,8 @@ import { z } from "zod/v4";
 
 import { serverErrorResponse } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
-import { serviceClient } from "@/lib/supabase";
+import { serviceDb } from "@/lib/db";
+import { isUniqueViolation } from "@/lib/db-errors";
 import { getPlayableGame, isGameVisibleToKid } from "@/services/games";
 import { getKid } from "@/services/kids";
 import { isPlausiblePlayTimestamp } from "@/lib/play-timestamps";
@@ -30,7 +31,7 @@ export async function POST(
 
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
-  const { accountId, supabase } = auth;
+  const { accountId, db } = auth;
 
   const body: unknown = await request.json();
   const parsed = StartPlaySchema.safeParse(body);
@@ -53,7 +54,7 @@ export async function POST(
   }
 
   try {
-    const kid = await getKid(supabase, kidId);
+    const kid = await getKid(db, kidId);
     if (!kid || kid.account_id !== accountId) {
       return NextResponse.json({ error: "Kid not found" }, { status: 404 });
     }
@@ -61,13 +62,13 @@ export async function POST(
     // Published Discover rows belong to other accounts (RLS-hidden), hence the
     // service-role fallback; the play row itself is written with THIS family's
     // ids, so plays on a published game aggregate on its single row.
-    const game = await getPlayableGame(supabase, serviceClient(), id);
+    const game = await getPlayableGame(db, serviceDb, id);
     if (!game) {
       return NextResponse.json({ error: "Game not found" }, { status: 404 });
     }
 
     // Inactive / unshared games are not playable outside the parent studio.
-    if (!(await isGameVisibleToKid(supabase, game, kid.id, accountId))) {
+    if (!(await isGameVisibleToKid(db, game, kid.id, accountId))) {
       return NextResponse.json({ error: "Game not available" }, { status: 403 });
     }
 
@@ -76,7 +77,7 @@ export async function POST(
     // existing row is the answer. A foreign id (another account's row, or a
     // UUID collision) is a conflict — the id space makes probing useless.
     if (playId) {
-      const existing = await getPlay(supabase, playId);
+      const existing = await getPlay(db, playId);
       if (existing) {
         const isOwnReplay =
           existing.account_id === accountId &&
@@ -88,7 +89,7 @@ export async function POST(
       }
     }
 
-    const play = await startPlay(supabase, {
+    const play = await startPlay(db, {
       accountId: accountId,
       kidId: kid.id,
       gameId: game.id,
@@ -100,9 +101,9 @@ export async function POST(
     return NextResponse.json({ playId: play.id }, { status: 201 });
   } catch (error) {
     // A pkey violation here means the id exists on a row RLS hides from this
-    // account (the own-row replay already returned 200 above) — a conflict,
+    // account (the own-row replay already returned 200 above): a conflict,
     // not a server error.
-    if (playId && (error as { code?: string }).code === "23505") {
+    if (playId && isUniqueViolation(error)) {
       return NextResponse.json({ error: "Conflict" }, { status: 409 });
     }
     return serverErrorResponse(error, "Failed to start play", "api/games/[id]/plays#POST", {

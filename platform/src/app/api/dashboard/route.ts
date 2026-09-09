@@ -7,10 +7,10 @@ import { getDashboardStats } from "@/services/dashboard";
 export async function GET(request: Request): Promise<NextResponse> {
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
-  const { accountId, supabase } = auth;
+  const { accountId, db } = auth;
 
   try {
-    const stats = await getDashboardStats(supabase, accountId);
+    const stats = await getDashboardStats(db, accountId);
     return NextResponse.json(stats);
   } catch (error) {
     return serverErrorResponse(error, "Failed to fetch dashboard stats", "api/dashboard#GET", {

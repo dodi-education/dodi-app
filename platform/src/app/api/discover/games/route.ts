@@ -5,7 +5,7 @@ import type { DiscoverGameSummary } from "@dodi/types/games";
 
 import { serverErrorResponse } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
-import { serviceClient } from "@/lib/supabase";
+import { serviceDb } from "@/lib/db";
 import {
   DISCOVER_MAX_PAGE_SIZE,
   getGameStats,
@@ -18,9 +18,9 @@ import {
 
 /**
  * The dodi Discover catalog: published games, newest first, keyset-paginated.
- * Rows come from the service client behind an explicit projection (publisher
- * ids never leak — see services/discover); the caller's OWN sharing state is
- * attached per row through their RLS client so the UI can show "Added".
+ * Rows come from the service handle behind an explicit projection (publisher
+ * ids never leak, see services/discover); the caller's OWN sharing state is
+ * attached per row through their RLS-scoped handle so the UI can show "Added".
  */
 const QuerySchema = z.object({
   cursor: z.iso.datetime({ offset: true }).optional(),
@@ -32,7 +32,7 @@ const QuerySchema = z.object({
 export async function GET(request: Request): Promise<NextResponse> {
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
-  const { accountId, supabase } = auth;
+  const { accountId, db } = auth;
 
   const { searchParams } = new URL(request.url);
   const parsed = QuerySchema.safeParse({
@@ -48,20 +48,19 @@ export async function GET(request: Request): Promise<NextResponse> {
   }
 
   try {
-    const service = serviceClient();
-    const rows = await listPublishedGames(service, parsed.data);
+    const rows = await listPublishedGames(serviceDb, parsed.data);
     const gameIds = rows.map((row) => row.id);
 
     // The caller's own sharing state for the page's games ("Added" markers).
     const sharingByGame = new Map<string, { family: boolean; kidIds: string[] }>();
     if (rows.length > 0) {
-      const { data: sharings, error } = await supabase
-        .from("game_sharings")
-        .select("game_id, kid_id")
-        .eq("account_id", accountId)
-        .in("game_id", gameIds);
-      if (error) throw error;
-      for (const row of sharings ?? []) {
+      const sharings = await db
+        .selectFrom("game_sharings")
+        .select(["game_id", "kid_id"])
+        .where("account_id", "=", accountId)
+        .where("game_id", "in", gameIds)
+        .execute();
+      for (const row of sharings) {
         let entry = sharingByGame.get(row.game_id);
         if (!entry) {
           entry = { family: false, kidIds: [] };
@@ -73,12 +72,12 @@ export async function GET(request: Request): Promise<NextResponse> {
     }
 
     // Cross-family play & copy counts for the page (service-role aggregate).
-    const statsByGame = await getGameStats(service, gameIds);
+    const statsByGame = await getGameStats(serviceDb, gameIds);
 
     // Per-locale title/description overrides: system games (seeded) and parent
     // publications (written by the publish gate) both carry them.
     const translations = await getTranslationsForGames(
-      supabase,
+      db,
       gameIds,
       parsed.data.locale ?? "en",
     );

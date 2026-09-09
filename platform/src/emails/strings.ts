@@ -222,3 +222,84 @@ export function friendApprovalCopy(locale: EmailLocale): FriendApprovalCopy {
 export function newsletterWelcomeCopy(locale: EmailLocale): NewsletterWelcomeCopy {
   return NEWSLETTER_WELCOME[locale];
 }
+
+/** One-time code emails (sign-up confirmation, password reset, OTP sign-in). */
+interface AuthCodeVariant {
+  subject: string;
+  preview: string;
+  heading: string;
+  body: string;
+  expiry: string;
+  ignore: string;
+}
+
+export interface AuthCodeCopy {
+  confirm: AuthCodeVariant;
+  reset: AuthCodeVariant;
+  "sign-in": AuthCodeVariant;
+  /** Footer override: the recipient may not have an account yet. */
+  footerReason: string;
+}
+
+const AUTH_CODE: Record<EmailLocale, AuthCodeCopy> = {
+  en: {
+    confirm: {
+      subject: "Confirm your dodi account",
+      preview: "Your dodi confirmation code.",
+      heading: "Confirm your dodi account",
+      body: "Enter this code to finish signing up:",
+      expiry: "This code expires in 1 hour.",
+      ignore: "If you didn't create a dodi account, you can safely ignore this email.",
+    },
+    reset: {
+      subject: "Reset your dodi password",
+      preview: "Your dodi password reset code.",
+      heading: "Reset your dodi password",
+      body: "Enter this code to reset your password:",
+      expiry: "This code expires in 1 hour.",
+      ignore: "If you didn't request a password reset, you can safely ignore this email.",
+    },
+    "sign-in": {
+      subject: "Your dodi sign-in code",
+      preview: "Your dodi sign-in code.",
+      heading: "Your dodi sign-in code",
+      body: "Enter this code to continue:",
+      expiry: "This code expires in 1 hour.",
+      ignore: "If you didn't request this code, you can safely ignore this email.",
+    },
+    footerReason:
+      "You're receiving this because this address was used to sign in or register at dodi.",
+  },
+  de: {
+    confirm: {
+      subject: "Bestätige dein dodi-Konto",
+      preview: "Dein dodi-Bestätigungscode.",
+      heading: "Bestätige dein dodi-Konto",
+      body: "Gib diesen Code ein, um die Registrierung abzuschließen:",
+      expiry: "Dieser Code ist 1 Stunde gültig.",
+      ignore: "Wenn du kein dodi-Konto erstellt hast, kannst du diese E-Mail ignorieren.",
+    },
+    reset: {
+      subject: "Setze dein dodi-Passwort zurück",
+      preview: "Dein Code zum Zurücksetzen des dodi-Passworts.",
+      heading: "Setze dein dodi-Passwort zurück",
+      body: "Gib diesen Code ein, um dein Passwort zurückzusetzen:",
+      expiry: "Dieser Code ist 1 Stunde gültig.",
+      ignore: "Wenn du kein Zurücksetzen angefordert hast, kannst du diese E-Mail ignorieren.",
+    },
+    "sign-in": {
+      subject: "Dein dodi-Anmeldecode",
+      preview: "Dein dodi-Anmeldecode.",
+      heading: "Dein dodi-Anmeldecode",
+      body: "Gib diesen Code ein, um fortzufahren:",
+      expiry: "Dieser Code ist 1 Stunde gültig.",
+      ignore: "Wenn du diesen Code nicht angefordert hast, kannst du diese E-Mail ignorieren.",
+    },
+    footerReason:
+      "Du erhältst diese E-Mail, weil diese Adresse zum Anmelden oder Registrieren bei dodi verwendet wurde.",
+  },
+};
+
+export function authCodeCopy(locale: EmailLocale): AuthCodeCopy {
+  return AUTH_CODE[locale] ?? AUTH_CODE.en;
+}

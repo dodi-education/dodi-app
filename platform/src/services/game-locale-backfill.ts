@@ -14,8 +14,6 @@
  * one structured summary per run. Ops-triggered only (no cron): see
  * /api/internal/jobs/backfill-game-locales.
  */
-import type { SupabaseClient } from "@supabase/supabase-js";
-
 import {
   buildGameTranslationPrompt,
   parseGeneratedTranslations,
@@ -28,15 +26,14 @@ import {
   replaceTranslationsBlock,
 } from "@dodi/games/translations";
 import { SUPPORTED_LOCALES } from "@dodi/intl/locales";
-import type { Database, Game } from "@dodi/types/database";
+import type { Game } from "@dodi/types/database";
 import { sanitizeGameBundle } from "../game-sanitizer";
 
+import type { Db } from "@/lib/db";
 import { logServerError } from "@/lib/error-logs";
 
 import { listTranslations } from "./game-translations";
 import { loadReviewAgentConfig } from "./publication-review";
-
-type Client = SupabaseClient<Database>;
 
 const BACKFILL_BATCH_LIMIT = 5;
 /** Candidate scan window — plenty while the catalog is young; raise when it isn't. */
@@ -44,21 +41,21 @@ const CANDIDATE_SCAN_LIMIT = 500;
 
 /**
  * LIVE published rows missing at least one platform locale, oldest first.
- * PostgREST cannot express "does not contain ALL of […]" cleanly, so this
- * scans a bounded window and filters here — fine at ops scale.
+ * Scans a bounded window of published rows and filters here (fine at ops
+ * scale; the explicit limit keeps this service-handle read bounded).
  */
 export async function listPublishedGamesNeedingLocales(
-  supabase: Client,
+  db: Db,
   limit: number,
 ): Promise<Game[]> {
-  const { data, error } = await supabase
-    .from("games")
-    .select("*")
-    .not("published_at", "is", null)
-    .order("published_at", { ascending: true })
-    .limit(CANDIDATE_SCAN_LIMIT);
-  if (error) throw error;
-  return ((data ?? []) as unknown as Game[])
+  const rows = await db
+    .selectFrom("games")
+    .selectAll()
+    .where("published_at", "is not", null)
+    .orderBy("published_at", "asc")
+    .limit(CANDIDATE_SCAN_LIMIT)
+    .execute();
+  return rows
     .filter((game) => {
       const locales = game.available_locales;
       return !locales || SUPPORTED_LOCALES.some((l) => !locales.includes(l));
@@ -96,7 +93,7 @@ export interface BackfillRunResult {
  * a batch bounds spend, and backfill latency is measured in ops runs.
  */
 export async function backfillGameLocales(
-  supabase: Client,
+  db: Db,
   options: {
     limit?: number;
     dryRun?: boolean;
@@ -124,7 +121,7 @@ export async function backfillGameLocales(
     return result;
   }
 
-  const candidates = await listPublishedGamesNeedingLocales(supabase, limit);
+  const candidates = await listPublishedGamesNeedingLocales(db, limit);
 
   for (const game of candidates) {
     result.processed += 1;
@@ -139,7 +136,7 @@ export async function backfillGameLocales(
       // A locale needs work when the block misses it OR its listing row is
       // absent; targets are re-translated wholesale so both stay coherent.
       const covered = coveredLocales(block, SUPPORTED_LOCALES);
-      const listingRows = await listTranslations(supabase, game.id);
+      const listingRows = await listTranslations(db, game.id);
       const listingLocales = new Set(listingRows.map((row) => row.locale));
       const targets = SUPPORTED_LOCALES.filter(
         (locale) => !covered.has(locale) || !listingLocales.has(locale),
@@ -148,11 +145,11 @@ export async function backfillGameLocales(
       if (targets.length === 0) {
         // Fully covered already — only the derived column lags.
         if (!dryRun) {
-          const { error } = await supabase
-            .from("games")
-            .update({ available_locales: [...SUPPORTED_LOCALES] })
-            .eq("id", game.id);
-          if (error) throw error;
+          await db
+            .updateTable("games")
+            .set({ available_locales: [...SUPPORTED_LOCALES] })
+            .where("id", "=", game.id)
+            .execute();
         }
         result.updated += 1;
         continue;
@@ -223,19 +220,16 @@ export async function backfillGameLocales(
           description: translated[locale].description,
         }));
       if (newListingRows.length > 0) {
-        const { error } = await supabase
-          .from("game_translations")
-          .insert(newListingRows);
-        if (error) throw error;
+        await db.insertInto("game_translations").values(newListingRows).execute();
       }
-      const { error: updateError } = await supabase
-        .from("games")
-        .update({
+      await db
+        .updateTable("games")
+        .set({
           code_bundle: sanitized,
           available_locales: [...SUPPORTED_LOCALES],
         })
-        .eq("id", game.id);
-      if (updateError) throw updateError;
+        .where("id", "=", game.id)
+        .execute();
 
       result.updated += 1;
     } catch (error) {

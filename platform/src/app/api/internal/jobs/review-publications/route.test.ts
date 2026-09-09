@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/lib/supabase", () => ({ serviceClient: vi.fn(() => ({})) }));
+vi.mock("@/lib/db", () => ({ serviceDb: {} }));
 vi.mock("@/services/publication-review", () => ({
   processPendingPublications: vi.fn(),
 }));

@@ -1,4 +1,4 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Selectable } from "kysely";
 
 import type {
   Database,
@@ -6,10 +6,12 @@ import type {
   FriendshipInsert,
   FriendshipStatus,
   FriendshipUpdate,
-  Kid,
 } from "@dodi/types/database";
 
-type Client = SupabaseClient<Database>;
+import type { Db } from "@/lib/db";
+
+/** Raw kids row (the API `Kid` shape swaps the persona FK for an embed). */
+type KidRow = Selectable<Database["kids"]>;
 
 /** Statuses for which a pair counts as having a "live" relationship. */
 const LIVE_STATUSES: FriendshipStatus[] = [
@@ -52,59 +54,53 @@ export function computeStatus(row: StatusInputs): FriendshipStatus {
 // Low-level row helpers
 // ---------------------------------------------------------------------------
 
-async function getKidRow(
-  supabase: Client,
-  kidId: string,
-): Promise<Kid | null> {
-  const { data, error } = await supabase
-    .from("kids")
-    .select("*")
-    .eq("id", kidId)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  return (data ?? null) as Kid | null;
+async function getKidRow(db: Db, kidId: string): Promise<KidRow | null> {
+  const row = await db
+    .selectFrom("kids")
+    .selectAll()
+    .where("id", "=", kidId)
+    .executeTakeFirst();
+  return row ?? null;
 }
 
-async function getFriendship(
-  supabase: Client,
-  id: string,
-): Promise<Friendship | null> {
-  const { data, error } = await supabase
-    .from("friendships")
-    .select("*")
-    .eq("id", id)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  return (data ?? null) as Friendship | null;
+async function getFriendship(db: Db, id: string): Promise<Friendship | null> {
+  const row = await db
+    .selectFrom("friendships")
+    .selectAll()
+    .where("id", "=", id)
+    .executeTakeFirst();
+  return row ?? null;
 }
 
 async function updateFriendship(
-  supabase: Client,
+  db: Db,
   id: string,
   patch: FriendshipUpdate,
 ): Promise<Friendship> {
-  const { data, error } = await supabase
-    .from("friendships")
-    .update(patch)
-    .eq("id", id)
-    .select("*")
-    .single();
-  if (error) throw new Error(error.message);
-  return data as Friendship;
+  return db
+    .updateTable("friendships")
+    .set(patch)
+    .where("id", "=", id)
+    .returningAll()
+    .executeTakeFirstOrThrow();
 }
 
 /** Find an existing live relationship between two kids, either direction. */
 async function findLivePair(
-  supabase: Client,
+  db: Db,
   kidA: string,
   kidB: string,
 ): Promise<Friendship | null> {
-  const { data, error } = await supabase
-    .from("friendships")
-    .select("*")
-    .or(`requester_kid_id.eq.${kidA},addressee_kid_id.eq.${kidA}`);
-  if (error) throw new Error(error.message);
-  const rows = (data ?? []) as Friendship[];
+  const rows = await db
+    .selectFrom("friendships")
+    .selectAll()
+    .where((eb) =>
+      eb.or([
+        eb("requester_kid_id", "=", kidA),
+        eb("addressee_kid_id", "=", kidA),
+      ]),
+    )
+    .execute();
   return (
     rows.find(
       (r) =>
@@ -129,19 +125,19 @@ export interface PublishFriendKeysInput {
 
 /** Publish a kid's friend identity (owner-scoped). */
 export async function publishFriendKeys(
-  supabase: Client,
+  db: Db,
   input: PublishFriendKeysInput,
 ): Promise<void> {
-  const { error } = await supabase
-    .from("kids")
-    .update({
+  await db
+    .updateTable("kids")
+    .set({
       friend_kem_public_key: input.kemPublicKey,
       friend_sign_public_key: input.signPublicKey,
       friend_secret_keys: input.sealedSecretKeys,
     })
-    .eq("id", input.kidId)
-    .eq("account_id", input.accountId);
-  if (error) throw new Error(error.message);
+    .where("id", "=", input.kidId)
+    .where("account_id", "=", input.accountId)
+    .execute();
 }
 
 export interface FriendTarget {
@@ -156,24 +152,20 @@ export interface FriendTarget {
  * has published keys — never leaks names, ciphertext, or a browsable list.
  */
 export async function lookupFriendTarget(
-  supabase: Client,
+  db: Db,
   socialId: string,
 ): Promise<FriendTarget | null> {
-  const { data, error } = await supabase
-    .from("kids")
-    .select(
-      "id, can_be_added_as_friend, friend_kem_public_key, friend_sign_public_key",
-    )
-    .eq("social_id", socialId)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  if (!data) return null;
-  const row = data as {
-    id: string;
-    can_be_added_as_friend: boolean;
-    friend_kem_public_key: string | null;
-    friend_sign_public_key: string | null;
-  };
+  const row = await db
+    .selectFrom("kids")
+    .select([
+      "id",
+      "can_be_added_as_friend",
+      "friend_kem_public_key",
+      "friend_sign_public_key",
+    ])
+    .where("social_id", "=", socialId)
+    .executeTakeFirst();
+  if (!row) return null;
   if (
     !row.can_be_added_as_friend ||
     !row.friend_kem_public_key ||
@@ -205,12 +197,12 @@ export interface CreateFriendRequestInput {
 }
 
 export async function createFriendRequest(
-  supabase: Client,
+  db: Db,
   input: CreateFriendRequestInput,
 ): Promise<Friendship> {
   // Errors are stable codes (not prose): the client maps them to localized,
   // kid-friendly copy — the server is locale-blind and holds no UI strings.
-  const requester = await getKidRow(supabase, input.requesterKidId);
+  const requester = await getKidRow(db, input.requesterKidId);
   if (!requester || requester.account_id !== input.requesterAccountId) {
     throw new Error("requester_not_found");
   }
@@ -221,7 +213,7 @@ export async function createFriendRequest(
     throw new Error("no_friend_keys");
   }
 
-  const target = await getKidRow(supabase, input.targetKidId);
+  const target = await getKidRow(db, input.targetKidId);
   if (
     !target ||
     !target.can_be_added_as_friend ||
@@ -233,7 +225,7 @@ export async function createFriendRequest(
     throw new Error("cannot_add_self");
   }
 
-  const existing = await findLivePair(supabase, requester.id, target.id);
+  const existing = await findLivePair(db, requester.id, target.id);
   if (existing) {
     if (existing.status === "blocked") throw new Error("friendship_blocked");
     if (existing.status === "accepted") throw new Error("already_friends");
@@ -260,13 +252,11 @@ export async function createFriendRequest(
     nickname: input.nickname,
   };
 
-  const { data, error } = await supabase
-    .from("friendships")
-    .insert(insert)
-    .select("*")
-    .single();
-  if (error) throw new Error(error.message);
-  return data as Friendship;
+  return db
+    .insertInto("friendships")
+    .values(insert)
+    .returningAll()
+    .executeTakeFirstOrThrow();
 }
 
 export interface RespondInput {
@@ -280,10 +270,10 @@ export interface RespondInput {
 }
 
 export async function respondToRequest(
-  supabase: Client,
+  db: Db,
   input: RespondInput,
 ): Promise<Friendship> {
-  const row = await getFriendship(supabase, input.friendshipId);
+  const row = await getFriendship(db, input.friendshipId);
   if (!row) throw new Error("Friend request not found");
   if (participantSide(row, input.accountId, input.kidId) !== "addressee") {
     throw new Error("Not authorized to respond to this request");
@@ -293,7 +283,7 @@ export async function respondToRequest(
   }
 
   if (input.action === "reject") {
-    return updateFriendship(supabase, row.id, { status: "rejected" });
+    return updateFriendship(db, row.id, { status: "rejected" });
   }
 
   if (!input.addresseeCard) {
@@ -305,7 +295,7 @@ export async function respondToRequest(
     requester_parent_ok: row.requester_parent_ok,
     addressee_parent_ok: row.addressee_parent_ok,
   });
-  return updateFriendship(supabase, row.id, {
+  return updateFriendship(db, row.id, {
     addressee_accepted: true,
     addressee_card: input.addresseeCard,
     status,
@@ -320,10 +310,10 @@ export interface ParentApprovalInput {
 }
 
 export async function setParentApproval(
-  supabase: Client,
+  db: Db,
   input: ParentApprovalInput,
 ): Promise<Friendship> {
-  const row = await getFriendship(supabase, input.friendshipId);
+  const row = await getFriendship(db, input.friendshipId);
   if (!row) throw new Error("Friendship not found");
 
   const sideAccount =
@@ -345,7 +335,7 @@ export async function setParentApproval(
   }
 
   if (!input.approve) {
-    return updateFriendship(supabase, row.id, { status: "rejected" });
+    return updateFriendship(db, row.id, { status: "rejected" });
   }
 
   const requesterOk =
@@ -358,7 +348,7 @@ export async function setParentApproval(
     requester_parent_ok: requesterOk,
     addressee_parent_ok: addresseeOk,
   });
-  return updateFriendship(supabase, row.id, {
+  return updateFriendship(db, row.id, {
     requester_parent_ok: requesterOk,
     addressee_parent_ok: addresseeOk,
     status,
@@ -400,15 +390,15 @@ export interface BlockInput {
 }
 
 export async function blockFriend(
-  supabase: Client,
+  db: Db,
   input: BlockInput,
 ): Promise<Friendship> {
-  const row = await getFriendship(supabase, input.friendshipId);
+  const row = await getFriendship(db, input.friendshipId);
   if (!row) throw new Error("Friendship not found");
   if (!participantSide(row, input.accountId, input.kidId)) {
     throw new Error("Not authorized");
   }
-  return updateFriendship(supabase, row.id, {
+  return updateFriendship(db, row.id, {
     status: "blocked",
     blocked_by: input.kidId,
   });
@@ -416,10 +406,10 @@ export async function blockFriend(
 
 /** Unblock by removing the row, so reconnecting requires a fresh request. */
 export async function unblockFriend(
-  supabase: Client,
+  db: Db,
   input: BlockInput,
 ): Promise<void> {
-  const row = await getFriendship(supabase, input.friendshipId);
+  const row = await getFriendship(db, input.friendshipId);
   if (!row) throw new Error("Friendship not found");
   if (!participantSide(row, input.accountId, input.kidId)) {
     throw new Error("Not authorized");
@@ -428,11 +418,7 @@ export async function unblockFriend(
   if (row.blocked_by && row.blocked_by !== input.kidId) {
     throw new Error("Only the kid who blocked can unblock");
   }
-  const { error } = await supabase
-    .from("friendships")
-    .delete()
-    .eq("id", row.id);
-  if (error) throw new Error(error.message);
+  await db.deleteFrom("friendships").where("id", "=", row.id).execute();
 }
 
 /**
@@ -441,20 +427,16 @@ export async function unblockFriend(
  * so a fresh request can be sent later. Blocked rows must be unblocked instead.
  */
 export async function removeFriendship(
-  supabase: Client,
+  db: Db,
   input: BlockInput,
 ): Promise<void> {
-  const row = await getFriendship(supabase, input.friendshipId);
+  const row = await getFriendship(db, input.friendshipId);
   if (!row) throw new Error("Friendship not found");
   if (!participantSide(row, input.accountId, input.kidId)) {
     throw new Error("Not authorized");
   }
   if (row.status === "blocked") throw new Error("Unblock the friendship instead");
-  const { error } = await supabase
-    .from("friendships")
-    .delete()
-    .eq("id", row.id);
-  if (error) throw new Error(error.message);
+  await db.deleteFrom("friendships").where("id", "=", row.id).execute();
 }
 
 // ---------------------------------------------------------------------------
@@ -489,23 +471,18 @@ interface CounterpartInfo {
 }
 
 async function counterpartInfoMap(
-  supabase: Client,
+  db: Db,
   kidIds: string[],
 ): Promise<Map<string, CounterpartInfo>> {
   const map = new Map<string, CounterpartInfo>();
   const unique = [...new Set(kidIds)];
   if (unique.length === 0) return map;
-  const { data, error } = await supabase
-    .from("kids")
-    .select("id, social_id, friend_sign_public_key, friend_kem_public_key")
-    .in("id", unique);
-  if (error) throw new Error(error.message);
-  for (const r of (data ?? []) as Array<{
-    id: string;
-    social_id: string;
-    friend_sign_public_key: string | null;
-    friend_kem_public_key: string | null;
-  }>) {
+  const rows = await db
+    .selectFrom("kids")
+    .select(["id", "social_id", "friend_sign_public_key", "friend_kem_public_key"])
+    .where("id", "in", unique)
+    .execute();
+  for (const r of rows) {
     map.set(r.id, {
       socialId: r.social_id,
       signPublicKey: r.friend_sign_public_key,
@@ -575,7 +552,7 @@ function toView(
 }
 
 async function buildViews(
-  supabase: Client,
+  db: Db,
   rows: Friendship[],
   viewerKidId: string,
 ): Promise<FriendshipView[]> {
@@ -584,25 +561,28 @@ async function buildViews(
       ? r.addressee_kid_id
       : r.requester_kid_id,
   );
-  const counterparts = await counterpartInfoMap(supabase, counterpartIds);
+  const counterparts = await counterpartInfoMap(db, counterpartIds);
   return rows.map((r) => toView(r, viewerKidId, counterparts));
 }
 
 async function rowsForKid(
-  supabase: Client,
+  db: Db,
   accountId: string,
   kidId: string,
 ): Promise<Friendship[]> {
-  const { data, error } = await supabase
-    .from("friendships")
-    .select("*")
-    .or(
-      `requester_kid_id.eq.${kidId},addressee_kid_id.eq.${kidId}`,
+  const rows = await db
+    .selectFrom("friendships")
+    .selectAll()
+    .where((eb) =>
+      eb.or([
+        eb("requester_kid_id", "=", kidId),
+        eb("addressee_kid_id", "=", kidId),
+      ]),
     )
-    .order("created_at", { ascending: false });
-  if (error) throw new Error(error.message);
+    .orderBy("created_at", "desc")
+    .execute();
   // Defense-in-depth: ensure the caller's account actually owns this kid's side.
-  return ((data ?? []) as Friendship[]).filter(
+  return rows.filter(
     (r) =>
       (r.requester_kid_id === kidId &&
         r.requester_account_id === accountId) ||
@@ -618,13 +598,13 @@ export interface KidScopeInput {
 
 /** Accepted friends of a given kid. */
 export async function listFriends(
-  supabase: Client,
+  db: Db,
   input: KidScopeInput,
 ): Promise<FriendshipView[]> {
-  const rows = (await rowsForKid(supabase, input.accountId, input.kidId)).filter(
+  const rows = (await rowsForKid(db, input.accountId, input.kidId)).filter(
     (r) => r.status === "accepted",
   );
-  return buildViews(supabase, rows, input.kidId);
+  return buildViews(db, rows, input.kidId);
 }
 
 export interface ListRequestsInput extends KidScopeInput {
@@ -639,10 +619,10 @@ export interface ListRequestsInput extends KidScopeInput {
  * sides, otherwise an accepted-but-unapproved request disappears for the kid.
  */
 export async function listRequests(
-  supabase: Client,
+  db: Db,
   input: ListRequestsInput,
 ): Promise<FriendshipView[]> {
-  const all = await rowsForKid(supabase, input.accountId, input.kidId);
+  const all = await rowsForKid(db, input.accountId, input.kidId);
   const rows = all.filter((r) => {
     const inProgress = r.status === "pending" || r.status === "awaiting_parent";
     if (!inProgress) return false;
@@ -650,18 +630,18 @@ export async function listRequests(
       ? r.addressee_kid_id === input.kidId
       : r.requester_kid_id === input.kidId;
   });
-  return buildViews(supabase, rows, input.kidId);
+  return buildViews(db, rows, input.kidId);
 }
 
 /** Friendships this kid has blocked (only the blocker sees them, so they can unblock). */
 export async function listBlocked(
-  supabase: Client,
+  db: Db,
   input: KidScopeInput,
 ): Promise<FriendshipView[]> {
   const rows = (
-    await rowsForKid(supabase, input.accountId, input.kidId)
+    await rowsForKid(db, input.accountId, input.kidId)
   ).filter((r) => r.status === "blocked" && r.blocked_by === input.kidId);
-  return buildViews(supabase, rows, input.kidId);
+  return buildViews(db, rows, input.kidId);
 }
 
 export interface PendingApproval {
@@ -685,19 +665,21 @@ export interface PendingApproval {
  * parent's final approval.
  */
 export async function listPendingApprovals(
-  supabase: Client,
+  db: Db,
   accountId: string,
 ): Promise<PendingApproval[]> {
-  const { data, error } = await supabase
-    .from("friendships")
-    .select("*")
-    .eq("status", "awaiting_parent")
-    .or(
-      `requester_account_id.eq.${accountId},addressee_account_id.eq.${accountId}`,
+  const rows = await db
+    .selectFrom("friendships")
+    .selectAll()
+    .where("status", "=", "awaiting_parent")
+    .where((eb) =>
+      eb.or([
+        eb("requester_account_id", "=", accountId),
+        eb("addressee_account_id", "=", accountId),
+      ]),
     )
-    .order("created_at", { ascending: false });
-  if (error) throw new Error(error.message);
-  const rows = (data ?? []) as Friendship[];
+    .orderBy("created_at", "desc")
+    .execute();
 
   type PartialApproval = Omit<
     PendingApproval,
@@ -733,7 +715,7 @@ export async function listPendingApprovals(
     }
   }
   const counterparts = await counterpartInfoMap(
-    supabase,
+    db,
     approvals.map((a) => a.counterpartKidId),
   );
   return approvals.map((a) => ({
@@ -763,10 +745,10 @@ export interface CardRefreshTarget {
  * has accepted. Scoped to the caller's account via `rowsForKid`.
  */
 export async function listCardRefreshTargets(
-  supabase: Client,
+  db: Db,
   input: KidScopeInput,
 ): Promise<CardRefreshTarget[]> {
-  const rows = await rowsForKid(supabase, input.accountId, input.kidId);
+  const rows = await rowsForKid(db, input.accountId, input.kidId);
   const relevant = rows.filter((r) => {
     if (r.status === "rejected") return false;
     const isRequester = r.requester_kid_id === input.kidId;
@@ -777,7 +759,7 @@ export async function listCardRefreshTargets(
       ? r.addressee_kid_id
       : r.requester_kid_id,
   );
-  const counterparts = await counterpartInfoMap(supabase, counterpartIds);
+  const counterparts = await counterpartInfoMap(db, counterpartIds);
   return relevant.map((r) => {
     const side: "requester" | "addressee" =
       r.requester_kid_id === input.kidId ? "requester" : "addressee";
@@ -812,12 +794,12 @@ export interface RefreshCardsInput {
  * Returns the number of friendships actually updated.
  */
 export async function refreshFriendCards(
-  supabase: Client,
+  db: Db,
   input: RefreshCardsInput,
 ): Promise<number> {
   let updated = 0;
   for (const c of input.cards) {
-    const row = await getFriendship(supabase, c.friendshipId);
+    const row = await getFriendship(db, c.friendshipId);
     if (!row) continue;
     const side = participantSide(row, input.accountId, input.kidId);
     if (!side) continue;
@@ -829,7 +811,7 @@ export async function refreshFriendCards(
       patch.addressee_card = c.card;
     }
     if (Object.keys(patch).length > 0) {
-      await updateFriendship(supabase, row.id, patch);
+      await updateFriendship(db, row.id, patch);
       updated++;
     }
   }
