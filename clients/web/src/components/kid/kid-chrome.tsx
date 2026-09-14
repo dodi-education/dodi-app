@@ -134,11 +134,13 @@ export function KidChrome({
   // Global gesture listener: when Dodi is deaf because AudioContext needs a
   // user gesture, any click on the page activates her. The handler does NOT
   // call preventDefault/stopPropagation so navigation and buttons still work.
+  // Flagged non-deliberate: this must only lift the audio-gesture kind of deaf,
+  // never wake (or unmute) a kid who deliberately muted her.
   useEffect(() => {
     if (dodiState !== "deaf" || !gestureNeeded) return;
 
     function handleGlobalClick() {
-      void activate();
+      void activate({ deliberate: false });
     }
 
     document.addEventListener("click", handleGlobalClick, { capture: true, once: true });

@@ -197,7 +197,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       estimatedDurationMinutes: data.estimatedDurationMinutes,
       learningGoal: data.learningGoal ?? "",
       successDefinition: data.successDefinition ?? "",
-      successCriteria: data.successCriteria as SuccessCriteria | undefined,
+      successCriteria: data.successCriteria as SuccessCriteria | string | undefined,
       progressKind: data.progressKind ?? "open",
       previewImage: data.previewImage,
       agentTranscriptEnc: data.agentTranscriptEnc,

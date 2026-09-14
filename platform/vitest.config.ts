@@ -13,5 +13,9 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["src/**/*.test.ts"],
+    // Every DB-backed file boots its own PGlite (WASM Postgres) in beforeAll and
+    // applies the migrations; ~1s alone, but well past the 10s default once a
+    // dozen of them boot in parallel.
+    hookTimeout: 60_000,
   },
 });

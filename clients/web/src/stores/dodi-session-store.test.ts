@@ -518,6 +518,138 @@ describe("dodi session store — persisted deaf state", () => {
     expect(state().state).toBe("active");
     expect(findKidPatch()).toBeUndefined(); // value already null → no write
   });
+
+  it("a context switch mid-connect still comes up deaf", async () => {
+    // Regression: the persisted target used to be resolved inside connect(),
+    // which bails out the moment a navigation supersedes it — so the kid row
+    // was never read and the session came up ACTIVE on the new context,
+    // silently unmuting a kid who had muted Dodi.
+    let resolveKid!: (v: unknown) => void;
+    kidLoadOneSpy.mockReturnValue(
+      new Promise((r) => {
+        resolveKid = r;
+      }),
+    );
+
+    useDodiSessionStore.setState({ state: "disconnected" });
+    void state().connect(PID); // parks on the kid-row read
+    await flush();
+
+    // The kid navigates into a game while that read is still in flight.
+    void state().setContext(
+      {
+        type: "game",
+        gameId: "g1",
+        markdown: "",
+        codeBundle: "",
+        gameState: {},
+        capabilities: [],
+      },
+      PID,
+    );
+    await flush();
+
+    fire({ type: "setupComplete" });
+    resolveKid({ display_name: "Ada", language: "en", deafened_dodi_at: DAY1 });
+    await flush();
+
+    expect(state().state).toBe("deaf");
+    expect(state().gestureNeeded).toBe(false);
+  });
+
+  it("a context switch after a mute comes back up deaf, not active", async () => {
+    await connect(PID);
+    fire({ type: "setupComplete" });
+    await flush();
+    state().deactivate();
+    expect(state().state).toBe("deaf");
+
+    // Navigating into a game rebuilds the session — it must honor the mute the
+    // kid just set rather than bringing her up listening again.
+    void state().setContext(
+      {
+        type: "game",
+        gameId: "g1",
+        markdown: "",
+        codeBundle: "",
+        gameState: {},
+        capabilities: [],
+      },
+      PID,
+    );
+    await flush();
+    fire({ type: "setupComplete" });
+    await flush();
+
+    expect(state().state).toBe("deaf");
+    expect(state().gestureNeeded).toBe(false);
+  });
+
+  it("sends the mute write with keepalive so a teardown cannot cancel it", async () => {
+    await connect(PID);
+    fire({ type: "setupComplete" });
+    await flush();
+
+    dodiRequestSpy.mockClear();
+    state().deactivate();
+
+    const patch = findKidPatch();
+    expect(patch).toBeTruthy();
+    // Muting is typically the last thing before navigating or closing the tab;
+    // without keepalive the browser drops the in-flight PATCH.
+    expect((patch![1] as { keepalive?: boolean }).keepalive).toBe(true);
+  });
+
+  it("a mute whose write never landed still comes up deaf on the next connect", async () => {
+    await connect(PID);
+    fire({ type: "setupComplete" });
+    await flush();
+
+    dodiRequestSpy.mockRejectedValueOnce(new TypeError("offline"));
+    state().deactivate();
+    await flush();
+    expect(state().state).toBe("deaf");
+
+    // Simulate the reload: the in-memory kid cache is gone and the server never
+    // received the mute (localStorage, and thus the outbox, survives). The
+    // parked write is the only thing that can keep her muted.
+    kidById.current = {};
+    kidLoadOneSpy.mockResolvedValue({ display_name: "Ada", language: "en" });
+    dodiRequestSpy.mockResolvedValue({ ok: true, json: async () => ({}) });
+    dodiRequestSpy.mockClear();
+
+    await connect(PID);
+    fire({ type: "setupComplete" });
+    await flush();
+
+    expect(state().state).toBe("deaf");
+    expect(state().gestureNeeded).toBe(false);
+    // …and the dropped write is retried.
+    expect(patchBody(findKidPatch()!).deafened_dodi_at).toBe(DAY1);
+  });
+
+  it("an incidental page click never clears a deliberate mute", async () => {
+    kidById.current[PID] = { deafened_dodi_at: DAY1 };
+    kidLoadOneSpy.mockResolvedValue({
+      display_name: "Ada",
+      language: "en",
+      deafened_dodi_at: DAY1,
+    });
+
+    await connect(PID);
+    fire({ type: "setupComplete" });
+    await flush();
+    expect(state().state).toBe("deaf");
+
+    dodiRequestSpy.mockClear();
+    // The any-click gesture handler in KidChrome — not a tap on Dodi herself.
+    await state().activate({ deliberate: false });
+    await flush();
+
+    expect(state().state).toBe("deaf");
+    expect(findKidPatch()).toBeUndefined();
+    expect(kidById.current[PID]?.deafened_dodi_at).toBe(DAY1);
+  });
 });
 
 // ---------------------------------------------------------------------------

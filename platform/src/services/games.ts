@@ -27,6 +27,7 @@ import { GAME_TAG_IDS } from "@dodi/games/tags";
 
 import type { Db } from "@/lib/db";
 import { isUniqueViolation } from "@/lib/db-errors";
+import { toJsonbValue } from "@/lib/db-json";
 
 import { getPublishedGame, getPublishedGamesByIds } from "./discover";
 
@@ -82,7 +83,8 @@ export interface CreateCustomGameInput {
   isActive?: boolean;
   learningGoal?: string;
   successDefinition?: string;
-  successCriteria?: SuccessCriteria;
+  /** Plain object for system/publication rows; a sealed `enc:v1:` string for private ones. */
+  successCriteria?: SuccessCriteria | string;
   progressKind?: ProgressKind;
   /** 100x100 list preview (sealed for private games; import/remix carry one). */
   previewImage?: string | null;
@@ -273,7 +275,7 @@ export async function createCustomGame(
     created_by: input.createdBy ?? "kid",
     learning_goal: input.learningGoal ?? "",
     success_definition: input.successDefinition ?? "",
-    success_criteria: (input.successCriteria ?? {}) as unknown as Json,
+    success_criteria: toJsonbValue(input.successCriteria ?? {}),
     progress_kind: input.progressKind ?? "open",
     preview_image: input.previewImage ?? null,
     agent_transcript_enc: input.agentTranscriptEnc ?? null,

@@ -32,7 +32,10 @@ export interface Accounts {
    */
   date_preferences: Json | null;
   email: string;
-  encrypted_api_keys: Json | null;
+  /**
+   * E2EE enc:v1: blob holding the whole provider-keys map (key, keyPreview, addedAt per provider), sealed client-side under the account VMK. Server stores and returns it verbatim and cannot decrypt.
+   */
+  encrypted_api_keys: string | null;
   /**
    * Stamped once when any of the account's submissions is hard-rejected; surfaced to the operator, never auto-cleared.
    */

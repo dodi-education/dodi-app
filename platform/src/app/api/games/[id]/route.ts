@@ -4,7 +4,8 @@ import { z } from "zod/v4";
 import { serverErrorResponse } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
 import { serviceDb } from "@/lib/db";
-import type { GameUpdate, Json } from "@dodi/types/database";
+import { toJsonbValue } from "@/lib/db-json";
+import type { GameUpdate } from "@dodi/types/database";
 import {
   deleteCustomGame,
   getGame,
@@ -191,7 +192,7 @@ export async function PATCH(
     // that drives the mapping lives only in the unlocked vault) and arrive
     // sealed; progress_kind flows through as a plain column.
     if (rawCriteria !== undefined) {
-      updates.success_criteria = rawCriteria as unknown as Json;
+      updates.success_criteria = toJsonbValue(rawCriteria);
     }
 
     // No bundle sanitizing here: the code is ciphertext. The studio sanitizes

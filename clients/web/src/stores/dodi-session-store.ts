@@ -152,7 +152,9 @@ export interface DodiSessionState {
   setContext: (context: DodiContext, kidId: string) => Promise<void>;
   setDisplayMode: (mode: DodiDisplayMode) => void;
   connect: (kidId: string) => Promise<void>;
-  activate: () => Promise<void>;
+  /** Wake Dodi from deaf. `deliberate` false = an incidental page click, which
+   *  never clears a persisted mute (see the any-click handler in KidChrome). */
+  activate: (options?: { deliberate?: boolean }) => Promise<void>;
   deactivate: () => void;
   toggleActive: () => void;
   endSession: () => void;
@@ -230,10 +232,6 @@ let hasGreetedThisPageLoad = false;
 let sessionIsBirthday = false;
 let micRequestInFlight = false;
 let tapStartedAtMs: number | null = null;
-// Persisted deaf target for this connect: when the kid's `deafened_dodi_at` is
-// set, Dodi comes up deaf directly (no audio resume, no greeting) instead of
-// active — so the target state is known from the first moment of the connect.
-let sessionStartDeaf = false;
 
 // Game voice state refs
 let turnBuffer = "";
@@ -539,37 +537,144 @@ function resetFlowFlags(): void {
   sessionIsBirthday = false;
   micRequestInFlight = false;
   tapStartedAtMs = null;
-  sessionStartDeaf = false;
+}
+
+// ---------------------------------------------------------------------------
+// Persisted deaf state (kids.deafened_dodi_at)
+//
+// The mute is the kid's deliberate choice, so it must never be lost or guessed
+// at: it is written through an outbox (durable before the request is even
+// attempted) and re-read from the kid row at every bring-up.
+// ---------------------------------------------------------------------------
+
+/** localStorage key holding a deaf toggle the server has not confirmed yet. */
+function deafenedOutboxKey(kidId: string): string {
+  return `dodi-deafened-pending-${kidId}`;
+}
+
+// Fallback for browsers where localStorage throws (private mode, at quota).
+// Without it a parked toggle there would be lost outright and never retried;
+// it is only populated when the durable write actually failed, so localStorage
+// stays the single source of truth on the normal path.
+const deafenedOutboxFallback = new Map<string, string | null>();
+
+/** The unconfirmed toggle for this kid, or null when the row is in sync. */
+function readDeafenedOutbox(kidId: string): { value: string | null } | null {
+  try {
+    const raw = localStorage.getItem(deafenedOutboxKey(kidId));
+    if (raw !== null) {
+      const value: unknown = JSON.parse(raw);
+      return { value: typeof value === "string" ? value : null };
+    }
+  } catch {
+    // Unreadable — fall through to the in-memory fallback.
+  }
+  if (deafenedOutboxFallback.has(kidId)) {
+    return { value: deafenedOutboxFallback.get(kidId) ?? null };
+  }
+  return null;
+}
+
+function writeDeafenedOutbox(kidId: string, value: string | null): void {
+  try {
+    localStorage.setItem(deafenedOutboxKey(kidId), JSON.stringify(value));
+    deafenedOutboxFallback.delete(kidId);
+  } catch {
+    deafenedOutboxFallback.set(kidId, value);
+  }
 }
 
 /**
- * Persist the deliberate deaf toggle to the kid row so it survives reconnects.
- * NULL ⇒ Dodi listens normally; a timestamp ⇒ the kid muted her. Best-effort:
- * the local cache is patched first so the UI (and the next connect's target)
- * stay consistent even if the PATCH is lost. No-ops when the persisted value
- * already matches, so the any-click "wake" path doesn't spam redundant writes.
+ * Send the kid's parked toggle, clearing the outbox only once it actually
+ * lands. Muting is typically the last thing a kid does before navigating or
+ * closing the tab, so the request is `keepalive` — without it the browser
+ * cancels it on unload and the mute silently reverts on the next load.
+ */
+async function flushDeafenedOutbox(kidId: string): Promise<void> {
+  const parked = readDeafenedOutbox(kidId);
+  if (!parked) return;
+
+  try {
+    const res = await dodi.request(`/api/kids/${kidId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ deafened_dodi_at: parked.value }),
+      keepalive: true,
+    });
+    // `dodi.request` resolves for 4xx/5xx too — an unchecked response would
+    // drop a toggle the server never stored.
+    if (!res.ok) return;
+  } catch {
+    return; // offline / aborted — retried on the next bring-up
+  }
+
+  // Only drop it if the kid hasn't toggled again while this was in flight.
+  const still = readDeafenedOutbox(kidId);
+  if (!still || still.value !== parked.value) return;
+  deafenedOutboxFallback.delete(kidId);
+  try {
+    localStorage.removeItem(deafenedOutboxKey(kidId));
+  } catch {
+    // Nothing to do — a redundant re-send is harmless.
+  }
+}
+
+/**
+ * The kid's mute as the client currently knows it. A parked toggle wins over
+ * the cached row: it is the more recent intent.
+ */
+function isDeafenedPersisted(kidId: string): boolean {
+  const parked = readDeafenedOutbox(kidId);
+  if (parked) return parked.value != null;
+  const cached = useKidStore.getState().byId?.[kidId]?.deafened_dodi_at ?? null;
+  return cached != null;
+}
+
+/**
+ * Persist the deliberate deaf toggle to the kid row so it survives reconnects
+ * AND reloads. NULL ⇒ Dodi listens normally; a timestamp ⇒ the kid muted her.
+ * The local cache and the outbox are both written synchronously, so the intent
+ * is durable before the PATCH is attempted. No-ops when the value already
+ * matches, so the any-click "wake" path doesn't spam redundant writes.
  */
 function persistDeafenedState(deafened: boolean): void {
   const kidId = currentKidId;
   if (!kidId) return;
-
-  const store = useKidStore.getState();
-  const currentValue = store.byId?.[kidId]?.deafened_dodi_at ?? null;
-  if ((currentValue != null) === deafened) return;
+  if (isDeafenedPersisted(kidId) === deafened) return;
 
   const value = deafened ? new Date().toISOString() : null;
-  store.patchLocal?.(kidId, { deafened_dodi_at: value });
+  useKidStore.getState().patchLocal?.(kidId, { deafened_dodi_at: value });
+  writeDeafenedOutbox(kidId, value);
+  void flushDeafenedOutbox(kidId);
+}
 
-  void dodi
-    .request(`/api/kids/${kidId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ deafened_dodi_at: value }),
-    })
-    .catch(() => {
-      // Best-effort: the local patch keeps the UI coherent and the next connect
-      // re-reads the row, so a dropped write self-heals rather than hard-fails.
-    });
+/**
+ * Resolve the deaf target for one bring-up. Every path that raises a session
+ * (connect, setContext, a socket's setupComplete) runs this, so the target is
+ * decided from the kid row at the moment of the decision — never from a flag
+ * that a superseded connect may never have reached. Cache-first, like the kid
+ * store's own `loadOne`.
+ */
+async function resolveStartDeaf(kidId: string): Promise<boolean> {
+  const parked = readDeafenedOutbox(kidId);
+  if (parked) {
+    void flushDeafenedOutbox(kidId);
+    return parked.value != null;
+  }
+
+  const store = useKidStore.getState();
+  const cached = store.byId?.[kidId];
+  if (cached) return cached.deafened_dodi_at != null;
+
+  try {
+    const kid = await store.loadOne(kidId);
+    return kid?.deafened_dodi_at != null;
+  } catch {
+    // The row is unreachable (offline with a cold cache). Come up deaf rather
+    // than guessing "listening": a failed read must never unmute a kid who
+    // muted Dodi, and a tap wakes her if the guess was wrong.
+    return true;
+  }
 }
 
 function getGreetingMode(kidId: string, isBirthday: boolean): "long" | "short" | "birthday" {
@@ -689,6 +794,11 @@ function transitionToDeaf(
  * AudioContext without a gesture — success means active, failure means deaf
  * with gestureNeeded (any click then wakes her). Persistent sockets run this
  * from their `setupComplete` event; pooled sessions after `pool.whenReady()`.
+ *
+ * The persisted target is resolved HERE rather than handed in by the caller:
+ * `connect` and `setContext` both raise sessions, and a connect superseded by
+ * a navigation returns early — a flag it set would then be missing or stale,
+ * which is how a muted Dodi used to come back up listening.
  */
 function decideInitialPresence(
   set: (partial: Partial<DodiSessionState>) => void,
@@ -696,32 +806,39 @@ function decideInitialPresence(
   kidId: string,
   generation: number,
 ): void {
-  if (sessionStartDeaf) {
-    transitionToDeaf(set, true);
-    return;
-  }
-  if (!streamer) {
-    transitionToDeaf(set, false);
-    return;
-  }
-  void streamer.tryResume().then((audioOk) => {
-    // Guard against stale callback
-    if (generation !== contextGeneration) return;
-    if (currentKidId !== kidId) return;
+  const isStale = (): boolean =>
+    generation !== contextGeneration || currentKidId !== kidId;
+
+  void (async () => {
+    const startDeaf = await resolveStartDeaf(kidId);
+    if (isStale()) return;
+
+    if (startDeaf) {
+      transitionToDeaf(set, true);
+      return;
+    }
+    // Captured across the await: cleanup() may null the module ref, and a
+    // retired streamer must not decide this session's presence.
+    const activeStreamer = streamer;
+    if (!activeStreamer) {
+      transitionToDeaf(set, false);
+      return;
+    }
+
+    const audioOk = await activeStreamer.tryResume();
+    if (isStale() || streamer !== activeStreamer) return;
 
     if (!audioOk) {
       transitionToDeaf(set, false);
       return;
     }
     if (sessionStrategy === "pooled") {
-      void (async () => {
-        const acquired = await acquireActiveClient(set, get);
-        if (acquired) transitionToActive(set, get);
-      })();
+      const acquired = await acquireActiveClient(set, get);
+      if (acquired) transitionToActive(set, get);
     } else {
       transitionToActive(set, get);
     }
-  });
+  })();
 }
 
 /**
@@ -1226,17 +1343,9 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
     });
 
     try {
-      // Resolve the persisted deaf target up front so it's known from the very
-      // first moment of the connect: a set `deafened_dodi_at` means the kid
-      // muted Dodi last time, so we come up deaf directly rather than active.
-      try {
-        const kid = await useKidStore.getState().loadOne(kidId);
-        if (gen !== contextGeneration || controller.signal.aborted) return;
-        sessionStartDeaf = kid?.deafened_dodi_at != null;
-      } catch {
-        sessionStartDeaf = false;
-      }
-
+      // The persisted deaf target is NOT resolved here: a navigation can
+      // supersede this connect at any await below, and the session it hands
+      // over to must read the kid row itself. decideInitialPresence owns it.
       const currentContext = get().context;
       let config: GameVoiceSessionConfig;
 
@@ -1306,11 +1415,17 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
     }
   },
 
-  activate: async () => {
+  activate: async (options) => {
+    // `deliberate` false is KidChrome's any-click gesture handler, which only
+    // exists to lift the transient "audio needs a gesture" deaf. A kid who
+    // deliberately muted Dodi stays muted until she is actually tapped awake —
+    // an incidental click must neither wake her nor clear the stored mute.
+    const deliberate = options?.deliberate ?? true;
     const current = get();
     if (current.state !== "deaf") return;
     if (!currentKidId) return;
     if (sessionStrategy === "persistent" && !client) return;
+    if (!deliberate && isDeafenedPersisted(currentKidId)) return;
 
     // Prime AudioContext from user gesture — must stay synchronous inside the
     // gesture (autoplay unlock), before any await below.
@@ -1339,8 +1454,7 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
     transitionToActive(set, get);
     // The kid deliberately woke Dodi → clear the persisted deaf state so the
     // next connect comes up listening. (No-ops if it wasn't set.)
-    sessionStartDeaf = false;
-    persistDeafenedState(false);
+    if (deliberate) persistDeafenedState(false);
   },
 
   deactivate: () => {
@@ -1349,8 +1463,7 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
 
     transitionToDeaf(set, true);
     // The kid deliberately muted Dodi → persist it so she stays deaf across
-    // reconnects until re-enabled.
-    sessionStartDeaf = true;
+    // reconnects, navigations and reloads until re-enabled.
     persistDeafenedState(true);
   },
 
@@ -1369,6 +1482,11 @@ export const useDodiSessionStore = create<DodiSessionState>((set, get) => ({
   endSession: () => {
     window.removeEventListener("beforeunload", handleBeforeUnload);
     window.removeEventListener("pagehide", handlePageHide);
+
+    // Leaving the kid view is a common exit right after muting — retry the
+    // toggle now (keepalive carries it past the navigation) instead of waiting
+    // for the next bring-up. No-ops when there is nothing parked.
+    if (currentKidId) void flushDeafenedOutbox(currentKidId);
 
     // Flush the in-progress round and push the outbox to the DB; memory
     // processing stays a connect-time concern.
