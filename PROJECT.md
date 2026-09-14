@@ -445,9 +445,10 @@ parent-defined goal — and, in future, generate challenges like "Solve 3 math g
 
 - Enhance game agent:
  - Every time a version is persisted, save differences to previous versions (including manual saves)
- - Let Code agent read all version differences to get a better understanding and avoid reintroduction of previously fixed bugs
+ - Add a change summary to every version which are fed to game agents as context so they know why a change happened
  - Allow surgical edits
 
+- Add an API and/or MCP service for creating games.
 
 - Enhance usability of game-studio
  - Step 1 ("Inspiration"): should be a skipable step where you can draw or upload inspiration (could be a "Sketch" of the game UI, or photo of a similar task, etc.).

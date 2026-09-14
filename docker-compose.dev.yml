@@ -12,6 +12,11 @@
 #   DATABASE_URL_SERVICE=postgres://dodi_service:dodi_service@127.0.0.1:5432/dodi_platform
 #   DATABASE_URL_MIGRATOR=postgres://dodi_migrator:dodi_migrator@127.0.0.1:5432/dodi_platform
 #   COM_DATABASE_URL=postgres://dodi_com:dodi_com@127.0.0.1:5432/dodi_commercial (dodi-com/ai)
+#   BLOG_DATABASE_URL=postgres://dodi_blog:dodi_blog@127.0.0.1:5432/dodi_blog (dodi-com/blog)
+# After first boot the volume already exists, so re-run the blog init by hand:
+#   docker compose -f docker-compose.dev.yml exec -T postgres \
+#     env DODI_MIGRATOR_PASSWORD=dodi_migrator DODI_BLOG_PASSWORD=dodi_blog \
+#     bash < ../dodi-com/ops/hosting/postgres/init/01-blog-db.sh
 
 name: dodi-dev
 
@@ -27,9 +32,11 @@ services:
       DODI_APP_PASSWORD: ${DODI_APP_PASSWORD:-dodi_app}
       DODI_SERVICE_PASSWORD: ${DODI_SERVICE_PASSWORD:-dodi_service}
       DODI_COM_PASSWORD: ${DODI_COM_PASSWORD:-dodi_com}
+      DODI_BLOG_PASSWORD: ${DODI_BLOG_PASSWORD:-dodi_blog}
     volumes:
       - pgdata_dev:/var/lib/postgresql/data
       - ./platform/db/docker/init:/docker-entrypoint-initdb.d:ro
+      - ../dodi-com/ops/hosting/postgres/init/01-blog-db.sh:/docker-entrypoint-initdb.d/01-blog-db.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
       interval: 5s
