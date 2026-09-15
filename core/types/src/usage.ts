@@ -20,6 +20,8 @@ export interface TokenUsage {
 export type UsageEventType =
   | "game_create"
   | "game_edit"
+  /** Studio Plan step: a brainstorming turn, or the settings derivation on accept. */
+  | "game_plan"
   | "game_analysis"
   | "game_text_generation"
   | "game_translation"

@@ -7,6 +7,7 @@ export * from "./ai";
 export * from "./agent-progress";
 export * from "./database";
 export * from "./games";
+export * from "./plan";
 export * from "./tasks";
 export * from "./success";
 export * from "./gemini-live";

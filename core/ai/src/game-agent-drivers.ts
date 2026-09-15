@@ -61,6 +61,9 @@ export interface GameToolResult {
 
 export interface GameTurn {
   toolCalls: GameToolCall[];
+  /** The assistant's plain-text output this turn ("" when it produced none).
+   *  The code agent only nudges on it; the plan agent shows it to the parent. */
+  text: string;
   /** The assistant produced text output (used to nudge toward tool use). */
   hasText: boolean;
   /** Model wants to continue after tool results (Anthropic stop_reason
@@ -287,12 +290,15 @@ class AnthropicGameDriver implements GameCodeDriver {
 
     this.#messages.push({ role: "assistant", content: response.content });
 
+    const text = textBlocks.map((b) => b.text).join("\n");
+
     return {
       toolCalls: toolUseBlocks.map((b) => ({
         id: b.id,
         name: b.name,
         input: (b.input ?? {}) as Record<string, unknown>,
       })),
+      text,
       hasText: textBlocks.length > 0,
       expectsToolResults: response.stop_reason === "tool_use",
       stopReason: response.stop_reason,
@@ -496,6 +502,7 @@ class XaiGameDriver implements GameCodeDriver {
         name: c.name,
         input: parseJsonObject(c.arguments),
       })),
+      text: turn.content,
       hasText: turn.content.trim().length > 0,
       expectsToolResults: turn.finishReason === "tool_calls",
       stopReason: turn.finishReason,

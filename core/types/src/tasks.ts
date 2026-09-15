@@ -26,6 +26,12 @@ export interface GenerateGamePayload {
   perspective?: GamePerspective;
   /** Parent-attached reference images (data URLs) — visual guidance for the design. */
   images?: string[];
+  /**
+   * The prompt is a game plan the parent reviewed and approved in the studio's
+   * Plan step (not a free-form idea): build exactly it, and treat any attached
+   * image as the sketch/photo of the intended game rather than style guidance.
+   */
+  isAgreedPlan?: boolean;
 }
 
 /**

@@ -18,7 +18,7 @@ export type ErrorLogType = "client" | "server";
 
 /** Which client-side flow failed. Extend as more flows adopt reporting.
  *  (Server errors use a free-form scope string instead, e.g. "api/games#POST".) */
-export type ErrorLogContext = "game_build" | "game_update" | "game_save";
+export type ErrorLogContext = "game_build" | "game_update" | "game_save" | "game_plan";
 
 /** Operational diagnostics captured at the moment of failure. Counts, flags
  *  and enum-ish strings only — never content. */

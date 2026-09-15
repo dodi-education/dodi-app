@@ -24,7 +24,7 @@ const ErrorLogMetaSchema = z
   .partial();
 
 const ErrorLogReportSchema = z.object({
-  context: z.enum(["game_build", "game_update", "game_save"]),
+  context: z.enum(["game_build", "game_update", "game_save", "game_plan"]),
   kidId: z.string().uuid().nullable().optional(),
   gameId: z.string().uuid().nullable().optional(),
   provider: z.string().min(1).max(40).optional(),

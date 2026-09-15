@@ -162,7 +162,7 @@ const STEP_BY_TOOL: Partial<Record<string, AgentStep>> = {
  * images stay in the sealed transcript for display — this only trims what is
  * re-fed to the model.
  */
-function trimPriorImages(turns: PriorTurn[] | undefined): PriorTurn[] | undefined {
+export function trimPriorImages(turns: PriorTurn[] | undefined): PriorTurn[] | undefined {
   if (!turns?.length) return turns;
   let kept = 0;
   const reversed = [...turns].reverse().map((turn): PriorTurn => {
@@ -179,7 +179,18 @@ function trimPriorImages(turns: PriorTurn[] | undefined): PriorTurn[] | undefine
 function buildCodeTaskUserMessage(task: AgentTaskRequest): string {
   if (task.taskType === "generate_game") {
     const payload = task.payload as GenerateGamePayload;
-    const lines = ["Create a new game based on this description:", "", payload.prompt];
+    // An agreed plan came out of the studio's Plan step: the parent already
+    // reviewed these mechanics, so it is a spec to implement, not an idea to
+    // riff on.
+    const lines = payload.isAgreedPlan
+      ? [
+          "Build the game described by this plan. The parent reviewed and approved it in the " +
+            "studio's planning step: implement every mechanic, rule and progression step it " +
+            "lists, and do not add features it does not mention.",
+          "",
+          payload.prompt,
+        ]
+      : ["Create a new game based on this description:", "", payload.prompt];
     if (payload.title) lines.push("", `Title: ${payload.title} (set by the parent — keep it)`);
     if (payload.tags?.length) lines.push(`Tags: ${payload.tags.join(", ")}`);
     if (payload.learningGoal) lines.push("", `Learning goal: ${payload.learningGoal}`);
@@ -187,7 +198,11 @@ function buildCodeTaskUserMessage(task: AgentTaskRequest): string {
     if (payload.images?.length) {
       lines.push(
         "",
-        `${payload.images.length} reference image(s) are attached — use them as visual guidance.`,
+        payload.isAgreedPlan
+          ? `${payload.images.length} image(s) are attached: the parent's sketch or photo of the ` +
+            "intended game from the planning step. Read them for layout, pieces and mechanics — " +
+            "they are not artwork to copy."
+          : `${payload.images.length} reference image(s) are attached — use them as visual guidance.`,
       );
     }
     lines.push(

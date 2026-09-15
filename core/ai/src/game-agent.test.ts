@@ -62,6 +62,7 @@ describe("per-model output-cap clamping", () => {
       return driverReturning([
         {
           toolCalls: [],
+          text: "",
           hasText: false,
           expectsToolResults: false,
           stopReason: "end_turn",
@@ -95,6 +96,7 @@ describe("runGameAgent failure diagnostics", () => {
       driverReturning([
         {
           toolCalls: [],
+          text: "narration",
           hasText: true,
           expectsToolResults: false,
           stopReason: "max_tokens",
@@ -102,6 +104,7 @@ describe("runGameAgent failure diagnostics", () => {
         },
         {
           toolCalls: [],
+          text: "",
           hasText: false,
           expectsToolResults: false,
           stopReason: "max_tokens",
@@ -137,6 +140,7 @@ describe("prior-turn image window", () => {
       const driver = driverReturning([
         {
           toolCalls: [],
+          text: "",
           hasText: false,
           expectsToolResults: false,
           stopReason: "end_turn",
@@ -197,6 +201,7 @@ describe("task attachments", () => {
       const driver = driverReturning([
         {
           toolCalls: [],
+          text: "",
           hasText: false,
           expectsToolResults: false,
           stopReason: "end_turn",
@@ -230,6 +235,7 @@ describe("task attachments", () => {
       const driver = driverReturning([
         {
           toolCalls: [],
+          text: "",
           hasText: false,
           expectsToolResults: false,
           stopReason: "end_turn",
@@ -264,6 +270,46 @@ describe("task attachments", () => {
     expect(content.text).toContain("FIRST attached image is a screenshot");
     expect(content.text).toContain("reference image(s) are attached after the screenshot");
   });
+
+  it("an agreed plan is framed as a spec, and its image as the intended game", async () => {
+    // The studio's Plan step hands over a plan the parent already approved, so
+    // the brief must not read like a free-form idea the model may reinterpret.
+    let captured: string | UserContent | undefined;
+    mockDriverFactory = () => {
+      const driver = driverReturning([
+        {
+          toolCalls: [],
+          text: "",
+          hasText: false,
+          expectsToolResults: false,
+          stopReason: "end_turn",
+          usage: emptyUsage,
+        },
+      ]);
+      return {
+        ...driver,
+        seed: (_turns: PriorTurn[] | undefined, first: string | UserContent) => {
+          captured = first;
+        },
+      };
+    };
+    await runGameAgent({
+      provider: "anthropic",
+      apiKey: "k",
+      model: "m",
+      task: {
+        ...TASK,
+        payload: { prompt: "**Goal**\n- count apples", isAgreedPlan: true, images: [IMG] },
+      },
+    }).catch(() => {});
+
+    const content = captured as UserContent;
+    expect(content.text).toContain("reviewed and approved it");
+    expect(content.text).toContain("do not add features it does not mention");
+    expect(content.text).toContain("sketch or photo of the intended game");
+    expect(content.text).not.toContain("Create a new game based on this description");
+    expect(content.text).not.toContain("use them as visual guidance");
+  });
 });
 
 describe("parent-owned title", () => {
@@ -275,6 +321,7 @@ describe("parent-owned title", () => {
         input: { code: "<html><script>x=1</script></html>", markdown: "m", title, capabilities: [] },
       },
     ],
+    text: "",
     hasText: false,
     expectsToolResults: true,
     stopReason: "tool_use",
@@ -282,6 +329,7 @@ describe("parent-owned title", () => {
   });
   const endTurn: GameTurn = {
     toolCalls: [],
+    text: "",
     hasText: false,
     expectsToolResults: false,
     stopReason: "end_turn",
@@ -344,6 +392,7 @@ describe("background image loop integration", () => {
 
   const turn = (toolCalls: GameTurn["toolCalls"]): GameTurn => ({
     toolCalls,
+    text: "",
     hasText: false,
     expectsToolResults: toolCalls.length > 0,
     stopReason: toolCalls.length > 0 ? "tool_use" : "end_turn",
@@ -537,6 +586,7 @@ describe("background image loop integration", () => {
       return driverReturning([
         {
           toolCalls: [],
+          text: "",
           hasText: false,
           expectsToolResults: false,
           stopReason: "end_turn",
@@ -592,6 +642,7 @@ describe("preview image loop integration", () => {
 
   const turn = (toolCalls: GameTurn["toolCalls"], hasText = false): GameTurn => ({
     toolCalls,
+    text: hasText ? "narration" : "",
     hasText,
     expectsToolResults: toolCalls.length > 0,
     stopReason: toolCalls.length > 0 ? "tool_use" : "end_turn",
@@ -781,6 +832,7 @@ describe("surgical edit loop integration", () => {
 
   const turn = (toolCalls: GameTurn["toolCalls"]): GameTurn => ({
     toolCalls,
+    text: "",
     hasText: false,
     expectsToolResults: toolCalls.length > 0,
     stopReason: toolCalls.length > 0 ? "tool_use" : "end_turn",
@@ -1044,6 +1096,7 @@ describe("surgical edit loop integration", () => {
 describe("live activity + narration", () => {
   const idleTurn: GameTurn = {
     toolCalls: [],
+    text: "",
     hasText: false,
     expectsToolResults: false,
     stopReason: "end_turn",

@@ -33,6 +33,8 @@ import { locales } from "@/i18n/config";
 import { tagStyle } from "@/components/parent/games/tag-style";
 import { CodeViewer } from "@/components/parent/games/code-viewer";
 import { AgeRange, isValidAgeRange } from "@/components/parent/games/age-range";
+import { PlanStage, type PlanMode } from "@/components/parent/games/plan-stage";
+import { RichText } from "@/components/parent/games/rich-text";
 import { useTagLabel } from "@/lib/games/tag-label";
 import { cn } from "@/lib/utils";
 import {
@@ -63,6 +65,8 @@ import { buildPreviewPrompt } from "@dodi/ai/image-providers/preview-prompt";
 import { calculateChildAge, getLanguageDisplayName } from "@dodi/ai/dodi-context";
 import { buildLearningContext, measureLearningContext } from "@dodi/ai/learning-context";
 import { runGameAgent, AgentAbortedError, GameAgentError, type PriorTurn } from "@dodi/ai/game-agent";
+import { runPlanAgent } from "@dodi/ai/game-plan-agent";
+import { derivePlanSettings } from "@dodi/ai/plan-settings";
 import { reportUsage } from "@/lib/usage/report-usage";
 import {
   browserFailureMeta,
@@ -136,6 +140,14 @@ const STUDIO_VIEWS: readonly StudioView[] = ["settings", "code", "preview"];
 export function isStudioView(value: string | undefined): value is StudioView {
   return value !== undefined && STUDIO_VIEWS.includes(value as StudioView);
 }
+
+/**
+ * What the stage can show. "plan" is the brainstorming step and exists only
+ * while the game is still a draft, so it is deliberately NOT a StudioView: it
+ * has no id yet and therefore no URL, and `/game-studio/{id}/plan` falls back
+ * to the default tab like any other unknown segment.
+ */
+type DraftView = StudioView | "plan";
 
 interface GameStudioProps {
   initialGame?: StudioGame;
@@ -251,6 +263,10 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
   }));
 
   const [game, setGame] = useState<StudioGame>(initialGame ?? emptyGame());
+  // The game id as of right now. `game.id` is null for a draft and is adopted
+  // in place when a planned draft is saved, so callbacks that must not go stale
+  // across that transition (setView's URL mirroring) read it from here.
+  const gameIdRef = useRef<string | null>(initialGame?.id ?? null);
 
   // Surface the live game title in the shared breadcrumb bar (the studio has no
   // top bar of its own); clear it when leaving the studio.
@@ -260,8 +276,9 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     return () => setLeaf(null);
   }, [game.title, setLeaf, t]);
 
-  const [view, setViewState] = useState<StudioView>(
-    initialView ?? (initialGame?.id ? "preview" : "settings"),
+  // A brand-new game opens on the Plan step; an existing one on its preview.
+  const [view, setViewState] = useState<DraftView>(
+    initialView ?? (initialGame?.id ? "preview" : "plan"),
   );
 
   /**
@@ -271,21 +288,18 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
    * thread, a running agent build and the mounted sandbox with it. Replacing
    * (not pushing) also keeps Back meaning "leave the studio" rather than
    * unwinding a trail of tab switches. A draft has no id and so no URL yet.
+   *
+   * Keyed on the LIVE id, not `initialGame`: saving a planned draft adopts its
+   * new id in place (see saveSettings) instead of remounting the studio.
    */
-  const setView = useCallback(
-    (next: StudioView) => {
-      setViewState(next);
-      const gameId = initialGame?.id;
-      if (gameId && typeof window !== "undefined") {
-        window.history.replaceState(
-          null,
-          "",
-          `/parent/game-studio/${gameId}/${next}`,
-        );
-      }
-    },
-    [initialGame?.id],
-  );
+  const setView = (next: DraftView): void => {
+    setViewState(next);
+    const gameId = gameIdRef.current;
+    // "plan" only exists for a draft, so it never has a URL to mirror into.
+    if (gameId && next !== "plan" && typeof window !== "undefined") {
+      window.history.replaceState(null, "", `/parent/game-studio/${gameId}/${next}`);
+    }
+  };
 
   // Canonicalize on entry: `/game-studio/{id}` (and anything unrecognized in the
   // tab slot) becomes the tab actually being shown, so a reload or a shared link
@@ -300,7 +314,9 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     // Entry only — later tab switches keep the URL in step via setView.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialGame?.id]);
-  // Initial thread = the unsealed prior conversation (resume), or empty.
+  // Initial thread = the unsealed prior conversation (resume), or empty. The
+  // Plan step shares it: the brainstorming turns become the head of the build
+  // conversation, so the coding agent inherits everything that was discussed.
   const [messages, setMessages] = useState<ChatMessage[]>(() => restoreTranscript(initialGame));
   const [draft, setDraft] = useState("");
   // Reference images staged for the next message (downscaled data URLs).
@@ -337,6 +353,27 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
   }>({});
   const [justSaved, setJustSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  // ----- Plan step (drafts only) -----------------------------------------
+  // Which inspiration surface is open, and the image each one holds. Both are
+  // kept so switching back and forth never throws work away; the one from the
+  // open surface is what dodi sees.
+  const [planMode, setPlanMode] = useState<PlanMode>("draw");
+  const [sketchImage, setSketchImage] = useState<string | null>(null);
+  const [photoImage, setPhotoImage] = useState<string | null>(null);
+  // The summary on the table: dodi's proposal, or the parent's edit of it.
+  const [planDraft, setPlanDraft] = useState("");
+  const [isEditingPlan, setIsEditingPlan] = useState(false);
+  // The approved text. Non-null ⇒ saving the draft starts the build with it.
+  const [acceptedPlan, setAcceptedPlan] = useState<string | null>(null);
+  const [isDerivingSettings, setIsDerivingSettings] = useState(false);
+  // A sketch/photo the parent has not shown dodi yet — it rides the next message.
+  const [hasUnsentPlanImage, setHasUnsentPlanImage] = useState(false);
+  // The build to start once the draft's id lands (see saveSettings).
+  const pendingAutoBuildRef = useRef<{ text: string; images: string[] } | null>(null);
+  // This studio adopted its id in place rather than being remounted by the
+  // router — the successful build hands the route over instead of refreshing.
+  const adoptedIdRef = useRef(false);
   // In-flight state for the header's active/inactive auto-save toggle.
   const [togglingActive, setTogglingActive] = useState(false);
   // Whether an explicit thinking model is configured (model_config.thinkingProvider).
@@ -375,8 +412,8 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
   // (matches the `compact` CSS variant). Landscape/desktop keep the resizable
   // side-by-side panes.
   const vertical = useMediaQuery("(orientation: portrait), (max-width: 767px)");
-  // New games open on the Game tab (settings must be filled before the chat
-  // unlocks); existing games open on the Dodi chat.
+  // New games open on the Game tab (the Plan step, then settings); existing
+  // games open on the Dodi chat.
   const [mtab, setMtab] = useState<"game" | "chat">(
     initialGame?.id ? "chat" : "game",
   );
@@ -388,9 +425,13 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
   // The in-flight build's abort handle — drives Stop + navigation guards.
   const abortRef = useRef<AbortController | null>(null);
 
-  // The chat is locked until a draft has been persisted (new-game hard gate):
-  // the parent fills mandatory settings + saves, which redirects to /[id].
-  const locked = !game.id;
+  const isDraft = !game.id;
+  // The Plan step is the one place a draft may talk to dodi: it brainstorms the
+  // idea, it does not build anything, so it needs no game row.
+  const isPlanMode = isDraft && view === "plan";
+  // Building is locked until a draft has been persisted (new-game hard gate):
+  // the parent fills mandatory settings + saves, which mints the game id.
+  const locked = isDraft && !isPlanMode;
 
   // Pin the thread to the latest turn on resume, after each turn, and when the
   // chat pane becomes visible (mobile tab switch / draft unlock). Measuring
@@ -431,12 +472,15 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
         const image = await resolveClientImage().catch(() => null);
         if (!cancelled) {
           setHasImageProvider(Boolean(image));
-          // New games default the list-preview generation on — but only once an
-          // image provider is confirmed, so accounts without an image model
-          // never save the flag (or a checked-but-disabled switch) they can't
-          // use. Existing games keep whatever their settings say.
+          // New games default both image generations on — an illustrated
+          // background and a list preview are what a game is expected to look
+          // like. Only once an image provider is confirmed, though, so accounts
+          // without an image model never save a flag (or a checked-but-disabled
+          // switch) they can't use. Existing games keep their own settings.
           if (image && !editing) {
-            setGame((g) => (g.id ? g : { ...g, generatePreviewImage: true }));
+            setGame((g) =>
+              g.id ? g : { ...g, generatePreviewImage: true, generateBackgroundImage: true },
+            );
           }
         }
       } catch {
@@ -978,9 +1022,252 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     return boundBackgroundImage(generated.dataUrl);
   };
 
-  async function send(raw?: string): Promise<void> {
+  // ----- Plan step --------------------------------------------------------
+
+  /** The inspiration image of the surface the parent has open. */
+  const planImage = planMode === "draw" ? sketchImage : photoImage;
+
+  /**
+   * One brainstorming turn with the plan agent. Runs in the browser on the
+   * game provider (same key, same drivers as a build) and produces prose plus,
+   * usually, a plan proposal — never code and never a game row.
+   */
+  async function sendPlanMessage(text: string, explicitImages?: string[]): Promise<void> {
+    if (!text.trim() || thinking) return;
+    if (needsGameProvider) {
+      setError(t("needThinkingProvider"));
+      return;
+    }
+    setError(null);
+    setDraft("");
+
+    // The sketch/photo rides along the first message after it changed; later
+    // turns refer back to it through the conversation.
+    const fresh = explicitImages ?? (hasUnsentPlanImage && planImage ? [planImage] : []);
+    const attachments = capImages([], [...fresh, ...pendingImages], MAX_ATTACHMENTS);
+    setPendingImages([]);
+    setHasUnsentPlanImage(false);
+
+    const history = messages;
+    const withUser: ChatMessage[] = [
+      ...history,
+      { role: "user", text, ...(attachments.length ? { images: attachments } : {}) },
+    ];
+    setMessages(withUser);
+    setThinking(true);
+    setNarration("");
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const startedAt = startFailureTimer();
+    let gameCfg: Awaited<ReturnType<typeof resolveClientGame>> = null;
+    try {
+      gameCfg = await resolveClientGame();
+      if (!gameCfg) {
+        setThinking(false);
+        setError(t("needProviderKey"));
+        return;
+      }
+
+      // No audience is chosen during planning, so the context spans the whole
+      // family: the plan should fit whoever ends up playing it.
+      const kid = kids.find((k) => k.id === primaryKidId);
+      const learningContext = buildLearningContext(
+        kids,
+        { isFamily: true, audienceIds: [] },
+        primaryKidId ?? "",
+      );
+
+      const result = await runPlanAgent({
+        provider: gameCfg.provider,
+        apiKey: gameCfg.apiKey,
+        model: gameCfg.model,
+        childContext: {
+          age: calculateChildAge(kid?.birthdate ?? null) ?? undefined,
+          language: getLanguageDisplayName(kid?.language ?? "en"),
+          learningContext,
+        },
+        priorTurns: history as PriorTurn[],
+        message: { text, images: attachments.length ? attachments : undefined },
+        currentPlan: planDraft || null,
+        // The studio is a parent surface — dodi answers in the parent's language.
+        replyLanguage: getLanguageDisplayName(locale),
+        signal: controller.signal,
+        onActivity: (e) => {
+          if (e.type === "narration_start") setNarration("");
+          else if (e.type === "narration_delta") setNarration((n) => n + e.text);
+        },
+      });
+
+      if (result.plan) {
+        setPlanDraft(result.plan.summary);
+        setIsEditingPlan(false);
+      }
+
+      const ctxSizes = measureLearningContext(
+        kids,
+        { isFamily: true, audienceIds: [] },
+        primaryKidId ?? "",
+      );
+      reportUsage({
+        eventType: "game_plan",
+        kidId: primaryKidId,
+        // No game row exists yet — planning happens before the draft is saved.
+        gameId: null,
+        provider: gameCfg.provider,
+        model: gameCfg.model,
+        usage: result.usage,
+        meta: {
+          turns: result.turns,
+          promptChars: text.length,
+          memoryChars: ctxSizes.memoryChars,
+          parentNotesChars: ctxSizes.parentNotesChars,
+        },
+      });
+
+      const reply = result.reply.trim() || (result.plan ? t("planProposedFallback") : "");
+      const note = result.plan ? `\n\n${t("planUpdatedNote")}` : "";
+      if (reply) setMessages([...withUser, { role: "assistant", text: reply + note }]);
+    } catch (err) {
+      if (err instanceof AgentAbortedError || controller.signal.aborted) {
+        setMessages((m) => [...m, { role: "assistant", text: t("stopped") }]);
+      } else {
+        console.error("[game-studio] plan turn failed", err);
+        reportErrorLog({
+          context: "game_plan",
+          kidId: primaryKidId,
+          gameId: null,
+          provider: gameCfg?.provider,
+          model: gameCfg?.model,
+          ...describeError(err, gameCfg ? [gameCfg.apiKey] : []),
+          meta: browserFailureMeta(startedAt, {}),
+        });
+        setError(t("planFailed"));
+        setMessages((m) => [...m, { role: "assistant", text: t("planFailed") }]);
+      }
+    } finally {
+      setThinking(false);
+      setNarration("");
+      abortRef.current = null;
+    }
+  }
+
+  /** Stage a photo of a real-world task and have dodi read it straight away. */
+  const onPhotoPicked = async (file: File): Promise<void> => {
+    if (!file.type.startsWith("image/")) return;
+    try {
+      const raw = await fileToDataUrl(file);
+      const small = await downscaleDataUrl(raw, {
+        maxWidth: 1280,
+        maxHeight: 1280,
+        quality: 0.8,
+      });
+      if (!small) return;
+      setPhotoImage(small);
+      setHasUnsentPlanImage(false);
+      // On a phone the plan pane and the chat are separate tabs — follow the
+      // answer over to where it appears.
+      if (vertical) setMtab("chat");
+      await sendPlanMessage(t("planAnalyzePhotoPrompt"), [small]);
+    } catch {
+      /* unreadable file — the parent can pick another */
+    }
+  };
+
+  const onSketchChange = (dataUrl: string | null): void => {
+    setSketchImage(dataUrl);
+    setHasUnsentPlanImage(Boolean(dataUrl));
+  };
+
+  /** "Describe my sketch" / "Analyze this photo" — an explicit look at the image. */
+  const describePlanImage = (): void => {
+    if (!planImage) return;
+    if (vertical) setMtab("chat");
+    void sendPlanMessage(
+      t(planMode === "draw" ? "planAnalyzeSketchPrompt" : "planAnalyzePhotoPrompt"),
+      [planImage],
+    );
+  };
+
+  /**
+   * Accept the plan on the table: derive the settings from the FINAL text (the
+   * parent may have rewritten it), then move on to settings. A failed
+   * derivation is not fatal — the parent fills the form themselves.
+   */
+  async function acceptPlan(): Promise<void> {
+    const text = planDraft.trim();
+    if (!text || isDerivingSettings || thinking) return;
+    setIsDerivingSettings(true);
+    setError(null);
+    try {
+      const gameCfg = await resolveClientGame();
+      if (gameCfg) {
+        const kid = kids.find((k) => k.id === primaryKidId);
+        const settings = await derivePlanSettings(
+          { providerId: gameCfg.provider, modelId: gameCfg.model, apiKey: gameCfg.apiKey },
+          text,
+          {
+            kidAge: calculateChildAge(kid?.birthdate ?? null) ?? undefined,
+            language: getLanguageDisplayName(locale),
+            defaultAgeMin: game.targetAgeMin,
+            defaultAgeMax: game.targetAgeMax,
+          },
+          (usage) =>
+            reportUsage({
+              eventType: "game_plan",
+              kidId: primaryKidId,
+              gameId: null,
+              provider: gameCfg.provider,
+              model: gameCfg.model,
+              usage,
+            }),
+        );
+        setGame((g) => ({
+          ...g,
+          // A name the parent typed themselves wins over a derived one.
+          title: g.title.trim() || settings.title,
+          learningGoal: settings.learningGoal || g.learningGoal,
+          successDefinition: settings.successDefinition || g.successDefinition,
+          tags: settings.tags.length ? settings.tags : g.tags,
+          targetAgeMin: settings.targetAgeMin,
+          targetAgeMax: settings.targetAgeMax,
+          perspective: settings.perspective,
+        }));
+      }
+    } catch (err) {
+      console.error("[game-studio] deriving settings from the plan failed", err);
+      setError(t("planSettingsFailed"));
+    } finally {
+      setIsDerivingSettings(false);
+      setAcceptedPlan(text);
+      setIsEditingPlan(false);
+      setView("settings");
+    }
+  }
+
+  /** Skip planning: the draft carries no plan, so saving behaves as it always did. */
+  const skipPlan = (): void => {
+    setAcceptedPlan(null);
+    setView("settings");
+  };
+
+  /** Extra inputs for a build the studio starts itself (the accepted plan). */
+  interface SendOptions {
+    /** Images for THIS message, instead of whatever is staged in the composer. */
+    images?: string[];
+    /** The prompt is a plan the parent approved — build it, don't reinterpret it. */
+    isAgreedPlan?: boolean;
+  }
+
+  async function send(raw?: string, opts?: SendOptions): Promise<void> {
     const text = (raw ?? draft).trim();
     if (!text || thinking) return;
+    // In the Plan step the same composer talks to the planning agent instead —
+    // brainstorming, no code, no game row needed.
+    if (isPlanMode) {
+      await sendPlanMessage(text);
+      return;
+    }
     // New-game hard gate: a draft must be persisted (giving us a game id) before
     // Dodi can build. The composer is disabled in this state, but guard anyway.
     if (locked) {
@@ -1003,8 +1290,9 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     setBgNotice(null);
     setPreviewNotice(null);
     setDraft("");
-    // Attachments belong to this message — stage them and clear the strip.
-    const attachments = pendingImages;
+    // Attachments belong to this message — stage them and clear the strip. A
+    // studio-started build (the accepted plan) brings its own image instead.
+    const attachments = opts?.images ?? pendingImages;
     setPendingImages([]);
     // Capture the conversation before this prompt so we can seed the agent's
     // continuity on resume, then show the new user turn.
@@ -1060,6 +1348,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
         }
       : {
           prompt: text,
+          isAgreedPlan: opts?.isAgreedPlan || undefined,
           title: game.title || undefined,
           tags: game.tags,
           learningGoal: game.learningGoal || undefined,
@@ -1317,7 +1606,15 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
           }));
           void loadVersions();
         }
-        router.refresh();
+        if (adoptedIdRef.current) {
+          // This studio adopted its id in place (planned draft → build) while
+          // the router still points at /game-studio/new. Everything is
+          // persisted now, so hand the route over to the game's own page.
+          adoptedIdRef.current = false;
+          router.replace(`/parent/game-studio/${game.id}/preview`);
+        } else {
+          router.refresh();
+        }
       } catch (saveErr) {
         const reason = saveErr instanceof Error ? saveErr.message : "";
         setError(reason ? t("saveFailed", { reason }) : t("saveFailedGeneric"));
@@ -1460,6 +1757,13 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
           successDefinition: game.successDefinition || undefined,
           codeBundle: game.codeBundle || UNBUILT_GAME_PLACEHOLDER,
         });
+        // The Plan conversation is already worth keeping: seal it onto the new
+        // row so a reload shows what was discussed, not an empty thread.
+        const session = useVaultStore.getState().session;
+        const planTranscript =
+          messages.length > 0 && session
+            ? session.encryptJson(sealableTranscript(messages))
+            : null;
         const res = await dodi.request("/api/games", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1478,11 +1782,32 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
               generatePreviewImage: game.generatePreviewImage,
             },
             audience: { isFamily: game.isFamily, audienceIds: game.audienceIds },
+            ...(planTranscript ? { agentTranscriptEnc: planTranscript } : {}),
           }),
         });
         if (!res.ok) throw new Error(await readError(res));
         const data = (await res.json()) as { id: string };
         useGameStore.getState().invalidate();
+
+        if (acceptedPlan) {
+          // A plan was agreed, so this save IS the start of the build. Adopt the
+          // new id in place instead of navigating: a router push would remount
+          // the studio and take the plan thread, the sketch and the queued build
+          // with it. The URL is corrected here, and the route is handed over to
+          // the game's own page once the build has persisted (see send()).
+          pendingAutoBuildRef.current = {
+            text: `${t("planBuildIntro")}\n\n${acceptedPlan}`,
+            images: planImage ? [planImage] : [],
+          };
+          adoptedIdRef.current = true;
+          gameIdRef.current = data.id;
+          setGame((g) => ({ ...g, id: data.id }));
+          setViewState("preview");
+          window.history.replaceState(null, "", `/parent/game-studio/${data.id}/preview`);
+          if (vertical) setMtab("chat");
+          return;
+        }
+
         // Move to the draft's own URL so the build binds to this id and
         // reload/recovery works. The chat unlocks on the [id] route.
         router.push(`/parent/game-studio/${data.id}`);
@@ -1498,6 +1823,18 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
       setSaving(false);
     }
   }
+
+  // Start the build queued by an accepted plan, once the adopted id is live.
+  // Deliberately an effect and not a call inside saveSettings: send() reads
+  // game.id from its closure, which is still null in the render that saved.
+  useEffect(() => {
+    const pending = pendingAutoBuildRef.current;
+    if (!pending || !game.id) return;
+    pendingAutoBuildRef.current = null;
+    void send(pending.text, { images: pending.images, isAgreedPlan: true });
+    // Fires exactly once per id adoption; send() is stable enough for this.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [game.id]);
 
   // Flip the game's active state straight from the studio header — an optimistic
   // auto-save so parents can activate/deactivate without opening settings. The
@@ -1536,7 +1873,24 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     t("starterDrawing"),
   ];
 
-  const statusText = thinking ? (step ? stepLabel(step) : t("working")) : t("designerRole");
+  // Planning openers: what to talk about before there is anything to build.
+  const planStarters = [
+    t("planStarterIdea"),
+    t("planStarterSubject"),
+    t("planChipPersonalize"),
+  ];
+
+  // In the Plan step dodi is a brainstorming partner, not a builder — the
+  // progress steps belong to a build and never fire here.
+  const statusText = isPlanMode
+    ? thinking
+      ? t("planThinking")
+      : t("plannerRole")
+    : thinking
+      ? step
+        ? stepLabel(step)
+        : t("working")
+      : t("designerRole");
 
   // The turn links attach only to the LAST code-changing reply — the stored
   // previous version corresponds to exactly that change.
@@ -1550,8 +1904,8 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
       className="fixed inset-x-0 top-[60px] bottom-0 z-30 flex flex-col border-t border-border bg-background wide:top-[72px] wide:left-56"
       data-screen-label={editing ? "Parent — Edit game" : "Parent — New game"}
     >
-      {/* Mobile tab bar (vertical layout only; hidden until the draft is saved,
-          since the Dodi pane is gated away for a brand-new game). */}
+      {/* Mobile tab bar (vertical layout only; hidden while the Dodi pane is
+          gated away — a draft past the Plan step and before its first save). */}
       {vertical && !locked && (
         <div className="flex flex-shrink-0 gap-1 border-b border-border bg-card px-3 py-2">
           <StudioTab
@@ -1586,9 +1940,13 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
           )}
         >
           <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border bg-card px-4 py-2.5 md:px-5">
-            {/* One 3-way switch for the whole stage — Preview / Code / Settings
-                (the settings gear folded in as a third tab). */}
+            {/* One switch for the whole stage — Preview / Code / Settings (the
+                settings gear folded in as a tab), plus Plan while the game is
+                still a draft. */}
             <div className="inline-flex gap-0.5 rounded-[10px] border border-border bg-background p-[3px]">
+              {isDraft && (
+                <SegTab active={view === "plan"} onClick={() => setView("plan")} icon="pencil" label={t("plan")} />
+              )}
               <SegTab active={view === "settings"} onClick={() => setView("settings")} icon="settings" label={t("settings")} />
               <SegTab active={view === "code"} onClick={() => setView("code")} icon="code" label={t("code")} />
               <SegTab active={view === "preview"} onClick={() => setView("preview")} icon="show" label={t("preview")} />
@@ -1739,6 +2097,34 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
                   <EmptyStage title={t("codeEmpty")} icon="code" />
                 </div>
               ))}
+            {view === "plan" && (
+              <PlanStage
+                mode={planMode}
+                onModeChange={setPlanMode}
+                sketchImage={sketchImage}
+                photoImage={photoImage}
+                onSketchChange={onSketchChange}
+                onPhotoPicked={(file) => void onPhotoPicked(file)}
+                onRemovePhoto={() => {
+                  setPhotoImage(null);
+                  setHasUnsentPlanImage(false);
+                }}
+                onDescribeImage={describePlanImage}
+                planDraft={planDraft}
+                isEditingPlan={isEditingPlan}
+                onPlanDraftChange={setPlanDraft}
+                onToggleEdit={() => setIsEditingPlan((v) => !v)}
+                onAccept={() => void acceptPlan()}
+                onSkip={skipPlan}
+                onPersonalize={() => {
+                  if (vertical) setMtab("chat");
+                  void sendPlanMessage(t("planChipPersonalize"));
+                }}
+                isBusy={thinking}
+                isDerivingSettings={isDerivingSettings}
+                t={t}
+              />
+            )}
             {view === "settings" && (
               <SettingsForm
                 game={game}
@@ -1752,6 +2138,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
                 justSaved={justSaved}
                 error={error}
                 hasImageProvider={hasImageProvider}
+                hasAcceptedPlan={Boolean(acceptedPlan)}
                 t={t}
               />
             )}
@@ -1853,14 +2240,14 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
                     className="mb-3 h-14 w-14 object-contain"
                   />
                   <h2 className="text-[18px] font-bold tracking-tight text-ink">
-                    {t("welcomeTitle")}
+                    {t(isPlanMode ? "planWelcomeTitle" : "welcomeTitle")}
                   </h2>
                   <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
-                    {t("welcomeDesc")}
+                    {t(isPlanMode ? "planWelcomeDesc" : "welcomeDesc")}
                   </p>
                   {!needsGameProvider && (
                     <div className="mt-[18px] flex w-full flex-col gap-2">
-                      {starters.map((s) => (
+                      {(isPlanMode ? planStarters : starters).map((s) => (
                         <button
                           key={s}
                           type="button"
@@ -2049,9 +2436,11 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
                 placeholder={
                   needsGameProvider
                     ? t("composerPlaceholderNoThinking")
-                    : messages.length === 0
-                      ? t("composerPlaceholderEmpty")
-                      : t("composerPlaceholder")
+                    : isPlanMode
+                      ? t("planComposerPlaceholder")
+                      : messages.length === 0
+                        ? t("composerPlaceholderEmpty")
+                        : t("composerPlaceholder")
                 }
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
@@ -2297,6 +2686,7 @@ function SettingsForm({
   justSaved,
   error,
   hasImageProvider,
+  hasAcceptedPlan,
   t,
 }: {
   game: StudioGame;
@@ -2311,6 +2701,8 @@ function SettingsForm({
   error: string | null;
   /** Image model configured + key available (null = still loading). */
   hasImageProvider: boolean | null;
+  /** A plan was agreed in the Plan step — saving starts the build right away. */
+  hasAcceptedPlan: boolean;
   t: ReturnType<typeof useTranslations>;
 }) {
   // Only the game-studio catalog is offered; non-catalog tags are stripped on save.
@@ -2514,6 +2906,9 @@ function SettingsForm({
             {error}
           </div>
         )}
+        {!game.id && hasAcceptedPlan && (
+          <p className="text-xs text-muted-foreground">{t("planBuildHint")}</p>
+        )}
         <Button
           size="lg"
           className="w-full"
@@ -2564,59 +2959,3 @@ function Field({
   );
 }
 
-/**
- * Minimal markdown: **bold** inline; consecutive "- " lines (the agent's
- * changeSummary format) render as a bullet list instead of literal dashes.
- */
-function RichText({ text }: { text: string }) {
-  type Block = { kind: "text"; text: string } | { kind: "list"; items: string[] };
-  const blocks: Block[] = [];
-  for (const line of text.split("\n")) {
-    const item = /^\s*-\s+(.*)/.exec(line);
-    if (item) {
-      const prev = blocks[blocks.length - 1];
-      if (prev?.kind === "list") prev.items.push(item[1]);
-      else blocks.push({ kind: "list", items: [item[1]] });
-    } else if (line.trim()) {
-      blocks.push({ kind: "text", text: line });
-    }
-  }
-  // Single plain line (the common case) stays inline, exactly as before.
-  if (blocks.length === 1 && blocks[0].kind === "text") return <BoldText text={blocks[0].text} />;
-  return (
-    <>
-      {blocks.map((b, i) =>
-        b.kind === "list" ? (
-          <ul key={i} className="mt-1 list-disc space-y-0.5 pl-4 first:mt-0">
-            {b.items.map((it, j) => (
-              <li key={j}>
-                <BoldText text={it} />
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p key={i} className="mt-1 first:mt-0">
-            <BoldText text={b.text} />
-          </p>
-        ),
-      )}
-    </>
-  );
-}
-
-function BoldText({ text }: { text: string }) {
-  const parts = text.split(/(\*\*[^*]+\*\*)/g);
-  return (
-    <>
-      {parts.map((p, i) =>
-        p.startsWith("**") && p.endsWith("**") ? (
-          <strong key={i} className="font-bold">
-            {p.slice(2, -2)}
-          </strong>
-        ) : (
-          <span key={i}>{p}</span>
-        ),
-      )}
-    </>
-  );
-}

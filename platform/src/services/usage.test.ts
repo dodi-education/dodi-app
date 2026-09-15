@@ -49,4 +49,20 @@ describe("aggregateMonthly", () => {
     const kid2 = agg.perKid.find((k) => k.kidId === "kid-2")!;
     expect(kid2.games).toBe(1);
   });
+
+  it("counts studio planning separately from built games", () => {
+    // Plan turns are spend without a game behind them: they belong in the
+    // per-model line, but must not inflate "games made".
+    const planned = aggregateMonthly([
+      row({ event_type: "game_plan", model: "claude-opus-4-8", input_tokens: 500 }),
+      row({ event_type: "game_plan", model: "claude-opus-4-8" }),
+      row({ event_type: "game_create", model: "claude-opus-4-8" }),
+    ]);
+    const opus = planned.perModel.find((m) => m.model === "claude-opus-4-8")!;
+    expect(opus.plans).toBe(2);
+    expect(opus.creates).toBe(1);
+    expect(opus.inputTokens).toBe(500);
+    expect(planned.gamesByModel["claude-opus-4-8"]).toBe(1);
+    expect(planned.perKid.find((k) => k.kidId === "kid-1")!.games).toBe(1);
+  });
 });

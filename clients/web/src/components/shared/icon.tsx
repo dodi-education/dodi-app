@@ -25,6 +25,8 @@ import {
   IconDeviceGamepad2,
   IconDots,
   IconDownload,
+  IconArrowBackUp,
+  IconEraser,
   IconEye,
   IconEyeOff,
   IconEyeQuestion,
@@ -109,6 +111,7 @@ export type IconName =
   | "dots"
   | "download"
   | "edit"
+  | "eraser"
   | "feature_games"
   | "feature_personal"
   | "feature_privacy"
@@ -143,6 +146,7 @@ export type IconName =
   | "stop"
   | "success"
   | "switch_vertical"
+  | "undo"
   | "upload"
   | "user_plus"
   | "user_share"
@@ -197,6 +201,7 @@ const ICONS: Record<IconName, ComponentType<TablerIconProps>> = {
   dots: IconDots,
   download: IconDownload,
   edit: IconPencil,
+  eraser: IconEraser,
   feature_games: IconDeviceGamepad2,
   feature_personal: IconPalette,
   feature_privacy: IconShieldLock,
@@ -231,6 +236,7 @@ const ICONS: Record<IconName, ComponentType<TablerIconProps>> = {
   stop: IconSquare,
   success: IconCircleCheck,
   switch_vertical: IconSwitchVertical,
+  undo: IconArrowBackUp,
   upload: IconUpload,
   user_plus: IconUserPlus,
   user_share: IconUserShare,

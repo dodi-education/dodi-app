@@ -128,6 +128,7 @@ describe("XaiGameDriver", () => {
     expect(turn.toolCalls).toEqual([{ id: "call_1", name: "read_bridge_docs", input: {} }]);
     expect(turn.expectsToolResults).toBe(true);
     expect(turn.hasText).toBe(false);
+    expect(turn.text).toBe("");
     expect(turn.usage).toEqual({
       inputTokens: 12,
       outputTokens: 4,
@@ -161,6 +162,8 @@ describe("XaiGameDriver", () => {
     const turn2 = await driver.runTurn();
     expect(turn2.toolCalls).toEqual([]);
     expect(turn2.hasText).toBe(true);
+    // The plan agent shows this text to the parent, so it must survive the turn.
+    expect(turn2.text).toBe("all done");
     expect(turn2.expectsToolResults).toBe(false);
 
     // The second request must carry the reassembled assistant tool_call turn +
@@ -260,6 +263,7 @@ describe("XaiGameDriver", () => {
 
     expect(turn.toolCalls).toEqual([{ id: "c1", name: "write_game_code", input: { code: "x" } }]);
     expect(turn.hasText).toBe(true);
+    expect(turn.text).toBe("Now writing the game.");
     expect(events).toEqual([
       { type: "narration_start" },
       { type: "narration_delta", text: "Now " },

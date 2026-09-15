@@ -10,6 +10,7 @@
     "./agent-progress": "./src/agent-progress.ts",
     "./database": "./src/database.ts",
     "./games": "./src/games.ts",
+    "./plan": "./src/plan.ts",
     "./tasks": "./src/tasks.ts",
     "./usage": "./src/usage.ts",
     "./error-logs": "./src/error-logs.ts",

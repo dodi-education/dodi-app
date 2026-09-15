@@ -14,6 +14,7 @@ interface ModelLine {
   model: string;
   creates: number;
   edits: number;
+  plans: number;
   analyses: number;
   inputTokens: number;
   outputTokens: number;
@@ -96,6 +97,7 @@ export default function UsagePage() {
                     {t("createsEdits", {
                       creates: m.creates,
                       edits: m.edits,
+                      plans: m.plans,
                       analyses: m.analyses,
                     })}
                   </RowMeta>

@@ -2,7 +2,7 @@
   "columns": {
     "accounts.memory_tier": "Generated<'basic' | 'advanced' | 'full'>",
     "platform_plans.memory_tier": "'basic' | 'advanced' | 'full'",
-    "ai_usage_logs.event_type": "'game_create' | 'game_edit' | 'game_analysis' | 'game_text_generation' | 'game_translation' | 'memory_update' | 'voice_minutes'",
+    "ai_usage_logs.event_type": "'game_create' | 'game_edit' | 'game_plan' | 'game_analysis' | 'game_text_generation' | 'game_translation' | 'memory_update' | 'voice_minutes'",
     "error_logs.type": "'client' | 'server'",
     "friendships.status": "Generated<'pending' | 'awaiting_parent' | 'accepted' | 'rejected' | 'blocked'>",
     "game_plays.progress_kind": "Generated<'goal' | 'open'>",

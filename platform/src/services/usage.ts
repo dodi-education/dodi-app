@@ -78,6 +78,8 @@ export interface ModelUsageLine {
   model: string;
   creates: number;
   edits: number;
+  /** Studio Plan-step calls (brainstorming turns + settings derivation). */
+  plans: number;
   analyses: number;
   inputTokens: number;
   outputTokens: number;
@@ -98,8 +100,11 @@ export interface MonthlyUsage {
   perKid: KidUsageLine[];
 }
 
+// "A game" = one built or rebuilt game. Plan-step calls are spend without a
+// game behind them (the draft row does not exist yet), so they stay out.
 const isGame = (t: string): boolean => t === "game_create" || t === "game_edit";
-const eventTotal = (m: ModelUsageLine): number => m.creates + m.edits + m.analyses;
+const eventTotal = (m: ModelUsageLine): number =>
+  m.creates + m.edits + m.plans + m.analyses;
 
 /** Pure aggregation over a month's rows (usage only). */
 export function aggregateMonthly(rows: UsageRow[]): MonthlyUsage {
@@ -117,6 +122,7 @@ export function aggregateMonthly(rows: UsageRow[]): MonthlyUsage {
         model: r.model,
         creates: 0,
         edits: 0,
+        plans: 0,
         analyses: 0,
         inputTokens: 0,
         outputTokens: 0,
@@ -129,6 +135,7 @@ export function aggregateMonthly(rows: UsageRow[]): MonthlyUsage {
     m.cacheReadTokens += r.cache_read_tokens ?? 0;
     if (r.event_type === "game_create") m.creates += 1;
     else if (r.event_type === "game_edit") m.edits += 1;
+    else if (r.event_type === "game_plan") m.plans += 1;
     else if (r.event_type === "game_analysis" || r.event_type === "game_text_generation")
       m.analyses += 1;
 

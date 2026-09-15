@@ -34,6 +34,7 @@ const UsageReportSchema = z.object({
   eventType: z.enum([
     "game_create",
     "game_edit",
+    "game_plan",
     "game_analysis",
     "game_text_generation",
     "game_translation",
