@@ -764,6 +764,283 @@ describe("preview image loop integration", () => {
   });
 });
 
+describe("surgical edit loop integration", () => {
+  // Goal-compliant on purpose: the baseline metadata below says progressKind
+  // "goal" with a required "score" metric, and final validation enforces both.
+  const compliant = (marker: string): string =>
+    `<!doctype html><html><head><script type="application/dodi-translations">{"sourceLocale":"en","locales":{"en":{"game.title":"Game"}}}</script></head><body><script>
+      var speed = ${marker};
+      var dodiState = { progressKind: 'goal', progress: 0, metrics: { score: 0 } };
+      document.title = dodi.translate('game.title');
+      function report() { parent.postMessage({ type: 'game:progress', payload: dodiState }, '*'); }
+      window.addEventListener('message', function (e) {
+        if (e.data.type === 'dodi:init') parent.postMessage({ type: 'game:ready', payload: { capabilities: [] } }, '*');
+        if (e.data.type === 'dodi:command') { report(); parent.postMessage({ type: 'game:result' }, '*'); }
+      });
+    </script></body></html>`;
+
+  const turn = (toolCalls: GameTurn["toolCalls"]): GameTurn => ({
+    toolCalls,
+    hasText: false,
+    expectsToolResults: toolCalls.length > 0,
+    stopReason: toolCalls.length > 0 ? "tool_use" : "end_turn",
+    usage: emptyUsage,
+  });
+
+  function capturingDriver(turns: GameTurn[]) {
+    const toolResults: GameToolResult[][] = [];
+    let seedText = "";
+    let i = 0;
+    const driver: GameCodeDriver = {
+      seed: (_t, first) => {
+        seedText = typeof first === "string" ? first : first.text;
+      },
+      addUserMessage: () => {},
+      addToolResults: (rs) => {
+        toolResults.push(rs);
+      },
+      runTurn: () => Promise.resolve(turns[Math.min(i++, turns.length - 1)]),
+    };
+    return { driver, toolResults, getSeedText: () => seedText };
+  }
+
+  const EXISTING_META = {
+    title: "Ball Game",
+    description: "Bounce a ball",
+    tags: ["math"],
+    progressKind: "goal" as const,
+    successCriteria: {
+      description: "Reach 10",
+      match: "all" as const,
+      conditions: [{ metric: "score" as const, op: ">=" as const, value: 10 }],
+      requiredMetrics: ["score" as const],
+    },
+    capabilities: [],
+  };
+
+  const updateTask = (existingCode: string, withMeta = true): AgentTaskRequest => ({
+    ...TASK,
+    taskType: "update_game",
+    payload: {
+      instruction: "make it faster",
+      existingCode,
+      existingMarkdown: "# Ball Game",
+      ...(withMeta ? { existingMeta: EXISTING_META } : {}),
+    },
+  });
+
+  it("applies edits and preserves the metadata baseline without a full write", async () => {
+    const captured = capturingDriver([
+      turn([{ id: "r1", name: "read_existing_game", input: {} }]),
+      turn([
+        {
+          id: "e1",
+          name: "edit_game_code",
+          input: {
+            edits: [{ old_text: "var speed = 5;", new_text: "var speed = 9;" }],
+            changeSummary: "- the ball moves faster",
+          },
+        },
+      ]),
+      turn([]),
+    ]);
+    mockDriverFactory = () => captured.driver;
+
+    const result = await runGameAgent({
+      provider: "anthropic",
+      apiKey: "k",
+      model: "m",
+      task: updateTask(compliant("5")),
+    });
+
+    expect(result.codeBundle).toContain("var speed = 9;");
+    expect(result.validationPassed).toBe(true);
+    expect(result.changeSummary).toBe("- the ball moves faster");
+    // A pure-edit run must carry the game's real metadata — otherwise the
+    // caller would persist placeholders over the parent's settings.
+    expect(result.title).toBe("Ball Game");
+    expect(result.description).toBe("Bounce a ball");
+    expect(result.tags).toEqual(["math"]);
+    expect(result.progressKind).toBe("goal");
+    expect(result.successCriteria).toEqual(EXISTING_META.successCriteria);
+    expect(result.markdown).toBe("# Ball Game");
+    // The task steps must advertise the edit tool.
+    expect(captured.getSeedText()).toContain("edit_game_code");
+  });
+
+  it("edits the code it just wrote in a generate run", async () => {
+    const captured = capturingDriver([
+      turn([
+        {
+          id: "w1",
+          name: "write_game_code",
+          input: { code: compliant("5"), markdown: "m", title: "T", capabilities: [] },
+        },
+      ]),
+      turn([
+        {
+          id: "e1",
+          name: "edit_game_code",
+          input: {
+            edits: [{ old_text: "var speed = 5;", new_text: "var speed = 7;" }],
+            changeSummary: "- tuned the speed",
+          },
+        },
+      ]),
+      turn([]),
+    ]);
+    mockDriverFactory = () => captured.driver;
+
+    const result = await runGameAgent({
+      provider: "anthropic",
+      apiKey: "k",
+      model: "m",
+      task: TASK,
+    });
+
+    expect(result.codeBundle).toContain("var speed = 7;");
+    expect(result.title).toBe("T");
+  });
+
+  it("leaves the code untouched after a failed edit and accepts the retry", async () => {
+    const captured = capturingDriver([
+      turn([
+        {
+          id: "e1",
+          name: "edit_game_code",
+          input: {
+            edits: [{ old_text: "var speed = 99;", new_text: "var speed = 9;" }],
+            changeSummary: "- bad anchor",
+          },
+        },
+      ]),
+      turn([
+        {
+          id: "e2",
+          name: "edit_game_code",
+          input: {
+            edits: [{ old_text: "var speed = 5;", new_text: "var speed = 9;" }],
+            changeSummary: "- the ball moves faster",
+          },
+        },
+      ]),
+      turn([]),
+    ]);
+    mockDriverFactory = () => captured.driver;
+
+    const result = await runGameAgent({
+      provider: "anthropic",
+      apiKey: "k",
+      model: "m",
+      task: updateTask(compliant("5")),
+    });
+
+    const failed = JSON.parse(captured.toolResults[0][0].content) as { ok: boolean };
+    expect(failed.ok).toBe(false);
+    expect(result.codeBundle).toContain("var speed = 9;");
+    // Only the successful call's summary survives.
+    expect(result.changeSummary).toBe("- the ball moves faster");
+  });
+
+  it("combines summaries across edits and resets them on a full write", async () => {
+    const captured = capturingDriver([
+      turn([
+        {
+          id: "e1",
+          name: "edit_game_code",
+          input: {
+            edits: [{ old_text: "var speed = 5;", new_text: "var speed = 6;" }],
+            changeSummary: "- faster",
+          },
+        },
+      ]),
+      turn([
+        {
+          id: "e2",
+          name: "edit_game_code",
+          input: {
+            edits: [{ old_text: "var speed = 6;", new_text: "var speed = 7;" }],
+            changeSummary: "- faster still",
+          },
+        },
+      ]),
+      turn([]),
+    ]);
+    mockDriverFactory = () => captured.driver;
+
+    const combined = await runGameAgent({
+      provider: "anthropic",
+      apiKey: "k",
+      model: "m",
+      task: updateTask(compliant("5")),
+    });
+    expect(combined.changeSummary).toBe("- faster\n- faster still");
+
+    const rewritten = capturingDriver([
+      turn([
+        {
+          id: "e1",
+          name: "edit_game_code",
+          input: {
+            edits: [{ old_text: "var speed = 5;", new_text: "var speed = 6;" }],
+            changeSummary: "- faster",
+          },
+        },
+      ]),
+      turn([
+        {
+          id: "w1",
+          name: "write_game_code",
+          input: {
+            code: compliant("8"),
+            markdown: "m",
+            title: "T",
+            capabilities: [],
+            changeSummary: "- rebuilt from scratch",
+          },
+        },
+      ]),
+      turn([]),
+    ]);
+    mockDriverFactory = () => rewritten.driver;
+
+    const afterWrite = await runGameAgent({
+      provider: "anthropic",
+      apiKey: "k",
+      model: "m",
+      task: updateTask(compliant("5")),
+    });
+    expect(afterWrite.changeSummary).toBe("- rebuilt from scratch");
+  });
+
+  it("falls back to placeholder metadata when the payload carries no baseline", async () => {
+    const captured = capturingDriver([
+      turn([
+        {
+          id: "e1",
+          name: "edit_game_code",
+          input: {
+            edits: [{ old_text: "var speed = 5;", new_text: "var speed = 9;" }],
+            changeSummary: "- faster",
+          },
+        },
+      ]),
+      turn([]),
+    ]);
+    mockDriverFactory = () => captured.driver;
+
+    const result = await runGameAgent({
+      provider: "anthropic",
+      apiKey: "k",
+      model: "m",
+      task: updateTask(compliant("5"), false),
+    });
+
+    expect(result.codeBundle).toContain("var speed = 9;");
+    expect(result.tags).toEqual([]);
+  });
+});
+
 describe("live activity + narration", () => {
   const idleTurn: GameTurn = {
     toolCalls: [],
@@ -804,6 +1081,21 @@ describe("live activity + narration", () => {
       { type: "tool_started", name: "write_game_code" },
       { type: "narration_delta", text: "hi" },
     ]);
+  });
+
+  it("treats a streaming edit call as the writing step too", async () => {
+    const captured = captureDriverOpts();
+    const steps: AgentStep[] = [];
+    await runGameAgent({
+      provider: "anthropic",
+      apiKey: "k",
+      model: "m",
+      task: TASK,
+      onStep: (s) => steps.push(s),
+    }).catch(() => {});
+
+    captured.get().onActivity!({ type: "tool_started", name: "edit_game_code" });
+    expect(steps).toContain("writing_code");
   });
 
   it("passes the narration language into the system prompt", async () => {

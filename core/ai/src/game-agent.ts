@@ -152,6 +152,7 @@ const STEP_BY_TOOL: Partial<Record<string, AgentStep>> = {
   use_uploaded_background: "generating_image",
   generate_preview_image: "generating_preview",
   write_game_code: "writing_code",
+  edit_game_code: "writing_code",
   validate_game: "validating",
 };
 
@@ -224,10 +225,11 @@ function buildCodeTaskUserMessage(task: AgentTaskRequest): string {
     "",
     "Steps:",
     "1. Read the existing game with read_existing_game",
-    "2. Make the requested changes",
-    "3. Write the updated code with write_game_code (keep progressKind + successCriteria in sync with the goal/success above)",
-    "4. Validate with validate_game",
-    "5. Fix any issues and re-validate if needed",
+    "2. Make the requested changes — use edit_game_code with exact-match snippets for " +
+      "targeted changes (preferred), or write_game_code for a large overhaul (keep " +
+      "progressKind + successCriteria in sync with the goal/success above)",
+    "3. Validate with validate_game",
+    "4. Fix any issues and re-validate if needed",
   );
   return lines.join("\n");
 }
@@ -310,6 +312,18 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
     // locales go stale on edit anyway — re-publishing re-translates.
     toolContext.existingCode = stripTranslationsToSource(extracted.code);
     toolContext.existingMarkdown = payload.existingMarkdown;
+    // Baseline for edit-only runs: without it, surgical edits would hand back
+    // placeholder metadata and the caller would persist it over the real values.
+    const meta = payload.existingMeta;
+    toolContext.currentMeta = {
+      title: meta?.title ?? payload.title ?? "",
+      description: meta?.description ?? "",
+      tags: meta?.tags ?? [],
+      progressKind: coerceProgressKind(meta?.progressKind),
+      successCriteria: coerceSuccessCriteria(meta?.successCriteria),
+      changeSummary: "",
+      capabilities: meta?.capabilities ?? [],
+    };
     if (extracted.dataUrl) toolContext.carriedBackgroundImage = extracted.dataUrl;
   }
 
@@ -390,6 +404,9 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
       lastWrite = writeResult;
       toolContext.existingCode = writeResult.code;
       toolContext.existingMarkdown = writeResult.markdown;
+      // Edits build on the latest metadata; a full write resets the summary.
+      const { code: _code, markdown: _markdown, ...meta } = writeResult;
+      toolContext.currentMeta = meta;
     }
     return { id: call.id, content: result };
   };
@@ -422,7 +439,8 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
       }
       if (result.hasText) {
         driver.addUserMessage(
-          "Please use the write_game_code tool to provide the game code, " +
+          "Please use the write_game_code tool to provide the game code (or " +
+            "edit_game_code for targeted changes to code that already exists), " +
             "then validate_game to verify it. Do not output code as text.",
         );
         continue;
@@ -499,7 +517,8 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
     emitStep("fixing_validation");
     driver.addUserMessage(
       `Final validation failed with errors:\n${validation.errors.join("\n")}\n\n` +
-        `Please fix these issues and use write_game_code again, then validate_game.`,
+        `Please fix these issues — with edit_game_code for targeted fixes, or ` +
+        `write_game_code for a rewrite — then validate_game.`,
     );
 
     for (let retry = 0; retry < AGENT_LIMITS.MAX_VALIDATION_RETRIES; retry++) {

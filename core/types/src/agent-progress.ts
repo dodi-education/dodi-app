@@ -29,7 +29,7 @@ export type AgentActivityEvent =
   | { type: "narration_delta"; text: string }
   /** The model started emitting a tool call (fires before the input finishes streaming). */
   | { type: "tool_started"; name: string }
-  /** Cumulative streamed input size of the current write_game_code call. */
+  /** Cumulative streamed input size of the current write/edit call. */
   | { type: "write_progress"; chars: number };
 
 export type AgentProgressEvent =

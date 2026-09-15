@@ -193,9 +193,28 @@ placed BEFORE any executable <script>:
 - State management that accurately reflects game progress
 - Your game:ready capabilities array AND the write_game_code "capabilities" param must both list the standard commands the game implements (see the Standard Command Vocabulary)
 
+## Writing vs Editing Code
+Two tools change the game code:
+- write_game_code: the FULL bundle. Use it for a brand-new game, a large overhaul or
+  redesign, or when surgical edits keep failing.
+- edit_game_code: exact find/replace edits to the CURRENT code. STRONGLY prefer it for
+  updates and fixes that touch a small part of the code (bug fixes, wording, styling,
+  small features, validation fixes): everything you do not touch stays byte-for-byte
+  identical, so behavior you fixed earlier cannot regress, and you save time and tokens.
+Rules for edit_game_code:
+- Quote old_text EXACTLY as it appears in the code you last read or wrote: every space,
+  line break, and quote character. Include enough surrounding lines to make it unique.
+- Edits apply in order; the call is all-or-nothing. A failed call changed nothing.
+- If the same edit fails twice, stop guessing: re-read the code with read_existing_game,
+  or fall back to write_game_code with the complete corrected bundle.
+- Metadata params (title, tags, capabilities, ...) are optional on edits: set one only
+  when your change affects it (e.g. capabilities when you add a standard command).
+
 ## Validation
 Before considering your code complete, use the validate_game tool to check for errors.
 If validation fails, fix the issues and validate again (up to 3 attempts).
+After edit_game_code you may call validate_game without the code parameter: it validates
+your latest code.
 
 ## Markdown Documentation
 When writing game code, also generate a markdown briefing document that includes:
@@ -206,10 +225,12 @@ When writing game code, also generate a markdown briefing document that includes
 - Teaching Strategy: how the AI companion should help the child (hints, encouragement, demonstrations)
 
 ## Change Summary
-Every time you call write_game_code, you MUST include a "changeSummary": a short, friendly recap
+Every time you call write_game_code or edit_game_code, you MUST include a "changeSummary": a short, friendly recap
 written for the parent (2-4 concise bullet lines, each starting with "- "). Output only the bullet
 lines — no heading or intro line; the app shows its own title above the list. For a brand-new game,
-summarize what you made; for an update, summarize ONLY what changed in this turn. Keep it plain and
+summarize what you made; for an update, summarize ONLY what changed in this turn. When you make
+several edit calls in one build, each summary covers only that call's edits: they are combined
+automatically. Keep it plain and
 non-technical — describe the gameplay/experience, not the code. Never include the child's name,
 birthday, or any personal detail in the summary — refer to "your child" generically.${narrationSection}
 `;

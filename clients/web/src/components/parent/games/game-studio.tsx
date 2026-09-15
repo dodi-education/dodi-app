@@ -75,7 +75,8 @@ import type { AgentStep } from "@dodi/types/agent-progress";
 import type { Game, GameVersion, Json } from "@dodi/types/database";
 import type { GamePerspective } from "@dodi/types/games";
 import type { AgentCodeResult, AgentTaskRequest } from "@dodi/types/tasks";
-import type { ProgressKind } from "@dodi/games/success";
+import { coerceSuccessCriteria } from "@dodi/games/game-spec";
+import type { ProgressKind, SuccessCriteria } from "@dodi/games/success";
 
 interface KidOption {
   id: string;
@@ -96,6 +97,8 @@ export interface StudioGame {
   learningGoal: string;
   successDefinition: string;
   progressKind: ProgressKind;
+  /** Structured success mapping — the baseline edit-only builds must preserve. */
+  successCriteria: SuccessCriteria;
   /** Recommended player age range — a plaintext facet shown on dodi Discover. */
   targetAgeMin: number;
   targetAgeMax: number;
@@ -178,6 +181,7 @@ function emptyGame(): StudioGame {
     learningGoal: "",
     successDefinition: "",
     progressKind: "open",
+    successCriteria: coerceSuccessCriteria(undefined),
     // Match the server's default recommended range for new games (games.ts).
     targetAgeMin: 4,
     targetAgeMax: 12,
@@ -1038,6 +1042,16 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
           screenshot,
           existingCode: game.codeBundle,
           existingMarkdown: game.markdown,
+          // Baseline for surgical edits: an edit-only build returns these
+          // unchanged, so persistBuild cannot wipe them.
+          existingMeta: {
+            title: game.title,
+            description: game.description,
+            tags: game.tags,
+            progressKind: game.progressKind,
+            successCriteria: game.successCriteria,
+            capabilities: game.capabilities,
+          },
           title: game.title || undefined,
           learningGoal: game.learningGoal || undefined,
           successDefinition: game.successDefinition || undefined,
@@ -1114,7 +1128,11 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
         onActivity: (e) => {
           if (e.type === "narration_start") setNarration("");
           else if (e.type === "narration_delta") setNarration((n) => n + e.text);
-          else if (e.type === "tool_started" && e.name === "write_game_code") setWriteChars(0);
+          else if (
+            e.type === "tool_started" &&
+            (e.name === "write_game_code" || e.name === "edit_game_code")
+          )
+            setWriteChars(0);
           else if (e.type === "write_progress") setWriteChars(Math.floor(e.chars / 200) * 200);
         },
         // Narration is for the parent watching the studio — their UI language.
@@ -1273,6 +1291,8 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
         learningGoal: result.learningGoal,
         successDefinition: result.successDefinition,
         progressKind: result.progressKind,
+        // Keeps the next build in this session seeded with a fresh baseline.
+        successCriteria: result.successCriteria,
         codeBundle: safeCode,
         markdown: result.markdown,
         capabilities: builtCapabilities,

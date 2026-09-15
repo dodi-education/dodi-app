@@ -28,10 +28,25 @@ export interface GenerateGamePayload {
   images?: string[];
 }
 
+/**
+ * Current game metadata baseline for surgical-edit runs — a pure-edit run's
+ * result must carry these unchanged or persistence would wipe them.
+ */
+export interface ExistingGameMeta {
+  title: string;
+  description: string;
+  tags: string[];
+  progressKind: ProgressKind;
+  successCriteria: SuccessCriteria;
+  capabilities: string[];
+}
+
 export interface UpdateGamePayload {
   instruction: string;
   existingCode: string;
   existingMarkdown?: string;
+  /** Metadata baseline seeded into the run so edit-only builds keep it intact. */
+  existingMeta?: ExistingGameMeta;
   title?: string;
   learningGoal?: string;
   successDefinition?: string;

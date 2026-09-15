@@ -442,12 +442,6 @@ parent-defined goal — and, in future, generate challenges like "Solve 3 math g
 
 ## TODO
 
-
-- Enhance game agent:
- - Every time a version is persisted, save differences to previous versions (including manual saves)
- - Add a change summary to every version which are fed to game agents as context so they know why a change happened
- - Allow surgical edits
-
 - Add an API and/or MCP service for creating games.
 
 - Enhance usability of game-studio

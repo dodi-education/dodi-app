@@ -35,13 +35,121 @@ import { DECLARABLE_CAPABILITY_NAMES, standardCommandsDoc } from "@dodi/games/to
 // Tool definitions (Anthropic format)
 // ---------------------------------------------------------------------------
 
+/** Guard: max find/replace edits accepted in one edit_game_code call. */
+export const MAX_GAME_CODE_EDITS = 20;
+
+/**
+ * Tools whose streamed tool input drives the studio's write-progress ticker.
+ * Both code-writing paths stream large inputs worth counting.
+ */
+export const WRITE_STREAM_TOOL_NAMES = ["write_game_code", "edit_game_code"] as const;
+
+/** True for a tool whose streamed input should drive the write ticker. */
+export function isWriteStreamTool(name: string): boolean {
+  return (WRITE_STREAM_TOOL_NAMES as readonly string[]).includes(name);
+}
+
+// Metadata properties shared by write_game_code and edit_game_code. On edits
+// every one of them is optional ("omit to keep"), so the descriptions are
+// wrapped rather than duplicated — see EDIT_META_PROPS below.
+const TITLE_PROP = {
+  type: "string",
+  description: "Short, kid-friendly game title",
+} as const;
+
+const DESCRIPTION_PROP = {
+  type: "string",
+  description: "Brief game description",
+} as const;
+
+const TAGS_PROP = {
+  type: "array",
+  items: { type: "string", enum: [...GAME_TAG_IDS] },
+  description:
+    "Subject tags for discoverability, from this catalog only: " +
+    GAME_TAG_IDS.join(", ") +
+    '. Pick the ones that fit the game. Additionally add "ai" if the game ' +
+    'generates AI text and "ai-image" if it generates AI images.',
+} as const;
+
+const PROGRESS_KIND_PROP = {
+  type: "string",
+  enum: ["goal", "open"],
+  description:
+    "'goal' if the game has a measurable success objective; 'open' for free/creative play.",
+} as const;
+
+const CAPABILITIES_PROP = {
+  type: "array",
+  items: { type: "string", enum: [...DECLARABLE_CAPABILITY_NAMES] },
+  description:
+    "EVERY standardized command your game implements — chosen ONLY from the standard " +
+    "vocabulary (see 'Standard Command Vocabulary' in your system prompt / read_bridge_docs). " +
+    "These become Dodi's first-class voice tools. Declare 'get_snapshot' if your game has a " +
+    "visual surface (lets Dodi see it), 'generate_drawing' if it supports AI-drawn pictures, " +
+    "'generate_text' if it presents AI-written text (the game must publish " +
+    "state.contentSlots and implement set_generated_text), and 'generate_voice' if it asks " +
+    "Dodi to read short texts aloud (the game must implement set_generated_voice). " +
+    "Do NOT invent command names. Use an empty array only if the game has no Dodi-driven actions.",
+} as const;
+
+const SUCCESS_CRITERIA_PROP = {
+  type: "object",
+  description:
+    "Structured mapping of the parent's success definition. Use the standardized metric vocabulary only. Empty conditions for open play.",
+  properties: {
+    description: { type: "string" },
+    match: { type: "string", enum: ["all", "any"] },
+    conditions: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          metric: { type: "string" },
+          op: { type: "string", enum: [">=", ">", "<=", "<", "==", "!="] },
+          value: { type: "number" },
+        },
+        required: ["metric", "op", "value"],
+      },
+    },
+    requiredMetrics: { type: "array", items: { type: "string" } },
+  },
+  required: ["description", "match", "conditions", "requiredMetrics"],
+} as const;
+
+/** The same metadata props, re-described as optional overrides for edits. */
+const optionalOverride = <T extends { description: string }>(
+  prop: T,
+): T & { description: string } => ({
+  ...prop,
+  description:
+    "Optional — omit to keep the current value. Provide when your edits change it. " +
+    prop.description,
+});
+
+const EDIT_META_PROPS = {
+  title: optionalOverride(TITLE_PROP),
+  description: optionalOverride(DESCRIPTION_PROP),
+  tags: optionalOverride(TAGS_PROP),
+  progressKind: optionalOverride(PROGRESS_KIND_PROP),
+  capabilities: optionalOverride(CAPABILITIES_PROP),
+  successCriteria: optionalOverride(SUCCESS_CRITERIA_PROP),
+} as const;
+
+const CHANGE_SUMMARY_TEXT =
+  "A short, friendly recap of what you just built or changed, written for the parent. " +
+  "2-4 concise bullet lines (each starting with '- '). Bullet lines only — no heading " +
+  "or intro line, the app shows its own title above the list. For a brand-new game, " +
+  "summarize what you made; for an update, summarize only what changed.";
+
 export const AGENT_TOOLS: Anthropic.Tool[] = [
   {
     name: "write_game_code",
     description:
       "Write or update the full HTML/CSS/JS game bundle. The code must be a complete, " +
       "self-contained HTML document with inline styles and scripts that implements the " +
-      "Dodi bridge protocol. Also provide the markdown briefing document.",
+      "Dodi bridge protocol. Also provide the markdown briefing document. For targeted " +
+      "changes to a game that already exists, prefer edit_game_code.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -55,75 +163,73 @@ export const AGENT_TOOLS: Anthropic.Tool[] = [
             "Markdown briefing document for the AI companion (game overview, rules, " +
             "available commands with examples, state fields, teaching strategy)",
         },
-        title: {
+        title: TITLE_PROP,
+        description: DESCRIPTION_PROP,
+        changeSummary: {
           type: "string",
-          description: "Short, kid-friendly game title",
+          description: CHANGE_SUMMARY_TEXT,
         },
-        description: {
-          type: "string",
-          description: "Brief game description",
+        tags: TAGS_PROP,
+        progressKind: PROGRESS_KIND_PROP,
+        capabilities: CAPABILITIES_PROP,
+        successCriteria: SUCCESS_CRITERIA_PROP,
+      },
+      required: ["code", "markdown", "title", "capabilities"],
+    },
+  },
+  {
+    name: "edit_game_code",
+    description:
+      "Make surgical find/replace edits to the CURRENT game code without resending the " +
+      "whole bundle. Prefer this over write_game_code for targeted changes (bug fixes, " +
+      "tweaks, small features, validation fixes) — untouched code stays byte-for-byte " +
+      "identical, so behavior you fixed earlier cannot regress. Each edit replaces one " +
+      "exact occurrence of old_text with new_text; edits apply in order to the result of " +
+      "the previous edit; the call is all-or-nothing (a failed call changes NOTHING). " +
+      "Copy old_text exactly from the code you last read or wrote, and include enough " +
+      "surrounding lines to make it unique.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        edits: {
+          type: "array",
+          minItems: 1,
+          maxItems: MAX_GAME_CODE_EDITS,
+          items: {
+            type: "object",
+            properties: {
+              old_text: {
+                type: "string",
+                description:
+                  "Exact text to replace — must match the current code character-for-character " +
+                  "(whitespace included) and occur exactly once.",
+              },
+              new_text: {
+                type: "string",
+                description: "Replacement text. An empty string deletes old_text.",
+              },
+            },
+            required: ["old_text", "new_text"],
+          },
+          description: "Find/replace edits, applied in order, all-or-nothing.",
         },
         changeSummary: {
           type: "string",
           description:
-            "A short, friendly recap of what you just built or changed, written for the parent. " +
-            "2-4 concise bullet lines (each starting with '- '). Bullet lines only — no heading " +
-            "or intro line, the app shows its own title above the list. For a brand-new game, " +
-            "summarize what you made; for an update, summarize only what changed.",
+            CHANGE_SUMMARY_TEXT +
+            " Cover ALL edits in this call; summaries from multiple edit calls in one " +
+            "build are combined automatically.",
         },
-        tags: {
-          type: "array",
-          items: { type: "string", enum: [...GAME_TAG_IDS] },
-          description:
-            "Subject tags for discoverability, from this catalog only: " +
-            GAME_TAG_IDS.join(", ") +
-            '. Pick the ones that fit the game. Additionally add "ai" if the game ' +
-            'generates AI text and "ai-image" if it generates AI images.',
-        },
-        progressKind: {
+        markdown: {
           type: "string",
-          enum: ["goal", "open"],
           description:
-            "'goal' if the game has a measurable success objective; 'open' for free/creative play.",
+            "Optional FULL replacement of the markdown briefing. Provide it whenever your " +
+            "edits change rules, commands, state fields, or teaching strategy; omit to keep " +
+            "it unchanged.",
         },
-        capabilities: {
-          type: "array",
-          items: { type: "string", enum: [...DECLARABLE_CAPABILITY_NAMES] },
-          description:
-            "EVERY standardized command your game implements — chosen ONLY from the standard " +
-            "vocabulary (see 'Standard Command Vocabulary' in your system prompt / read_bridge_docs). " +
-            "These become Dodi's first-class voice tools. Declare 'get_snapshot' if your game has a " +
-            "visual surface (lets Dodi see it), 'generate_drawing' if it supports AI-drawn pictures, " +
-            "'generate_text' if it presents AI-written text (the game must publish " +
-            "state.contentSlots and implement set_generated_text), and 'generate_voice' if it asks " +
-            "Dodi to read short texts aloud (the game must implement set_generated_voice). " +
-            "Do NOT invent command names. Use an empty array only if the game has no Dodi-driven actions.",
-        },
-        successCriteria: {
-          type: "object",
-          description:
-            "Structured mapping of the parent's success definition. Use the standardized metric vocabulary only. Empty conditions for open play.",
-          properties: {
-            description: { type: "string" },
-            match: { type: "string", enum: ["all", "any"] },
-            conditions: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  metric: { type: "string" },
-                  op: { type: "string", enum: [">=", ">", "<=", "<", "==", "!="] },
-                  value: { type: "number" },
-                },
-                required: ["metric", "op", "value"],
-              },
-            },
-            requiredMetrics: { type: "array", items: { type: "string" } },
-          },
-          required: ["description", "match", "conditions", "requiredMetrics"],
-        },
+        ...EDIT_META_PROPS,
       },
-      required: ["code", "markdown", "title", "capabilities"],
+      required: ["edits", "changeSummary"],
     },
   },
   {
@@ -136,10 +242,12 @@ export const AGENT_TOOLS: Anthropic.Tool[] = [
       properties: {
         code: {
           type: "string",
-          description: "The HTML game code to validate",
+          description:
+            "The HTML game code to validate. Omit to validate the code from your latest " +
+            "write_game_code / edit_game_code call.",
         },
       },
-      required: ["code"],
+      required: [],
     },
   },
   {
@@ -301,6 +409,12 @@ export interface ToolContext {
   /** Current game markdown (for read_existing_game) */
   existingMarkdown?: string;
   /**
+   * Metadata of the last write/edit this run, or the update task's baseline.
+   * edit_game_code synthesizes a full LastWriteResult from it, so an edit-only
+   * run carries the game's real metadata instead of wiping it on persist.
+   */
+  currentMeta?: Omit<LastWriteResult, "code" | "markdown">;
+  /**
    * Client-injected image generation (the only I/O a tool may do). Present only
    * when the game's "generate background image" setting is on AND an image
    * provider is resolvable. Returns a downscaled data URL; throws on failure.
@@ -358,6 +472,39 @@ export interface LastWriteResult {
 // Tool execution
 // ---------------------------------------------------------------------------
 
+/** A tool result that reports failure to the model (never an SDK error flag). */
+function toolError(fields: Record<string, unknown>): { result: string } {
+  return { result: JSON.stringify({ ok: false, ...fields }) };
+}
+
+/** Shared guard: capability names must come from the standard vocabulary. */
+function invalidCapabilityError(capabilities: string[]): { result: string } | null {
+  const invalidCaps = capabilities.filter((c) => !DECLARABLE_CAPABILITY_NAMES.includes(c));
+  if (invalidCaps.length === 0) return null;
+  return toolError({
+    error:
+      `Unknown capabilities: ${invalidCaps.join(", ")}. Use ONLY the standard vocabulary ` +
+      `(${DECLARABLE_CAPABILITY_NAMES.join(", ")}).`,
+  });
+}
+
+/** Non-overlapping occurrence count of `needle` in `haystack`. */
+function countOccurrences(haystack: string, needle: string): number {
+  let count = 0;
+  let at = haystack.indexOf(needle);
+  while (at !== -1) {
+    count++;
+    at = haystack.indexOf(needle, at + needle.length);
+  }
+  return count;
+}
+
+const stringOr = (value: unknown, fallback: string): string =>
+  typeof value === "string" ? value : fallback;
+
+const stringArrayOr = (value: unknown, fallback: string[]): string[] =>
+  Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : fallback;
+
 export async function executeTool(
   toolName: string,
   toolInput: Record<string, unknown>,
@@ -381,22 +528,11 @@ export async function executeTool(
         : [];
 
       if (!code.trim()) {
-        return { result: JSON.stringify({ ok: false, error: "Code cannot be empty" }) };
+        return toolError({ error: "Code cannot be empty" });
       }
 
-      const invalidCaps = capabilities.filter(
-        (c) => !DECLARABLE_CAPABILITY_NAMES.includes(c),
-      );
-      if (invalidCaps.length > 0) {
-        return {
-          result: JSON.stringify({
-            ok: false,
-            error:
-              `Unknown capabilities: ${invalidCaps.join(", ")}. Use ONLY the standard vocabulary ` +
-              `(${DECLARABLE_CAPABILITY_NAMES.join(", ")}).`,
-          }),
-        };
-      }
+      const capsError = invalidCapabilityError(capabilities);
+      if (capsError) return capsError;
 
       const writeResult: LastWriteResult = {
         code,
@@ -419,8 +555,140 @@ export async function executeTool(
       };
     }
 
+    case "edit_game_code": {
+      const currentCode = context.existingCode;
+      if (!currentCode) {
+        return toolError({
+          error: "No existing game code to edit. Use write_game_code to create the game first.",
+        });
+      }
+
+      // Defensive coercion: the xAI driver turns malformed tool JSON into {}.
+      const rawEdits = Array.isArray(toolInput.edits) ? toolInput.edits : [];
+      if (rawEdits.length === 0) {
+        return toolError({
+          error: "edits must be a non-empty array of {old_text, new_text} objects.",
+        });
+      }
+      if (rawEdits.length > MAX_GAME_CODE_EDITS) {
+        return toolError({
+          error:
+            `Too many edits (${rawEdits.length}). Max ${MAX_GAME_CODE_EDITS} per call — split ` +
+            "them across calls, or use write_game_code for a large overhaul.",
+        });
+      }
+
+      const edits: { oldText: string; newText: string }[] = [];
+      for (let i = 0; i < rawEdits.length; i++) {
+        const raw = rawEdits[i];
+        const item = typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>) : {};
+        const oldText = typeof item.old_text === "string" ? item.old_text : "";
+        const newText = typeof item.new_text === "string" ? item.new_text : "";
+        if (!oldText) {
+          return toolError({
+            failedEditIndex: i + 1,
+            error: `Edit ${i + 1}: old_text must be a non-empty string.`,
+          });
+        }
+        if (oldText === newText) {
+          return toolError({
+            failedEditIndex: i + 1,
+            error: `Edit ${i + 1} is a no-op (old_text equals new_text). NO edits were applied.`,
+          });
+        }
+        edits.push({ oldText, newText });
+      }
+
+      // Metadata overrides apply only when the key is PRESENT — coercing an
+      // absent progressKind/successCriteria would reset the baseline.
+      const base = context.currentMeta ?? {
+        title: "New Game",
+        description: "",
+        tags: [],
+        progressKind: coerceProgressKind(undefined),
+        successCriteria: coerceSuccessCriteria(undefined),
+        changeSummary: "",
+        capabilities: [],
+      };
+      const capabilities = stringArrayOr(toolInput.capabilities, base.capabilities);
+      // Guard capabilities BEFORE applying anything, so a bad-caps call is
+      // all-or-nothing like every other failure path.
+      const editCapsError = invalidCapabilityError(capabilities);
+      if (editCapsError) return editCapsError;
+
+      let working = currentCode;
+      for (let i = 0; i < edits.length; i++) {
+        const { oldText, newText } = edits[i];
+        const firstIndex = working.indexOf(oldText);
+        const occurrences = firstIndex === -1 ? 0 : countOccurrences(working, oldText);
+        if (occurrences !== 1) {
+          const afterNote =
+            i > 0 ? ` (checked against the code AFTER applying edits 1-${i})` : "";
+          const reason =
+            occurrences === 0
+              ? "was not found in the current code"
+              : `matches ${occurrences} locations — extend it with surrounding lines until it is unique`;
+          return toolError({
+            failedEditIndex: i + 1,
+            occurrences,
+            error:
+              `Edit ${i + 1} failed: old_text ${reason}${afterNote}. ` +
+              `old_text started with: ${JSON.stringify(oldText.slice(0, 120))}. ` +
+              "NO edits were applied. Fix this edit and retry; if you are unsure of the exact " +
+              "current text, re-read it with read_existing_game; if it keeps failing, use " +
+              "write_game_code with the full corrected code.",
+          });
+        }
+        working =
+          working.slice(0, firstIndex) + newText + working.slice(firstIndex + oldText.length);
+      }
+
+      if (!working.trim()) {
+        return toolError({ error: "Edits would leave the code empty — not applied." });
+      }
+
+      const newSummary =
+        typeof toolInput.changeSummary === "string" ? toolInput.changeSummary.trim() : "";
+      const markdownParam = typeof toolInput.markdown === "string" ? toolInput.markdown : "";
+
+      const writeResult: LastWriteResult = {
+        code: working,
+        markdown: markdownParam.trim() ? markdownParam : (context.existingMarkdown ?? ""),
+        title: stringOr(toolInput.title, base.title),
+        description: stringOr(toolInput.description, base.description),
+        tags: stringArrayOr(toolInput.tags, base.tags),
+        progressKind:
+          toolInput.progressKind !== undefined
+            ? coerceProgressKind(toolInput.progressKind)
+            : base.progressKind,
+        successCriteria:
+          toolInput.successCriteria !== undefined
+            ? coerceSuccessCriteria(toolInput.successCriteria)
+            : base.successCriteria,
+        // Several edit calls in one build each summarize their own edits.
+        changeSummary: [base.changeSummary, newSummary].filter(Boolean).join("\n"),
+        capabilities,
+      };
+
+      return {
+        result: JSON.stringify({
+          ok: true,
+          message:
+            `Applied ${edits.length} edit(s). Code is now ${working.length} chars. ` +
+            "Use validate_game to check it before finishing (you may omit the code " +
+            "parameter to validate this latest code).",
+        }),
+        writeResult,
+      };
+    }
+
     case "validate_game": {
-      const code = typeof toolInput.code === "string" ? toolInput.code : "";
+      // Omitted code validates the latest write/edit — the model never has to
+      // retype the bundle, and we check the bytes that will actually ship.
+      const code =
+        typeof toolInput.code === "string" && toolInput.code.trim()
+          ? toolInput.code
+          : (context.existingCode ?? "");
       // "Image available" = generated this run, or carried over AND still
       // referenced (a carried background may be dropped deliberately — e.g.
       // the parent asked to remove it — so its absence is never an error).

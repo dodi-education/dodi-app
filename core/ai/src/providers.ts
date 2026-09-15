@@ -89,8 +89,15 @@ export const AI_PROVIDERS: AIProviderDefinition[] = [
         capabilities: ["voice", "live"],
       },
       // Text/reasoning models drive thinking + the game-coding agent (Grok
-      // supports OpenAI-style tool calling). `grok-4.5` is xAI's recommended
-      // general model; the fast variant trades some quality for latency/cost.
+      // supports OpenAI-style tool calling), listed newest first: the config UI
+      // seeds models[0] for a capability, so `grok-4.6` (xAI's current flagship)
+      // is what a fresh BYOK selection picks. The fast variant trades some
+      // quality for latency/cost.
+      {
+        id: "grok-4.6",
+        name: "Grok 4.6",
+        capabilities: ["text", "thinking", "agentic"],
+      },
       {
         id: "grok-4.5",
         name: "Grok 4.5",

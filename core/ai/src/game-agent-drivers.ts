@@ -19,7 +19,7 @@ import type { AIProviderId } from "@dodi/types/ai";
 import type { TokenUsage } from "@dodi/types/usage";
 
 import { parseImageDataUrl } from "./data-url";
-import { AGENT_TOOLS } from "./game-agent-tools";
+import { AGENT_TOOLS, isWriteStreamTool } from "./game-agent-tools";
 import { anthropicUsage, xaiUsage } from "./usage-map";
 import { createXaiClient } from "./xai";
 
@@ -209,13 +209,17 @@ export function createAnthropicActivityHandler(
         emit({ type: "narration_start" });
       } else if (block.type === "tool_use") {
         currentTool = block.name;
-        if (block.name === "write_game_code") writeChars = 0;
+        if (isWriteStreamTool(block.name)) writeChars = 0;
         emit({ type: "tool_started", name: block.name });
       }
     } else if (event.type === "content_block_delta") {
       if (event.delta.type === "text_delta") {
         emit({ type: "narration_delta", text: event.delta.text });
-      } else if (event.delta.type === "input_json_delta" && currentTool === "write_game_code") {
+      } else if (
+        event.delta.type === "input_json_delta" &&
+        currentTool !== null &&
+        isWriteStreamTool(currentTool)
+      ) {
         writeChars += event.delta.partial_json.length;
         emit({ type: "write_progress", chars: writeChars });
       }
@@ -400,7 +404,7 @@ export function createXaiTurnAccumulator(
         }
         if (tc.function?.arguments) {
           call.arguments += tc.function.arguments;
-          if (call.name === "write_game_code") {
+          if (isWriteStreamTool(call.name)) {
             emit({ type: "write_progress", chars: call.arguments.length });
           }
         }

@@ -12,7 +12,7 @@ import {
 import { dodi } from "@/lib/api";
 import { getSessionUser } from "@/lib/auth/client";
 import { useGameStore } from "@/stores/game-store";
-import { coerceProgressKind } from "@dodi/games/game-spec";
+import { coerceProgressKind, coerceSuccessCriteria } from "@dodi/games/game-spec";
 import { isUnbuiltBundle } from "@dodi/games/placeholder";
 import type { GameMetadata } from "@dodi/types/games";
 
@@ -78,6 +78,7 @@ export default function EditGameStudioPage() {
         learningGoal: game.learning_goal,
         successDefinition: game.success_definition,
         progressKind: coerceProgressKind(game.progress_kind),
+        successCriteria: coerceSuccessCriteria(game.success_criteria),
         targetAgeMin: game.target_age_min,
         targetAgeMax: game.target_age_max,
         codeBundle: game.code_bundle,

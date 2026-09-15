@@ -55,6 +55,16 @@ describe("buildAgentSystemPrompt", () => {
     expect(prompt).toContain("NEVER put undefined in state");
   });
 
+  it("teaches when to edit surgically instead of rewriting the bundle", () => {
+    const prompt = buildAgentSystemPrompt(BASE);
+    expect(prompt).toContain("## Writing vs Editing Code");
+    expect(prompt).toContain("STRONGLY prefer it for");
+    expect(prompt).toContain("all-or-nothing");
+    expect(prompt).toContain("fall back to write_game_code");
+    // The change summary is mandatory on both write paths.
+    expect(prompt).toContain("Every time you call write_game_code or edit_game_code");
+  });
+
   it("teaches the generate_voice spoken-feedback convention", () => {
     const prompt = buildAgentSystemPrompt(BASE);
     expect(prompt).toContain("generate_voice");

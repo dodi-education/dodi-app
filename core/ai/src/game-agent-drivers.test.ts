@@ -273,7 +273,28 @@ describe("XaiGameDriver", () => {
 });
 
 describe("createXaiTurnAccumulator", () => {
-  it("only reports write progress for write_game_code arguments", () => {
+  it("reports write progress for edit_game_code arguments", () => {
+    const events: AgentActivityEvent[] = [];
+    const acc = createXaiTurnAccumulator((e) => events.push(e));
+    acc.push({
+      choices: [
+        {
+          delta: {
+            tool_calls: [{ index: 0, id: "e1", function: { name: "edit_game_code", arguments: "" } }],
+          },
+        },
+      ],
+    } as never);
+    acc.push({
+      choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: '{"edits":[]}' } }] } }],
+    } as never);
+    expect(events).toEqual([
+      { type: "tool_started", name: "edit_game_code" },
+      { type: "write_progress", chars: 12 },
+    ]);
+  });
+
+  it("only reports write progress for code-writing tools' arguments", () => {
     const events: AgentActivityEvent[] = [];
     const acc = createXaiTurnAccumulator((e) => events.push(e));
     acc.push({
@@ -336,6 +357,23 @@ describe("createAnthropicActivityHandler", () => {
     );
     handle(event({ type: "content_block_delta", index: 0, delta: { type: "input_json_delta", partial_json: "{}" } }));
     expect(events).toEqual([{ type: "tool_started", name: "validate_game" }]);
+  });
+
+  it("reports progress for streamed edit_game_code input too", () => {
+    const events: AgentActivityEvent[] = [];
+    const handle = createAnthropicActivityHandler((e) => events.push(e));
+    handle(
+      event({
+        type: "content_block_start",
+        index: 0,
+        content_block: { type: "tool_use", id: "e1", name: "edit_game_code", input: {} },
+      }),
+    );
+    handle(event({ type: "content_block_delta", index: 0, delta: { type: "input_json_delta", partial_json: '{"edits":[' } }));
+    expect(events).toEqual([
+      { type: "tool_started", name: "edit_game_code" },
+      { type: "write_progress", chars: 10 },
+    ]);
   });
 });
 

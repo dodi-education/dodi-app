@@ -4,7 +4,9 @@ import {
   AGENT_TOOLS,
   buildAgentTools,
   executeTool,
+  isWriteStreamTool,
   MAX_BACKGROUND_IMAGE_CALLS,
+  MAX_GAME_CODE_EDITS,
   MAX_PREVIEW_IMAGE_CALLS,
   type ToolContext,
 } from "./game-agent-tools";
@@ -235,6 +237,177 @@ describe("executeTool read_char_paths", () => {
   });
 });
 
+describe("executeTool edit_game_code", () => {
+  const CODE = "<html><body>const speed = 5;\nconst score = 0;</body></html>";
+  const META = {
+    title: "Ball Game",
+    description: "Bounce a ball",
+    tags: ["math"],
+    progressKind: "goal" as const,
+    successCriteria: {
+      description: "Reach 10 points",
+      match: "all" as const,
+      conditions: [{ metric: "score" as const, op: ">=" as const, value: 10 }],
+      requiredMetrics: ["score" as const],
+    },
+    changeSummary: "",
+    capabilities: ["get_snapshot"],
+  };
+  const ctx = (overrides: Partial<ToolContext> = {}): ToolContext => ({
+    existingCode: CODE,
+    existingMarkdown: "# Ball Game",
+    currentMeta: META,
+    ...overrides,
+  });
+  const edit = (oldText: string, newText: string) => ({ old_text: oldText, new_text: newText });
+  const run = (input: Record<string, unknown>, context: ToolContext = ctx()) =>
+    executeTool("edit_game_code", { changeSummary: "- tweaked", ...input }, context);
+
+  it("errors when there is no existing code to edit", async () => {
+    const { result, writeResult } = await run({ edits: [edit("a", "b")] }, { currentMeta: META });
+    expect(JSON.parse(result)).toMatchObject({ ok: false });
+    expect(JSON.parse(result).error).toContain("write_game_code");
+    expect(writeResult).toBeUndefined();
+  });
+
+  it("applies a single edit and carries the metadata baseline", async () => {
+    const { result, writeResult } = await run({ edits: [edit("speed = 5", "speed = 6")] });
+    expect(JSON.parse(result)).toMatchObject({ ok: true });
+    expect(writeResult?.code).toContain("speed = 6");
+    expect(writeResult?.code).toContain("score = 0");
+    expect(writeResult?.title).toBe("Ball Game");
+    expect(writeResult?.tags).toEqual(["math"]);
+    expect(writeResult?.progressKind).toBe("goal");
+    expect(writeResult?.successCriteria).toEqual(META.successCriteria);
+    expect(writeResult?.capabilities).toEqual(["get_snapshot"]);
+    expect(writeResult?.markdown).toBe("# Ball Game");
+  });
+
+  it("applies edits in order, so a later edit can target earlier output", async () => {
+    const { writeResult } = await run({
+      edits: [edit("speed = 5", "speed = SPEED"), edit("const speed = SPEED;", "let speed = 9;")],
+    });
+    expect(writeResult?.code).toContain("let speed = 9;");
+    expect(writeResult?.code).not.toContain("SPEED");
+  });
+
+  it("applies nothing when one edit's anchor is missing", async () => {
+    const context = ctx();
+    const { result, writeResult } = await run(
+      {
+        edits: [edit("speed = 5", "speed = 6"), edit("nowhere", "x"), edit("score = 0", "score = 1")],
+      },
+      context,
+    );
+    const parsed = JSON.parse(result);
+    expect(parsed).toMatchObject({ ok: false, failedEditIndex: 2, occurrences: 0 });
+    expect(parsed.error).toContain("Edit 2");
+    expect(parsed.error).toContain("AFTER applying edits 1-1");
+    expect(writeResult).toBeUndefined();
+    expect(context.existingCode).toBe(CODE);
+  });
+
+  it("refuses an ambiguous anchor and reports the occurrence count", async () => {
+    const { result, writeResult } = await run(
+      { edits: [edit("const", "let")] },
+      ctx({ existingCode: "const a = 1;\nconst b = 2;" }),
+    );
+    const parsed = JSON.parse(result);
+    expect(parsed).toMatchObject({ ok: false, failedEditIndex: 1, occurrences: 2 });
+    expect(parsed.error).toContain("matches 2 locations");
+    expect(writeResult).toBeUndefined();
+  });
+
+  it("rejects malformed or empty edit lists", async () => {
+    for (const edits of [[], undefined, "nope"]) {
+      const { result } = await run({ edits });
+      expect(JSON.parse(result)).toMatchObject({ ok: false });
+    }
+    const tooMany = await run({
+      edits: Array.from({ length: MAX_GAME_CODE_EDITS + 1 }, () => edit("speed = 5", "speed = 6")),
+    });
+    expect(JSON.parse(tooMany.result).error).toContain(`Max ${MAX_GAME_CODE_EDITS}`);
+  });
+
+  it("rejects an empty anchor and a no-op edit", async () => {
+    const empty = await run({ edits: [edit("", "x")] });
+    expect(JSON.parse(empty.result)).toMatchObject({ ok: false, failedEditIndex: 1 });
+    const noop = await run({ edits: [edit("speed = 5", "speed = 5")] });
+    expect(JSON.parse(noop.result).error).toContain("no-op");
+  });
+
+  it("refuses edits that would empty the bundle", async () => {
+    const { result, writeResult } = await run({ edits: [edit(CODE, "")] });
+    expect(JSON.parse(result).error).toContain("empty");
+    expect(writeResult).toBeUndefined();
+  });
+
+  it("keeps baseline metadata when a param is absent and overrides when present", async () => {
+    const kept = await run({ edits: [edit("speed = 5", "speed = 6")] });
+    expect(kept.writeResult?.progressKind).toBe("goal");
+    expect(kept.writeResult?.tags).toEqual(["math"]);
+
+    const overridden = await run({
+      edits: [edit("speed = 5", "speed = 6")],
+      title: "Faster Ball",
+      tags: ["math", "logic"],
+      progressKind: "open",
+    });
+    expect(overridden.writeResult?.title).toBe("Faster Ball");
+    expect(overridden.writeResult?.tags).toEqual(["math", "logic"]);
+    expect(overridden.writeResult?.progressKind).toBe("open");
+    // Untouched params still come from the baseline.
+    expect(overridden.writeResult?.successCriteria).toEqual(META.successCriteria);
+  });
+
+  it("rejects an unknown capability override before applying any edit", async () => {
+    const context = ctx();
+    const { result, writeResult } = await run(
+      { edits: [edit("speed = 5", "speed = 6")], capabilities: ["teleport"] },
+      context,
+    );
+    expect(JSON.parse(result).error).toContain("Unknown capabilities: teleport");
+    expect(writeResult).toBeUndefined();
+    expect(context.existingCode).toBe(CODE);
+  });
+
+  it("appends the change summary onto the baseline", async () => {
+    const fresh = await run({ edits: [edit("speed = 5", "speed = 6")], changeSummary: "- faster" });
+    expect(fresh.writeResult?.changeSummary).toBe("- faster");
+
+    const second = await run(
+      { edits: [edit("score = 0", "score = 1")], changeSummary: "- starts at 1" },
+      ctx({ currentMeta: { ...META, changeSummary: "- faster" } }),
+    );
+    expect(second.writeResult?.changeSummary).toBe("- faster\n- starts at 1");
+  });
+
+  it("replaces the markdown only when the param is given", async () => {
+    const replaced = await run({ edits: [edit("speed = 5", "speed = 6")], markdown: "# New" });
+    expect(replaced.writeResult?.markdown).toBe("# New");
+    const kept = await run({ edits: [edit("speed = 5", "speed = 6")], markdown: "   " });
+    expect(kept.writeResult?.markdown).toBe("# Ball Game");
+  });
+
+  it("falls back to placeholder metadata when no baseline was seeded", async () => {
+    const { writeResult } = await run(
+      { edits: [edit("speed = 5", "speed = 6")] },
+      { existingCode: CODE },
+    );
+    expect(writeResult?.title).toBe("New Game");
+    expect(writeResult?.tags).toEqual([]);
+    expect(writeResult?.capabilities).toEqual([]);
+  });
+});
+
+describe("isWriteStreamTool", () => {
+  it("covers both code-writing tools and nothing else", () => {
+    expect(isWriteStreamTool("write_game_code")).toBe(true);
+    expect(isWriteStreamTool("edit_game_code")).toBe(true);
+    expect(isWriteStreamTool("validate_game")).toBe(false);
+  });
+});
+
 describe("executeTool validate_game background awareness", () => {
   const compliant = (extra: string): string =>
     `<!doctype html><html><head><script type="application/dodi-translations">{"sourceLocale":"en","locales":{"en":{"game.title":"Game"}}}</script></head><body>${extra}<script>
@@ -276,6 +449,17 @@ describe("executeTool validate_game background awareness", () => {
       { code: compliant(PLACEHOLDER_BLOCK) },
       {},
     );
+    expect((JSON.parse(result) as { valid: boolean }).valid).toBe(false);
+  });
+
+  it("validates the latest code when the code param is omitted", async () => {
+    const context: ToolContext = { existingCode: compliant("") };
+    const { result } = await executeTool("validate_game", {}, context);
+    expect((JSON.parse(result) as { valid: boolean }).valid).toBe(true);
+  });
+
+  it("reports empty code when neither the param nor the context has any", async () => {
+    const { result } = await executeTool("validate_game", {}, {});
     expect((JSON.parse(result) as { valid: boolean }).valid).toBe(false);
   });
 });
