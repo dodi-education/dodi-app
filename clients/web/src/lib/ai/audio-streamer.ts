@@ -4,14 +4,33 @@
  */
 export class AudioStreamer {
   private context: AudioContext | null = null;
+  private gain: GainNode | null = null;
+  private volume = 1;
   private scheduledTime = 0;
   private activeSources: AudioBufferSourceNode[] = [];
 
   private ensureContext(): AudioContext {
     if (!this.context) {
       this.context = new AudioContext({ sampleRate: 24000 });
+      // Master gain between every source and the speakers — the single point
+      // the kid's volume slider controls.
+      this.gain = this.context.createGain();
+      this.gain.gain.value = this.volume;
+      this.gain.connect(this.context.destination);
     }
     return this.context;
+  }
+
+  /**
+   * Master output volume, 0..1 (clamped). Applied with a short ramp so slider
+   * drags don't click. Remembered even before the context exists, so a volume
+   * set while dodi is idle still applies to the next utterance.
+   */
+  setVolume(volume: number): void {
+    this.volume = Math.min(1, Math.max(0, volume));
+    if (this.gain && this.context) {
+      this.gain.gain.setTargetAtTime(this.volume, this.context.currentTime, 0.02);
+    }
   }
 
   addPcmChunk(base64Data: string): void {
@@ -38,7 +57,7 @@ export class AudioStreamer {
     // Schedule for gapless playback
     const source = ctx.createBufferSource();
     source.buffer = buffer;
-    source.connect(ctx.destination);
+    source.connect(this.gain ?? ctx.destination);
 
     const now = ctx.currentTime;
     const startTime = Math.max(now, this.scheduledTime);
@@ -106,6 +125,7 @@ export class AudioStreamer {
 
   async destroy(): Promise<void> {
     this.stop();
+    this.gain = null;
     if (this.context) {
       await this.context.close();
       this.context = null;

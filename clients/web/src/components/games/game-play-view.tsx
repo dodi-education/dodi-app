@@ -455,12 +455,13 @@ export function GamePlayView({
 
   // `generate_voice` is a host-handled meta-command: the game asks dodi to read
   // a short text aloud, and the session store injects a read-aloud turn into
-  // the LIVE voice session (same voice, same persona — no separate TTS
-  // pipeline). Game-initiated via game:event "request_generate_voice",
-  // rate-limited like generate_text. The game always receives a
-  // `set_generated_voice` result: { ok: true } when dodi is about to speak, or
-  // { ok: false, error } (voice_unavailable when she is muted/asleep/offline,
-  // rate_limited, empty_text) so its speaking indicator can recover.
+  // the voice session (same voice, same persona — no separate TTS pipeline).
+  // Game-initiated via game:event "request_generate_voice", rate-limited like
+  // generate_text. The game always receives a `set_generated_voice` result:
+  // { ok: true } when dodi is about to speak, or { ok: false, error }
+  // (rate_limited, empty_text, or voice_unavailable) so its speaking indicator
+  // can recover. Note: deaf does NOT block this — dodi can still be HEARD while
+  // her mic is off; only a full mute, sleep, or a dead session is unavailable.
   const gameVoiceRequestCountRef = useRef(0);
   const lastGameVoiceRequestAtRef = useRef(0);
 

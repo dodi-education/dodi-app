@@ -464,7 +464,7 @@ export interface Kids {
    */
   date_preferences: Json | null;
   /**
-   * Persisted Dodi deaf state: NULL = listens normally; a timestamp = kid muted Dodi, so she comes up deaf on connect until re-enabled. Plaintext operational state.
+   * Persisted deaf state: NULL = listens normally; a timestamp = kid turned dodi's listening off (mic muted), so she comes up deaf on connect until re-enabled. Audio OUTPUT, including game-requested speech, stays allowed; full silence is kids.muted_dodi_at. Plaintext operational state.
    */
   deafened_dodi_at: Timestamp | null;
   display_name: string;
@@ -481,6 +481,10 @@ export interface Kids {
    * E2EE AI briefing dossier markdown; derived from active memories with [source:memory_source_id] citations.
    */
   memory: string | null;
+  /**
+   * Persisted output mute: NULL = dodi may produce sound; a timestamp = kid muted dodi's audio output (no speech, game-requested speech refused). Orthogonal to deafened_dodi_at (hearing): the two compose freely.
+   */
+  muted_dodi_at: Timestamp | null;
   outgoing_friend_requests_require_parent_approval: Generated<boolean>;
   parent_notes: string | null;
   social_id: string;

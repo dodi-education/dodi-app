@@ -35,9 +35,14 @@ const UpdateKidSchema = z.object({
   can_be_added_as_friend: z.boolean().optional(),
   incoming_friend_requests_require_parent_approval: z.boolean().optional(),
   outgoing_friend_requests_require_parent_approval: z.boolean().optional(),
-  // Persisted Dodi deaf state (plaintext operational): an ISO timestamp when the
-  // kid muted Dodi, or null to re-enable listening.
+  // Persisted Dodi listening state (plaintext operational): an ISO timestamp
+  // when the kid turned Dodi's listening off (mic muted), or null to re-enable.
+  // Output stays allowed while deaf; full silence is muted_dodi_at.
   deafened_dodi_at: z.iso.datetime().nullable().optional(),
+  // Persisted Dodi output mute (plaintext operational): an ISO timestamp when the
+  // kid muted Dodi's audio output, or null to re-enable sound. Orthogonal to
+  // deafened_dodi_at.
+  muted_dodi_at: z.iso.datetime().nullable().optional(),
 });
 
 interface RouteContext {

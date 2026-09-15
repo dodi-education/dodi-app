@@ -33,16 +33,16 @@ export function DodiCompact() {
 
   const ariaLabel =
     dodiState === "connecting"
-      ? "dodi connecting"
+      ? t("voiceAriaConnecting")
       : dodiState === "active"
-        ? "Mute dodi"
+        ? t("voiceAriaStopListening")
         : dodiState === "deaf"
-          ? "Unmute dodi"
+          ? t("voiceAriaStartListening")
           : dodiState === "sleep"
-            ? "Tap to wake dodi"
+            ? t("voiceAriaWake")
             : error
-              ? "Tap to reconnect dodi"
-              : "Tap to start dodi";
+              ? t("voiceAriaReconnect")
+              : t("voiceAriaStart");
 
   // Transient status shown in the bubble; idle states (listening, deaf,
   // disconnected) show no bubble — the avatar badge already conveys them.
@@ -74,7 +74,7 @@ export function DodiCompact() {
               ? "/images/dodi-head-thinking.png"
               : getDodiImage(dodiState, true)
           }
-          alt={isThinking ? "dodi is thinking" : "dodi"}
+          alt={isThinking ? t("voiceThinkingAlt") : "dodi"}
           width={32}
           height={32}
           className={cn("rounded-full", isThinking && "animate-kspin")}

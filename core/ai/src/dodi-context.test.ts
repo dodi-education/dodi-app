@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { buildGameTextContext, buildGameVoiceContext } from "./dodi-context";
+import {
+  buildGameTextContext,
+  buildGameVoiceContext,
+  buildHomeVoiceContext,
+} from "./dodi-context";
 
 const base = {
   personaSoul: "SOUL",
+  personaName: "Dodi",
   childName: "Ada",
   childBirthdate: null,
   childLanguage: "en",
@@ -14,6 +19,19 @@ const base = {
   gameMarkdown: "",
   gameCodeBundle: "",
   gameState: {},
+};
+
+const homeBase = {
+  personaSoul: "SOUL",
+  personaName: "Dodi",
+  childName: "Ada",
+  childBirthdate: null,
+  childLanguage: "en",
+  memory: null,
+  parentNotes: null,
+  gameCatalog: [
+    { id: "g1", title: "Dragon Draw", description: "draw dragons", tags: ["art"] },
+  ],
 };
 
 describe("buildGameVoiceContext tool registration", () => {
@@ -136,5 +154,68 @@ describe("snapshot tools & guidance", () => {
     }).systemInstruction;
     expect(noFriends).toContain("save_snapshot");
     expect(noFriends).not.toContain("`share_snapshot`");
+  });
+});
+
+describe("addressing / intent awareness (voice only)", () => {
+  it("both voice modes carry the Hearing vs. Being Asked section with the persona name", () => {
+    const game = buildGameVoiceContext({ ...base, capabilities: [] }).systemInstruction;
+    const home = buildHomeVoiceContext(homeBase).systemInstruction;
+
+    for (const sys of [game, home]) {
+      expect(sys).toContain("## Hearing vs. Being Asked");
+      // The name is the strong "addressed" signal, with transcription variants.
+      expect(sys).toContain('"Dodi"');
+      expect(sys).toContain("Dodie");
+      // Narration/self-talk must NOT be treated as a command.
+      expect(sys).toContain("NOT meant for you");
+    }
+  });
+
+  it("uses a custom persona name in the addressing section", () => {
+    const sys = buildGameVoiceContext({
+      ...base,
+      personaName: "Fluffi",
+      capabilities: [],
+    }).systemInstruction;
+    expect(sys).toContain('"Fluffi"');
+  });
+
+  it("adds a German-phonetics hint only for German", () => {
+    const de = buildGameVoiceContext({
+      ...base,
+      childLanguage: "de",
+      capabilities: [],
+    }).systemInstruction;
+    const en = buildGameVoiceContext({
+      ...base,
+      childLanguage: "en",
+      capabilities: [],
+    }).systemInstruction;
+    expect(de).toContain("German");
+    expect(en).not.toContain("shifted vowels");
+  });
+
+  it("keeps the same-turn reliability rule, scoped to directed requests", () => {
+    const sys = buildGameVoiceContext({ ...base, capabilities: [] }).systemInstruction;
+    // The 38%→100% first-ask reliability rule must survive.
+    expect(sys).toContain("SAME turn");
+    expect(sys).toContain("Announcing an action is NOT the same as doing it");
+    // ...but mutating tools are now gated on a directed request.
+    expect(sys).toContain("directed at you");
+    expect(sys).toContain("overheard narration");
+    // Read-only tools stay permissive.
+    expect(sys).toContain("only LOOK");
+  });
+
+  it("text mode never gets the addressing section", () => {
+    const sys = buildGameTextContext({ ...base, capabilities: [] }).systemInstruction;
+    expect(sys).not.toContain("## Hearing vs. Being Asked");
+  });
+
+  it("home mode gates launch_game on a clear request", () => {
+    const sys = buildHomeVoiceContext(homeBase).systemInstruction;
+    expect(sys).toContain("clearly asks YOU to open or play");
+    expect(sys).toContain("not a request");
   });
 });

@@ -35,6 +35,7 @@ const {
   sendToolResponseSpy,
   sendContextSpy,
   streamerStopSpy,
+  streamerSetVolumeSpy,
   dodiRequestSpy,
   resolveThinkingSpy,
   analyzeSpy,
@@ -58,6 +59,7 @@ const {
   sendToolResponseSpy: vi.fn(),
   sendContextSpy: vi.fn(),
   streamerStopSpy: vi.fn(),
+  streamerSetVolumeSpy: vi.fn(),
   dodiRequestSpy: vi.fn(),
   resolveThinkingSpy: vi.fn(),
   analyzeSpy: vi.fn(),
@@ -129,6 +131,9 @@ vi.mock("@/lib/ai/audio-streamer", () => ({
     }
     destroy() {}
     primeFromGesture() {}
+    setVolume(v: number) {
+      streamerSetVolumeSpy(v);
+    }
     async tryResume() {
       return tryResumeResult.current;
     }
@@ -184,6 +189,7 @@ import {
   selectDodiActivityKind,
 } from "@/stores/dodi-session-store";
 import { useConnectivityStore } from "@/stores/connectivity-store";
+import { useCompanionVolumeStore } from "@/stores/companion-volume-store";
 
 // --- localStorage stub -----------------------------------------------------
 
@@ -254,6 +260,7 @@ function installTestEnv() {
   sendToolResponseSpy.mockReset();
   sendContextSpy.mockReset();
   streamerStopSpy.mockReset();
+  streamerSetVolumeSpy.mockReset();
   dodiRequestSpy.mockReset();
   dodiRequestSpy.mockResolvedValue({ ok: true, json: async () => ({}) });
   resolveThinkingSpy.mockReset();
@@ -958,9 +965,11 @@ describe("dodi session store — generate_drawing deferral", () => {
 
 // ---------------------------------------------------------------------------
 // speakGameVoiceText: game-initiated spoken feedback (request_generate_voice)
-// injects a read-aloud turn into the LIVE session — and only into a live one:
-// deaf/sleep/disconnected must return the stable "voice_unavailable" code so
-// mute always means mute.
+// injects a read-aloud turn into the voice session. Deaf means "ears off, voice
+// on" — a game may still ask dodi to speak; only a full output mute, sleep, or a
+// dead session returns the stable "voice_unavailable" code. On the pooled (xAI)
+// strategy a deaf read-aloud borrows a warm socket for the one turn, then
+// retires it.
 // ---------------------------------------------------------------------------
 
 describe("dodi session store — speakGameVoiceText (request_generate_voice)", () => {
@@ -990,7 +999,34 @@ describe("dodi session store — speakGameVoiceText (request_generate_voice)", (
     await flush();
   }
 
+  // Pooled (xAI) game connect: the store awaits the pool's first ready standby,
+  // so the handshake must be driven while connect() is in flight.
+  async function connectGamePooled(pid: string) {
+    mockVoiceProvider.current = "xai";
+    useDodiSessionStore.setState({
+      state: "disconnected",
+      context: {
+        type: "game",
+        gameId: "g1",
+        markdown: "",
+        codeBundle: "",
+        gameState: {},
+        capabilities: ["generate_voice"],
+      },
+    });
+    const connectPromise = useDodiSessionStore.getState().connect(pid);
+    await flush();
+    for (const c of createdClients.current as MockVoiceClient[]) {
+      c.handler({ type: "setupComplete" });
+    }
+    await connectPromise;
+    await flush();
+  }
+
   const activeClient = () => createdClients.current[0] as MockVoiceClient;
+  const clients = () => createdClients.current as MockVoiceClient[];
+  const spokenClient = () =>
+    clients().find((c) => c.sendText.mock.calls.length > 0);
 
   it("submits a read-aloud turn to the live session and reports ok", async () => {
     await connectGame(PID);
@@ -1006,20 +1042,200 @@ describe("dodi session store — speakGameVoiceText (request_generate_voice)", (
     expect(turn).toContain("exactly as written");
   });
 
-  it("returns voice_unavailable while deaf (mute means mute) and sends nothing", async () => {
-    await connectGame(PID);
+  it("persistent deaf still speaks: injects on the open socket and plays audio", async () => {
+    await connectGame(PID); // gemini → persistent socket
     useDodiSessionStore.getState().deactivate();
     expect(useDodiSessionStore.getState().state).toBe("deaf");
 
     const result = useDodiSessionStore.getState().speakGameVoiceText("read me");
+    expect(result).toEqual({ ok: true });
+    // Persistent keeps the socket open while deaf, so the read-aloud goes out on
+    // it — the socket is NOT closed.
+    expect(activeClient().sendText).toHaveBeenCalledTimes(1);
+    expect(activeClient().disconnect).not.toHaveBeenCalled();
 
-    expect(result).toEqual({ ok: false, error: "voice_unavailable" });
-    expect(activeClient().sendText).not.toHaveBeenCalled();
+    // Audio for the read-aloud plays even though she is deaf.
+    fire({ type: "audio", data: "AAAA" });
+    expect(useDodiSessionStore.getState().dodiSpeaking).toBe(true);
+
+    // Turn end clears the speaking flag; a persistent socket stays open.
+    fire({ type: "turnComplete" });
+    expect(useDodiSessionStore.getState().dodiSpeaking).toBe(false);
+    expect(useDodiSessionStore.getState().state).toBe("deaf");
+    expect(activeClient().disconnect).not.toHaveBeenCalled();
+  });
+
+  it("pooled deaf borrows a warm socket, speaks, and retires it on turn end", async () => {
+    await connectGamePooled(PID); // xai → pooled
+    useDodiSessionStore.getState().deactivate();
+    expect(useDodiSessionStore.getState().state).toBe("deaf");
+    clients().forEach((c) => c.sendText.mockClear());
+
+    const result = useDodiSessionStore.getState().speakGameVoiceText("read me");
+    expect(result).toEqual({ ok: true });
+    await flush(); // tryResume → pool.acquire → sendText
+
+    const spoke = spokenClient();
+    expect(spoke).toBeDefined();
+    expect(spoke!.sendText.mock.calls[0][0]).toContain("read me");
+    // A one-shot read-aloud never re-greets or replays a recap.
+    expect(spoke!.sendGreeting).not.toHaveBeenCalled();
+
+    // Turn end retires the borrowed socket (billing stops); still deaf.
+    spoke!.handler({ type: "turnComplete" });
+    await flush();
+    expect(spoke!.disconnect).toHaveBeenCalled();
+    expect(useDodiSessionStore.getState().state).toBe("deaf");
+  });
+
+  it("pooled deaf with a suspended AudioContext sends nothing", async () => {
+    await connectGamePooled(PID);
+    useDodiSessionStore.getState().deactivate();
+    clients().forEach((c) => c.sendText.mockClear());
+    tryResumeResult.current = false; // context can't resume without a gesture
+
+    const result = useDodiSessionStore.getState().speakGameVoiceText("read me");
+    // Optimistic ok (the sandbox reply is one-shot), but nothing is spoken.
+    expect(result).toEqual({ ok: true });
+    await flush();
+    expect(spokenClient()).toBeUndefined();
+    expect(useDodiSessionStore.getState().state).toBe("deaf");
   });
 
   it("returns voice_unavailable when no session exists at all", () => {
     const result = useDodiSessionStore.getState().speakGameVoiceText("read me");
     expect(result).toEqual({ ok: false, error: "voice_unavailable" });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Output mute (kids.muted_dodi_at) is orthogonal to the deaf/active listening
+// state: muting only silences dodi's OUTPUT (audio + game read-alouds); it never
+// changes whether she is listening, and the dodi-head deaf toggle never changes
+// it. Persisted through its own outbox, independent of deafened_dodi_at.
+// ---------------------------------------------------------------------------
+
+describe("dodi session store — output mute", () => {
+  beforeEach(() => {
+    installTestEnv();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  async function connectGame(pid: string) {
+    useDodiSessionStore.setState({
+      state: "disconnected",
+      context: {
+        type: "game",
+        gameId: "g1",
+        markdown: "",
+        codeBundle: "",
+        gameState: {},
+        capabilities: ["generate_voice"],
+      },
+    });
+    await useDodiSessionStore.getState().connect(pid);
+    await flush();
+    fire({ type: "setupComplete" });
+    await flush();
+  }
+
+  const findKidPatch = () =>
+    dodiRequestSpy.mock.calls.find(
+      (c) =>
+        c[0] === `/api/kids/${PID}` &&
+        (c[1] as { method?: string } | undefined)?.method === "PATCH",
+    );
+  const patchBody = (call: unknown[]) =>
+    JSON.parse((call[1] as { body: string }).body) as Record<string, unknown>;
+
+  it("setMuted leaves the listening state untouched and persists muted_dodi_at", async () => {
+    await connectGame(PID);
+    expect(useDodiSessionStore.getState().state).toBe("active");
+
+    dodiRequestSpy.mockClear();
+    useDodiSessionStore.getState().setMuted(true);
+
+    // Output-only: still active (still hearing), just muted.
+    expect(useDodiSessionStore.getState().state).toBe("active");
+    expect(useDodiSessionStore.getState().muted).toBe(true);
+    const patch = findKidPatch();
+    expect(patch).toBeTruthy();
+    expect(patchBody(patch!).muted_dodi_at).toBe(DAY1); // fake system clock
+    expect(kidById.current[PID]?.muted_dodi_at).toBe(DAY1); // local cache
+    // The deaf toggle is not touched.
+    expect(kidById.current[PID]?.deafened_dodi_at ?? null).toBeNull();
+  });
+
+  it("refuses game read-alouds and drops audio while muted+active", async () => {
+    await connectGame(PID);
+    useDodiSessionStore.getState().setMuted(true);
+
+    const result = useDodiSessionStore.getState().speakGameVoiceText("read me");
+    expect(result).toEqual({ ok: false, error: "voice_unavailable" });
+
+    // A model audio frame while muted never plays and never flags speaking.
+    fire({ type: "audio", data: "AAAA" });
+    expect(useDodiSessionStore.getState().dodiSpeaking).toBe(false);
+  });
+
+  it("the dodi-head deaf toggle does not change the mute", async () => {
+    await connectGame(PID);
+    useDodiSessionStore.getState().setMuted(true);
+
+    useDodiSessionStore.getState().deactivate(); // deaf toggle
+    expect(useDodiSessionStore.getState().state).toBe("deaf");
+    expect(useDodiSessionStore.getState().muted).toBe(true);
+
+    await useDodiSessionStore.getState().activate(); // wake
+    expect(useDodiSessionStore.getState().state).toBe("active");
+    expect(useDodiSessionStore.getState().muted).toBe(true);
+  });
+
+  it("comes up muted on connect when muted_dodi_at is set, still listening", async () => {
+    kidLoadOneSpy.mockResolvedValue({
+      display_name: "Ada",
+      language: "en",
+      muted_dodi_at: DAY1,
+    });
+
+    await connectGame(PID);
+
+    // Muted is derived from the row, but the deaf decision is independent — with
+    // deafened_dodi_at null she comes up active (listening) yet muted.
+    expect(useDodiSessionStore.getState().state).toBe("active");
+    expect(useDodiSessionStore.getState().muted).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Volume wiring: the streamer is created at the kid's persisted level and live
+// changes to the volume store are pushed into the playing streamer's gain.
+// ---------------------------------------------------------------------------
+
+describe("dodi session store — volume wiring", () => {
+  beforeEach(() => {
+    installTestEnv();
+    useCompanionVolumeStore.setState({ kidId: null, volume: 1 });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("sets the streamer volume on creation and on live change", async () => {
+    await connect(PID);
+    fire({ type: "setupComplete" });
+    await flush();
+
+    // The streamer was created and initialized to a concrete level.
+    expect(streamerSetVolumeSpy).toHaveBeenCalled();
+
+    streamerSetVolumeSpy.mockClear();
+    useCompanionVolumeStore.getState().setVolume(0.5);
+    expect(streamerSetVolumeSpy).toHaveBeenCalledWith(0.5);
   });
 });
 

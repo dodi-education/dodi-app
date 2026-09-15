@@ -28,6 +28,10 @@ export const EMPTY_MEMORY_HINT =
 
 export interface DodiContextInput {
   personaSoul: string;
+  /** The companion's display name ("Dodi" by default, or the custom persona's
+   *  name). Weighted very strongly in voice modes as the "you are being
+   *  addressed" signal. */
+  personaName: string;
   childName: string;
   childBirthdate: string | null;
   childLanguage: string;
@@ -134,6 +138,36 @@ function buildBirthdaySectionLight(name: string): string[] {
   ];
 }
 
+/**
+ * The "am I being talked to?" section — VOICE modes only. Children think out
+ * loud: they narrate play, count, read, sing, and talk to people in the room,
+ * all through an always-open mic. Without this, the model treats every overheard
+ * utterance as a command and acts on it. Being addressed by name is weighted as
+ * the strongest possible signal, robust to transcription mangling.
+ */
+function buildAddressingSection(input: DodiContextInput): string[] {
+  const name = input.personaName;
+  const germanHint =
+    input.childLanguage === "de"
+      ? ` The child speaks German, so your name may be transcribed with shifted vowels or German spelling (e.g. "Dodie", "Dodi", "Doti") — accept those too.`
+      : "";
+
+  return [
+    "",
+    "## Hearing vs. Being Asked",
+    `Your microphone is always on, so you hear EVERYTHING near the device: ${input.childName} talking to you, but also ${input.childName} narrating their play, thinking out loud, reading, counting, singing, or talking to other people in the room. Much of what you hear is NOT meant for you.`,
+    "",
+    "The child IS talking to you when:",
+    `- They say your name, "${name}". Speech transcription often mangles it (for example "Dody", "Dodie", "Dodee", "Dohdi", or a very similar-sounding word).${germanHint} Treat anything that sounds like your name as your name: hearing it is the strongest possible sign the child is addressing you, and you should respond.`,
+    "- They answer a question you just asked, or clearly continue a back-and-forth with you.",
+    "- They give a clear instruction for something only you can do.",
+    "",
+    "The child is NOT talking to you when they narrate their own play (\"now I put the red one here\"), talk to themselves, read or count out loud, sing, or speak to someone else in the room. In those moments do nothing and say nothing: stay warmly, quietly present. Never comment on something you merely overheard.",
+    "",
+    "When it MIGHT be for you but you are not sure, ask one short, friendly question to check (for example \"Did you mean me?\") instead of acting or launching into an answer.",
+  ];
+}
+
 // ---------------------------------------------------------------------------
 // Mode 1: Home/browse voice
 // ---------------------------------------------------------------------------
@@ -147,6 +181,8 @@ export function buildHomeVoiceContext(input: HomeVoiceInput): DodiVoiceContext {
   sections.push("", "## Current Session Context");
   sections.push(...buildChildContextLines(input));
 
+  sections.push(...buildAddressingSection(input));
+
   if (isTodayBirthday(input.childBirthdate)) {
     sections.push(...buildBirthdaySectionFull(input.childName));
   }
@@ -155,7 +191,7 @@ export function buildHomeVoiceContext(input: HomeVoiceInput): DodiVoiceContext {
     sections.push(
       "",
       "## Available Games",
-      "When the child asks to play a game, use the `launch_game` tool with the `game_id` from this catalog. If you're unsure which game they mean, use `search_query` or `tag` to show them matching options.",
+      "When the child clearly asks YOU to open or play a game, use the `launch_game` tool with the `game_id` from this catalog. If you're unsure which game they mean, use `search_query` or `tag` to show them matching options. A game mentioned in passing chatter is not a request to open it: launching navigates away from the current screen, so if you are not sure the child is asking you to open it, ask first (for example \"Should I open it?\").",
       "",
       "| id | title | tags |",
       "|----|-------|------|",
@@ -258,6 +294,7 @@ export function buildGameVoiceContext(
 
   const systemInstruction = [
     shared,
+    ...buildAddressingSection(input),
     "",
     "## Game State at Session Start",
     "This is the game state as of the START of this session. It goes STALE as the child plays — it is NOT kept up to date.",
@@ -268,12 +305,13 @@ export function buildGameVoiceContext(
     "You can use these tools:",
     ...toolListLines,
     "",
-    "CRITICAL — Doing things in the game:",
-    "- When the child asks you to do, make, draw, answer, or change something, you MUST call the matching tool immediately in that SAME turn. Do not just describe or promise it — the tool call is what changes the screen.",
-    "- Announcing an action is NOT the same as doing it. A spoken sentence alone changes nothing; you must call the tool.",
-    "- For multi-step actions, call the appropriate tools multiple times in the same turn.",
+    "CRITICAL — Doing things in the game (only on a request directed at you):",
+    "- First decide whether the utterance was addressed to YOU (see \"Hearing vs. Being Asked\"). Tools that CHANGE something — drawing, writing, answering, selecting, placing, changing colors, restarting, clearing, saving, sharing — must ONLY run on a request clearly aimed at you. NEVER fire them because of overheard narration, self-talk, or ambient chatter.",
+    "- If it might be a request but you are not sure it was meant for you, or not sure exactly what they want, ask ONE short question (for example \"Should I draw that?\") instead of acting.",
+    "- When the child DID clearly ask you to do, make, draw, answer, or change something, you MUST call the matching tool immediately in that SAME turn. Do not just describe or promise it — the tool call is what changes the screen. Announcing an action is NOT the same as doing it.",
+    "- For a multi-step request, call the appropriate tools multiple times in the same turn.",
     "- Pass arguments exactly as each tool defines them.",
-    "- Only skip tool calls if the child is purely chatting and NOT requesting any game action.",
+    "- `read_game_state` and `analyze_game_state` only LOOK — they change nothing. Use them freely whenever they help you follow along or answer; they need no directed request.",
     "- Game command tool responses include the game state AFTER the command ran — use it to react (e.g. whether the answer was correct, what the new score is).",
     "",
     "Knowing the game state:",
@@ -328,6 +366,9 @@ function buildSnapshotCommandsDoc(input: GameContextInput): string[] {
 export function buildGameTextContext(
   input: GameContextInput,
 ): { systemInstruction: string } {
+  // No "Hearing vs. Being Asked" section here: typed chat is directed at dodi by
+  // construction (the child taps a message to send), so there is no ambient
+  // overheard speech to disambiguate. That section is voice-only.
   const shared = buildGameSharedInstruction(input);
 
   const systemInstruction = [

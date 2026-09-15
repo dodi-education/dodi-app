@@ -7,6 +7,7 @@ import { useTranslations } from "next-intl";
 
 import { Icon, type IconName } from "@/components/shared/icon";
 import { DodiCompact } from "@/components/dodi/dodi-compact";
+import { CompanionVolumeControl } from "@/components/kid/companion-volume-control";
 import { cn } from "@/lib/utils";
 import { clearParentUnlocked } from "@/lib/parent-lock";
 import { flushPlayOutbox } from "@/lib/games/play-sync";
@@ -219,6 +220,10 @@ export function KidChrome({
               <DodiCompact />
             </div>
           ) : null}
+          {/* Volume/mute is a global companion property, so it lives in the
+              header on every kid view — even where the dodi avatar is elsewhere
+              (full-mode game ≥ lg shows dodi in the side panel). */}
+          <CompanionVolumeControl />
         </div>
         <a
           href="/parent/dashboard"

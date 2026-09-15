@@ -48,6 +48,7 @@ export function DodiFullHome({
   hasProvider,
 }: DodiFullHomeProps) {
   const t = useTranslations("kid");
+  const tVoice = useTranslations("games");
 
   const { kids } = useKids();
   const kidName =
@@ -187,7 +188,11 @@ export function DodiFullHome({
             type="button"
             onClick={toggleActive}
             className={mascotButtonClass}
-            aria-label={dodiState === "active" ? "Mute dodi" : "Unmute dodi"}
+            aria-label={
+              dodiState === "active"
+                ? tVoice("voiceAriaStopListening")
+                : tVoice("voiceAriaStartListening")
+            }
           >
             <Image
               src={getDodiImage(dodiState, false)}

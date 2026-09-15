@@ -153,6 +153,7 @@ export async function buildHomeVoiceConfig(
 
   const { systemInstruction, tools } = buildHomeVoiceContext({
     personaSoul: persona.soul,
+    personaName: persona.name,
     childName: kid.display_name,
     childBirthdate: kid.birthdate,
     childLanguage: kid.language,
@@ -231,6 +232,7 @@ export async function buildGameVoiceConfig(
 
   const { systemInstruction, tools } = buildGameVoiceContext({
     personaSoul: persona.soul,
+    personaName: persona.name,
     childName: kid.display_name,
     childBirthdate: kid.birthdate,
     childLanguage: kid.language,

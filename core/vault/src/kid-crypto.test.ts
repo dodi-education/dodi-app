@@ -32,6 +32,7 @@ function baseKid(overrides: Partial<Kid>): Kid {
     incoming_friend_requests_require_parent_approval: true,
     outgoing_friend_requests_require_parent_approval: false,
     deafened_dodi_at: null,
+    muted_dodi_at: null,
     created_at: "now",
     updated_at: "now",
     ...overrides,

@@ -44,6 +44,7 @@ export async function runGameTextAssistant(
 
   const { systemInstruction } = buildGameTextContext({
     personaSoul: persona.soul,
+    personaName: persona.name,
     childName: kid.display_name,
     childBirthdate: kid.birthdate,
     childLanguage: kid.language,
