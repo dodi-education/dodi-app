@@ -104,7 +104,7 @@ export interface AiUsageLogs {
   cache_read_tokens: number | null;
   cache_write_tokens: number | null;
   created_at: Generated<Timestamp>;
-  event_type: "game_create" | "game_edit" | "game_analysis" | "game_text_generation" | "game_translation" | "memory_update" | "voice_minutes";
+  event_type: "game_create" | "game_edit" | "game_plan" | "game_analysis" | "game_text_generation" | "game_translation" | "memory_update" | "voice_minutes";
   game_id: string | null;
   id: Generated<string>;
   input_tokens: number | null;
