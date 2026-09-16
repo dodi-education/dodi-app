@@ -505,6 +505,17 @@ const stringOr = (value: unknown, fallback: string): string =>
 const stringArrayOr = (value: unknown, fallback: string[]): string[] =>
   Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : fallback;
 
+/**
+ * Some models double-escape newlines inside tool-call JSON string arguments, so the
+ * parsed `changeSummary` arrives with the literal two-character sequences `\n` / `\r\n`
+ * instead of real line breaks. Convert them back so the parent-facing build summary
+ * never shows a visible `\n`. Non-strings yield "".
+ */
+function normalizeChangeSummary(value: unknown): string {
+  if (typeof value !== "string") return "";
+  return value.replace(/(?:\\r)?\\n/g, "\n").trim();
+}
+
 export async function executeTool(
   toolName: string,
   toolInput: Record<string, unknown>,
@@ -516,8 +527,7 @@ export async function executeTool(
       const markdown = typeof toolInput.markdown === "string" ? toolInput.markdown : "";
       const title = typeof toolInput.title === "string" ? toolInput.title : "New Game";
       const description = typeof toolInput.description === "string" ? toolInput.description : "";
-      const changeSummary =
-        typeof toolInput.changeSummary === "string" ? toolInput.changeSummary : "";
+      const changeSummary = normalizeChangeSummary(toolInput.changeSummary);
       const tags = Array.isArray(toolInput.tags)
         ? toolInput.tags.filter((t): t is string => typeof t === "string")
         : [];
@@ -647,8 +657,7 @@ export async function executeTool(
         return toolError({ error: "Edits would leave the code empty — not applied." });
       }
 
-      const newSummary =
-        typeof toolInput.changeSummary === "string" ? toolInput.changeSummary.trim() : "";
+      const newSummary = normalizeChangeSummary(toolInput.changeSummary);
       const markdownParam = typeof toolInput.markdown === "string" ? toolInput.markdown : "";
 
       const writeResult: LastWriteResult = {

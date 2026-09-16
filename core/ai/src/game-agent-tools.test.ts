@@ -382,6 +382,19 @@ describe("executeTool edit_game_code", () => {
     expect(second.writeResult?.changeSummary).toBe("- faster\n- starts at 1");
   });
 
+  it("unescapes literal \\n sequences the model emits inside the change summary", async () => {
+    // Some models double-escape newlines in tool-call JSON string arguments, so
+    // the parsed summary arrives as one line with literal backslash-n between
+    // the bullets. The parent-facing summary must carry real line breaks.
+    const { writeResult } = await run({
+      edits: [edit("speed = 5", "speed = 6")],
+      changeSummary: "- Moved the start letter\\n- Placed the firefly\\n- Golden trail still begins",
+    });
+    expect(writeResult?.changeSummary).toBe(
+      "- Moved the start letter\n- Placed the firefly\n- Golden trail still begins",
+    );
+  });
+
   it("replaces the markdown only when the param is given", async () => {
     const replaced = await run({ edits: [edit("speed = 5", "speed = 6")], markdown: "# New" });
     expect(replaced.writeResult?.markdown).toBe("# New");
@@ -397,6 +410,23 @@ describe("executeTool edit_game_code", () => {
     expect(writeResult?.title).toBe("New Game");
     expect(writeResult?.tags).toEqual([]);
     expect(writeResult?.capabilities).toEqual([]);
+  });
+});
+
+describe("executeTool write_game_code change summary", () => {
+  it("unescapes literal \\n sequences the model emits inside the change summary", async () => {
+    const { writeResult } = await executeTool(
+      "write_game_code",
+      {
+        code: "<html></html>",
+        markdown: "# Game",
+        title: "Maze",
+        capabilities: [],
+        changeSummary: "- Added a maze\\n- Added a firefly",
+      },
+      {},
+    );
+    expect(writeResult?.changeSummary).toBe("- Added a maze\n- Added a firefly");
   });
 });
 

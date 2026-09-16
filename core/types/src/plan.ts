@@ -3,10 +3,12 @@
  * game idea with the plan agent before any code is written.
  *
  * A plan is deliberately just prose: a parent-facing, non-technical summary of
- * the game's mechanics that the parent can read, edit and approve. It is never
- * persisted as its own column — the accepted plan travels as the first user
- * turn of the build conversation (sealed in `games.agent_transcript_enc`), so
- * the AI reads it as the briefing it is rather than as a serialized record.
+ * the game's mechanics that the parent can read, edit and approve. While the
+ * game is still being planned it lives in the sealed `games.plan_enc` envelope
+ * (with the sketch/photo it refers to) so the parent can leave and come back;
+ * once accepted it travels as the first user turn of the build conversation
+ * (sealed in `games.agent_transcript_enc`), so the AI reads it as the briefing
+ * it is rather than as a serialized record.
  */
 
 export interface GamePlan {

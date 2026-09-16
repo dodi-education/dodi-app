@@ -52,6 +52,8 @@ export interface GameListItem {
   sharing: GameSharingState;
   /** Dodi has written real code (not the unbuilt placeholder) — publishable. */
   built: boolean;
+  /** Still on the studio's Plan step (games.plan_enc set): no settings saved yet. */
+  isPlanning: boolean;
   /** Decrypted 100×100 list preview; null falls back to the tag tile. */
   previewImage: string | null;
   /** Times this game has been played (this row's game_plays). */
@@ -181,7 +183,11 @@ export function GameStudioList({ items, onDelete }: GameStudioListProps) {
                   <span className="truncate text-sm font-semibold text-ink-1 transition-colors group-hover:text-primary">
                     {g.title}
                   </span>
-                  {g.isActive ? (
+                  {g.isPlanning ? (
+                    <span className="shrink-0 rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-semibold text-primary">
+                      {t("planning")}
+                    </span>
+                  ) : g.isActive ? (
                     <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-semibold text-primary">
                       <span className="h-[7px] w-[7px] rounded-full bg-primary" />
                       {t("active")}

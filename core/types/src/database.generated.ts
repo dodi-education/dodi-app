@@ -310,6 +310,10 @@ export interface Games {
   markdown: Generated<string>;
   metadata: Generated<Json>;
   /**
+   * E2EE enc:v1: JSON envelope of the studio Plan step (plan summary, accepted flag, sketch/photo), sealed under the account VMK. Non-NULL = the game is still being planned; cleared when the settings are saved. Server cannot decrypt.
+   */
+  plan_enc: string | null;
+  /**
    * E2EE enc:v1: under the account VMK for private games; plaintext path/data URL for system games and publication copies. Server cannot decrypt.
    */
   preview_image: string | null;

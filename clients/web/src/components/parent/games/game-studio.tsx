@@ -33,7 +33,22 @@ import { locales } from "@/i18n/config";
 import { tagStyle } from "@/components/parent/games/tag-style";
 import { CodeViewer } from "@/components/parent/games/code-viewer";
 import { AgeRange, isValidAgeRange } from "@/components/parent/games/age-range";
-import { PlanStage, type PlanMode } from "@/components/parent/games/plan-stage";
+import { PlanActionRow, PlanEmptyActions } from "@/components/parent/games/plan-chat-actions";
+import { PlanSketchSurface } from "@/components/parent/games/plan-sketch-surface";
+import {
+  type DraftView,
+  EMPTY_PLANNING,
+  type PlanningState,
+  resolveInitialView,
+  restorePlanning,
+} from "@/components/parent/games/plan-state";
+import { PlanSurface } from "@/components/parent/games/plan-surface";
+import { ReferenceImageSheet } from "@/components/parent/games/reference-image-sheet";
+import type { SketchStroke } from "@/components/parent/games/sketch-strokes";
+import {
+  resolveStudioPanes,
+  type PlanSurface as PlanSurfaceKind,
+} from "@/components/parent/games/studio-panes";
 import { RichText } from "@/components/parent/games/rich-text";
 import { useTagLabel } from "@/lib/games/tag-label";
 import { cn } from "@/lib/utils";
@@ -130,6 +145,8 @@ export interface StudioGame {
   previewImage: string | null;
   /** enc:v1: sealed prior studio conversation, restored on re-entry. */
   agentTranscriptEnc?: string | null;
+  /** enc:v1: sealed Plan-step state; set while the game is still being planned. */
+  planEnc?: string | null;
 }
 
 /** The stage's three tabs. Doubles as the `/game-studio/{id}/{tab}` segment. */
@@ -141,13 +158,11 @@ export function isStudioView(value: string | undefined): value is StudioView {
   return value !== undefined && STUDIO_VIEWS.includes(value as StudioView);
 }
 
-/**
- * What the stage can show. "plan" is the brainstorming step and exists only
- * while the game is still a draft, so it is deliberately NOT a StudioView: it
- * has no id yet and therefore no URL, and `/game-studio/{id}/plan` falls back
- * to the default tab like any other unknown segment.
- */
-type DraftView = StudioView | "plan";
+// What the stage can show is `DraftView` (plan-state.ts): the three tabs, plus
+// "plan" while the game is still being planned. "plan" is deliberately NOT a
+// StudioView: it has no tab URL — `/game-studio/{id}/plan` falls back to the
+// default tab like any other unknown segment, and the studio reopens on the
+// Plan step from the persisted envelope instead.
 
 interface GameStudioProps {
   initialGame?: StudioGame;
@@ -177,10 +192,19 @@ const SIDE_DEFAULT = 384;
 const COMPOSER_MIN = 60;
 const COMPOSER_MAX = 520;
 const COMPOSER_DEFAULT = 150;
+/** One line of the composer (14.5px text at leading-normal, plus its padding).
+ *  The sketch surface shrinks the input to this so the canvas gets the screen. */
+const COMPOSER_ONE_LINE = 28;
+/** How far the composer may grow back on a plan surface, once there is text to
+ *  read. Well under the resizable height, which the canvas and the plan need
+ *  more than the input does. */
+const COMPOSER_SURFACE_MAX = 96;
 /** Max reference images a single message can carry. */
 const MAX_ATTACHMENTS = 3;
 /** Sealed-transcript guard: only this many trailing messages keep their images. */
 const TRANSCRIPT_IMAGE_MESSAGES = 6;
+/** How long the Plan step waits after a change before re-sealing it onto the row. */
+const PLANNING_PERSIST_DELAY_MS = 800;
 /** Square edge of the game-list preview the generated image is cropped to. */
 const PREVIEW_IMAGE_SIZE = 100;
 
@@ -221,6 +245,16 @@ async function readError(res: Response): Promise<string> {
   } catch {
     return `HTTP ${res.status}`;
   }
+}
+
+/**
+ * The studio URL for a game and a stage view. The Plan step has no tab
+ * segment (see DraftView), so it maps to the bare game URL.
+ */
+function studioUrl(gameId: string, view: DraftView): string {
+  return view === "plan"
+    ? `/parent/game-studio/${gameId}`
+    : `/parent/game-studio/${gameId}/${view}`;
 }
 
 /** Read a persisted panel size from localStorage, clamped to [min, max]. */
@@ -276,9 +310,19 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     return () => setLeaf(null);
   }, [game.title, setLeaf, t]);
 
-  // A brand-new game opens on the Plan step; an existing one on its preview.
-  const [view, setViewState] = useState<DraftView>(
-    initialView ?? (initialGame?.id ? "preview" : "plan"),
+  // The persisted Plan step, unsealed once on mount (plan-state.ts). Null for
+  // a brand-new game (nothing persisted yet) and for a game past planning.
+  const [restoredPlanning] = useState<PlanningState | null>(() =>
+    restorePlanning(initialGame?.planEnc, useVaultStore.getState().session),
+  );
+  // A planning draft reopens where the parent left off (the Plan step, or the
+  // settings once the plan was accepted); an existing game on its preview.
+  const [view, setViewState] = useState<DraftView>(() =>
+    resolveInitialView({
+      initialView,
+      hasId: Boolean(initialGame?.id),
+      planning: restoredPlanning,
+    }),
   );
 
   /**
@@ -287,17 +331,18 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
    * re-rendering this route would remount the studio and take the live chat
    * thread, a running agent build and the mounted sandbox with it. Replacing
    * (not pushing) also keeps Back meaning "leave the studio" rather than
-   * unwinding a trail of tab switches. A draft has no id and so no URL yet.
+   * unwinding a trail of tab switches. A brand-new game has no id and so no
+   * URL yet.
    *
-   * Keyed on the LIVE id, not `initialGame`: saving a planned draft adopts its
-   * new id in place (see saveSettings) instead of remounting the studio.
+   * Keyed on the LIVE id, not `initialGame`: the first plan turn (and the
+   * settings save of an unplanned draft) adopt the new id in place instead of
+   * remounting the studio.
    */
   const setView = (next: DraftView): void => {
     setViewState(next);
     const gameId = gameIdRef.current;
-    // "plan" only exists for a draft, so it never has a URL to mirror into.
-    if (gameId && next !== "plan" && typeof window !== "undefined") {
-      window.history.replaceState(null, "", `/parent/game-studio/${gameId}/${next}`);
+    if (gameId && typeof window !== "undefined") {
+      window.history.replaceState(null, "", studioUrl(gameId, next));
     }
   };
 
@@ -307,7 +352,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
   useEffect(() => {
     const gameId = initialGame?.id;
     if (!gameId) return;
-    const canonical = `/parent/game-studio/${gameId}/${view}`;
+    const canonical = studioUrl(gameId, view);
     if (window.location.pathname !== canonical) {
       window.history.replaceState(null, "", canonical);
     }
@@ -354,25 +399,38 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
   const [justSaved, setJustSaved] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // ----- Plan step (drafts only) -----------------------------------------
+  // ----- Plan step -------------------------------------------------------
+  // Still on the Plan step: a brand-new game, or a persisted planning draft
+  // (games.plan_enc set) reopened where the parent left off. Saving the
+  // settings is what ends planning.
+  const [isPlanning, setIsPlanning] = useState(
+    () => !initialGame?.id || restoredPlanning !== null,
+  );
+  const planning0 = restoredPlanning ?? EMPTY_PLANNING;
   // Which inspiration surface is open, and the image each one holds. Both are
   // kept so switching back and forth never throws work away; the one from the
   // open surface is what dodi sees.
-  const [planMode, setPlanMode] = useState<PlanMode>("draw");
-  const [sketchImage, setSketchImage] = useState<string | null>(null);
-  const [photoImage, setPhotoImage] = useState<string | null>(null);
+  const [planMode, setPlanMode] = useState<"draw" | "photo">(planning0.mode);
+  const [sketchImage, setSketchImage] = useState<string | null>(planning0.sketchImage);
+  const [photoImage, setPhotoImage] = useState<string | null>(planning0.photoImage);
+  // The sketch itself lives here, not in the pad: on a phone the pad is mounted
+  // only while its surface is open, and a rotation swaps one pad for another.
+  const [sketchStrokes, setSketchStrokes] = useState<SketchStroke[]>(planning0.sketchStrokes);
   // The summary on the table: dodi's proposal, or the parent's edit of it.
-  const [planDraft, setPlanDraft] = useState("");
+  const [planDraft, setPlanDraft] = useState(planning0.summary);
   const [isEditingPlan, setIsEditingPlan] = useState(false);
   // The approved text. Non-null ⇒ saving the draft starts the build with it.
-  const [acceptedPlan, setAcceptedPlan] = useState<string | null>(null);
+  const [acceptedPlan, setAcceptedPlan] = useState<string | null>(
+    planning0.isAccepted ? planning0.summary : null,
+  );
   const [isDerivingSettings, setIsDerivingSettings] = useState(false);
   // A sketch/photo the parent has not shown dodi yet — it rides the next message.
   const [hasUnsentPlanImage, setHasUnsentPlanImage] = useState(false);
-  // The build to start once the draft's id lands (see saveSettings).
+  // The build to start once the settings are saved (see saveSettings).
   const pendingAutoBuildRef = useRef<{ text: string; images: string[] } | null>(null);
-  // This studio adopted its id in place rather than being remounted by the
-  // router — the successful build hands the route over instead of refreshing.
+  // This studio adopted its id in place (the first plan turn, or the settings
+  // save of an unplanned draft) rather than being remounted by the router —
+  // the successful save/build hands the route over instead of refreshing.
   const adoptedIdRef = useRef(false);
   // In-flight state for the header's active/inactive auto-save toggle.
   const [togglingActive, setTogglingActive] = useState(false);
@@ -417,6 +475,16 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
   const [mtab, setMtab] = useState<"game" | "chat">(
     initialGame?.id ? "chat" : "game",
   );
+  // What the Plan step shows besides the conversation. On a phone the surface
+  // takes the thread's place; side by side it takes the stage next to the chat.
+  const [planSurface, setPlanSurface] = useState<PlanSurfaceKind>("chat");
+  // "Take a photo" opens the camera straight from the chat pane. While planning
+  // the photo sends itself for reading; otherwise it is staged like an upload.
+  const cameraInputRef = useRef<HTMLInputElement | null>(null);
+  // The composer's image button offers the ways in: camera, file, sketch. The
+  // sheet opens over the composer block, so it needs the block's footprint.
+  const [attachSheetOpen, setAttachSheetOpen] = useState(false);
+  const composerRef = useRef<HTMLDivElement | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
   // Handle into the always-mounted preview sandbox (edit-time screenshots).
   const sandboxRef = useRef<GameSandboxHandle | null>(null);
@@ -425,26 +493,37 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
   // The in-flight build's abort handle — drives Stop + navigation guards.
   const abortRef = useRef<AbortController | null>(null);
 
-  const isDraft = !game.id;
-  // The Plan step is the one place a draft may talk to dodi: it brainstorms the
-  // idea, it does not build anything, so it needs no game row.
-  const isPlanMode = isDraft && view === "plan";
-  // Building is locked until a draft has been persisted (new-game hard gate):
-  // the parent fills mandatory settings + saves, which mints the game id.
-  const locked = isDraft && !isPlanMode;
+  // The Plan step is the one place a planning draft may talk to dodi: it
+  // brainstorms the idea, it does not build anything.
+  const isPlanMode = isPlanning && view === "plan";
+  // Building is locked until the settings are saved (new-game hard gate): that
+  // is what ends planning, and for an unplanned draft it also mints the id.
+  const locked = isPlanning && !isPlanMode;
+  const hasPlan = planDraft.trim().length > 0;
+  // On a phone the Plan step IS the chat pane: no Game/dodi switch, and the
+  // sketch and the plan open over the thread instead of on the other tab. A
+  // surface there carries its own header and needs the height for its content,
+  // so the pane's chrome steps aside: no dodi header, no footer line, and the
+  // composer drops to a single line until there is something typed in it.
+  const isMobilePlan = vertical && isPlanMode;
+  const mobileSurfaceOpen = isMobilePlan && planSurface !== "chat";
+  const panes = resolveStudioPanes({ vertical, locked, isPlanMode, mtab, planSurface });
+  // Side by side, the Plan step's chat spans the studio until a surface takes
+  // the stage; then the chat is the sidebar again.
+  const chatFullscreen = !vertical && panes.showChat && !panes.showMain;
 
   // Pin the thread to the latest turn on resume, after each turn, and when the
-  // chat pane becomes visible (mobile tab switch / draft unlock). Measuring
-  // while hidden yields scrollHeight 0, so skip until the pane is shown.
+  // chat pane becomes visible (mobile tab switch / draft unlock / a plan
+  // surface closing). Measuring while hidden yields scrollHeight 0, so skip
+  // until the thread is actually on screen.
   useEffect(() => {
-    if (locked) return;
-    if (vertical && mtab !== "chat") return;
+    if (!panes.showChat || mobileSurfaceOpen) return;
     const el = threadRef.current;
     if (!el) return;
     requestAnimationFrame(() => {
       el.scrollTop = el.scrollHeight;
     });
-  }, [messages, thinking, narration, writeChars, mtab, locked, vertical]);
+  }, [messages, thinking, narration, writeChars, panes.showChat, mobileSurfaceOpen]);
 
   // Building/editing a game is a complex task that requires an explicitly
   // configured Game generation model. Without one we lock the composer (just
@@ -610,6 +689,171 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
       body: JSON.stringify({ agent_transcript_enc }),
     });
   };
+
+  // ----- Plan step persistence -------------------------------------------
+  // Once the parent has talked to the plan agent the draft is worth keeping:
+  // the first turn creates the game row (adopting its id in place, like a
+  // planned save does) and every later change to the thread, the plan or the
+  // sketch/photo re-seals the Plan-step envelope onto it (games.plan_enc). So
+  // the parent can leave mid-planning and pick up where they left off.
+  //
+  // Writes read the latest state through refs (they run from timers, after
+  // the render that changed something), are debounced so a burst of strokes
+  // costs one upload, and run one at a time so the create always lands before
+  // the first patch.
+  const planningRef = useRef<PlanningState>(EMPTY_PLANNING);
+  const messagesRef = useRef(messages);
+  const gameRef = useRef(game);
+  useEffect(() => {
+    planningRef.current = {
+      summary: planDraft,
+      isAccepted: acceptedPlan !== null,
+      mode: planMode,
+      sketchImage,
+      photoImage,
+      sketchStrokes,
+    };
+    messagesRef.current = messages;
+    gameRef.current = game;
+  });
+  const planningDirtyRef = useRef(false);
+  // The write loop in flight, so a settings save can wait for it: a planning
+  // write landing after the save would resurrect the envelope it just cleared.
+  const planningInflightRef = useRef<Promise<void> | null>(null);
+
+  const persistPlanningNow = async (): Promise<void> => {
+    const session = useVaultStore.getState().session;
+    if (!session) return;
+    const transcript = messagesRef.current;
+    const current = gameRef.current;
+    const planningState = planningRef.current;
+    const agentTranscriptEnc =
+      transcript.length > 0 ? session.encryptJson(sealableTranscript(transcript)) : null;
+    const planEnc = session.encryptJson(planningState);
+
+    const id = gameIdRef.current;
+    if (id) {
+      // An accepted plan also carries the settings derived from it, so a
+      // parent who leaves before saving finds the form filled in on return.
+      const derived = planningState.isAccepted
+        ? {
+            ...(await sealGameFields({
+              title: current.title,
+              learning_goal: current.learningGoal,
+              success_definition: current.successDefinition,
+            })),
+            tags: current.tags,
+            ...(isValidAgeRange(current.targetAgeMin, current.targetAgeMax)
+              ? { target_age_min: current.targetAgeMin, target_age_max: current.targetAgeMax }
+              : {}),
+            metadata: { perspective: current.perspective },
+          }
+        : {};
+      const res = await dodi.request(`/api/games/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...derived,
+          agent_transcript_enc: agentTranscriptEnc,
+          plan_enc: planEnc,
+        }),
+      });
+      if (!res.ok) throw new Error(await readError(res));
+      useGameStore.getState().put(await decryptGameResponse((await res.json()) as Game));
+      return;
+    }
+
+    // First turn: create the row. Mirrors the settings save of a brand-new
+    // game (sealed placeholder bundle, inactive, whole family) minus the
+    // settings themselves, which the parent has not filled in yet. Without a
+    // kid to own the row there is nothing to attach it to — planning simply
+    // stays in the browser, as it did before.
+    const kidId = current.isFamily ? (kids[0]?.id ?? null) : (current.audienceIds[0] ?? null);
+    if (!kidId) return;
+    const sealed = await sealGameCreateFields({
+      title: current.title.trim(),
+      codeBundle: UNBUILT_GAME_PLACEHOLDER,
+    });
+    const res = await dodi.request("/api/games", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        kidId,
+        ...sealed,
+        targetAgeMin: current.targetAgeMin,
+        targetAgeMax: current.targetAgeMax,
+        isActive: false,
+        audience: { isFamily: current.isFamily, audienceIds: current.audienceIds },
+        ...(agentTranscriptEnc ? { agentTranscriptEnc } : {}),
+        planEnc,
+      }),
+    });
+    if (!res.ok) throw new Error(await readError(res));
+    const data = (await res.json()) as { id: string };
+    useGameStore.getState().invalidate();
+    // Adopt the id in place: a navigation would remount the studio and take
+    // the live thread, the sketch and a running plan turn with it. The URL is
+    // corrected here; the route is handed over once the settings are saved.
+    adoptedIdRef.current = true;
+    gameIdRef.current = data.id;
+    setGame((g) => ({ ...g, id: data.id }));
+    window.history.replaceState(null, "", studioUrl(data.id, "plan"));
+  };
+
+  // Drain the dirty flag: one write at a time, and again if anything changed
+  // while a write was in flight. A failed write is reported once and the
+  // state stays in the browser — the next change tries again.
+  const flushPlanning = async (): Promise<void> => {
+    if (planningInflightRef.current) return;
+    const run = (async () => {
+      while (planningDirtyRef.current) {
+        planningDirtyRef.current = false;
+        try {
+          await persistPlanningNow();
+        } catch (err) {
+          console.error("[game-studio] persisting the plan draft failed", err);
+          const reason = err instanceof Error ? err.message : "";
+          setError(reason ? t("saveFailed", { reason }) : t("saveFailedGeneric"));
+          reportErrorLog({
+            context: "game_save",
+            kidId: primaryKidId,
+            gameId: gameIdRef.current,
+            ...describeError(err, []),
+          });
+        }
+      }
+    })();
+    planningInflightRef.current = run;
+    try {
+      await run;
+    } finally {
+      planningInflightRef.current = null;
+    }
+  };
+  const flushPlanningRef = useRef(flushPlanning);
+  useEffect(() => {
+    flushPlanningRef.current = flushPlanning;
+  });
+
+  // Mark the Plan step dirty on every change once there has been an
+  // interaction (a message in the thread), and write it out after a pause.
+  // Past planning the envelope is gone (cleared by the settings save) and
+  // nothing here runs again.
+  useEffect(() => {
+    if (!isPlanning || messages.length === 0) return;
+    planningDirtyRef.current = true;
+    const timer = setTimeout(() => void flushPlanningRef.current(), PLANNING_PERSIST_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [isPlanning, messages, planDraft, acceptedPlan, planMode, sketchImage, photoImage, sketchStrokes]);
+
+  // Leaving the studio (a client-side navigation) flushes a pending write —
+  // the request outlives the component, the state lives on the server.
+  useEffect(
+    () => () => {
+      if (planningDirtyRef.current) void flushPlanningRef.current();
+    },
+    [],
+  );
 
   // Persist a completed build — game fields + sealed transcript, no provider key
   // (generation already happened in the browser). The studio always has a game id
@@ -1040,6 +1284,10 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     }
     setError(null);
     setDraft("");
+    // Every plan turn is answered in the thread. On a phone a surface hides
+    // it, so leave whichever one the parent started from (sketch, plan); side
+    // by side the thread is in view anyway and the surface can stay.
+    if (vertical) setPlanSurface("chat");
 
     // The sketch/photo rides along the first message after it changed; later
     // turns refer back to it through the conversation.
@@ -1102,6 +1350,9 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
       if (result.plan) {
         setPlanDraft(result.plan.summary);
         setIsEditingPlan(false);
+        // Side by side there is room to put the plan on the stage as it
+        // arrives; on a phone it would cover the reply, so the pill waits.
+        if (!vertical) setPlanSurface("plan");
       }
 
       const ctxSizes = measureLearningContext(
@@ -1112,8 +1363,8 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
       reportUsage({
         eventType: "game_plan",
         kidId: primaryKidId,
-        // No game row exists yet — planning happens before the draft is saved.
-        gameId: null,
+        // Null on the very first turn: the row is created right after it.
+        gameId: gameIdRef.current,
         provider: gameCfg.provider,
         model: gameCfg.model,
         usage: result.usage,
@@ -1136,7 +1387,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
         reportErrorLog({
           context: "game_plan",
           kidId: primaryKidId,
-          gameId: null,
+          gameId: gameIdRef.current,
           provider: gameCfg?.provider,
           model: gameCfg?.model,
           ...describeError(err, gameCfg ? [gameCfg.apiKey] : []),
@@ -1152,7 +1403,23 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     }
   }
 
-  /** Stage a photo of a real-world task and have dodi read it straight away. */
+  /**
+   * Put a plan image (sketch or photo) into the composer, staged as an
+   * attachment. Opening the conversation with it also fills in the matching
+   * request as the message text, so the parent reads and adjusts what dodi is
+   * asked before sending; once the conversation is under way the image just
+   * joins whatever the parent writes next. Typed text is never overwritten.
+   */
+  const stagePlanImage = (
+    image: string,
+    promptKey: "planAnalyzePhotoPrompt" | "planAnalyzeSketchPrompt",
+  ): void => {
+    setPendingImages((prev) => capImages(prev, [image], MAX_ATTACHMENTS));
+    setHasUnsentPlanImage(false);
+    if (messages.length === 0) setDraft((d) => (d.trim() ? d : t(promptKey)));
+  };
+
+  /** Stage a photo of a real-world task for dodi to read. */
   const onPhotoPicked = async (file: File): Promise<void> => {
     if (!file.type.startsWith("image/")) return;
     try {
@@ -1164,11 +1431,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
       });
       if (!small) return;
       setPhotoImage(small);
-      setHasUnsentPlanImage(false);
-      // On a phone the plan pane and the chat are separate tabs — follow the
-      // answer over to where it appears.
-      if (vertical) setMtab("chat");
-      await sendPlanMessage(t("planAnalyzePhotoPrompt"), [small]);
+      stagePlanImage(small, "planAnalyzePhotoPrompt");
     } catch {
       /* unreadable file — the parent can pick another */
     }
@@ -1179,14 +1442,12 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     setHasUnsentPlanImage(Boolean(dataUrl));
   };
 
-  /** "Describe my sketch" / "Analyze this photo" — an explicit look at the image. */
-  const describePlanImage = (): void => {
-    if (!planImage) return;
-    if (vertical) setMtab("chat");
-    void sendPlanMessage(
-      t(planMode === "draw" ? "planAnalyzeSketchPrompt" : "planAnalyzePhotoPrompt"),
-      [planImage],
-    );
+  /** "Attach to chat" on the sketch surface. On a phone the composer is behind
+   *  the surface, so the surface closes to show the staged sketch. */
+  const attachSketch = (): void => {
+    if (!sketchImage) return;
+    stagePlanImage(sketchImage, "planAnalyzeSketchPrompt");
+    if (vertical) setPlanSurface("chat");
   };
 
   /**
@@ -1216,7 +1477,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
             reportUsage({
               eventType: "game_plan",
               kidId: primaryKidId,
-              gameId: null,
+              gameId: gameIdRef.current,
               provider: gameCfg.provider,
               model: gameCfg.model,
               usage,
@@ -1241,6 +1502,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
       setIsDerivingSettings(false);
       setAcceptedPlan(text);
       setIsEditingPlan(false);
+      setPlanSurface("chat");
       setView("settings");
     }
   }
@@ -1248,7 +1510,27 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
   /** Skip planning: the draft carries no plan, so saving behaves as it always did. */
   const skipPlan = (): void => {
     setAcceptedPlan(null);
+    setPlanSurface("chat");
     setView("settings");
+  };
+
+  /** Draw the screen you imagine — the sketch takes over the thread area. */
+  const openSketchSurface = (): void => {
+    setPlanMode("draw");
+    setPlanSurface("sketch");
+  };
+
+  /** Photograph a worksheet: the camera opens, and the photo sends itself. */
+  const openPlanCamera = (): void => {
+    setPlanMode("photo");
+    cameraInputRef.current?.click();
+  };
+
+  /** The camera from the composer: the plan's photo while planning, an
+   *  attachment for the next message otherwise. */
+  const openCamera = (): void => {
+    if (isPlanMode) openPlanCamera();
+    else cameraInputRef.current?.click();
   };
 
   /** Extra inputs for a build the studio starts itself (the accepted plan). */
@@ -1676,7 +1958,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     // (Server schemas stay permissive so voice/system game creation, which has
     // no parent goal, still works.)
     const nextInvalid = {
-      title: !game.id && !game.title.trim(),
+      title: isPlanning && !game.title.trim(),
       learningGoal: !game.learningGoal.trim(),
       audience: !primaryKidId,
       age: !isValidAgeRange(game.targetAgeMin, game.targetAgeMax),
@@ -1690,7 +1972,12 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     setError(null);
     setSaving(true);
     try {
-      if (game.id) {
+      // Let a planning write in flight land first (it may be the very create
+      // that mints the id), and never queue another: this save ends planning.
+      planningDirtyRef.current = false;
+      await planningInflightRef.current;
+      const gameId = gameIdRef.current;
+      if (gameId) {
         // Map the success definition to structured criteria IN THE BROWSER (the
         // provider key stays in the vault); send only the mapped result. With no
         // provider configured (or on a mapping error) we persist the text and
@@ -1721,7 +2008,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
             ? { success_criteria: mappedCriteria.success_criteria as Json }
             : {}),
         });
-        const res = await dodi.request(`/api/games/${game.id}`, {
+        const res = await dodi.request(`/api/games/${gameId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -1740,12 +2027,43 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
               generatePreviewImage: game.generatePreviewImage,
             },
             audience: { isFamily: game.isFamily, audienceIds: game.audienceIds },
+            // Saving the settings ends planning: the envelope goes, the row
+            // becomes a plain draft (or, with an accepted plan, a build).
+            ...(isPlanning ? { plan_enc: null } : {}),
           }),
         });
         if (!res.ok) throw new Error(await readError(res));
         useGameStore
           .getState()
           .put(await decryptGameResponse((await res.json()) as Game));
+
+        if (isPlanning) {
+          // Nothing left to persist from the Plan step; drop a queued write so
+          // it cannot resurrect the envelope after this save.
+          planningDirtyRef.current = false;
+          setIsPlanning(false);
+          if (acceptedPlan) {
+            // A plan was agreed, so this save IS the start of the build (the
+            // effect below starts it once the chat is unlocked).
+            pendingAutoBuildRef.current = {
+              text: `${t("planBuildIntro")}\n\n${acceptedPlan}`,
+              images: planImage ? [planImage] : [],
+            };
+            setViewState("preview");
+            window.history.replaceState(null, "", studioUrl(gameId, "preview"));
+            if (vertical) setMtab("chat");
+            return;
+          }
+          if (adoptedIdRef.current) {
+            // The row was created by the first plan turn while the router
+            // still points at /game-studio/new. Everything is persisted now,
+            // so hand the route over to the game's own page (which is where
+            // an unplanned draft's save always landed).
+            adoptedIdRef.current = false;
+            router.replace(studioUrl(gameId, "preview"));
+            return;
+          }
+        }
       } else {
         // Persist a new game straight from settings (no build required). With no
         // code yet we seal the placeholder ourselves — the server can't write
@@ -1788,6 +2106,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
         if (!res.ok) throw new Error(await readError(res));
         const data = (await res.json()) as { id: string };
         useGameStore.getState().invalidate();
+        setIsPlanning(false);
 
         if (acceptedPlan) {
           // A plan was agreed, so this save IS the start of the build. Adopt the
@@ -1824,17 +2143,18 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     }
   }
 
-  // Start the build queued by an accepted plan, once the adopted id is live.
-  // Deliberately an effect and not a call inside saveSettings: send() reads
-  // game.id from its closure, which is still null in the render that saved.
+  // Start the build queued by an accepted plan, once the id is live and the
+  // chat is unlocked. Deliberately an effect and not a call inside
+  // saveSettings: send() reads game.id and the lock from its closure, which
+  // are still the pre-save values in the render that saved.
   useEffect(() => {
     const pending = pendingAutoBuildRef.current;
-    if (!pending || !game.id) return;
+    if (!pending || !game.id || isPlanning) return;
     pendingAutoBuildRef.current = null;
     void send(pending.text, { images: pending.images, isAgreedPlan: true });
-    // Fires exactly once per id adoption; send() is stable enough for this.
+    // Fires exactly once per save; send() is stable enough for this.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [game.id]);
+  }, [game.id, isPlanning]);
 
   // Flip the game's active state straight from the studio header — an optimistic
   // auto-save so parents can activate/deactivate without opening settings. The
@@ -1873,13 +2193,6 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     t("starterDrawing"),
   ];
 
-  // Planning openers: what to talk about before there is anything to build.
-  const planStarters = [
-    t("planStarterIdea"),
-    t("planStarterSubject"),
-    t("planChipPersonalize"),
-  ];
-
   // In the Plan step dodi is a brainstorming partner, not a builder — the
   // progress steps belong to a build and never fire here.
   const statusText = isPlanMode
@@ -1899,14 +2212,51 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     -1,
   );
 
+  // The Plan step's surfaces are the same on every layout; only where they
+  // render differs (the stage side by side, the chat pane on a phone).
+  const renderPlanSurface = (): React.ReactNode => {
+    if (planSurface === "sketch") {
+      return (
+        <PlanSketchSurface
+          strokes={sketchStrokes}
+          onStrokesChange={setSketchStrokes}
+          onChange={onSketchChange}
+          onAttach={attachSketch}
+          onBack={() => setPlanSurface("chat")}
+          isBusy={thinking}
+          t={t}
+        />
+      );
+    }
+    if (planSurface === "plan") {
+      return (
+        <PlanSurface
+          onBack={() => setPlanSurface("chat")}
+          planDraft={planDraft}
+          isEditingPlan={isEditingPlan}
+          onPlanDraftChange={setPlanDraft}
+          onToggleEdit={() => setIsEditingPlan((v) => !v)}
+          onAccept={() => void acceptPlan()}
+          onSkip={skipPlan}
+          onPersonalize={() => void sendPlanMessage(t("planChipPersonalize"))}
+          isBusy={thinking}
+          isDerivingSettings={isDerivingSettings}
+          t={t}
+        />
+      );
+    }
+    return null;
+  };
+
   return (
     <div
       className="fixed inset-x-0 top-[60px] bottom-0 z-30 flex flex-col border-t border-border bg-background wide:top-[72px] wide:left-56"
       data-screen-label={editing ? "Parent — Edit game" : "Parent — New game"}
     >
       {/* Mobile tab bar (vertical layout only; hidden while the Dodi pane is
-          gated away — a draft past the Plan step and before its first save). */}
-      {vertical && !locked && (
+          gated away — a draft past the Plan step and before its first save —
+          and during the Plan step, which owns the whole screen). */}
+      {panes.showTabBar && (
         <div className="flex flex-shrink-0 gap-1 border-b border-border bg-card px-3 py-2">
           <StudioTab
             active={mtab === "game"}
@@ -1936,15 +2286,22 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
             // min-w-0: let a wide Code view scroll inside the pane instead of
             // widening it and squeezing the Dodi sidebar.
             "flex min-h-0 min-w-0 flex-1 flex-col bg-background",
-            vertical && mtab !== "game" && "hidden",
+            !panes.showMain && "hidden",
           )}
         >
-          <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border bg-card px-4 py-2.5 md:px-5">
+          <div
+            className={cn(
+              "flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border bg-card px-4 py-2.5 md:px-5",
+              // The Plan step's surfaces bring their own header; the stage
+              // switch returns once the plan is accepted or skipped.
+              isPlanMode && "hidden",
+            )}
+          >
             {/* One switch for the whole stage — Preview / Code / Settings (the
                 settings gear folded in as a tab), plus Plan while the game is
                 still a draft. */}
             <div className="inline-flex gap-0.5 rounded-[10px] border border-border bg-background p-[3px]">
-              {isDraft && (
+              {isPlanning && (
                 <SegTab active={view === "plan"} onClick={() => setView("plan")} icon="pencil" label={t("plan")} />
               )}
               <SegTab active={view === "settings"} onClick={() => setView("settings")} icon="settings" label={t("settings")} />
@@ -2097,33 +2454,10 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
                   <EmptyStage title={t("codeEmpty")} icon="code" />
                 </div>
               ))}
-            {view === "plan" && (
-              <PlanStage
-                mode={planMode}
-                onModeChange={setPlanMode}
-                sketchImage={sketchImage}
-                photoImage={photoImage}
-                onSketchChange={onSketchChange}
-                onPhotoPicked={(file) => void onPhotoPicked(file)}
-                onRemovePhoto={() => {
-                  setPhotoImage(null);
-                  setHasUnsentPlanImage(false);
-                }}
-                onDescribeImage={describePlanImage}
-                planDraft={planDraft}
-                isEditingPlan={isEditingPlan}
-                onPlanDraftChange={setPlanDraft}
-                onToggleEdit={() => setIsEditingPlan((v) => !v)}
-                onAccept={() => void acceptPlan()}
-                onSkip={skipPlan}
-                onPersonalize={() => {
-                  if (vertical) setMtab("chat");
-                  void sendPlanMessage(t("planChipPersonalize"));
-                }}
-                isBusy={thinking}
-                isDerivingSettings={isDerivingSettings}
-                t={t}
-              />
+            {/* Side by side, a plan surface takes the stage (on a phone it
+                renders inside the chat pane instead, see below). */}
+            {isPlanMode && !vertical && planSurface !== "chat" && (
+              <div className="absolute inset-0 flex flex-col">{renderPlanSurface()}</div>
             )}
             {view === "settings" && (
               <SettingsForm
@@ -2138,6 +2472,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
                 justSaved={justSaved}
                 error={error}
                 hasImageProvider={hasImageProvider}
+                isPlanning={isPlanning}
                 hasAcceptedPlan={Boolean(acceptedPlan)}
                 t={t}
               />
@@ -2150,13 +2485,11 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
             studio); the settings form fills the pane on its own until then.
             Drop zone for reference images (same path as paste / file picker). */}
         <div
-          style={vertical ? undefined : { width: sideWidth }}
+          style={vertical || chatFullscreen ? undefined : { width: sideWidth }}
           className={cn(
             "relative flex min-h-0 flex-col border-border bg-card",
-            locked && "hidden",
-            vertical
-              ? cn("w-full flex-1", mtab !== "chat" && "hidden")
-              : "flex-none border-l",
+            !panes.showChat && "hidden",
+            vertical || chatFullscreen ? "w-full flex-1" : "flex-none border-l",
           )}
           onDragEnter={onInboxDragEnter}
           onDragLeave={onInboxDragLeave}
@@ -2180,8 +2513,8 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
               </p>
             </div>
           )}
-          {/* Resize handle (horizontal layout only) */}
-          {!vertical && (
+          {/* Resize handle (horizontal layout only, and only as a sidebar) */}
+          {!vertical && !chatFullscreen && (
             <div
               onMouseDown={startSideResize}
               className="group absolute -left-1 bottom-0 top-0 z-10 flex w-2.5 cursor-col-resize items-center justify-center"
@@ -2192,7 +2525,12 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
           )}
 
           {/* Header */}
-          <div className="flex flex-shrink-0 items-center gap-3 border-b border-border px-4 py-3">
+          <div
+            className={cn(
+              "flex flex-shrink-0 items-center gap-3 border-b border-border px-4 py-3",
+              mobileSurfaceOpen && "hidden",
+            )}
+          >
             <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary-soft p-0.5">
               <Image
                 src="/images/dodi-head-active.png"
@@ -2227,38 +2565,108 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
             </button>
           </div>
 
+          {/* The Plan step's own controls, pinned under the header so they stay
+              reachable while the thread scrolls. On a phone an open surface has
+              its own header instead. */}
+          {isPlanMode && !mobileSurfaceOpen && messages.length > 0 && (
+            <PlanActionRow
+              hasPlan={hasPlan}
+              activeSurface={planSurface}
+              compact={vertical}
+              onDrawSketch={openSketchSurface}
+              onTakePhoto={openPlanCamera}
+              onOpenPlan={() => setPlanSurface("plan")}
+              onSkip={skipPlan}
+              isBusy={thinking}
+              isDerivingSettings={isDerivingSettings}
+              needsGameProvider={needsGameProvider}
+              t={t}
+            />
+          )}
+
+          {/* The camera, reachable from the chat pane. */}
+          <input
+            ref={cameraInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = "";
+              if (!file) return;
+              if (isPlanMode) void onPhotoPicked(file);
+              else void addImages([file]);
+            }}
+          />
+
+          {/* On a phone a plan surface takes the thread's place. The thread is
+              hidden, not unmounted, so it comes back where the parent left it. */}
+          {mobileSurfaceOpen && renderPlanSurface()}
+
           {/* Thread */}
-          <div ref={threadRef} className="min-h-0 flex-1 overflow-y-auto">
-            <div className="flex flex-col gap-[18px] px-[18px] pb-1.5 pt-[18px]">
+          <div
+            ref={threadRef}
+            className={cn("min-h-0 flex-1 overflow-y-auto", mobileSurfaceOpen && "hidden")}
+          >
+            <div
+              className={cn(
+                "flex flex-col gap-[18px] px-[18px] pb-1.5 pt-[18px]",
+                chatFullscreen && "mx-auto w-full max-w-[640px]",
+              )}
+            >
               {messages.length === 0 ? (
-                <div className="flex flex-col items-center px-1 pb-2 pt-6 text-center">
-                  <Image
-                    src="/images/dodi-active.png"
-                    alt=""
-                    width={56}
-                    height={56}
-                    className="mb-3 h-14 w-14 object-contain"
-                  />
+                <div
+                  className={cn(
+                    "flex flex-col items-center px-1 text-center",
+                    // The phone's Plan step needs the height for its actions.
+                    isMobilePlan ? "pb-2 pt-3" : "pb-2 pt-6",
+                  )}
+                >
+                  {!isMobilePlan && (
+                    <Image
+                      src="/images/dodi-active.png"
+                      alt=""
+                      width={56}
+                      height={56}
+                      className="mb-3 h-14 w-14 object-contain"
+                    />
+                  )}
                   <h2 className="text-[18px] font-bold tracking-tight text-ink">
                     {t(isPlanMode ? "planWelcomeTitle" : "welcomeTitle")}
                   </h2>
                   <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
                     {t(isPlanMode ? "planWelcomeDesc" : "welcomeDesc")}
                   </p>
-                  {!needsGameProvider && (
-                    <div className="mt-[18px] flex w-full flex-col gap-2">
-                      {(isPlanMode ? planStarters : starters).map((s) => (
-                        <button
-                          key={s}
-                          type="button"
-                          onClick={() => void send(s)}
-                          className="flex items-center gap-2.5 rounded-lg border border-border bg-card px-3.5 py-[11px] text-left text-[13.5px] font-medium text-ink-2 transition-colors hover:border-primary hover:bg-primary-soft hover:text-primary"
-                        >
-                          <Icon name="sparkles" size={14} className="shrink-0 text-primary" />
-                          {s}
-                        </button>
-                      ))}
-                    </div>
+                  {isPlanMode ? (
+                    <PlanEmptyActions
+                      hasPlan={hasPlan}
+                      onIdea={() => void send(t("planStarterIdea"))}
+                      onDrawSketch={openSketchSurface}
+                      onTakePhoto={openPlanCamera}
+                      onOpenPlan={() => setPlanSurface("plan")}
+                      onSkip={skipPlan}
+                      isBusy={thinking}
+                      isDerivingSettings={isDerivingSettings}
+                      needsGameProvider={needsGameProvider}
+                      t={t}
+                    />
+                  ) : (
+                    !needsGameProvider && (
+                      <div className="mt-[18px] flex w-full flex-col gap-2">
+                        {starters.map((s) => (
+                          <button
+                            key={s}
+                            type="button"
+                            onClick={() => void send(s)}
+                            className="flex items-center gap-2.5 rounded-lg border border-border bg-card px-3.5 py-[11px] text-left text-[13.5px] font-medium text-ink-2 transition-colors hover:border-primary hover:bg-primary-soft hover:text-primary"
+                          >
+                            <Icon name="sparkles" size={14} className="shrink-0 text-primary" />
+                            {s}
+                          </button>
+                        ))}
+                      </div>
+                    )
                   )}
                 </div>
               ) : (
@@ -2353,7 +2761,13 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
           </div>
 
           {/* Composer */}
-          <div className="flex-shrink-0 px-4 pb-3.5 pt-2">
+          <div
+            ref={composerRef}
+            className={cn(
+              "flex-shrink-0 px-4 pb-3.5 pt-2",
+              chatFullscreen && "mx-auto w-full max-w-[640px]",
+            )}
+          >
             {needsGameProvider && (
               <div className="mb-2 flex items-start gap-1.5 rounded-lg bg-warning-soft px-2.5 py-1.5 text-xs font-medium text-warning">
                 <Icon name="alert" size={14} className="mt-px shrink-0" />
@@ -2430,7 +2844,13 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
                 </div>
               )}
               <textarea
-                style={{ height: composerHeight }}
+                style={{
+                  height: !mobileSurfaceOpen
+                    ? composerHeight
+                    : draft.trim()
+                      ? Math.min(composerHeight, COMPOSER_SURFACE_MAX)
+                      : COMPOSER_ONE_LINE,
+                }}
                 disabled={composerLocked}
                 className="block w-full resize-none border-0 bg-transparent p-0 pb-1.5 text-[14.5px] leading-normal text-ink outline-none placeholder:text-faint disabled:cursor-not-allowed"
                 placeholder={
@@ -2482,7 +2902,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
                 />
                 <button
                   type="button"
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={() => setAttachSheetOpen(true)}
                   disabled={composerLocked || pendingImages.length >= MAX_ATTACHMENTS}
                   aria-label={t("attachImage")}
                   title={
@@ -2510,10 +2930,28 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
                 </button>
               </div>
             </div>
-            <p className="mt-2 text-center text-[11px] leading-snug text-faint">{t("footer")}</p>
+            <p
+              className={cn(
+                "mt-2 text-center text-[11px] leading-snug text-faint",
+                mobileSurfaceOpen && "hidden",
+              )}
+            >
+              {t("footer")}
+            </p>
           </div>
         </div>
       </div>
+
+      {/* The composer's image button: camera, file, or (while planning) a sketch. */}
+      <ReferenceImageSheet
+        open={attachSheetOpen}
+        onOpenChange={setAttachSheetOpen}
+        anchorRef={composerRef}
+        onTakePhoto={openCamera}
+        onUpload={() => fileInputRef.current?.click()}
+        onDraw={isPlanMode ? openSketchSurface : undefined}
+        t={t}
+      />
 
       {/* Manual code-edit save — offers to snapshot the change as a new
           version (default on); declining overwrites the current head. */}
@@ -2686,6 +3124,7 @@ function SettingsForm({
   justSaved,
   error,
   hasImageProvider,
+  isPlanning,
   hasAcceptedPlan,
   t,
 }: {
@@ -2701,6 +3140,8 @@ function SettingsForm({
   error: string | null;
   /** Image model configured + key available (null = still loading). */
   hasImageProvider: boolean | null;
+  /** Still in the Plan step: this save is the first, mandatory one. */
+  isPlanning: boolean;
   /** A plan was agreed in the Plan step — saving starts the build right away. */
   hasAcceptedPlan: boolean;
   t: ReturnType<typeof useTranslations>;
@@ -2896,31 +3337,32 @@ function SettingsForm({
       </Field>
 
       {/* The settings form owns the save action — the built game auto-saves, so
-          there is no global Save button. A new game shows "Save & start building"
-          (its Dodi panel is still hidden until the draft exists); an existing game
-          shows "Save changes". A new game's save failures surface here since its
-          composer is hidden; an existing game keeps its visible Dodi-panel error. */}
+          there is no global Save button. A planning draft shows "Save & start
+          building" (its Dodi panel is still hidden until the settings are saved);
+          an existing game shows "Save changes". A planning draft's save failures
+          surface here since its composer is hidden; an existing game keeps its
+          visible Dodi-panel error. */}
       <div className="mt-2 flex flex-col gap-3 border-t border-border pt-6">
-        {!game.id && error && (
+        {isPlanning && error && (
           <div className="rounded-lg bg-danger-soft px-3 py-2 text-xs font-medium text-danger">
             {error}
           </div>
         )}
-        {!game.id && hasAcceptedPlan && (
+        {isPlanning && hasAcceptedPlan && (
           <p className="text-xs text-muted-foreground">{t("planBuildHint")}</p>
         )}
         <Button
           size="lg"
           className="w-full"
           onClick={onSave}
-          disabled={saving || (!game.id && !game.title.trim())}
+          disabled={saving || (isPlanning && !game.title.trim())}
         >
           {justSaved ? (
             <>
               <Icon name="check" size={16} />
               {t("saved")}
             </>
-          ) : game.id ? (
+          ) : !isPlanning ? (
             t("saveChanges")
           ) : (
             <>

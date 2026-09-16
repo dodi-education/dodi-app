@@ -444,11 +444,6 @@ parent-defined goal — and, in future, generate challenges like "Solve 3 math g
 
 - Add an API and/or MCP service for creating games.
 
-- Enhance usability of game-studio
- - Step 1 ("Inspiration"): should be a skipable step where you can draw or upload inspiration (could be a "Sketch" of the game UI, or photo of a similar task, etc.).
- - Step 2 ("Description"): Describe game (attach sketch) and based on both inputs ask questions regarding functionality scope. User can add more context and request questions, or continue. During "Description" step Agent should already prefill Settings.
- - Step 3 ("Settings"): Once configured click button "Build game" -> Switch to Game preview and show sidebar. Inspiration and Description Conversation should be visible in agent conversation history.
-
 - Implement plan limits
  - Add 3 transcript logging tiers: basic, advanced, full and change pricing wording to:
   - Basic: 1 month
@@ -470,7 +465,6 @@ parent-defined goal — and, in future, generate challenges like "Solve 3 math g
 - Restrict publication for paid subscribers (plan-driven `monthly_game_publication_limit`)
 
 - Memory / transcripts (implemented foundation):
-
 
 - Credit balances
 

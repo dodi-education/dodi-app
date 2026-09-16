@@ -45,6 +45,8 @@ const UpdateGameSchema = z.object({
   progress_kind: z.enum(["goal", "open"]).optional(),
   // enc:v1: sealed studio conversation transcript (server stays blind).
   agent_transcript_enc: z.string().nullable().optional(),
+  // enc:v1: sealed Plan-step envelope; null ends planning (settings saved).
+  plan_enc: z.string().max(4_000_000).nullable().optional(),
   kid_id: z.string().uuid().nullable().optional(),
   is_active: z.boolean().optional(),
   audience: z

@@ -96,6 +96,8 @@ export default function EditGameStudioPage() {
         previewImage: game.preview_image,
         // Sealed prior conversation — the studio unseals it to resume editing.
         agentTranscriptEnc: game.agent_transcript_enc,
+        // Sealed Plan-step state — set while the game is still being planned.
+        planEnc: game.plan_enc,
       });
     }
     load().catch(() => {

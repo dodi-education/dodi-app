@@ -90,6 +90,8 @@ export interface CreateCustomGameInput {
   previewImage?: string | null;
   /** enc:v1: sealed studio conversation transcript (server-blind). */
   agentTranscriptEnc?: string | null;
+  /** enc:v1: sealed Plan-step envelope (server-blind); set = still being planned. */
+  planEnc?: string | null;
 }
 
 export function getGameMetadata(game: Pick<Game, "metadata">): GameMetadata {
@@ -279,6 +281,7 @@ export async function createCustomGame(
     progress_kind: input.progressKind ?? "open",
     preview_image: input.previewImage ?? null,
     agent_transcript_enc: input.agentTranscriptEnc ?? null,
+    plan_enc: input.planEnc ?? null,
   };
 
   const game = await db

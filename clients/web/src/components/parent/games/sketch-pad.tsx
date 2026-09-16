@@ -31,6 +31,10 @@ export interface SketchPadLabels {
 export const SKETCH_TOOLBAR_HEIGHT = 56;
 
 interface SketchPadProps {
+  /** The committed strokes. Held by the caller so a drawing survives the pad
+   *  being unmounted (mobile surface toggle, orientation change). */
+  strokes: SketchStroke[];
+  onStrokesChange: (next: SketchStroke[]) => void;
   /** Fires on every committed change: a PNG data URL, or null once emptied. */
   onChange: (dataUrl: string | null) => void;
   labels: SketchPadLabels;
@@ -64,9 +68,15 @@ function exportPng(strokes: SketchStroke[]): string | null {
  * logical coordinates and are re-rendered on resize, which keeps the drawing
  * crisp on any display.
  */
-export function SketchPad({ onChange, labels, className, style }: SketchPadProps) {
+export function SketchPad({
+  strokes,
+  onStrokesChange,
+  onChange,
+  labels,
+  className,
+  style,
+}: SketchPadProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [strokes, setStrokes] = useState<SketchStroke[]>([]);
   const [color, setColor] = useState<string>(SKETCH_COLORS[0]);
   const [width, setWidth] = useState<number>(SKETCH_WIDTHS.thin);
   const [isErasing, setIsErasing] = useState(false);
@@ -106,7 +116,7 @@ export function SketchPad({ onChange, labels, className, style }: SketchPadProps
   }, [paint, strokes]);
 
   const commit = (next: SketchStroke[]): void => {
-    setStrokes(next);
+    onStrokesChange(next);
     onChange(next.length > 0 ? exportPng(next) : null);
   };
 

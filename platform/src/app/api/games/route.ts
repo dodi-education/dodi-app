@@ -59,6 +59,8 @@ const CreateGameSchema = z.object({
   isActive: z.boolean().optional(),
   // enc:v1: sealed studio conversation transcript (server stays blind).
   agentTranscriptEnc: z.string().optional(),
+  // enc:v1: sealed Plan-step envelope; present = the game is still being planned.
+  planEnc: z.string().max(4_000_000).optional(),
   audience: z
     .object({
       isFamily: z.boolean(),
@@ -201,6 +203,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       progressKind: data.progressKind ?? "open",
       previewImage: data.previewImage,
       agentTranscriptEnc: data.agentTranscriptEnc,
+      planEnc: data.planEnc,
       createdBy: "parent",
       isActive: data.isActive ?? false,
     });

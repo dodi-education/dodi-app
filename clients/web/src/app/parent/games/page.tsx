@@ -65,7 +65,8 @@ export default function ParentGamesPage() {
 
       return {
         id: g.id,
-        title: g.title,
+        // A planning draft has no name until its settings are saved.
+        title: g.title || t("untitledPlan"),
         tags: g.tags,
         updatedAt: g.updated_at,
         isActive: g.is_active,
@@ -74,12 +75,13 @@ export default function ParentGamesPage() {
         sharing: share,
         // Readable only because the store decrypted the bundle for us.
         built: !isUnbuiltBundle(g.code_bundle),
+        isPlanning: g.plan_enc != null,
         previewImage: g.preview_image,
         plays: g.plays,
         copies: g.copies,
       };
     });
-  }, [games, kids]);
+  }, [games, kids, t]);
 
   return (
     <div>

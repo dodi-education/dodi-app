@@ -302,6 +302,7 @@ function toPublicGame(row: PublicGameRow): Game {
     kid_id: null,
     published_by_account_id: null,
     agent_transcript_enc: null,
+    plan_enc: null,
     current_game_version_id: null,
     source_game_id: null,
     system_key: null,
