@@ -28,6 +28,11 @@ interface VerifyCodeFormProps {
   onResend: () => Promise<string | null>;
   /** Leave the code step (e.g. back to the email + password form). */
   onBack: () => void;
+  /**
+   * Rendered between the messages and the Verify button: the caller's
+   * `<Captcha>` widget, so a resend from this step can fetch a token.
+   */
+  children?: React.ReactNode;
 }
 
 /**
@@ -41,6 +46,7 @@ export function VerifyCodeForm({
   onVerify,
   onResend,
   onBack,
+  children,
 }: VerifyCodeFormProps) {
   const t = useTranslations("auth");
   const [otp, setOtp] = useState("");
@@ -100,6 +106,7 @@ export function VerifyCodeForm({
       </div>
       {error && <p className="text-center text-sm text-destructive">{error}</p>}
       {info && <p className="text-center text-sm text-success">{info}</p>}
+      {children}
       <Button
         onClick={() => void handleVerify(otp)}
         disabled={verifying || otp.length < 6}

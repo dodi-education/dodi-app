@@ -54,6 +54,8 @@
     "backToDifferentEmail": "Use a different email",
     "tryAgain": "Try again",
     "genericSignupError": "We couldn't complete your registration. Please check your details and try again.",
+    "captchaFailed": "We couldn't confirm you're not a robot. Please try again.",
+    "captchaUnavailable": "The security check couldn't load. Check your connection or ad blocker and try again.",
     "vaultSetupFailed": "Account created, but we couldn't set up your secure vault. Please sign in to finish setup.",
     "finishSetupTitle": "Finish setting up your account",
     "finishSetupDescription": "Your email is confirmed. Enter your password to secure your data and get your account key.",

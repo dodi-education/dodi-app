@@ -2,9 +2,14 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 
+import {
+  Captcha,
+  type CaptchaHandle,
+  requestCaptchaToken,
+} from "@/components/auth/captcha";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -19,6 +24,7 @@ import { Label } from "@/components/ui/label";
 import { PinInput } from "@/components/ui/pin-input";
 import { otpErrorMessage } from "@/components/auth/verify-code-form";
 import { authClient } from "@/lib/auth/client";
+import { captchaHeaders, isCaptchaError } from "@/lib/captcha/turnstile";
 
 const RESEND_COOLDOWN_SECONDS = 60;
 
@@ -38,6 +44,9 @@ export default function ResetPasswordPage() {
   const [verifying, setVerifying] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [resendInfo, setResendInfo] = useState<string | null>(null);
+  // Turnstile widget of the current step: sending and resending the code each
+  // need a fresh token.
+  const captchaRef = useRef<CaptchaHandle>(null);
 
   useEffect(() => {
     if (resendCooldown <= 0) return;
@@ -50,11 +59,28 @@ export default function ResetPasswordPage() {
     setError(null);
     setLoading(true);
 
+    const captcha = await requestCaptchaToken(captchaRef);
+    if (!captcha.ok) {
+      setError(t("captchaUnavailable"));
+      setLoading(false);
+      return;
+    }
+
     // A sign-in code (not a password-reset one): entering it signs the user
     // in, and /update-password then sets the new password on that session.
     // The OTP step is the uniform response whether or not the email exists
-    // (anti-enumeration), so a rejected send still advances.
-    await authClient.emailOtp.sendVerificationOtp({ email, type: "sign-in" });
+    // (anti-enumeration), so a rejected send still advances. A captcha
+    // rejection is the one exception: it says nothing about the email, and
+    // advancing would park the parent on a code that was never sent.
+    const { error: sendError } = await authClient.emailOtp.sendVerificationOtp(
+      { email, type: "sign-in" },
+      { headers: captchaHeaders(captcha.token) },
+    );
+    if (sendError && isCaptchaError(sendError.code)) {
+      setError(t("captchaFailed"));
+      setLoading(false);
+      return;
+    }
 
     setStep("awaitingOtp");
     setResendCooldown(RESEND_COOLDOWN_SECONDS);
@@ -82,12 +108,19 @@ export default function ResetPasswordPage() {
     if (resendCooldown > 0) return;
     setOtpError(null);
     setResendInfo(null);
-    const { error } = await authClient.emailOtp.sendVerificationOtp({
-      email,
-      type: "sign-in",
-    });
+    const captcha = await requestCaptchaToken(captchaRef);
+    if (!captcha.ok) {
+      setOtpError(t("captchaUnavailable"));
+      return;
+    }
+    const { error } = await authClient.emailOtp.sendVerificationOtp(
+      { email, type: "sign-in" },
+      { headers: captchaHeaders(captcha.token) },
+    );
     if (error) {
-      setOtpError(t("resendFailed"));
+      setOtpError(
+        isCaptchaError(error.code) ? t("captchaFailed") : t("resendFailed"),
+      );
       return;
     }
     setResendInfo(t("codeResent"));
@@ -133,6 +166,7 @@ export default function ResetPasswordPage() {
           {resendInfo && (
             <p className="text-center text-sm text-success">{resendInfo}</p>
           )}
+          <Captcha ref={captchaRef} action="reset-password" />
           <Button
             onClick={() => void handleVerify(otp)}
             disabled={verifying || otp.length < 6}
@@ -192,6 +226,7 @@ export default function ResetPasswordPage() {
             />
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
+          <Captcha ref={captchaRef} action="reset-password" />
           <Button type="submit" disabled={loading} className="w-full">
             {loading ? t("sending") : t("sendResetCode")}
           </Button>

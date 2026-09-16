@@ -1,9 +1,14 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 
+import {
+  Captcha,
+  type CaptchaHandle,
+  requestCaptchaToken,
+} from "@/components/auth/captcha";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -15,23 +20,34 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient, getSessionUser } from "@/lib/auth/client";
+import { captchaHeaders, isCaptchaError } from "@/lib/captcha/turnstile";
 import { useVaultStore } from "@/stores/vault-store";
 
 type SetupResult =
   | { status: "ok"; created: boolean }
   | { status: "wrong-password" }
+  | { status: "captcha-failed" }
   | { status: "vault-failed" };
 
 /**
  * Verify the password against the account (so the vault password stays in sync
- * with auth), then bootstrap-or-unlock the E2EE vault.
+ * with auth), then bootstrap-or-unlock the E2EE vault. The password check is a
+ * sign-in, so it carries the captcha token like the login form does.
  */
-async function runSetup(email: string, password: string): Promise<SetupResult> {
-  const { error: signInError } = await authClient.signIn.email({
-    email,
-    password,
-  });
-  if (signInError) return { status: "wrong-password" };
+async function runSetup(
+  email: string,
+  password: string,
+  captchaToken: string | null,
+): Promise<SetupResult> {
+  const { error: signInError } = await authClient.signIn.email(
+    { email, password },
+    { headers: captchaHeaders(captchaToken) },
+  );
+  if (signInError) {
+    return isCaptchaError(signInError.code)
+      ? { status: "captcha-failed" }
+      : { status: "wrong-password" };
+  }
   try {
     const { created } = await useVaultStore
       .getState()
@@ -59,6 +75,7 @@ export default function FinishSetupPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const captchaRef = useRef<CaptchaHandle>(null);
 
   useEffect(() => {
     void getSessionUser().then((user) => {
@@ -81,9 +98,21 @@ export default function FinishSetupPage() {
     }
     setLoading(true);
 
-    const res = await runSetup(email, password);
+    const captcha = await requestCaptchaToken(captchaRef);
+    if (!captcha.ok) {
+      setError(t("captchaUnavailable"));
+      setLoading(false);
+      return;
+    }
+
+    const res = await runSetup(email, password, captcha.token);
     if (res.status === "wrong-password") {
       setError(t("finishSetupWrongPassword"));
+      setLoading(false);
+      return;
+    }
+    if (res.status === "captcha-failed") {
+      setError(t("captchaFailed"));
       setLoading(false);
       return;
     }
@@ -130,6 +159,7 @@ export default function FinishSetupPage() {
             />
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
+          <Captcha ref={captchaRef} action="sign-in" />
           <Button type="submit" disabled={loading} className="w-full">
             {loading ? tc("loading") : t("finishSetupSubmit")}
           </Button>

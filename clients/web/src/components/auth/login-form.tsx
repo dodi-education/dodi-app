@@ -1,15 +1,21 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 
+import {
+  Captcha,
+  type CaptchaHandle,
+  requestCaptchaToken,
+} from "@/components/auth/captcha";
 import { VerifyCodeForm, otpErrorMessage } from "@/components/auth/verify-code-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PasswordInput } from "@/components/ui/password-input";
 import { authClient } from "@/lib/auth/client";
+import { captchaHeaders, isCaptchaError } from "@/lib/captcha/turnstile";
 import { useAccountStore } from "@/stores/account-store";
 import { useVaultStore } from "@/stores/vault-store";
 
@@ -64,6 +70,9 @@ export function LoginForm({ next }: LoginFormProps) {
   // An account that never confirmed its email gets a fresh code emailed on
   // sign-in; the code step here is the same one registration uses.
   const [step, setStep] = useState<"form" | "awaitingOtp">("form");
+  // Turnstile widget of whichever step is showing (both mount one, since the
+  // sign-in and the code resend each need a fresh token).
+  const captchaRef = useRef<CaptchaHandle>(null);
 
   /** Signed in (bearer stored): unlock the vault, adopt the locale, navigate. */
   async function finishSignIn(): Promise<void> {
@@ -104,10 +113,17 @@ export function LoginForm({ next }: LoginFormProps) {
     setError(null);
     setLoading(true);
 
-    const { error: signInError } = await authClient.signIn.email({
-      email,
-      password,
-    });
+    const captcha = await requestCaptchaToken(captchaRef);
+    if (!captcha.ok) {
+      setError(t("captchaUnavailable"));
+      setLoading(false);
+      return;
+    }
+
+    const { error: signInError } = await authClient.signIn.email(
+      { email, password },
+      { headers: captchaHeaders(captcha.token) },
+    );
 
     if (signInError) {
       if (signInError.code === "EMAIL_NOT_VERIFIED") {
@@ -117,7 +133,11 @@ export function LoginForm({ next }: LoginFormProps) {
         setLoading(false);
         return;
       }
-      setError(signInError.message ?? signInError.statusText);
+      setError(
+        isCaptchaError(signInError.code)
+          ? t("captchaFailed")
+          : (signInError.message ?? signInError.statusText),
+      );
       setLoading(false);
       return;
     }
@@ -137,11 +157,16 @@ export function LoginForm({ next }: LoginFormProps) {
   }
 
   async function handleResend(): Promise<string | null> {
-    const { error: resendError } = await authClient.emailOtp.sendVerificationOtp({
-      email,
-      type: "email-verification",
-    });
-    return resendError ? t("resendFailed") : null;
+    const captcha = await requestCaptchaToken(captchaRef);
+    if (!captcha.ok) return t("captchaUnavailable");
+    const { error: resendError } = await authClient.emailOtp.sendVerificationOtp(
+      { email, type: "email-verification" },
+      { headers: captchaHeaders(captcha.token) },
+    );
+    if (!resendError) return null;
+    return isCaptchaError(resendError.code)
+      ? t("captchaFailed")
+      : t("resendFailed");
   }
 
   if (step === "awaitingOtp") {
@@ -154,7 +179,9 @@ export function LoginForm({ next }: LoginFormProps) {
           setStep("form");
           setError(null);
         }}
-      />
+      >
+        <Captcha ref={captchaRef} action="sign-in" />
+      </VerifyCodeForm>
     );
   }
 
@@ -183,6 +210,7 @@ export function LoginForm({ next }: LoginFormProps) {
         />
       </div>
       {error && <p className="text-sm text-destructive">{error}</p>}
+      <Captcha ref={captchaRef} action="sign-in" />
       <Button type="submit" disabled={loading} className="w-full">
         {loading ? t("signingIn") : tc("signIn")}
       </Button>

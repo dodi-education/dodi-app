@@ -54,6 +54,8 @@
     "backToDifferentEmail": "Andere E-Mail verwenden",
     "tryAgain": "Erneut versuchen",
     "genericSignupError": "Wir konnten deine Registrierung nicht abschließen. Bitte überprüfe deine Angaben und versuche es erneut.",
+    "captchaFailed": "Wir konnten nicht bestätigen, dass du kein Roboter bist. Bitte versuche es erneut.",
+    "captchaUnavailable": "Die Sicherheitsprüfung konnte nicht geladen werden. Prüfe deine Verbindung oder deinen Werbeblocker und versuche es erneut.",
     "vaultSetupFailed": "Konto erstellt, aber wir konnten deinen sicheren Tresor nicht einrichten. Bitte melde dich an, um die Einrichtung abzuschließen.",
     "finishSetupTitle": "Konto-Einrichtung abschließen",
     "finishSetupDescription": "Deine E-Mail ist bestätigt. Gib dein Passwort ein, um deine Daten zu sichern und deinen Kontoschlüssel zu erhalten.",

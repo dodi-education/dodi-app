@@ -4,6 +4,7 @@ import { APIError } from "better-auth/api";
 import { z } from "zod";
 
 import { auth } from "@/lib/auth";
+import { getCaptchaConfig, verifyCaptchaRequest } from "@/lib/captcha";
 
 /**
  * Sign-up front door. Every well-formed request gets the same `{ ok: true }`
@@ -16,6 +17,11 @@ import { auth } from "@/lib/auth";
  * Registration-mode and invite-code failures (400, codes REGISTRATION_CLOSED,
  * INVITE_CODE_REQUIRED, INVITE_CODE_INVALID) are real user errors and are
  * surfaced as-is; they never reveal whether the email exists.
+ *
+ * When Turnstile is configured the request must carry a valid
+ * `x-captcha-response` token (400 MISSING_RESPONSE / 403 VERIFICATION_FAILED).
+ * The check lives here because `auth.api.signUpEmail` runs in-process, where
+ * Better Auth's captcha plugin (an HTTP-handler hook) never sees the request.
  */
 const BodySchema = z.object({
   email: z.string().trim().email().max(254),
@@ -29,6 +35,17 @@ export async function POST(request: Request): Promise<NextResponse> {
     body = BodySchema.parse(await request.json());
   } catch {
     return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
+  }
+
+  const captcha = getCaptchaConfig();
+  if (captcha) {
+    const verdict = await verifyCaptchaRequest(request, captcha);
+    if (!verdict.ok) {
+      return NextResponse.json(
+        { error: verdict.message, code: verdict.code },
+        { status: verdict.status },
+      );
+    }
   }
 
   try {

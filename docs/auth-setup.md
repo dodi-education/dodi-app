@@ -5,7 +5,7 @@ platform** with its tables in the platform database. There is no external auth
 service and no dashboard to configure: everything below is code, environment,
 and SQL in this repo.
 
-Three things are layered on top of email + password:
+Four things are layered on top of email + password:
 
 1. **Registration modes** (`open` / `invite` / `closed`) via the
    `REGISTRATION_MODE` env var on the platform.
@@ -14,6 +14,8 @@ Three things are layered on top of email + password:
 3. **Email confirmation + delivery** — a 6-digit one-time code, entered in-page,
    sent through **Resend**. Confirmation is required, and it is also our
    account-enumeration protection.
+4. **Bot protection** — an optional Cloudflare Turnstile check on sign-up,
+   sign-in and the password-reset code sender (`TURNSTILE_*` env vars).
 
 Everything auth-related is behind `platform/src/lib/auth.ts`, so the library
 stays swappable (the planned key-based `npub` login lands as a plugin there).
@@ -61,6 +63,7 @@ See `platform/.env.local.example`:
 - `CORS_ALLOWED_ORIGINS` — the web app origin; it doubles as the trusted-origin
   list for auth
 - `RESEND_API_KEY` + `EMAIL_FROM` — see below
+- `TURNSTILE_SITE_KEY` + `TURNSTILE_SECRET_KEY` — optional bot protection, see §4
 
 Rotating `BETTER_AUTH_SECRET` invalidates every existing session (everyone is
 signed out). It does **not** touch passwords or the E2EE vault.
@@ -83,6 +86,63 @@ If codes do not arrive: check `RESEND_API_KEY` is set (an unset key logs a
 warning and skips the send), check `EMAIL_FROM` is on a verified domain, and
 check the Resend dashboard's delivery log. A send failure surfaces to the
 caller as a 500 rather than failing silently.
+
+## 4. Bot protection (Cloudflare Turnstile)
+
+Sign-up, password sign-in and the one-time-code sender (password reset, code
+resends) can require a [Cloudflare Turnstile](https://developers.cloudflare.com/turnstile/)
+token. Turnstile is a one-click captcha: most visitors never see anything, the
+rest get a single checkbox, never an image puzzle. It sets no tracking cookies
+and is free without a traffic cap. It is **off by default** (self-host mode).
+
+### Set it up
+
+1. In the Cloudflare dashboard open **Turnstile** and add a widget. Hostnames:
+   the web app origin (`app.dodi.app`; add `localhost` for local dev). Widget
+   mode: **Managed** (Cloudflare decides when a checkbox is needed).
+   Pre-clearance: off.
+2. Put the pair into the **platform** env (`platform/.env.local` locally,
+   `ops/hosting/env/platform.env` in dodi-com for prod) and restart it:
+
+   ```bash
+   TURNSTILE_SITE_KEY=0x4AAAAAAA...      # public, shown in the widget settings
+   TURNSTILE_SECRET_KEY=0x4AAAAAAA...    # server only
+   ```
+
+   Both set ⇒ enforced. Neither ⇒ off. Only one ⇒ stays off and logs a
+   warning at startup, so a half-configured pair can never lock parents out.
+3. Nothing to configure on the web client: it asks
+   `GET /api/auth/captcha-config` whether a token is required and which site
+   key to render with, so the platform is the single switch and the two sides
+   cannot disagree. No rebuild of the web image is needed to turn it on or off.
+
+For local development without a Cloudflare account, Cloudflare's test keys
+always pass (`TURNSTILE_SITE_KEY=1x00000000000000000000AA`,
+`TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA`); the site key
+`3x00000000000000000000FF` forces the visible checkbox to test that path, and
+`2x00000000000000000000AB` always blocks.
+
+### How it is enforced
+
+- The browser renders the widget (`clients/web/src/components/auth/captcha.tsx`)
+  in execute mode with `appearance: "interaction-only"`: invisible until a form
+  asks for a token, and the checkbox shows only when Cloudflare requires it.
+  Every submit fetches a fresh single-use token and sends it in the
+  `x-captcha-response` header (Better Auth's captcha contract).
+- Better Auth's `captcha` plugin (`platform/src/lib/auth.ts`) gates
+  `/sign-up/email`, `/sign-in/email`, `/email-otp/send-verification-otp`,
+  `/request-password-reset` and `/forget-password` over HTTP. A missing token is
+  `400 MISSING_RESPONSE`, a rejected one `403 VERIFICATION_FAILED`; the client
+  maps both to `auth.captchaFailed`. Code **entry** (`/email-otp/verify-email`,
+  `/sign-in/email-otp`) is deliberately not gated: it is bounded by the
+  5-attempt OTP limit and the per-path rate limit.
+- `POST /api/auth/register` calls `auth.api.signUpEmail` in-process, where the
+  plugin never sees the request, so it verifies the token itself
+  (`platform/src/lib/captcha.ts`) before the call. A token is spent on first
+  verification, so each request is checked exactly once.
+- In the reset flow a captcha rejection is the one send failure that does
+  **not** advance to the code step (it says nothing about whether the email
+  exists, and advancing would park the parent on a code that was never sent).
 
 ---
 

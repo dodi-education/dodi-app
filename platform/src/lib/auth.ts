@@ -6,10 +6,15 @@ import type {} from "zod/v4/core";
 
 import { betterAuth } from "better-auth";
 import { APIError } from "better-auth/api";
-import { bearer, emailOTP } from "better-auth/plugins";
+import { bearer, captcha, emailOTP } from "better-auth/plugins";
 
 import { AuthCodeEmail, type AuthCodeKind } from "@/emails/auth-code";
 import { authCodeCopy, normalizeEmailLocale } from "@/emails/strings";
+import {
+  CAPTCHA_PROTECTED_AUTH_PATHS,
+  CAPTCHA_PROVIDER,
+  getCaptchaConfig,
+} from "@/lib/captcha";
 import { serviceDb } from "@/lib/db";
 import { sendEmail } from "@/lib/email";
 import {
@@ -119,6 +124,24 @@ async function sendVerificationOTP(input: {
   }
 }
 
+/**
+ * Turnstile on the auth front doors, only when the platform is configured for
+ * it (see lib/captcha). The plugin hooks the HTTP handler: it demands a valid
+ * `x-captcha-response` header on the listed paths and answers 400/403 itself.
+ * In-process `auth.api.*` calls bypass it, so /api/auth/register verifies on
+ * its own before calling `signUpEmail`.
+ */
+const captchaConfig = getCaptchaConfig();
+const captchaPlugins = captchaConfig
+  ? [
+      captcha({
+        provider: CAPTCHA_PROVIDER,
+        secretKey: captchaConfig.secretKey,
+        endpoints: [...CAPTCHA_PROTECTED_AUTH_PATHS],
+      }),
+    ]
+  : [];
+
 export const auth = betterAuth({
   baseURL: process.env.BETTER_AUTH_URL,
   basePath: "/api/auth",
@@ -220,6 +243,7 @@ export const auth = betterAuth({
       sendVerificationOTP,
     }),
     passwordOps(),
+    ...captchaPlugins,
   ],
 });
 

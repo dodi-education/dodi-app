@@ -2,9 +2,14 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 
+import {
+  Captcha,
+  type CaptchaHandle,
+  requestCaptchaToken,
+} from "@/components/auth/captcha";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -22,6 +27,7 @@ import { NpubConflictError } from "@dodi/protocol/client";
 import { otpErrorMessage } from "@/components/auth/verify-code-form";
 import { dodi } from "@/lib/api";
 import { authClient } from "@/lib/auth/client";
+import { captchaHeaders, isCaptchaError } from "@/lib/captcha/turnstile";
 import { useVaultStore } from "@/stores/vault-store";
 
 type RegistrationMode = "open" | "invite" | "closed";
@@ -56,6 +62,9 @@ export default function RegisterPage() {
   const [finalizeError, setFinalizeError] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [resendInfo, setResendInfo] = useState<string | null>(null);
+  // Turnstile widget of the current step: the sign-up POST and every code
+  // resend each need a fresh token.
+  const captchaRef = useRef<CaptchaHandle>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -82,11 +91,12 @@ export default function RegisterPage() {
     return () => clearTimeout(id);
   }, [resendCooldown]);
 
-  // Map a /register rejection (registration closed, bad invite code) to
-  // localized copy. Never echo raw auth errors — that could leak account
+  // Map a /register rejection (registration closed, bad invite code, captcha)
+  // to localized copy. Never echo raw auth errors — that could leak account
   // existence.
-  function mapSignUpError(message: string): string {
-    const m = message.toLowerCase();
+  function mapSignUpError(rejection: { message: string; code?: string }): string {
+    if (isCaptchaError(rejection.code)) return t("captchaFailed");
+    const m = rejection.message.toLowerCase();
     if (m.includes("invite")) return t("invalidInviteCode");
     if (m.includes("closed")) return t("registrationClosed");
     return t("genericSignupError");
@@ -115,18 +125,28 @@ export default function RegisterPage() {
 
     setLoading(true);
 
+    const captcha = await requestCaptchaToken(captchaRef);
+    if (!captcha.ok) {
+      setError(t("captchaUnavailable"));
+      setLoading(false);
+      return;
+    }
+
     // The platform's /register front door (not Better Auth's own sign-up): it
     // applies the registration gate and validates the invite code, emails the
     // 6-digit confirmation code, and answers `{ ok: true }` for ANY well-formed
     // email — new or already registered — so nothing here leaks account
     // existence.
-    let rejection: string | null = null;
+    let rejection: { message: string; code?: string } | null = null;
     try {
       const res = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL ?? ""}/api/auth/register`,
         {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: {
+            "content-type": "application/json",
+            ...captchaHeaders(captcha.token),
+          },
           body: JSON.stringify({
             email,
             password,
@@ -137,11 +157,12 @@ export default function RegisterPage() {
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as {
           error?: string;
+          code?: string;
         } | null;
-        rejection = body?.error ?? "";
+        rejection = { message: body?.error ?? "", code: body?.code };
       }
     } catch {
-      rejection = "";
+      rejection = { message: "" };
     }
 
     if (rejection !== null) {
@@ -218,12 +239,19 @@ export default function RegisterPage() {
     if (resendCooldown > 0) return;
     setOtpError(null);
     setResendInfo(null);
-    const { error } = await authClient.emailOtp.sendVerificationOtp({
-      email,
-      type: "email-verification",
-    });
+    const captcha = await requestCaptchaToken(captchaRef);
+    if (!captcha.ok) {
+      setOtpError(t("captchaUnavailable"));
+      return;
+    }
+    const { error } = await authClient.emailOtp.sendVerificationOtp(
+      { email, type: "email-verification" },
+      { headers: captchaHeaders(captcha.token) },
+    );
     if (error) {
-      setOtpError(t("resendFailed"));
+      setOtpError(
+        isCaptchaError(error.code) ? t("captchaFailed") : t("resendFailed"),
+      );
       return;
     }
     setResendInfo(t("codeResent"));
@@ -301,6 +329,7 @@ export default function RegisterPage() {
               {resendInfo && (
                 <p className="text-center text-sm text-success">{resendInfo}</p>
               )}
+              <Captcha ref={captchaRef} action="sign-up" />
               <Button
                 onClick={() => void handleVerify(otp)}
                 disabled={verifying || otp.length < 6}
@@ -441,6 +470,7 @@ export default function RegisterPage() {
             </div>
           </details>
           {error && <p className="text-sm text-destructive">{error}</p>}
+          <Captcha ref={captchaRef} action="sign-up" />
           <Button type="submit" disabled={loading} className="w-full">
             {loading ? t("creatingAccount") : t("createAccount")}
           </Button>
