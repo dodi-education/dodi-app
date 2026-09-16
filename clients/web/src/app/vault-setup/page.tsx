@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { vaultSetupGuardTarget } from "@/lib/vault-setup-nav";
 import { useVaultStore } from "@/stores/vault-store";
 
 export default function VaultSetupPage() {
@@ -22,10 +23,17 @@ export default function VaultSetupPage() {
 
   const [copied, setCopied] = useState(false);
   const [saved, setSaved] = useState(false);
+  // Set before the key is cleared, so the guard below can tell "continuing"
+  // apart from "landed here with nothing to show".
+  const continued = useRef(false);
 
   // Direct navigation with no key to show (e.g. refresh after setup) → leave.
   useEffect(() => {
-    if (!nsec) router.replace("/parent/dashboard");
+    const target = vaultSetupGuardTarget({
+      hasPendingKey: Boolean(nsec),
+      hasContinued: continued.current,
+    });
+    if (target) router.replace(target);
   }, [nsec, router]);
 
   if (!nsec) return null;
@@ -38,21 +46,28 @@ export default function VaultSetupPage() {
   }
 
   function finish() {
+    continued.current = true;
     acknowledge();
-    router.replace("/parent/dashboard");
+    // Onboarding continues with the account preferences step.
+    router.replace("/onboarding");
   }
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-xl flex-col justify-center p-4">
+    <div className="mx-auto flex min-h-screen max-w-2xl flex-col justify-center p-4">
       <Card>
         <CardHeader>
           <CardTitle>{t("saveKeyTitle")}</CardTitle>
           <CardDescription>{t("saveKeyDescription")}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-5">
-          <p className="rounded-lg border bg-muted/40 p-4 font-mono text-sm [overflow-wrap:anywhere]">
-            {nsec}
-          </p>
+          {/* The key is one unbroken token: never wrap it. The font size
+              tracks the box width (cqi) so all 63 characters sit on a single
+              line, down to a readable floor below which the box scrolls. */}
+          <div className="@container overflow-x-auto rounded-lg border bg-muted/40 px-4 py-3.5">
+            <p className="whitespace-nowrap text-center font-mono text-[clamp(0.65rem,2.5cqi,0.875rem)] leading-relaxed">
+              {nsec}
+            </p>
+          </div>
           <Button variant="outline" onClick={() => void copyKey()}>
             {copied ? t("keyCopied") : t("copyKey")}
           </Button>

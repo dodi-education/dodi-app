@@ -27,6 +27,7 @@ import {
   IconDownload,
   IconArrowBackUp,
   IconEraser,
+  IconExternalLink,
   IconEye,
   IconEyeOff,
   IconEyeQuestion,
@@ -112,6 +113,7 @@ export type IconName =
   | "download"
   | "edit"
   | "eraser"
+  | "external"
   | "feature_games"
   | "feature_personal"
   | "feature_privacy"
@@ -202,6 +204,7 @@ const ICONS: Record<IconName, ComponentType<TablerIconProps>> = {
   download: IconDownload,
   edit: IconPencil,
   eraser: IconEraser,
+  external: IconExternalLink,
   feature_games: IconDeviceGamepad2,
   feature_personal: IconPalette,
   feature_privacy: IconShieldLock,

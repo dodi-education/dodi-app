@@ -13,7 +13,7 @@
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 
-import { FieldRow } from "@/components/parent/rows";
+import { FieldRow, fieldSelectClass } from "@/components/parent/rows";
 import {
   formatDate,
   formatDateTime,
@@ -22,9 +22,6 @@ import {
   type DateStyleId,
   type TimeStyleId,
 } from "@dodi/intl";
-
-const selectClassName =
-  "h-9 w-full rounded-md border border-input bg-card px-3 text-sm outline-none transition-[color,box-shadow,border-color] hover:border-faint focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary-soft-2 sm:w-[250px]";
 
 // Fixed sample instant (24 Jun 2026, 15:30 UTC) used for previews/examples.
 const SAMPLE = new Date("2026-06-24T15:30:00Z");
@@ -97,7 +94,7 @@ export function DateTimeFields({
       <FieldRow label={t("dateFormat")} htmlFor="date-style">
         <select
           id="date-style"
-          className={selectClassName}
+          className={fieldSelectClass}
           value={dateStyle}
           onChange={(e) => onDateStyle(e.target.value as DateStyleId | "")}
         >
@@ -120,7 +117,7 @@ export function DateTimeFields({
       <FieldRow label={t("timeFormat")} htmlFor="time-style">
         <select
           id="time-style"
-          className={selectClassName}
+          className={fieldSelectClass}
           value={timeStyle}
           onChange={(e) => onTimeStyle(e.target.value as TimeStyleId | "")}
         >
@@ -140,7 +137,7 @@ export function DateTimeFields({
       <FieldRow label={t("timezone")} hint={t("timezoneHint")} htmlFor="timezone">
         <select
           id="timezone"
-          className={selectClassName}
+          className={fieldSelectClass}
           value={timeZone}
           onChange={(e) => onTimeZone(e.target.value)}
         >

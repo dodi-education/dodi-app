@@ -102,6 +102,14 @@
     "forgotPasswordUseKey": "Forgot password? Use your account key",
     "usePasswordInstead": "Use password instead"
   },
+  "onboarding": {
+    "prefsTitle": "A few basics",
+    "prefsDescription": "Pick the language and the date and time formats for your family. You can change all of this later in Settings.",
+    "continue": "Continue",
+    "skip": "Skip for now",
+    "saving": "Saving...",
+    "saveFailed": "Couldn't save your preferences. Please try again."
+  },
   "dashboard": {
     "title": "Dashboard",
     "subtitle": "What your kids have been up to with dodi",
@@ -120,7 +128,10 @@
     "noRecentSessions": "No sessions yet. They appear when you create games with dodi.",
     "kidsGlance": "Kids at a glance",
     "viewAll": "View all",
-    "ageYears": "{age} yrs"
+    "ageYears": "{age} yrs",
+    "aiSetupTitle": "Connect an AI provider",
+    "aiSetupDescription": "No AI provider is set up yet, so voice chat and game creation are still switched off. Add your own API key to turn them on.",
+    "aiSetupCta": "Set up AI"
   },
   "kids": {
     "title": "Kids",
@@ -223,6 +234,7 @@
     "removeProvider": "Remove",
     "confirmRemoveProvider": "Remove this provider? dodi will no longer be able to use it.",
     "noProviders": "No AI providers configured yet. Add one to give dodi a voice.",
+    "byokHelpLink": "How does bring your own key work?",
     "providerAdded": "Provider added successfully",
     "providerRemoved": "Provider removed",
     "voiceConfig": "Voice Configuration",
@@ -249,6 +261,7 @@
     "added": "Added {date}",
     "aiTabManaged": "dodi AI",
     "aiTabByok": "Your own keys",
+    "aiTabManagedSoon": "Coming soon",
     "managedIntro": "The simplest way to power dodi — one switch, no API keys, no setup.",
     "managedTitle": "dodi AI",
     "managedEnableDescription": "Turn it on and dodi picks the best model for every task. You can fine-tune everything afterwards.",

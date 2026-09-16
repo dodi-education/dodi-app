@@ -102,6 +102,14 @@
     "forgotPasswordUseKey": "Passwort vergessen? Kontoschlüssel verwenden",
     "usePasswordInstead": "Stattdessen Passwort verwenden"
   },
+  "onboarding": {
+    "prefsTitle": "Ein paar Grundeinstellungen",
+    "prefsDescription": "Wähle die Sprache sowie das Datums- und Uhrzeitformat für deine Familie. Du kannst das alles später in den Einstellungen ändern.",
+    "continue": "Weiter",
+    "skip": "Später einstellen",
+    "saving": "Wird gespeichert...",
+    "saveFailed": "Deine Einstellungen konnten nicht gespeichert werden. Bitte versuche es erneut."
+  },
   "dashboard": {
     "title": "Dashboard",
     "subtitle": "Was deine Kinder mit dodi gemacht haben",
@@ -120,7 +128,10 @@
     "noRecentSessions": "Noch keine Sitzungen. Sie erscheinen, wenn du mit dodi Spiele erstellst.",
     "kidsGlance": "Kinder im Überblick",
     "viewAll": "Alle anzeigen",
-    "ageYears": "{age} J."
+    "ageYears": "{age} J.",
+    "aiSetupTitle": "KI-Anbieter verbinden",
+    "aiSetupDescription": "Es ist noch kein KI-Anbieter eingerichtet, deshalb sind Sprachchat und Spielerstellung noch deaktiviert. Füge deinen eigenen API-Schlüssel hinzu, um sie zu aktivieren.",
+    "aiSetupCta": "KI einrichten"
   },
   "kids": {
     "title": "Kinder",
@@ -223,6 +234,7 @@
     "removeProvider": "Entfernen",
     "confirmRemoveProvider": "Diesen Anbieter entfernen? dodi kann ihn nicht mehr verwenden.",
     "noProviders": "Noch keine KI-Anbieter konfiguriert. Füge einen hinzu, um dodi eine Stimme zu geben.",
+    "byokHelpLink": "Wie funktioniert Bring your own key?",
     "providerAdded": "Anbieter erfolgreich hinzugefügt",
     "providerRemoved": "Anbieter entfernt",
     "voiceConfig": "Stimmkonfiguration",
@@ -249,6 +261,7 @@
     "added": "Hinzugefügt {date}",
     "aiTabManaged": "dodi AI",
     "aiTabByok": "Eigene Schlüssel",
+    "aiTabManagedSoon": "Demnächst",
     "managedIntro": "Der einfachste Weg, dodi zu betreiben — ein Schalter, keine API-Schlüssel, keine Einrichtung.",
     "managedTitle": "dodi AI",
     "managedEnableDescription": "Einschalten, und dodi wählt für jede Aufgabe das beste Modell. Alles lässt sich danach anpassen.",

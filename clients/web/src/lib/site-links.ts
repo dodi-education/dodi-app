@@ -18,7 +18,8 @@ export type SitePage =
   | "companion"
   | "pricing"
   | "about"
-  | "games";
+  | "games"
+  | "byok";
 
 const SITE_PATHS: Record<SitePage, { en: string; de: string }> = {
   home: { en: "/", de: "/de" },
@@ -27,6 +28,8 @@ const SITE_PATHS: Record<SitePage, { en: string; de: string }> = {
   pricing: { en: "/pricing", de: "/de/preise" },
   about: { en: "/about", de: "/de/ueber-uns" },
   games: { en: "/learning-games-for-kids", de: "/de/lernspiele-fuer-kinder" },
+  // "How does bring your own key work?" — linked from Settings → Your own keys.
+  byok: { en: "/blog/how-does-byok-work", de: "/de/blog/wie-funktioniert-byok" },
 };
 
 /** Absolute marketing-site URL for a page in the visitor's locale. */

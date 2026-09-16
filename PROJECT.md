@@ -468,9 +468,6 @@ parent-defined goal — and, in future, generate challenges like "Solve 3 math g
 
 - Credit balances
 
-- Check: Prettier is currently broken repo-wide (.prettierrc wants prettier-plugin-tailwindcss, which isn't installed — pre-existing, I formatted my files with equivalent settings)
-
-
 
 - Configure Voice (Provider/Style) per persona
 
@@ -482,8 +479,6 @@ parent-defined goal — and, in future, generate challenges like "Solve 3 math g
   - Track token usage
   - Add "Usage & cost" item under "Activity" in parent view where we want to display token usage over time and cost including summary per month etc. 
 
-- Onboarding wizard (Password, Seed phrase, PIN (skipable))
-
 - Daily challenges UI: let Dodi generate + track challenges on top of `game_plays` (foundation is in place).
 - Allow games to connect with AI provider for in-game content generation (e.g. for texts, calculations, formulas etc.)
 
@@ -493,16 +488,8 @@ parent-defined goal — and, in future, generate challenges like "Solve 3 math g
 - Investigate sessionResumption for google voice
 
 - New system games:
+  -  
   - Writing / Reading: Divide generated sentences into text blocks which are randomly laid out. Kid must put the blocks into correct order and read the sentence.
-  - Math tower: Dodi must climb a tower, tower is sinking into water, kid must solve calculation to jump to upper floor, before water reaches the current floor. 10 calculations per level, each level creates harder calculations. At the top, dodi reaches a hot air ballon where she can jump in and fly away. E.g.:
-    - Level 1: Addition, 2 numbers, range of numbers <= 10
-    - Level 2: Subtraction, 2 numbers, range of numbers <= 10
-    - Level 3: Addition, 2 numbers, range of numbers <= 20
-    - Level 4: Subtraction, 2 numbers, range of numbers <= 20
-    - Level 5: Addition, 3 numbers, range of numbers <= 20
-    - Level 6: Subtraction, 3 numbers, range of numbers <= 20
-    - Level 7: Mixed, 3 numbers, range of numbers <= 20
-
 
 - Connect dodi-bot for
   - Enhanced transcript storage & learning capabilities (e.g. full transcript storage + periodic memory analysis / update)

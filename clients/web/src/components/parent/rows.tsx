@@ -66,6 +66,10 @@ export function RequiredMark() {
   );
 }
 
+/** Select styled to match the inputs inside a FieldRow. */
+export const fieldSelectClass =
+  "h-9 w-full rounded-md border border-input bg-card px-3 text-sm outline-none transition-[color,box-shadow,border-color] hover:border-faint focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary-soft-2 sm:w-[250px]";
+
 interface FieldRowProps {
   label: string;
   hint?: React.ReactNode;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 
 import { Icon } from "@/components/shared/icon";
 import { useDateFormat } from "@/components/providers/date-format-provider";
@@ -28,6 +28,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+import { siteUrl } from "@/lib/site-links";
+
 import { AI_PROVIDERS } from "@dodi/ai/providers";
 import { validateProviderKey } from "@dodi/ai/validate-key";
 import { useProvidersStore } from "@/stores/providers-store";
@@ -47,6 +49,7 @@ interface ByokKeysPanelProps {
  */
 export function ByokKeysPanel({ onFirstKeySeeded }: ByokKeysPanelProps) {
   const t = useTranslations("settings");
+  const locale = useLocale();
   const { formatDate } = useDateFormat();
 
   const providersMap = useProvidersStore((s) => s.providers);
@@ -291,6 +294,18 @@ export function ByokKeysPanel({ onFirstKeySeeded }: ByokKeysPanelProps) {
           </Row>
         ))
       )}
+      <Row>
+        <a
+          href={siteUrl("byok", locale)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-primary hover:underline"
+        >
+          <Icon name="info" className="h-4 w-4" />
+          {t("byokHelpLink")}
+          <Icon name="external" className="h-3.5 w-3.5" />
+        </a>
+      </Row>
     </Section>
   );
 }

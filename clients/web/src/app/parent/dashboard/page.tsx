@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 
+import { AiSetupCard } from "@/components/parent/ai-setup-card";
 import { KidsGlance } from "@/components/parent/kids-glance";
 import { PageActions, Section } from "@/components/parent/section";
 import { StatCell, StatStrip } from "@/components/parent/stat-strip";
@@ -52,6 +53,7 @@ export default function DashboardPage() {
   if (kids.length === 0) {
     return (
       <div>
+        <AiSetupCard />
         <Section>
           <div className="flex flex-col items-center gap-4 px-5 py-12">
             <Icon name="kids" className="h-10 w-10 text-primary" />
@@ -80,6 +82,8 @@ export default function DashboardPage() {
           </Link>
         </Button>
       </PageActions>
+
+      <AiSetupCard />
 
       <Section title={t("overview")}>
         <StatStrip>
