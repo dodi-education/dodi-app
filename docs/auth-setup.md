@@ -63,7 +63,8 @@ See `platform/.env.local.example`:
 - `CORS_ALLOWED_ORIGINS` — the web app origin; it doubles as the trusted-origin
   list for auth
 - `RESEND_API_KEY` + `EMAIL_FROM` — see below
-- `TURNSTILE_SITE_KEY` + `TURNSTILE_SECRET_KEY` — optional bot protection, see §4
+- `TURNSTILE_SITE_KEY` + `TURNSTILE_SECRET_KEY` (+ `TURNSTILE_ALLOWED_HOSTNAMES`
+  in prod) — optional bot protection, see §4
 
 Rotating `BETTER_AUTH_SECRET` invalidates every existing session (everyone is
 signed out). It does **not** touch passwords or the E2EE vault.
@@ -111,6 +112,17 @@ and is free without a traffic cap. It is **off by default** (self-host mode).
 
    Both set ⇒ enforced. Neither ⇒ off. Only one ⇒ stays off and logs a
    warning at startup, so a half-configured pair can never lock parents out.
+
+   In prod also pin tokens to the page they were solved on:
+
+   ```bash
+   TURNSTILE_ALLOWED_HOSTNAMES=app.dodi.app   # comma-separated; unset ⇒ no pinning
+   ```
+
+   Cloudflare reports the hostname of the page the widget ran on; with this
+   set, a token solved on someone else's page using our public site key is
+   refused. Leave it **unset in dev**: the test keys report a placeholder
+   hostname, so every token would fail.
 3. Nothing to configure on the web client: it asks
    `GET /api/auth/captcha-config` whether a token is required and which site
    key to render with, so the platform is the single switch and the two sides

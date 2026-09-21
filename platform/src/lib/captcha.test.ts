@@ -8,7 +8,8 @@ import {
   verifyCaptchaToken,
 } from "./captcha";
 
-const CONFIG = { siteKey: "site", secretKey: "secret" };
+const CONFIG = { siteKey: "site", secretKey: "secret", allowedHostnames: [] };
+const PINNED = { ...CONFIG, allowedHostnames: ["app.dodi.app"] };
 
 function siteVerifyResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -22,6 +23,7 @@ describe("getCaptchaConfig", () => {
   beforeEach(() => {
     delete process.env.TURNSTILE_SITE_KEY;
     delete process.env.TURNSTILE_SECRET_KEY;
+    delete process.env.TURNSTILE_ALLOWED_HOSTNAMES;
     resetCaptchaWarnings();
   });
   afterEach(() => {
@@ -33,13 +35,25 @@ describe("getCaptchaConfig", () => {
     expect(getCaptchaConfig()).toBeNull();
   });
 
-  it("returns both keys when both are set", () => {
+  it("returns both keys when both are set, with no hostname pinning by default", () => {
     process.env.TURNSTILE_SITE_KEY = " site ";
     process.env.TURNSTILE_SECRET_KEY = "secret";
     expect(getCaptchaConfig()).toEqual({
       siteKey: "site",
       secretKey: "secret",
+      allowedHostnames: [],
     });
+  });
+
+  it("parses TURNSTILE_ALLOWED_HOSTNAMES as a lower-cased comma list", () => {
+    process.env.TURNSTILE_SITE_KEY = "site";
+    process.env.TURNSTILE_SECRET_KEY = "secret";
+    process.env.TURNSTILE_ALLOWED_HOSTNAMES =
+      " App.dodi.app, staging.dodi.app ,, ";
+    expect(getCaptchaConfig()?.allowedHostnames).toEqual([
+      "app.dodi.app",
+      "staging.dodi.app",
+    ]);
   });
 
   it("stays off (with one warning) when only one key is set", () => {
@@ -97,6 +111,41 @@ describe("verifyCaptchaToken", () => {
       code: "VERIFICATION_FAILED",
       status: 403,
     });
+  });
+
+  it("with pinning, refuses a token solved on another hostname (403)", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      siteVerifyResponse({ success: true, hostname: "evil.example" }),
+    );
+    expect(await verifyCaptchaToken("tok", PINNED)).toMatchObject({
+      ok: false,
+      code: "VERIFICATION_FAILED",
+      status: 403,
+    });
+  });
+
+  it("with pinning, refuses a token whose hostname is missing (403)", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      siteVerifyResponse({ success: true }),
+    );
+    expect(await verifyCaptchaToken("tok", PINNED)).toMatchObject({
+      ok: false,
+      code: "VERIFICATION_FAILED",
+    });
+  });
+
+  it("with pinning, passes a token solved on an allowed hostname (case-insensitive)", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      siteVerifyResponse({ success: true, hostname: "App.dodi.app" }),
+    );
+    expect(await verifyCaptchaToken("tok", PINNED)).toEqual({ ok: true });
+  });
+
+  it("without pinning, ignores the reported hostname (dev with test keys)", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      siteVerifyResponse({ success: true, hostname: "example.com" }),
+    );
+    expect(await verifyCaptchaToken("tok", CONFIG)).toEqual({ ok: true });
   });
 
   it("fails closed when siteverify is unreachable or broken (500)", async () => {

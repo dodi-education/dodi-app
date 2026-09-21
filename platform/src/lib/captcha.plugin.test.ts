@@ -152,3 +152,71 @@ describe("Better Auth captcha plugin contract", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+describe("Better Auth captcha plugin hostname pinning", () => {
+  const BASE = "http://localhost:3001";
+  const auth = betterAuth({
+    baseURL: BASE,
+    basePath: "/api/auth",
+    secret: "test-secret-test-secret-test-secret-1234",
+    database: memoryAdapter({
+      user: [],
+      session: [],
+      account: [],
+      verification: [],
+    }),
+    emailAndPassword: { enabled: true },
+    plugins: [
+      captcha({
+        provider: CAPTCHA_PROVIDER,
+        secretKey: "secret",
+        endpoints: [...CAPTCHA_PROTECTED_AUTH_PATHS],
+        allowedHostnames: ["app.dodi.app"],
+      }),
+    ],
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function signIn(hostname?: string): Promise<Response> {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ success: true, hostname }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    return auth.handler(
+      new Request(`${BASE}/api/auth/sign-in/email`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: BASE,
+          [CAPTCHA_HEADER]: "tok",
+        },
+        body: JSON.stringify({
+          email: "nobody@example.com",
+          password: "correct horse battery",
+        }),
+      }),
+    );
+  }
+
+  it("refuses a valid token solved on another hostname (403)", async () => {
+    const res = await signIn("evil.example");
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ code: "VERIFICATION_FAILED" });
+  });
+
+  it("refuses a valid token with no hostname reported (403)", async () => {
+    const res = await signIn(undefined);
+    expect(res.status).toBe(403);
+  });
+
+  it("passes a token solved on the pinned hostname through to the endpoint", async () => {
+    const res = await signIn("app.dodi.app");
+    expect(res.status).toBe(401); // unknown user: the endpoint itself answered
+    expect(await res.json()).not.toMatchObject({ code: "VERIFICATION_FAILED" });
+  });
+});

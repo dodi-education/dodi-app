@@ -48,15 +48,37 @@ const SITE_VERIFY_TIMEOUT_MS = 10_000;
 export interface CaptchaConfig {
   siteKey: string;
   secretKey: string;
+  /**
+   * Hostnames a token must have been solved on (TURNSTILE_ALLOWED_HOSTNAMES,
+   * comma-separated, lower-case). Empty ⇒ no pinning. Prod pins `app.dodi.app`
+   * so a token solved on an attacker's own page with our public site key is
+   * refused; dev leaves it empty because Cloudflare's test keys report a
+   * placeholder hostname.
+   */
+  allowedHostnames: string[];
 }
 
 let warnedPartialConfig = false;
+
+/** Parse a comma-separated hostname list; empty when unset. */
+function parseHostnames(raw: string | undefined): string[] {
+  return (raw ?? "")
+    .split(",")
+    .map((h) => h.trim().toLowerCase())
+    .filter(Boolean);
+}
 
 /** The Turnstile key pair from the environment, or null when captcha is off. */
 export function getCaptchaConfig(): CaptchaConfig | null {
   const siteKey = process.env.TURNSTILE_SITE_KEY?.trim() ?? "";
   const secretKey = process.env.TURNSTILE_SECRET_KEY?.trim() ?? "";
-  if (siteKey && secretKey) return { siteKey, secretKey };
+  if (siteKey && secretKey) {
+    return {
+      siteKey,
+      secretKey,
+      allowedHostnames: parseHostnames(process.env.TURNSTILE_ALLOWED_HOSTNAMES),
+    };
+  }
   if ((siteKey || secretKey) && !warnedPartialConfig) {
     warnedPartialConfig = true;
     console.warn(
@@ -105,13 +127,15 @@ const UNKNOWN_ERROR: CaptchaVerdict = {
 
 interface SiteVerifyResponse {
   success?: boolean;
+  /** Hostname of the page the widget was solved on. */
+  hostname?: string;
   "error-codes"?: string[];
 }
 
 /**
  * Verify a Turnstile token with Cloudflare's siteverify endpoint. Fails closed:
  * an unreachable or malformed siteverify answer is a 500 `UNKNOWN_ERROR`, not
- * a pass.
+ * a pass. With `allowedHostnames` set, a token solved elsewhere is refused.
  */
 export async function verifyCaptchaToken(
   token: string,
@@ -134,7 +158,14 @@ export async function verifyCaptchaToken(
       return UNKNOWN_ERROR;
     }
     const data = (await res.json()) as SiteVerifyResponse;
-    return data.success === true ? { ok: true } : VERIFICATION_FAILED;
+    if (data.success !== true) return VERIFICATION_FAILED;
+    if (config.allowedHostnames.length > 0) {
+      const hostname = data.hostname?.toLowerCase() ?? "";
+      if (!config.allowedHostnames.includes(hostname)) {
+        return VERIFICATION_FAILED;
+      }
+    }
+    return { ok: true };
   } catch (error) {
     console.error("[captcha] siteverify unreachable", error);
     return UNKNOWN_ERROR;

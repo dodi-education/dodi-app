@@ -138,6 +138,11 @@ const captchaPlugins = captchaConfig
         provider: CAPTCHA_PROVIDER,
         secretKey: captchaConfig.secretKey,
         endpoints: [...CAPTCHA_PROTECTED_AUTH_PATHS],
+        // Same hostname pinning as lib/captcha's own verifier (register route).
+        allowedHostnames:
+          captchaConfig.allowedHostnames.length > 0
+            ? captchaConfig.allowedHostnames
+            : undefined,
       }),
     ]
   : [];
