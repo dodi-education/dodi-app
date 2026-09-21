@@ -29,7 +29,12 @@ import { logKidActivity } from "@/lib/activities/log-activity";
 import { reportUsage } from "@/lib/usage/report-usage";
 import { runGameTextAssistant } from "@/lib/ai/client-game-assistant";
 import { resolveClientThinking } from "@/lib/ai/resolve-client-thinking";
+import {
+  isUuidLike,
+  resolveLaunchGameTarget,
+} from "@/lib/games/resolve-launch-game";
 import { isCurrentlyOnline } from "@/stores/connectivity-store";
+import { useGameStore } from "@/stores/game-store";
 import {
   readKidVolume,
   useCompanionVolumeStore,
@@ -1964,7 +1969,7 @@ function createEventHandler(
 
         if (event.name === "launch_game") {
           // Navigate to a game or filtered game library
-          const gameId = typeof event.args.game_id === "string" ? event.args.game_id : "";
+          const gameId = typeof event.args.game_id === "string" ? event.args.game_id.trim() : "";
           const searchQuery = typeof event.args.search_query === "string" ? event.args.search_query : "";
           const tag = typeof event.args.tag === "string" ? event.args.tag : "";
 
@@ -1972,8 +1977,61 @@ function createEventHandler(
           let action: string;
 
           if (gameId) {
-            navPath = `/games/${gameId}`;
-            action = "navigating_to_game";
+            // `game_id` is model output, not a trusted id: models regularly
+            // answer with the game's TITLE (slugified) instead of the catalog
+            // UUID. Resolve it against the kid's decrypted library and refuse
+            // to navigate on anything unresolvable — the raw string must never
+            // become a URL (/games/<title-slug> is a 404 for the kid).
+            const catalog = currentKidId
+              ? useGameStore.getState().byKid[currentKidId]
+              : undefined;
+            const target = resolveLaunchGameTarget(gameId, catalog ?? []);
+            const ctxNow = get().context;
+            const openGameId = ctxNow.type === "game" ? ctxNow.gameId : null;
+            const resolvedId =
+              target.kind === "game"
+                ? target.id
+                : !catalog && isUuidLike(gameId)
+                  ? gameId
+                  : null;
+            if (resolvedId && openGameId && resolvedId === openGameId) {
+              // "Again!" / the current title as game_id: the child is already
+              // in this game. Re-navigating would remount it (and drop the
+              // autosaved state) — answer instead of moving.
+              gameDebugWarn("voice", "launch_game: target is the open game — not navigating");
+              client?.sendToolResponse(event.id, event.name, {
+                ok: false,
+                error: "already_open",
+                message:
+                  "That game is already open, so nothing was launched. If the child wants to start over, " +
+                  "use restart_game when it is available; otherwise say you cannot restart it from here.",
+              });
+              break;
+            }
+            if (target.kind === "game") {
+              navPath = `/games/${target.id}`;
+              action = "navigating_to_game";
+            } else if (target.kind === "ambiguous") {
+              navPath = `/games?${new URLSearchParams({ search: target.query }).toString()}`;
+              action = "showing_matching_games";
+            } else if (!catalog && isUuidLike(gameId)) {
+              // No library in the cache to validate against (cold session);
+              // a well-formed id is the best we can do — the play page 404s
+              // gracefully if it is stale.
+              navPath = `/games/${gameId}`;
+              action = "navigating_to_game";
+            } else {
+              gameDebugWarn("voice", `launch_game: unknown game_id "${gameId}" — not navigating`);
+              client?.sendToolResponse(event.id, event.name, {
+                ok: false,
+                error: "unknown_game_id",
+                message:
+                  `No game with id "${gameId}" is in the catalog, so nothing was opened. ` +
+                  "Pass the exact value from the id column of the Available Games table (never the title), " +
+                  "or use search_query to show the child matching games.",
+              });
+              break;
+            }
           } else if (searchQuery || tag) {
             const params = new URLSearchParams();
             if (searchQuery) params.set("search", searchQuery);

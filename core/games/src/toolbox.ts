@@ -109,7 +109,12 @@ export const STANDARD_TOOLS: StandardTool[] = [
     parameters: {
       type: "object",
       properties: {
-        game_id: { type: "string", description: "The UUID of a specific game from the catalog" },
+        game_id: {
+          type: "string",
+          description:
+            "The exact UUID from the id column of the game catalog (e.g. af7e848c-faa8-490c-bd38-3fdbafe1216c). " +
+            "Never the game's title or a slug of it.",
+        },
         search_query: { type: "string", description: "Free-text search to filter games" },
         tag: { type: "string", description: "Tag filter (e.g. math, counting, science, creativity)" },
       },

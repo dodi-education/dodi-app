@@ -229,6 +229,10 @@ export async function buildGameVoiceConfig(
   const friendNames = info.capabilities.includes("save_state")
     ? await loadFriendNames(kid)
     : [];
+  // Best-effort: the catalog only makes launch_game usable with real ids; a
+  // failed library load must not keep the game session from connecting (the
+  // guidance then documents the tool as library-only).
+  const gameCatalog = await getGameCatalog(kidId).catch(() => []);
 
   const { systemInstruction, tools } = buildGameVoiceContext({
     personaSoul: persona.soul,
@@ -242,6 +246,8 @@ export async function buildGameVoiceConfig(
     gameDescription: info.description,
     gameMarkdown: info.markdown,
     gameCodeBundle: info.codeBundle,
+    gameId: ctx.gameId,
+    gameCatalog,
     gameState: ctx.gameState,
     capabilities: info.capabilities,
     friendNames,

@@ -157,6 +157,66 @@ describe("snapshot tools & guidance", () => {
   });
 });
 
+describe("launch_game in game mode", () => {
+  const CURRENT = "af7e848c-faa8-490c-bd38-3fdbafe1216c";
+  const OTHER = "1b2c3d4e-0000-4000-8000-000000000001";
+  const catalog = [
+    { id: CURRENT, title: "Buchstabenlabyrinth", description: "", tags: ["reading"] },
+    { id: OTHER, title: "Zählen mit Tieren", description: "", tags: ["math"] },
+  ];
+
+  it("gates launch_game on a clear request to open a DIFFERENT game and says it leaves the game", () => {
+    const sys = buildGameVoiceContext({
+      ...base,
+      gameTitle: "Buchstabenlabyrinth",
+      gameId: CURRENT,
+      gameCatalog: catalog,
+      capabilities: [],
+    }).systemInstruction;
+    expect(sys).toContain("## Leaving the Game (launch_game)");
+    expect(sys).toContain("LEAVES this game");
+    expect(sys).toContain("clearly asks YOU to open a DIFFERENT game");
+    expect(sys).toContain("NOT a request to open it");
+    expect(sys).toContain(`already open (id ${CURRENT})`);
+  });
+
+  it("lists the catalog with ids, marks the open game, and forbids title ids", () => {
+    const sys = buildGameVoiceContext({
+      ...base,
+      gameId: CURRENT,
+      gameCatalog: catalog,
+      capabilities: [],
+    }).systemInstruction;
+    expect(sys).toContain(`| ${CURRENT} | Buchstabenlabyrinth (currently open) | reading |`);
+    expect(sys).toContain(`| ${OTHER} | Zählen mit Tieren | math |`);
+    expect(sys).toContain("the UUID, never the title");
+  });
+
+  it("maps 'again/restart' to restart_game when the game declares it", () => {
+    const sys = buildGameVoiceContext({
+      ...base,
+      capabilities: ["restart_game"],
+    }).systemInstruction;
+    expect(sys).toContain("call `restart_game`, never `launch_game`");
+  });
+
+  it("without restart_game, forbids answering 'again' with launch_game", () => {
+    const sys = buildGameVoiceContext({ ...base, capabilities: [] }).systemInstruction;
+    expect(sys).toContain("NEVER answer that with `launch_game`");
+  });
+
+  it("without a catalog, forbids passing game_id at all", () => {
+    const sys = buildGameVoiceContext({ ...base, capabilities: [] }).systemInstruction;
+    expect(sys).toContain("NEVER pass `game_id`");
+    expect(sys).not.toContain("| id | title | tags |");
+  });
+
+  it("keeps launch_game registered in game mode", () => {
+    const names = buildGameVoiceContext({ ...base, capabilities: [] }).tools.map((t) => t.name);
+    expect(names).toContain("launch_game");
+  });
+});
+
 describe("addressing / intent awareness (voice only)", () => {
   it("both voice modes carry the Hearing vs. Being Asked section with the persona name", () => {
     const game = buildGameVoiceContext({ ...base, capabilities: [] }).systemInstruction;

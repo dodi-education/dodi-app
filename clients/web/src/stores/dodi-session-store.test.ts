@@ -42,6 +42,7 @@ const {
   kidLoadOneSpy,
   kidPatchLocalSpy,
   kidById,
+  gamesByKid,
   tryResumeResult,
 } = vi.hoisted(() => ({
   runClientMemoryUpdate: vi.fn(),
@@ -66,6 +67,10 @@ const {
   kidLoadOneSpy: vi.fn(),
   kidPatchLocalSpy: vi.fn(),
   kidById: { current: {} as Record<string, Record<string, unknown>> },
+  // The decrypted kid game library the launch_game tool resolves ids against.
+  gamesByKid: {
+    current: {} as Record<string, Array<{ id: string; title: string }>>,
+  },
   // Controls whether the AudioStreamer resumes without a gesture. false ⇒ the
   // store lands in transient gesture-needed deaf (distinct from persisted deaf).
   tryResumeResult: { current: true },
@@ -90,6 +95,15 @@ vi.mock("@/stores/kid-store", () => ({
       loadOne: kidLoadOneSpy,
       patchLocal: kidPatchLocalSpy,
       byId: kidById.current,
+    }),
+  },
+}));
+
+vi.mock("@/stores/game-store", () => ({
+  useGameStore: {
+    getState: () => ({
+      byKid: gamesByKid.current,
+      loadForKid: async (kidId: string) => gamesByKid.current[kidId] ?? [],
     }),
   },
 }));
@@ -276,6 +290,7 @@ function installTestEnv() {
       kidById.current[id] = { ...(kidById.current[id] ?? {}), ...patch };
     },
   );
+  gamesByKid.current = {};
   liveHandler.current = null;
   createdClients.current = [];
   mockVoiceProvider.current = "gemini";
@@ -665,6 +680,152 @@ describe("dodi session store — persisted deaf state", () => {
 // function call yields no audio) instead of looping "a doggy coming right up!"
 // through the whole generation window.
 // ---------------------------------------------------------------------------
+
+describe("dodi session store — launch_game navigation", () => {
+  beforeEach(() => {
+    installTestEnv();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const MAZE_ID = "af7e848c-faa8-490c-bd38-3fdbafe1216c";
+  const COUNT_ID = "1b2c3d4e-0000-4000-8000-000000000001";
+
+  async function connectHomeWithCatalog(pid: string) {
+    gamesByKid.current[pid] = [
+      { id: MAZE_ID, title: "Buchstabenlabyrinth" },
+      { id: COUNT_ID, title: "Zählen mit Tieren" },
+    ];
+    useDodiSessionStore.setState({
+      state: "disconnected",
+      context: { type: "home" },
+      pendingNavigation: null,
+    });
+    await useDodiSessionStore.getState().connect(pid);
+    await flush();
+    fire({ type: "setupComplete" });
+    await flush();
+  }
+
+  const launch = (id: string, args: Record<string, unknown>) => ({
+    type: "toolCall" as const,
+    id,
+    name: "launch_game",
+    args,
+  });
+
+  it("navigates to the game when game_id is a catalog id", async () => {
+    await connectHomeWithCatalog(PID);
+
+    fire(launch("call-1", { game_id: MAZE_ID }));
+
+    expect(useDodiSessionStore.getState().pendingNavigation).toBe(
+      `/games/${MAZE_ID}`,
+    );
+    expect(sendToolResponseSpy).toHaveBeenCalledTimes(1);
+    expect(sendToolResponseSpy.mock.calls[0][2]).toMatchObject({
+      ok: true,
+      action: "navigating_to_game",
+    });
+  });
+
+  it("resolves a title passed as game_id to the catalog id instead of navigating to the slug", async () => {
+    // The bug: the model answered with the game's TITLE (lowercased) in the
+    // game_id slot, and the raw string went straight into the URL —
+    // /games/buchstabenlabyrinth — a 404 for the kid.
+    await connectHomeWithCatalog(PID);
+
+    fire(launch("call-2", { game_id: "buchstabenlabyrinth" }));
+
+    expect(useDodiSessionStore.getState().pendingNavigation).toBe(
+      `/games/${MAZE_ID}`,
+    );
+    expect(sendToolResponseSpy.mock.calls[0][2]).toMatchObject({
+      ok: true,
+      action: "navigating_to_game",
+    });
+  });
+
+  it("matches a title loosely (case, accents, spacing, punctuation)", async () => {
+    await connectHomeWithCatalog(PID);
+
+    fire(launch("call-3", { game_id: "zaehlen-mit-tieren" }));
+    expect(useDodiSessionStore.getState().pendingNavigation).toBe(
+      `/games/${COUNT_ID}`,
+    );
+
+    useDodiSessionStore.getState().clearPendingNavigation();
+    fire(launch("call-4", { game_id: "Zählen mit Tieren!" }));
+    expect(useDodiSessionStore.getState().pendingNavigation).toBe(
+      `/games/${COUNT_ID}`,
+    );
+  });
+
+  it("never navigates on an unknown game_id and tells the model so", async () => {
+    await connectHomeWithCatalog(PID);
+
+    fire(launch("call-5", { game_id: "raketenrechnen" }));
+
+    expect(useDodiSessionStore.getState().pendingNavigation).toBeNull();
+    expect(sendToolResponseSpy).toHaveBeenCalledTimes(1);
+    const response = sendToolResponseSpy.mock.calls[0][2] as Record<string, unknown>;
+    expect(response).toMatchObject({ ok: false, error: "unknown_game_id" });
+    expect(String(response.message)).toContain("search_query");
+  });
+
+  it("in a game, launching the game that is already open answers instead of navigating", async () => {
+    // The mid-play trigger: "nochmal!" → launch_game(game_id: "<current title>").
+    gamesByKid.current[PID] = [
+      { id: MAZE_ID, title: "Buchstabenlabyrinth" },
+      { id: COUNT_ID, title: "Zählen mit Tieren" },
+    ];
+    useDodiSessionStore.setState({
+      state: "disconnected",
+      pendingNavigation: null,
+      context: {
+        type: "game",
+        gameId: MAZE_ID,
+        markdown: "",
+        codeBundle: "",
+        gameState: {},
+        capabilities: [],
+      },
+    });
+    await useDodiSessionStore.getState().connect(PID);
+    await flush();
+    fire({ type: "setupComplete" });
+    await flush();
+
+    fire(launch("call-7", { game_id: "buchstabenlabyrinth" }));
+    expect(useDodiSessionStore.getState().pendingNavigation).toBeNull();
+    expect(sendToolResponseSpy).toHaveBeenCalledTimes(1);
+    expect(sendToolResponseSpy.mock.calls[0][2]).toMatchObject({
+      ok: false,
+      error: "already_open",
+    });
+
+    // The same by exact id.
+    fire(launch("call-8", { game_id: MAZE_ID }));
+    expect(useDodiSessionStore.getState().pendingNavigation).toBeNull();
+    expect(sendToolResponseSpy.mock.calls[1][2]).toMatchObject({ error: "already_open" });
+
+    // A DIFFERENT catalog game still navigates from inside a game.
+    fire(launch("call-9", { game_id: COUNT_ID }));
+    expect(useDodiSessionStore.getState().pendingNavigation).toBe(`/games/${COUNT_ID}`);
+  });
+
+  it("falls back to the library filter when only search_query/tag are given", async () => {
+    await connectHomeWithCatalog(PID);
+
+    fire(launch("call-6", { search_query: "Buchstaben", tag: "reading" }));
+
+    expect(useDodiSessionStore.getState().pendingNavigation).toBe(
+      "/games?search=Buchstaben&tag=reading",
+    );
+  });
+});
 
 describe("dodi session store — generate_drawing deferral", () => {
   beforeEach(() => {

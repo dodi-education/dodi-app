@@ -52,8 +52,12 @@ vi.mock("@dodi/vault", () => ({
   }),
 }));
 
+const buildGameVoiceContextSpy = vi.fn((_input: unknown) => ({
+  systemInstruction: "SYS",
+  tools: [],
+}));
 vi.mock("@dodi/ai/dodi-context", () => ({
-  buildGameVoiceContext: () => ({ systemInstruction: "SYS", tools: [] }),
+  buildGameVoiceContext: (input: unknown) => buildGameVoiceContextSpy(input),
   buildHomeVoiceContext: () => ({ systemInstruction: "SYS", tools: [] }),
   isTodayBirthday: () => false,
 }));
@@ -75,6 +79,16 @@ const GAME = {
   tags: [],
 };
 
+const OTHER_GAME = {
+  id: "af7e848c-faa8-490c-bd38-3fdbafe1216c",
+  title: "Buchstabenlabyrinth",
+  description: "Find the letters",
+  markdown: "",
+  code_bundle: "<html></html>",
+  tags: ["reading"],
+  is_favorite: true,
+};
+
 function routedFetch() {
   return vi.fn(async (url: string) => {
     if (url === "/api/ai/config") {
@@ -85,6 +99,9 @@ function routedFetch() {
     }
     if (url.startsWith("/api/games/")) {
       return { ok: true, json: async () => GAME };
+    }
+    if (url.startsWith("/api/games?kidId=")) {
+      return { ok: true, json: async () => [{ ...GAME, is_favorite: false }, OTHER_GAME] };
     }
     throw new Error(`unexpected fetch: ${url}`);
   });
@@ -121,6 +138,24 @@ describe("buildGameVoiceConfig — E2EE key sourcing", () => {
     // The obsolete server session route must never be called.
     const calledUrls = fetchMock.mock.calls.map((c) => c[0]);
     expect(calledUrls.some((u) => u.includes("/session"))).toBe(false);
+  });
+
+  it("hands the in-game prompt the open game's id and the kid's catalog for launch_game", async () => {
+    buildGameVoiceContextSpy.mockClear();
+    await buildGameVoiceConfig(KID.id, GAME_CTX);
+
+    expect(buildGameVoiceContextSpy).toHaveBeenCalledTimes(1);
+    const input = buildGameVoiceContextSpy.mock.calls[0][0] as {
+      gameId: string;
+      gameCatalog: Array<{ id: string; title: string; tags: string[] }>;
+    };
+    expect(input.gameId).toBe(GAME.id);
+    expect(input.gameCatalog).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: GAME.id, title: GAME.title }),
+        expect.objectContaining({ id: OTHER_GAME.id, title: OTHER_GAME.title, tags: ["reading"] }),
+      ]),
+    );
   });
 
   it("throws a clear client error (not a server 500) when the vault has no key", async () => {

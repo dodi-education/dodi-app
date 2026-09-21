@@ -39,13 +39,16 @@ export interface DodiContextInput {
   parentNotes: string | null;
 }
 
+/** One row of the game catalog dodi reasons over for `launch_game`. */
+export interface GameCatalogEntry {
+  id: string;
+  title: string;
+  description: string;
+  tags: string[];
+}
+
 export interface HomeVoiceInput extends DodiContextInput {
-  gameCatalog: Array<{
-    id: string;
-    title: string;
-    description: string;
-    tags: string[];
-  }>;
+  gameCatalog: GameCatalogEntry[];
 }
 
 export interface GameContextInput extends DodiContextInput {
@@ -53,6 +56,17 @@ export interface GameContextInput extends DodiContextInput {
   gameDescription: string;
   gameMarkdown: string;
   gameCodeBundle: string;
+  /**
+   * Id of the game that is open. Lets the `launch_game` guidance name it, so the
+   * model never "launches" the game the child is already in.
+   */
+  gameId?: string;
+  /**
+   * The kid's game library (same shape as the home catalog), so an in-game
+   * `launch_game` can carry a REAL id. Absent/empty ⇒ the tool is documented
+   * as library-only (search/tag), never with a guessed id.
+   */
+  gameCatalog?: GameCatalogEntry[];
   gameState?: Record<string, unknown>;
   /** Standardized command names this game implements (drives first-class tools). */
   capabilities?: string[];
@@ -191,7 +205,7 @@ export function buildHomeVoiceContext(input: HomeVoiceInput): DodiVoiceContext {
     sections.push(
       "",
       "## Available Games",
-      "When the child clearly asks YOU to open or play a game, use the `launch_game` tool with the `game_id` from this catalog. If you're unsure which game they mean, use `search_query` or `tag` to show them matching options. A game mentioned in passing chatter is not a request to open it: launching navigates away from the current screen, so if you are not sure the child is asking you to open it, ask first (for example \"Should I open it?\").",
+      "When the child clearly asks YOU to open or play a game, use the `launch_game` tool with the `game_id` copied exactly from the id column of this catalog (the UUID, never the title). If you're unsure which game they mean, use `search_query` or `tag` to show them matching options. A game mentioned in passing chatter is not a request to open it: launching navigates away from the current screen, so if you are not sure the child is asking you to open it, ask first (for example \"Should I open it?\").",
       "",
       "| id | title | tags |",
       "|----|-------|------|",
@@ -281,6 +295,50 @@ function buildSnapshotSection(input: GameContextInput): string[] {
   return lines;
 }
 
+/**
+ * In-game guidance for `launch_game`. The tool is always registered in game
+ * sessions, so without this the model sees a bare "navigate to a game" tool,
+ * no ids, and no warning that calling it ends the current game: "again!" then
+ * turns into launch_game(game_id: "<current title>") and a navigation the child
+ * never asked for. Mirrors the home-mode gating, plus the restart mapping.
+ */
+function buildLaunchGameSection(input: GameContextInput): string[] {
+  const hasRestart = (input.capabilities ?? []).includes("restart_game");
+  const catalog = input.gameCatalog ?? [];
+  const currentId = input.gameId;
+
+  const lines = [
+    "## Leaving the Game (launch_game)",
+    `\`launch_game\` LEAVES this game: it closes "${input.gameTitle}" and opens another game or the game library. Nothing in the current game is kept.`,
+    "- Call it ONLY when the child clearly asks YOU to open a DIFFERENT game or to see the game library. A game mentioned in passing, narration, or a question about another game is NOT a request to open it. If you are not sure, ask first (for example \"Should I open it?\") and wait for a clear yes.",
+    hasRestart
+      ? "- \"Again\", \"once more\", \"from the start\", \"restart\" mean THIS game: call `restart_game`, never `launch_game`."
+      : "- \"Again\", \"once more\", \"from the start\", \"restart\" mean THIS game, and it has no restart tool. NEVER answer that with `launch_game` — say you cannot restart it from here and that the child can keep playing.",
+    currentId
+      ? `- Never call \`launch_game\` for the game that is already open (id ${currentId}).`
+      : "- Never call `launch_game` for the game that is already open.",
+  ];
+
+  if (catalog.length > 0) {
+    lines.push(
+      "- `game_id` must be copied exactly from the id column below (the UUID, never the title). If the game the child wants is not in this list, use `search_query` instead of inventing an id.",
+      "",
+      "| id | title | tags |",
+      "|----|-------|------|",
+      ...catalog.map(
+        (g) =>
+          `| ${g.id} | ${g.title}${g.id === currentId ? " (currently open)" : ""} | ${g.tags.join(", ")} |`,
+      ),
+    );
+  } else {
+    lines.push(
+      "- You have no game ids in this session, so NEVER pass `game_id`. To open another game use `search_query` or `tag` and let the child pick from the library.",
+    );
+  }
+  lines.push("");
+  return lines;
+}
+
 export function buildGameVoiceContext(
   input: GameContextInput,
 ): DodiVoiceContext {
@@ -322,6 +380,7 @@ export function buildGameVoiceContext(
     "- Speak answers naturally and concisely in the child's language",
     "",
     ...buildSnapshotSection(input),
+    ...buildLaunchGameSection(input),
     "Speech rules:",
     "- Speak naturally to the child in their configured language",
     "- Keep spoken responses short and friendly",
