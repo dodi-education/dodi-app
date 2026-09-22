@@ -29,10 +29,6 @@ import { DodiAIPanel } from "./dodi-ai-panel";
  * pickers, where dodi AI and BYOK combine per category) and "Your own keys"
  * (BYOK). Self-host (no URL): the BYOK experience renders untabbed, exactly as
  * before dodi AI existed.
- *
- * dodi AI has not launched yet, so its tab is disabled and BYOK opens by
- * default. The lock lifts for an account already running on dodi AI — it owns
- * the only switch that turns it back off.
  */
 export function AIProviderConfig() {
   const t = useTranslations("settings");
@@ -169,21 +165,12 @@ export function AIProviderConfig() {
     );
   }
 
-  const dodiLocked = !anyDodi;
-
   return (
-    <Tabs defaultValue={dodiLocked ? "byok" : "dodi-ai"}>
+    <Tabs defaultValue="dodi-ai">
       <TabsList>
-        <TabsTrigger
-          value="dodi-ai"
-          disabled={dodiLocked}
-          className="disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-muted-foreground"
-        >
+        <TabsTrigger value="dodi-ai">
           <Icon name="sparkles" className="h-4 w-4" />
           {t("aiTabManaged")}
-          {dodiLocked ? (
-            <Badge variant="secondary">{t("aiTabManagedSoon")}</Badge>
-          ) : null}
         </TabsTrigger>
         <TabsTrigger value="byok">
           {t("aiTabByok")}
