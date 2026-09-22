@@ -14,6 +14,8 @@
  * never prompts, kid content, or provider keys.
  */
 
+import { z } from "zod/v4";
+
 import type { ErrorLogInsert, Json } from "@dodi/types/database";
 import type { ErrorLogType } from "@dodi/types/error-logs";
 
@@ -99,4 +101,82 @@ export async function recordErrorLog(
     // fails the FK — retry once without attribution rather than lose the report.
     return insert({ ...payload, kid_id: null, game_id: null });
   }
+}
+
+/** Hard ceiling on one ops console page of error logs. */
+export const OPS_ERROR_LOG_MAX_LIMIT = 200;
+
+export const OpsErrorLogsQuerySchema = z.object({
+  type: z.enum(["all", "client", "server"]).default("all"),
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(OPS_ERROR_LOG_MAX_LIMIT)
+    .default(50),
+});
+export type OpsErrorLogsQuery = z.infer<typeof OpsErrorLogsQuerySchema>;
+
+// SYNC TOUCHPOINT: dodi-com/core/ops-contract/src/platform.ts
+export interface OpsErrorLogRow {
+  id: string;
+  type: string;
+  context: string | null;
+  provider: string | null;
+  model: string | null;
+  errorName: string | null;
+  errorMessage: string | null;
+  httpStatus: number | null;
+  createdAt: string;
+}
+
+// SYNC TOUCHPOINT: dodi-com/core/ops-contract/src/platform.ts
+export interface OpsErrorLogsResponse {
+  items: OpsErrorLogRow[];
+}
+
+/**
+ * The newest error reports across all accounts, for the ops console. Runs on
+ * the BYPASSRLS handle (cross-account), always bounded by `limit`. The
+ * projection deliberately drops `account_id`, `kid_id`, `game_id`, `meta` and
+ * `user_agent`: the console shows what broke, not who it happened to.
+ */
+export async function listOpsErrorLogs(
+  db: Db,
+  query: OpsErrorLogsQuery,
+): Promise<OpsErrorLogsResponse> {
+  let builder = db
+    .selectFrom("error_logs")
+    .select([
+      "id",
+      "type",
+      "context",
+      "provider",
+      "model",
+      "error_name",
+      "error_message",
+      "http_status",
+      "created_at",
+    ])
+    .orderBy("created_at", "desc")
+    .orderBy("id", "desc")
+    .limit(query.limit);
+  if (query.type !== "all") {
+    builder = builder.where("type", "=", query.type);
+  }
+  const rows = await builder.execute();
+
+  return {
+    items: rows.map((row) => ({
+      id: row.id,
+      type: row.type,
+      context: row.context,
+      provider: row.provider,
+      model: row.model,
+      errorName: row.error_name,
+      errorMessage: row.error_message,
+      httpStatus: row.http_status,
+      createdAt: row.created_at,
+    })),
+  };
 }

@@ -14,13 +14,41 @@ import {
  * Stamp a submission as approved (admin override path; the security agent
  * approves through the process worker). Ops m2m only — /api/internal auth,
  * see lib/internal-auth.
+ *
+ * `actor` is the staff member behind the decision, sent by the ops console:
+ * logged for the audit trail, never persisted on the game. Optional so the
+ * older curl/worker callers keep working.
  */
 const ReviewSchema = z.object({
   approvedBy: z.enum(["system", "admin"]),
+  actor: z.string().trim().max(200).optional(),
 });
 
 interface RouteContext {
   params: Promise<{ id: string }>;
+}
+
+/**
+ * One structured line per manual verdict. Written straight to console rather
+ * than through the fs-backed logger, which defaults to level "none" in
+ * production — same reasoning as the review-worker run summary.
+ */
+function logVerdict(
+  publicationId: string,
+  approvedBy: "system" | "admin",
+  actor: string | undefined,
+): void {
+  console.log(
+    JSON.stringify({
+      ts: new Date().toISOString(),
+      level: "info",
+      scope: "api/internal/publications/[id]/review#POST",
+      event: "publication_approved",
+      publicationId,
+      approvedBy,
+      actor: actor ?? null,
+    }),
+  );
 }
 
 export async function POST(
@@ -48,6 +76,8 @@ export async function POST(
       id,
       parsed.data.approvedBy,
     );
+    // Audit first: the decision is recorded even if mail is unavailable.
+    logVerdict(publication.id, parsed.data.approvedBy, parsed.data.actor);
     // Same outcome as the automated worker: let the publisher know their game
     // is live. Fire-and-forget — never throws, never blocks the response body.
     await notifyPublisherApproved(serviceDb, publication);
