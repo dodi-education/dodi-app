@@ -26,7 +26,7 @@ import type { Database, Game, Json } from "@dodi/types/database";
 import type {
   DiscoverGameDetail,
   PublicGameSummary,
-  PublishedSitemapEntry,
+  PublicCatalogGame,
 } from "@dodi/types/games";
 import type { ProgressKind } from "@dodi/types/success";
 
@@ -207,25 +207,32 @@ export async function listRandomPublishedGameSummaries(
   return sampled.flatMap((id) => byId.get(id) ?? []);
 }
 
-/** Sitemap cap, well above any near-term catalog size. */
-const SITEMAP_LIMIT = 5000;
+/**
+ * Catalog cap, well above any near-term catalog size. Summaries carry the
+ * preview image (a ~100×100 JPEG data URL for parent publications, roughly
+ * 10 KB each), so the feed needs pagination long before it reaches this.
+ */
+const CATALOG_LIMIT = 5000;
 
-/** Ids + timestamps of every LIVE published game, newest first: the sitemap feed. */
-export async function listPublishedSitemapEntries(
+/**
+ * The whole LIVE catalog as summaries plus `updated_at`, newest first (id
+ * breaks ties so the order is stable). One feed for every consumer: the web
+ * client's sitemap and the marketing site's statically built games page.
+ */
+export async function listPublishedGameCatalog(
   service: Db,
-): Promise<PublishedSitemapEntry[]> {
+): Promise<PublicCatalogGame[]> {
   const rows = await service
     .selectFrom("games")
-    .select(["id", "published_at", "updated_at"])
+    .select(SUMMARY_COLUMNS)
+    .select("updated_at")
+    .select(byline)
     .where("published_at", "is not", null)
     .orderBy("published_at", "desc")
-    .limit(SITEMAP_LIMIT)
+    .orderBy("id", "asc")
+    .limit(CATALOG_LIMIT)
     .execute();
-  return rows.map((row) => ({
-    id: row.id,
-    published_at: row.published_at as string,
-    updated_at: row.updated_at,
-  }));
+  return rows.map((row) => ({ ...toSummary(row), updated_at: row.updated_at }));
 }
 
 /** Aggregate play & copy counts for one published game. */

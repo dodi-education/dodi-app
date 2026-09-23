@@ -34,6 +34,7 @@ import type { Game, GameInsert, Json } from "@dodi/types/database";
 import { sanitizeGameBundle } from "../game-sanitizer";
 
 import type { Db } from "@/lib/db";
+import { triggerLandingRebuild } from "@/lib/landing-rebuild";
 
 import { filterToCatalogTags } from "./games";
 import { upsertTranslations } from "./game-translations";
@@ -355,7 +356,7 @@ export async function withdrawPublication(
   sourceGameId: string,
   accountId: string,
 ): Promise<void> {
-  await db
+  const deleted = await db
     .deleteFrom("games")
     .where("source_game_id", "=", sourceGameId)
     .where("account_id", "=", accountId)
@@ -367,7 +368,12 @@ export async function withdrawPublication(
         eb("rejection_kind", "!=", "hard"),
       ]),
     )
+    .returning("published_at")
     .execute();
+  // A live game left the public catalogue: the marketing site lists it.
+  if (deleted.some((row) => row.published_at !== null)) {
+    await triggerLandingRebuild();
+  }
 }
 
 /**
@@ -401,6 +407,9 @@ export async function approvePublication(
     .where("publication_game_id", "=", publicationId)
     .where("outcome", "is", null)
     .execute();
+
+  // A game went live: the marketing site's games page lists the catalogue.
+  await triggerLandingRebuild();
 
   return publication;
 }

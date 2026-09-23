@@ -1,7 +1,9 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { PublicationRejectionReason } from "@dodi/protocol";
 import type { Game } from "@dodi/types/database";
+
+import { triggerLandingRebuild } from "@/lib/landing-rebuild";
 
 import { createTestDb, type TestDatabase } from "../test-support/pglite-db";
 
@@ -16,6 +18,10 @@ import {
   submitPublication,
   withdrawPublication,
 } from "./game-publications";
+
+vi.mock("@/lib/landing-rebuild", () => ({
+  triggerLandingRebuild: vi.fn(async () => {}),
+}));
 
 const SOURCE_ID = "cccccccc-3333-4333-8333-333333333333";
 
@@ -64,6 +70,7 @@ describe("game publications", () => {
   });
 
   beforeEach(async () => {
+    vi.mocked(triggerLandingRebuild).mockClear();
     await t.serviceDb.deleteFrom("game_publication_requests").execute();
     await t.serviceDb.deleteFrom("game_translations").execute();
     await t.serviceDb.deleteFrom("games").where("is_system", "=", false).execute();
@@ -730,6 +737,26 @@ describe("game publications", () => {
         getPublication(t.serviceDb, SOURCE_ID, ACCOUNT),
       ).resolves.toBeNull();
     });
+
+    it("rebuilds the marketing site only when a LIVE game is withdrawn", async () => {
+      await submitPublication(t.serviceDb, {
+        sourceGameId: SOURCE_ID,
+        accountId: ACCOUNT,
+        content: CONTENT,
+      });
+      await withdrawPublication(t.serviceDb, SOURCE_ID, ACCOUNT);
+      expect(triggerLandingRebuild).not.toHaveBeenCalled();
+
+      await submitPublication(t.serviceDb, {
+        sourceGameId: SOURCE_ID,
+        accountId: ACCOUNT,
+        content: CONTENT,
+      });
+      await approvePublication(t.serviceDb, await pubId(), "system");
+      vi.mocked(triggerLandingRebuild).mockClear();
+      await withdrawPublication(t.serviceDb, SOURCE_ID, ACCOUNT);
+      expect(triggerLandingRebuild).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe("approvePublication", () => {
@@ -746,6 +773,18 @@ describe("game publications", () => {
       expect(approved.approved_by).toBe("admin");
       // The open request-log row is decided too.
       expect((await requests())[0]).toMatchObject({ outcome: "approved" });
+    });
+
+    it("rebuilds the marketing site once the game is live", async () => {
+      await submitPublication(t.serviceDb, {
+        sourceGameId: SOURCE_ID,
+        accountId: ACCOUNT,
+        content: CONTENT,
+      });
+      expect(triggerLandingRebuild).not.toHaveBeenCalled();
+
+      await approvePublication(t.serviceDb, await pubId(), "system");
+      expect(triggerLandingRebuild).toHaveBeenCalledTimes(1);
     });
 
     it("an admin approval supersedes a rejection", async () => {

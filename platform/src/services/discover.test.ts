@@ -10,7 +10,7 @@ import {
   getPublishedGameDetail,
   getPublishedGamesByIds,
   listPublishedGames,
-  listPublishedSitemapEntries,
+  listPublishedGameCatalog,
   listRandomPublishedGameSummaries,
 } from "./discover";
 
@@ -235,28 +235,42 @@ describe("listRandomPublishedGameSummaries", () => {
   });
 });
 
-describe("listPublishedSitemapEntries", () => {
-  it("returns id + timestamps of LIVE games only, newest first", async () => {
-    const entries = await listPublishedSitemapEntries(t.serviceDb);
-    expect(entries.map((e) => e.id)).toEqual([
+describe("listPublishedGameCatalog", () => {
+  it("returns every LIVE game, newest first, with updated_at", async () => {
+    const games = await listPublishedGameCatalog(t.serviceDb);
+    expect(games.map((g) => g.id)).toEqual([
       PUB_2,
       PUB_1,
       SYSTEM_MANDALA,
       SYSTEM_DRAWING,
     ]);
-    expect(entries[0]).toEqual({
+    expect(games[0]).toMatchObject({
       id: PUB_2,
+      title: "Counting Comets",
+      tags: ["math"],
+      publication_handle: "fun_games",
       published_at: "2026-07-10T10:00:00.000Z",
       updated_at: "2026-07-02T10:00:00.000Z",
     });
   });
 
-  it("carries nothing beyond the three sitemap fields", async () => {
-    const entries = await listPublishedSitemapEntries(t.serviceDb);
-    for (const entry of entries) {
-      expect(Object.keys(entry).sort()).toEqual([
+  it("carries the public summary fields plus updated_at, never publisher ids or content", async () => {
+    const games = await listPublishedGameCatalog(t.serviceDb);
+    for (const game of games) {
+      expect(Object.keys(game).sort()).toEqual([
+        "available_locales",
+        "description",
+        "estimated_duration_minutes",
         "id",
+        "is_system",
+        "preview_image",
+        "progress_kind",
+        "publication_handle",
         "published_at",
+        "tags",
+        "target_age_max",
+        "target_age_min",
+        "title",
         "updated_at",
       ]);
     }

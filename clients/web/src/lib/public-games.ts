@@ -2,8 +2,8 @@ import { cache } from "react";
 
 import type {
   DiscoverGameDetail,
+  PublicCatalogGame,
   PublicGameSummary,
-  PublishedSitemapEntry,
 } from "@dodi/types/games";
 
 /**
@@ -66,14 +66,14 @@ export async function getPopularGames(
   }
 }
 
-/** Published game ids + timestamps for /sitemap.xml; degrades to []. */
-export async function getSitemapGames(): Promise<PublishedSitemapEntry[]> {
+/** The full published catalog (used by /sitemap.xml); degrades to []. */
+export async function getCatalogGames(): Promise<PublicCatalogGame[]> {
   try {
     const res = await fetch(`${apiBase()}/api/public/games`, {
       cache: "no-store",
     });
     if (!res.ok) return [];
-    const body = (await res.json()) as { games: PublishedSitemapEntry[] };
+    const body = (await res.json()) as { games: PublicCatalogGame[] };
     return body.games ?? [];
   } catch {
     return [];

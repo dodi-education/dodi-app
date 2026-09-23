@@ -6,7 +6,7 @@ import {
   publicGameLanguageAlternates,
   publicGamePath,
 } from "@/lib/public-game-urls";
-import { getSitemapGames } from "@/lib/public-games";
+import { getCatalogGames } from "@/lib/public-games";
 
 /**
  * The app's only indexable pages are the public game pages (plus the auth
@@ -17,7 +17,7 @@ import { getSitemapGames } from "@/lib/public-games";
  */
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const origin = appOrigin();
-  const games = await getSitemapGames();
+  const games = await getCatalogGames();
   return games.flatMap((game) => {
     const languages = publicGameLanguageAlternates(game.id);
     return locales.map((locale) => ({

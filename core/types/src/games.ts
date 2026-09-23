@@ -89,10 +89,12 @@ export type PublicGameSummary = Omit<
   "sharing" | "plays" | "copies"
 >;
 
-/** Sitemap feed row for one LIVE published game (public /api/public/games). */
-export interface PublishedSitemapEntry {
-  id: string;
-  published_at: string;
+/**
+ * One row of the public full-catalog feed (/api/public/games): the anonymous
+ * summary plus the row's last change, which the web client's sitemap reports
+ * as `lastModified`.
+ */
+export interface PublicCatalogGame extends PublicGameSummary {
   updated_at: string;
 }
 
