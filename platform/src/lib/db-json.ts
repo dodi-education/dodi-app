@@ -5,8 +5,11 @@ import type { Json } from "@dodi/types/database";
  *
  * `pg` passes JS strings to the wire verbatim, so a bare string bound to a
  * jsonb parameter is parsed BY POSTGRES as JSON — which fails for anything that
- * is not itself valid JSON ("invalid input syntax for type json"). Objects and
- * arrays need no help: pg serializes those itself.
+ * is not itself valid JSON ("invalid input syntax for type json"). Plain objects
+ * need no help: pg JSON-serializes those itself. Arrays DO: pg binds a JS array
+ * as a Postgres array literal (`{"{\"code\":…}"}`), which jsonb rejects with the
+ * same error, so JSON.stringify an array bound to a jsonb column (see
+ * rejectPublication). PGlite encodes arrays differently, so tests won't catch it.
  *
  * Only the polymorphic E2EE columns need this. `games.success_criteria` holds a
  * plain object for system games and publication copies, and an opaque `enc:v1:`

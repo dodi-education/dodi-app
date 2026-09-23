@@ -415,7 +415,9 @@ export async function rejectPublication(
   publicationId: string,
   rejection: { kind: RejectionKind; reasons: PublicationRejectionReason[] },
 ): Promise<Game> {
-  const reasonsJson = rejection.reasons as unknown as Json;
+  // Pre-encode: pg binds a JS array as a Postgres array literal, not JSON, and
+  // jsonb rejects it ("invalid input syntax for type json"). See lib/db-json.
+  const reasonsJson = JSON.stringify(rejection.reasons) as unknown as Json;
   const publication = await db
     .updateTable("games")
     .set({

@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
+import type { PublicationRejectionReason } from "@dodi/protocol";
 import type { Game } from "@dodi/types/database";
 
 import { createTestDb, type TestDatabase } from "../test-support/pglite-db";
@@ -594,6 +595,21 @@ describe("game publications", () => {
         rejection_kind: "soft",
       });
       expect(rows[0].decided_at).toBeTruthy();
+    });
+
+    it("stores rejection_reasons as a jsonb array on the copy and the log row", async () => {
+      // PGlite can't reproduce the pg array-literal bug (prod: "invalid input
+      // syntax for type json"); this guards the round-trip only.
+      const id = await submitted();
+      const reasons: PublicationRejectionReason[] = [
+        { code: "soft_contains_personal_information", note: "a name" },
+        { code: "soft_quality_below_bar", note: "" },
+      ];
+      const rejected = await rejectPublication(t.serviceDb, id, { kind: "soft", reasons });
+
+      expect(rejected.rejection_reasons).toEqual(reasons);
+      const rows = await requests();
+      expect(rows[0].rejection_reasons).toEqual(reasons);
     });
 
     it("soft rejection does NOT flag the account", async () => {
