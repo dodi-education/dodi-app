@@ -22,6 +22,16 @@ describe("buildGameTranslationPrompt", () => {
     expect(prompt).toContain("Raketen zählen");
     expect(prompt).toContain('"score.label"');
     expect(prompt).toContain("Translate into: en");
+    expect(prompt).not.toContain("Listing only");
+  });
+
+  it("lists listing-only locales and allows a title in any language", () => {
+    const { system, prompt } = buildGameTranslationPrompt({
+      ...INPUT,
+      listingOnlyLocales: ["de"],
+    });
+    expect(system).toContain("ANY language");
+    expect(prompt).toContain("Listing only (title and description, no strings): de");
   });
 });
 
@@ -75,5 +85,23 @@ describe("parseGeneratedTranslations", () => {
     const result = valid();
     result.locales.en.title = "  ";
     expect(() => parseGeneratedTranslations(result, parseInput)).toThrow(/no title/);
+  });
+
+  it("accepts a listing-only locale without strings", () => {
+    const raw = valid() as { locales: Record<string, unknown> };
+    raw.locales.de = { title: "Raketen zählen", description: "Zähle die Raketen" };
+    const result = parseGeneratedTranslations(raw, { ...parseInput, listingOnlyLocales: ["de"] });
+    expect(result.de).toEqual({
+      title: "Raketen zählen",
+      description: "Zähle die Raketen",
+      strings: {},
+    });
+    expect(result.en.strings["game.start"]).toBe("Let's go!");
+  });
+
+  it("rejects a missing listing-only locale", () => {
+    expect(() =>
+      parseGeneratedTranslations(valid(), { ...parseInput, listingOnlyLocales: ["de"] }),
+    ).toThrow(/missing locale 'de'/);
   });
 });

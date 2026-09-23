@@ -4,7 +4,7 @@ import { dodi } from "@/lib/api";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 
 import { GameStage } from "@/components/games/game-stage";
@@ -23,16 +23,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { STAGE } from "@/lib/games/stage";
-import { GAME_TAGS } from "@dodi/games/tags";
 import { sanitizeGameBundle } from "@dodi/games/sanitizer";
-import { hasTranslationsBlock } from "@dodi/games/translations";
+import { extractTranslations, hasTranslationsBlock } from "@dodi/games/translations";
 import { UNBUILT_GAME_PLACEHOLDER } from "@dodi/games/placeholder";
 import { injectBackgroundImage } from "@dodi/games/background-image";
 import { normalizeLocale } from "@dodi/intl/locales";
 import { locales } from "@/i18n/config";
-import { tagStyle } from "@/components/parent/games/tag-style";
 import { CodeViewer } from "@/components/parent/games/code-viewer";
 import { AgeRange, isValidAgeRange } from "@/components/parent/games/age-range";
+import { ListingTranslationsField } from "@/components/parent/games/listing-translations-field";
+import { TagPicker } from "@/components/parent/games/tag-picker";
 import { PlanActionRow, PlanEmptyActions } from "@/components/parent/games/plan-chat-actions";
 import { PlanSketchSurface } from "@/components/parent/games/plan-sketch-surface";
 import {
@@ -59,7 +59,6 @@ import {
   restoreRunLog,
 } from "@/lib/games/agent-run-log";
 import { createAgentRunRecorder, RUN_FRAME_BOUND } from "@/lib/games/agent-run-recorder";
-import { useTagLabel } from "@/lib/games/tag-label";
 import { cn } from "@/lib/utils";
 import {
   capImages,
@@ -69,6 +68,7 @@ import {
 } from "@/lib/games/thumbnail";
 import { gameDebugWarn } from "@dodi/games/debug";
 import { useKids } from "@/hooks/use-kids";
+import { type ListingTranslations, useListingTranslations } from "@/hooks/use-listing-translations";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { useNavigationGuard } from "@/hooks/use-navigation-guard";
 import { useWakeLock } from "@/hooks/use-wake-lock";
@@ -356,6 +356,15 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
       planning: restoredPlanning,
     }),
   );
+
+  // Discover listing translations, editable in settings (where a review's
+  // translation findings get fixed). Loaded the first time settings opens.
+  const listingTranslations = useListingTranslations(game.id, view === "settings");
+  const listingSourceLocale = useMemo(() => {
+    if (view !== "settings" || !game.codeBundle) return null;
+    const source = extractTranslations(game.codeBundle).translations?.sourceLocale;
+    return source ? normalizeLocale(source) : null;
+  }, [view, game.codeBundle]);
 
   /**
    * Switch tab and mirror it into the URL so the tab is linkable and survives a
@@ -2148,6 +2157,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
         useGameStore
           .getState()
           .put(await decryptGameResponse((await res.json()) as Game));
+        await listingTranslations.save();
 
         if (isPlanning) {
           // Nothing left to persist from the Plan step; drop a queued write so
@@ -2586,6 +2596,8 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
                 hasImageProvider={hasImageProvider}
                 isPlanning={isPlanning}
                 hasAcceptedPlan={Boolean(acceptedPlan)}
+                listingTranslations={listingTranslations}
+                listingSourceLocale={listingSourceLocale}
                 t={t}
               />
             )}
@@ -3246,6 +3258,8 @@ function SettingsForm({
   hasImageProvider,
   isPlanning,
   hasAcceptedPlan,
+  listingTranslations,
+  listingSourceLocale,
   t,
 }: {
   game: StudioGame;
@@ -3264,10 +3278,11 @@ function SettingsForm({
   isPlanning: boolean;
   /** A plan was agreed in the Plan step — saving starts the build right away. */
   hasAcceptedPlan: boolean;
+  listingTranslations: ListingTranslations;
+  /** The game's own (the child's) language, marked on its listing card (null = unknown). */
+  listingSourceLocale: string | null;
   t: ReturnType<typeof useTranslations>;
 }) {
-  // Only the game-studio catalog is offered; non-catalog tags are stripped on save.
-  const tagLabel = useTagLabel();
   return (
     <div className="mx-auto flex max-w-[560px] flex-col gap-4 p-5 md:p-8">
       <Field label={t("gameName")} required>
@@ -3333,36 +3348,7 @@ function SettingsForm({
       </Field>
 
       <Field label={t("tags")} hint={t("tagsHint")}>
-        <div className="flex flex-wrap gap-2">
-          {GAME_TAGS.map((tag) => {
-            const selected = game.tags.includes(tag.id);
-            return (
-              <button
-                key={tag.id}
-                type="button"
-                aria-pressed={selected}
-                onClick={() =>
-                  setField(
-                    "tags",
-                    selected
-                      ? game.tags.filter((x) => x !== tag.id)
-                      : [...game.tags, tag.id],
-                  )
-                }
-                className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-semibold transition-colors",
-                  selected
-                    ? "border-primary bg-primary-soft text-primary"
-                    : "border-border-strong bg-card text-ink-2 hover:border-faint",
-                )}
-              >
-                <Icon name={tagStyle(tag.id).icon} size={15} />
-                {tagLabel(tag.id)}
-                {selected && <Icon name="check" size={13} strokeWidth={3} />}
-              </button>
-            );
-          })}
-        </div>
+        <TagPicker selected={game.tags} onChange={(tags) => setField("tags", tags)} />
       </Field>
 
       <Field
@@ -3455,6 +3441,12 @@ function SettingsForm({
           {t("previewImageToggle")}
         </label>
       </Field>
+
+      <ListingTranslationsField
+        entries={listingTranslations.entries}
+        sourceLocale={listingSourceLocale}
+        onChange={listingTranslations.setEntry}
+      />
 
       {/* The settings form owns the save action — the built game auto-saves, so
           there is no global Save button. A planning draft shows "Save & start

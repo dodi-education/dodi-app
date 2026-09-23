@@ -15,6 +15,12 @@ export interface GameTranslationPromptInput {
   sourceLocale: string;
   /** Locale codes to translate INTO (never includes the source). */
   targetLocales: string[];
+  /**
+   * Locales that need only the listing title/description, no strings (e.g.
+   * the source locale itself: the listing is written in the parent's language,
+   * which may not be the game's). Optional; disjoint from `targetLocales`.
+   */
+  listingOnlyLocales?: string[];
   /** The bundle's source-locale strings dictionary. */
   strings: Record<string, string>;
   title: string;
@@ -50,8 +56,10 @@ export function buildGameTranslationPrompt(
     "Preserve every {param} placeholder EXACTLY as written — never translate, remove, or add placeholders.",
     "String values are plain text: no HTML, no '<' characters. Preserve the source's paragraph and line-break structure. Keep each translation's length comparable to its source so game layouts still fit.",
     "The title and description describe the game in a public catalog for parents; translate them idiomatically.",
-    'Respond with a single JSON object: {"locales": {"<locale>": {"title": "<text>", "description": "<text>", "strings": {"<key>": "<text>", ...}}}} with EXACTLY one entry per requested target locale and EXACTLY the source string keys. No other keys, no markdown, no code fences.',
+    "The title and description may be written in ANY language, not necessarily the source language: write every locale's title and description in THAT locale's language. Where they are already in that locale's language, keep them unchanged.",
+    'Respond with a single JSON object: {"locales": {"<locale>": {"title": "<text>", "description": "<text>", "strings": {"<key>": "<text>", ...}}}} with EXACTLY one entry per requested target locale and EXACTLY the source string keys. Listing-only locales get an entry with just "title" and "description" (no "strings"). No other keys, no markdown, no code fences.',
   ].join("\n");
+  const listingOnly = input.listingOnlyLocales ?? [];
 
   const prompt = [
     `## Source language: ${input.sourceLocale}`,
@@ -61,7 +69,10 @@ export function buildGameTranslationPrompt(
     "## Source strings",
     JSON.stringify(input.strings, null, 2),
     "",
-    `## Translate into: ${input.targetLocales.join(", ")}`,
+    `## Translate into: ${input.targetLocales.join(", ") || "(none)"}`,
+    ...(listingOnly.length > 0
+      ? [`## Listing only (title and description, no strings): ${listingOnly.join(", ")}`]
+      : []),
   ].join("\n");
 
   return { system, prompt };
@@ -80,7 +91,12 @@ function placeholdersOf(value: string): string[] {
  */
 export function parseGeneratedTranslations(
   raw: Record<string, unknown>,
-  input: { targetLocales: string[]; sourceStrings: Record<string, string> },
+  input: {
+    targetLocales: string[];
+    sourceStrings: Record<string, string>;
+    /** Locales held to the title rule only; their `strings` come back empty. */
+    listingOnlyLocales?: string[];
+  },
 ): Record<string, TranslatedLocale> {
   const rawLocales = raw.locales;
   if (!rawLocales || typeof rawLocales !== "object" || Array.isArray(rawLocales)) {
@@ -89,8 +105,9 @@ export function parseGeneratedTranslations(
   const source = rawLocales as Record<string, unknown>;
   const expectedKeys = Object.keys(input.sourceStrings);
   const result: Record<string, TranslatedLocale> = {};
+  const listingOnly = new Set(input.listingOnlyLocales ?? []);
 
-  for (const locale of input.targetLocales) {
+  for (const locale of [...input.targetLocales, ...listingOnly]) {
     const entry = source[locale];
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
       throw new Error(`Generated translations are missing locale '${locale}'`);
@@ -102,6 +119,15 @@ export function parseGeneratedTranslations(
 
     const description =
       typeof record.description === "string" ? record.description.trim() : "";
+
+    if (listingOnly.has(locale)) {
+      result[locale] = {
+        title: title.slice(0, MAX_TRANSLATED_TITLE_CHARS),
+        description: description.slice(0, MAX_TRANSLATED_DESCRIPTION_CHARS),
+        strings: {},
+      };
+      continue;
+    }
 
     const rawStrings = record.strings;
     if (

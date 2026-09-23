@@ -48,7 +48,6 @@ import {
   sealGameFields,
   useGameStore,
 } from "@/stores/game-store";
-import { useVaultStore } from "@/stores/vault-store";
 import {
   PUBLICATION_HANDLE_MAX_LENGTH,
   normalizePublicationHandle,
@@ -65,7 +64,12 @@ import {
   type ListingText,
   type PublicationTranslationResult,
 } from "@/lib/ai/client-translate-game";
-import type { Game, GameTranslation } from "@dodi/types/database";
+import {
+  knownListingsFrom,
+  saveListingDraft,
+  type PublicationListingsResponse,
+} from "@/lib/games/publication-listings";
+import type { Game } from "@dodi/types/database";
 
 type PublicationState =
   | "none"
@@ -155,39 +159,15 @@ export function PublishDialog({ open, gameId, built, onClose }: PublishDialogPro
     ])
       .then(
         ([pub, game]: [
-          {
-            publication: Game | null;
-            translations?: GameTranslation[];
-            draftListingTranslationsEnc?: string | null;
-          },
+          { publication: Game | null } & PublicationListingsResponse,
           Game | null,
         ]) => {
           if (cancelled) return;
           setPublication(pub.publication ?? null);
-          // Paid listing translations to reuse: the live copy's rows, and —
-          // fresher, from a translate-then-leave round trip — the sealed
-          // draft blob (decrypted in the unlocked vault; ignored when sealed
-          // by a different key state or malformed).
-          let draftListings: Record<string, ListingText> = {};
-          try {
-            draftListings =
-              useVaultStore
-                .getState()
-                .session?.decryptJson<Record<string, ListingText>>(
-                  pub.draftListingTranslationsEnc,
-                ) ?? {};
-          } catch {
-            draftListings = {};
-          }
-          setKnownListings({
-            ...Object.fromEntries(
-              (pub.translations ?? []).map((row) => [
-                row.locale,
-                { title: row.title, description: row.description },
-              ]),
-            ),
-            ...draftListings,
-          });
+          // Paid listing translations to reuse: the live copy's rows, overlaid
+          // by the sealed draft (a translate-then-leave round trip, or edits
+          // made in the studio settings).
+          setKnownListings(knownListingsFrom(pub));
           if (typeof game?.target_age_min === "number") setAgeMin(game.target_age_min);
           if (typeof game?.target_age_max === "number") setAgeMax(game.target_age_max);
           setSourceVersionId(game?.current_game_version_id ?? null);
@@ -299,16 +279,7 @@ export function PublishDialog({ open, gameId, built, onClose }: PublishDialogPro
         // (sealed — the game is still private) so closing the dialog for a
         // studio review loses nothing. Best-effort: publishing works without.
         try {
-          const session = useVaultStore.getState().session;
-          if (session) {
-            await dodi.request(`/api/games/${gameId}/publication/draft`, {
-              method: "PUT",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                listingTranslationsEnc: session.encryptJson(result.translations),
-              }),
-            });
-          }
+          await saveListingDraft(gameId, result.translations);
         } catch {
           /* the draft is an optimization, never a blocker */
         }
@@ -442,7 +413,7 @@ export function PublishDialog({ open, gameId, built, onClose }: PublishDialogPro
   const openStudio = () => {
     if (!gameId) return;
     onClose();
-    router.push(`/parent/game-studio/${gameId}`);
+    router.push(`/parent/game-studio/${gameId}/settings#translations`);
   };
 
   const withdrawButton = (

@@ -11,7 +11,9 @@
  * translated bundle back into the sealed SOURCE game) and listing texts the
  * caller already knows (an existing publication's rows) are reused. When only
  * listing texts are missing, a strings-free mini generation runs instead of a
- * full one. Mirrors `client-generate-text.ts`.
+ * full one. The game-language listing is generated as well (listing only): the
+ * game's name and description are in the parent's language, which may not be
+ * the game's. Mirrors `client-generate-text.ts`.
  */
 import { createClientThinkingProvider } from "@dodi/ai/client-thinking";
 import {
@@ -52,7 +54,7 @@ export interface ListingText {
 }
 
 export interface PublicationTranslationResult {
-  /** The game's own (platform-normalized) locale — its entry mirrors title/description. */
+  /** The game's own (platform-normalized) locale. */
   sourceLocale: string;
   /** The bundle with the translations block covering every platform locale. */
   codeBundle: string;
@@ -94,18 +96,27 @@ export async function translateGameForPublication(
     (locale) => !covered.has(locale) || !known[locale]?.title.trim(),
   );
 
+  // The game's name and description are written in the PARENT's language,
+  // which may differ from the game's (child's) language. So the game-language
+  // listing is generated too (listing-only: the bundle already has its
+  // strings), unless the parent already knows/fixed one.
+  const knownSource = known[sourceLocale];
+  const sourceNeedsListing = !knownSource?.title.trim();
   const result: PublicationTranslationResult = {
     sourceLocale,
     codeBundle: game.code_bundle,
     translations: {
-      [sourceLocale]: { title: game.title, description: game.description },
+      [sourceLocale]: sourceNeedsListing
+        ? { title: game.title, description: game.description }
+        : knownSource,
     },
   };
   for (const locale of nonSource) {
     const listing = known[locale];
     if (listing?.title.trim()) result.translations[locale] = listing;
   }
-  if (aiTargets.length === 0) return result;
+  if (aiTargets.length === 0 && !sourceNeedsListing) return result;
+  const listingOnlyLocales = sourceNeedsListing ? [sourceLocale] : [];
 
   const thinking = await resolveClientThinking();
   if (!thinking) throw new NoThinkingModelError();
@@ -135,6 +146,7 @@ export async function translateGameForPublication(
   const { system, prompt } = buildGameTranslationPrompt({
     sourceLocale: translations.sourceLocale,
     targetLocales: [...aiTargets],
+    listingOnlyLocales,
     strings: promptStrings,
     title: game.title,
     description: game.description,
@@ -143,9 +155,10 @@ export async function translateGameForPublication(
   const translated = parseGeneratedTranslations(raw, {
     targetLocales: [...aiTargets],
     sourceStrings: promptStrings,
+    listingOnlyLocales,
   });
 
-  for (const locale of aiTargets) {
+  for (const locale of [...aiTargets, ...listingOnlyLocales]) {
     result.translations[locale] = {
       title: translated[locale].title,
       description: translated[locale].description,
