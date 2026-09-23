@@ -50,6 +50,15 @@ import {
   type PlanSurface as PlanSurfaceKind,
 } from "@/components/parent/games/studio-panes";
 import { RichText } from "@/components/parent/games/rich-text";
+import { AgentRunHistory } from "@/components/parent/games/agent-run-history";
+import { AgentRunTimeline } from "@/components/parent/games/agent-run-timeline";
+import {
+  type AgentRunLog,
+  type AgentRunOutcome,
+  boundRunLogs,
+  restoreRunLog,
+} from "@/lib/games/agent-run-log";
+import { createAgentRunRecorder, RUN_FRAME_BOUND } from "@/lib/games/agent-run-recorder";
 import { useTagLabel } from "@/lib/games/tag-label";
 import { cn } from "@/lib/utils";
 import {
@@ -71,7 +80,13 @@ import {
   sealGameFields,
   useGameStore,
 } from "@/stores/game-store";
+import { gameScreenshotServiceOf, useAccountStore } from "@/stores/account-store";
 import { useVaultStore } from "@/stores/vault-store";
+import {
+  captureGameFrames,
+  isDodiScreenshotServiceUnavailable,
+  type ScreenshotTarget,
+} from "@/lib/games/screenshot-service";
 import { resolveClientGame } from "@/lib/ai/resolve-client-game";
 import { resolveClientImage } from "@/lib/ai/resolve-client-image";
 import { createClientImageProvider } from "@dodi/ai/image-providers/factory";
@@ -80,6 +95,7 @@ import { buildPreviewPrompt } from "@dodi/ai/image-providers/preview-prompt";
 import { calculateChildAge, getLanguageDisplayName } from "@dodi/ai/dodi-context";
 import { buildLearningContext, measureLearningContext } from "@dodi/ai/learning-context";
 import { runGameAgent, AgentAbortedError, GameAgentError, type PriorTurn } from "@dodi/ai/game-agent";
+import type { RenderGameInput, RenderGameOutput } from "@dodi/ai/game-agent-tools";
 import { runPlanAgent } from "@dodi/ai/game-plan-agent";
 import { derivePlanSettings } from "@dodi/ai/plan-settings";
 import { reportUsage } from "@/lib/usage/report-usage";
@@ -177,6 +193,17 @@ interface ChatMessage {
   images?: string[];
   /** Assistant turns whose build changed the code — anchors Show changes | Revert. */
   hasCodeChange?: boolean;
+  /** What the game agent did for this reply (display only, never fed to the model). */
+  run?: AgentRunLog;
+}
+
+/** Prior turns for the model: text and images only, never a run log. */
+function toPriorTurns(history: ChatMessage[]): PriorTurn[] {
+  return history.map((m) => ({
+    role: m.role,
+    text: m.text,
+    ...(m.images?.length ? { images: m.images } : {}),
+  }));
 }
 
 /** Lean version-history entry from GET /api/games/[id]/versions (no code). */
@@ -272,7 +299,12 @@ function restoreTranscript(initialGame?: StudioGame): ChatMessage[] {
   if (!session) return [];
   try {
     const restored = session.decryptJson<ChatMessage[]>(enc);
-    return Array.isArray(restored) ? restored : [];
+    if (!Array.isArray(restored)) return [];
+    // Transcripts sealed before run logs existed simply have no `run`.
+    return restored.map(({ run, ...m }) => {
+      const restoredRun = restoreRunLog(run);
+      return restoredRun ? { ...m, run: restoredRun } : m;
+    });
   } catch {
     // malformed / wrong key — start clean
     return [];
@@ -382,6 +414,9 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
   // Cumulative streamed size of the current write_game_code call, rounded to
   // 200-char steps so state updates (re-renders) stay coarse. 0 = hidden.
   const [writeChars, setWriteChars] = useState(0);
+  // The running build's timeline (run log), shown live in the thinking block
+  // and attached to the build's reply when it ends. Null outside a build.
+  const [liveRun, setLiveRun] = useState<AgentRunLog | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Background generation was enabled but the build produced no image — tells
   // the parent whether the model skipped the tool or generation failed.
@@ -389,6 +424,15 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
   // Same signal for the game-list preview image: the setting was on, the game
   // had no preview yet, and the build still ended without one.
   const [previewNotice, setPreviewNotice] = useState<"skipped" | "failed" | null>(null);
+  // A screenshot service was on but never delivered frames this build. A
+  // platform without a configured worker is a silent skip (see the ref), so
+  // self-hosters are not nagged; real failures do get the notice.
+  const [visualCheckNotice, setVisualCheckNotice] = useState(false);
+  const screenshotUnavailableRef = useRef(false);
+  // The account setting that picks the screenshot service (single-flight
+  // shared cache; already loaded by the parent shell in the common case).
+  const account = useAccountStore((s) => s.account);
+  const loadAccount = useAccountStore((s) => s.load);
   // Mandatory settings fields left empty on save — drives the red field markers.
   const [invalid, setInvalid] = useState<{
     title?: boolean;
@@ -523,7 +567,11 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     requestAnimationFrame(() => {
       el.scrollTop = el.scrollHeight;
     });
-  }, [messages, thinking, narration, writeChars, panes.showChat, mobileSurfaceOpen]);
+  }, [messages, thinking, narration, writeChars, liveRun, panes.showChat, mobileSurfaceOpen]);
+
+  useEffect(() => {
+    void loadAccount();
+  }, [loadAccount]);
 
   // Building/editing a game is a complex task that requires an explicitly
   // configured Game generation model. Without one we lock the composer (just
@@ -668,10 +716,12 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
   // Keep the sealed transcript bounded: images beyond the trailing window are
   // display-only history nobody re-feeds — drop them from the sealed copy so
   // agent_transcript_enc doesn't grow by hundreds of KB per attachment forever.
+  // Run logs are bounded the same way: only the trailing runs keep their
+  // (thumbnail) frames, and full-size captures never leave the session.
   const sealableTranscript = (transcript: ChatMessage[]): ChatMessage[] =>
-    transcript.map((m, i) =>
+    boundRunLogs(transcript).map((m, i) =>
       m.images?.length && i < transcript.length - TRANSCRIPT_IMAGE_MESSAGES
-        ? { role: m.role, text: m.text }
+        ? { ...m, images: undefined }
         : m,
     );
 
@@ -924,6 +974,40 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
       throw new Error("Preview image processing failed");
     }
     return square;
+  };
+
+  // ----- Visual check (screenshot service) --------------------------------
+
+  // Which screenshot service this build may use, from the account setting.
+  // "custom" needs the unlocked vault to open the sealed URL; anything that
+  // cannot be resolved means no visual check this build.
+  const resolveScreenshotTarget = (): ScreenshotTarget | null => {
+    const setting = gameScreenshotServiceOf(account);
+    if (setting.mode === "dodi") {
+      return isDodiScreenshotServiceUnavailable() ? null : { mode: "dodi" };
+    }
+    if (setting.mode === "custom" && setting.customUrlEnc) {
+      const session = useVaultStore.getState().session;
+      if (!session) return null;
+      try {
+        const url = session.decryptField(setting.customUrlEnc);
+        return url ? { mode: "custom", url } : null;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  };
+
+  // Client-side render injected into the agent loop: the sandbox document goes
+  // to the configured service and real frames come back for the model to look
+  // at. This is the moment game code leaves the browser, and the only one.
+  const makeGameView = async (input: RenderGameInput): Promise<RenderGameOutput | null> => {
+    const target = resolveScreenshotTarget();
+    if (!target) return null;
+    const output = await captureGameFrames(input, target);
+    if (!output && isDodiScreenshotServiceUnavailable()) screenshotUnavailableRef.current = true;
+    return output;
   };
 
   // Export and publish live in the game list's actions menu, not here — both act
@@ -1228,6 +1312,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
       writing_code: t("stepWritingCode"),
       validating: t("stepValidating"),
       fixing_validation: t("stepFixingValidation"),
+      visual_check: t("stepVisualCheck"),
       finalizing: t("stepFinalizing"),
     };
     return map[s];
@@ -1335,7 +1420,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
           language: getLanguageDisplayName(kid?.language ?? "en"),
           learningContext,
         },
-        priorTurns: history as PriorTurn[],
+        priorTurns: toPriorTurns(history),
         message: { text, images: attachments.length ? attachments : undefined },
         currentPlan: planDraft || null,
         // The studio is a parent surface — dodi answers in the parent's language.
@@ -1571,6 +1656,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     setError(null);
     setBgNotice(null);
     setPreviewNotice(null);
+    setVisualCheckNotice(false);
     setDraft("");
     // Attachments belong to this message — stage them and clear the strip. A
     // studio-started build (the accepted plan) brings its own image instead.
@@ -1588,6 +1674,16 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     setStep(null);
     setNarration("");
     setWriteChars(0);
+    // Record what the agent does this build (steps, narration, screenshot
+    // checks) for the "How dodi built this" timeline under its reply.
+    const recorder = createAgentRunRecorder({
+      onChange: setLiveRun,
+      thumbnail: (url) => downscaleDataUrl(url, RUN_FRAME_BOUND),
+    });
+    setLiveRun(null);
+    const finishRun = (outcome: AgentRunOutcome): { run: AgentRunLog } => ({
+      run: recorder.finish(outcome),
+    });
 
     // First build of a freshly-saved draft uses generate_game semantics (build
     // from scratch) even though the game id exists; later edits are updates.
@@ -1687,16 +1783,18 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
         apiKey: gameCfg.apiKey,
         model: gameCfg.model,
         task,
-        priorTurns: history as PriorTurn[],
+        priorTurns: toPriorTurns(history),
         signal: controller.signal,
         onStep: (s) => {
           lastStep = s;
           setStep(s);
+          recorder.onStep(s);
         },
         // Live activity: narration text streams into the line under the loader;
         // the write ticker counts streamed write_game_code input. Rounding to
         // 200-char steps keeps re-renders coarse (React skips equal states).
         onActivity: (e) => {
+          recorder.onActivity(e);
           if (e.type === "narration_start") setNarration("");
           else if (e.type === "narration_delta") setNarration((n) => n + e.text);
           else if (
@@ -1714,6 +1812,9 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
         onPrepareBackgroundImage: boundBackgroundImage,
         onGeneratePreviewImage: game.generatePreviewImage ? makePreviewImage : undefined,
         hasExistingPreviewImage: Boolean(game.previewImage),
+        // Only when the setting resolves to a service now: with none, the model
+        // never even sees the view_game tool.
+        onViewGame: resolveScreenshotTarget() ? recorder.wrapViewGame(makeGameView) : undefined,
       });
 
       // Preview-only run: the parent asked for a new preview image and nothing
@@ -1724,7 +1825,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
           setPreviewNotice("failed");
           const withFail: ChatMessage[] = [
             ...withUser,
-            { role: "assistant", text: t("previewUpdateFailedMessage") },
+            { role: "assistant", text: t("previewUpdateFailedMessage"), ...finishRun("failed") },
           ];
           setMessages(withFail);
           void persistTranscript(withFail).catch(() => {
@@ -1736,7 +1837,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
         const gameId = game.id;
         const withDodi: ChatMessage[] = [
           ...withUser,
-          { role: "assistant", text: t("previewUpdatedMessage") },
+          { role: "assistant", text: t("previewUpdatedMessage"), ...finishRun("completed") },
         ];
         setMessages(withDodi);
         setGame((g) => ({ ...g, previewImage: preview }));
@@ -1786,6 +1887,9 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
       if (game.generatePreviewImage && !result.previewImage) {
         if (result.previewImageFailed) setPreviewNotice("failed");
         else if (!game.previewImage) setPreviewNotice("skipped");
+      }
+      if (result.visualCheckFailed && !screenshotUnavailableRef.current) {
+        setVisualCheckNotice(true);
       }
 
       // Sanitize client-side before it touches state/persistence (the games route
@@ -1847,7 +1951,12 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
           : `Here's **${result.title}** — it's live in the preview; flip to Code to see what I wrote.`;
       const withDodi: ChatMessage[] = [
         ...withUser,
-        { role: "assistant", text: dodiText, ...(codeChanged ? { hasCodeChange: true } : {}) },
+        {
+          role: "assistant",
+          text: dodiText,
+          ...(codeChanged ? { hasCodeChange: true } : {}),
+          ...finishRun(result.validationPassed ? "completed" : "validation_failed"),
+        },
       ];
 
       const builtCapabilities = Array.isArray(result.metadata.capabilities)
@@ -1912,7 +2021,8 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     } catch (err) {
       // Pressing Stop aborts the loop — don't dress that up as a failure.
       if (err instanceof AgentAbortedError || controller.signal.aborted) {
-        setMessages((m) => [...m, { role: "assistant", text: t("stopped") }]);
+        const stopped = finishRun("stopped");
+        setMessages((m) => [...m, { role: "assistant", text: t("stopped"), ...stopped }]);
       } else {
         // The user sees only the generic message (no server/provider errors
         // bubble up) — the real error goes to telemetry, where the meta below
@@ -1940,13 +2050,15 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
           }),
         });
         setError(t("buildFailed"));
-        setMessages((m) => [...m, { role: "assistant", text: t("buildFailed") }]);
+        const failed = finishRun("failed");
+        setMessages((m) => [...m, { role: "assistant", text: t("buildFailed"), ...failed }]);
       }
     } finally {
       setThinking(false);
       setStep(null);
       setNarration("");
       setWriteChars(0);
+      setLiveRun(null);
       abortRef.current = null;
     }
   }
@@ -2682,6 +2794,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
                       />
                       <div className="min-w-0 flex-1 text-sm leading-[1.6] text-ink">
                         <RichText text={m.text} />
+                        {m.run && <AgentRunHistory run={m.run} />}
                         {i === lastChangeIndex && (canDiff || reverted) && (
                           <div className="mt-1.5 flex items-center gap-1.5 text-[11.5px] font-medium text-faint">
                             <button
@@ -2742,6 +2855,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
                       <span className="h-[7px] w-[7px] animate-bounce rounded-full bg-faint [animation-delay:150ms]" />
                       <span className="h-[7px] w-[7px] animate-bounce rounded-full bg-faint [animation-delay:300ms]" />
                     </div>
+                    {liveRun && <AgentRunTimeline run={liveRun} isLive />}
                     {/* No aria-live: announcing every streamed delta would spam
                         screen readers — the header status line carries progress. */}
                     {narration.trim() && (
@@ -2805,6 +2919,12 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
                 <span>
                   {t(previewNotice === "failed" ? "previewFailedNotice" : "previewSkippedNotice")}
                 </span>
+              </div>
+            )}
+            {visualCheckNotice && (
+              <div className="mb-2 flex items-start gap-1.5 rounded-lg bg-warning-soft px-2.5 py-1.5 text-xs font-medium text-warning">
+                <Icon name="alert" size={14} className="mt-px shrink-0" />
+                <span>{t("visualCheckFailedNotice")}</span>
               </div>
             )}
             <div className="relative rounded-2xl border border-border-strong bg-card px-4 pb-2.5 pt-3 shadow-[0_4px_18px_rgba(34,56,78,0.07)] transition-colors focus-within:border-primary">

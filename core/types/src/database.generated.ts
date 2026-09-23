@@ -25,6 +25,19 @@ export type Numeric = ColumnType<number, number | string, number | string>;
 
 export type Timestamp = ColumnType<string, Date | string, Date | string>;
 
+export interface AccountRateLimitWindows {
+  account_id: string;
+  /**
+   * Which limited operation the row counts, e.g. game_screenshot.
+   */
+  bucket: string;
+  request_count: Generated<number>;
+  /**
+   * Start of the fixed window (now floored to the window length).
+   */
+  window_start: Timestamp;
+}
+
 export interface Accounts {
   created_at: Generated<Timestamp>;
   /**
@@ -40,6 +53,10 @@ export interface Accounts {
    * Stamped once when any of the account's submissions is hard-rejected; surfaced to the operator, never auto-cleared.
    */
   flagged_for_review_at: Timestamp | null;
+  /**
+   * Game Studio visual-check setting: {"mode": "off"|"dodi"|"custom", "customUrlEnc"?: enc:v1:}. mode is plaintext (the platform enforces the opt-in for POST /api/games/screenshot); customUrlEnc is sealed client-side under the account VMK and never read by the server.
+   */
+  game_screenshot_service: Generated<Json>;
   id: string;
   /**
    * Parent UI language (BCP-47 short code, e.g. en/de). Durable source of truth; cached client-side in the NEXT_LOCALE cookie and re-seeded at login.
@@ -600,6 +617,7 @@ export interface Transcripts {
 }
 
 export interface DB {
+  account_rate_limit_windows: AccountRateLimitWindows;
   accounts: Accounts;
   activities: Activities;
   ai_usage_logs: AiUsageLogs;

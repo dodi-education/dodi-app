@@ -13,6 +13,7 @@
     "./background-image": "./src/background-image.ts",
     "./char-strokes": "./src/char-strokes.ts",
     "./bridge-protocol": "./src/bridge-protocol.ts",
+    "./screenshot-contract": "./src/screenshot-contract.ts",
     "./toolbox": "./src/toolbox.ts",
     "./command-markers": "./src/command-markers.ts",
     "./normalize-commands": "./src/normalize-commands.ts",

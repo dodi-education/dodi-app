@@ -6,10 +6,12 @@ import { requireAuth } from "@/lib/resolve-auth";
 import {
   getAccount,
   updateAccountDatePreferences,
+  updateAccountGameScreenshotService,
   updateAccountLanguage,
   updateAccountNotificationPreferences,
   updateAccountParentPin,
 } from "@/services/accounts";
+import { GameScreenshotServiceSettingsSchema } from "@dodi/games/screenshot-contract";
 import { DATE_STYLE_IDS } from "@dodi/intl";
 
 /** Update payload for date/time display preferences. */
@@ -38,6 +40,9 @@ const UpdateAccountSchema = z.object({
   // sees the plaintext PIN.
   parentPinEnc: z.string().min(1).nullable().optional(),
   notificationPreferences: NotificationPreferencesSchema.optional(),
+  // Game Studio screenshot service: plaintext mode + an `enc:v1:` sealed custom
+  // URL. The server validates only the envelope; it never sees the URL.
+  gameScreenshotService: GameScreenshotServiceSettingsSchema.optional(),
 });
 
 /** User-authed: the caller's account (subscribed plan, entitlements, preferences). */
@@ -63,8 +68,13 @@ export async function PATCH(request: Request): Promise<Response> {
     );
   }
 
-  const { datePreferences, language, parentPinEnc, notificationPreferences } =
-    result.data;
+  const {
+    datePreferences,
+    language,
+    parentPinEnc,
+    notificationPreferences,
+    gameScreenshotService,
+  } = result.data;
 
   try {
     const savedDatePreferences = datePreferences
@@ -83,10 +93,14 @@ export async function PATCH(request: Request): Promise<Response> {
           notificationPreferences,
         )
       : undefined;
+    const savedGameScreenshotService = gameScreenshotService
+      ? await updateAccountGameScreenshotService(db, accountId, gameScreenshotService)
+      : undefined;
     return NextResponse.json({
       datePreferences: savedDatePreferences,
       language,
       notificationPreferences: savedNotificationPreferences,
+      gameScreenshotService: savedGameScreenshotService,
     });
   } catch (error) {
     return serverErrorResponse(error, "Failed to update account", "api/account#PATCH", {

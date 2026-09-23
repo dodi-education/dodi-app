@@ -20,6 +20,7 @@ import {
   createXaiTurnAccumulator,
   toAnthropicContent,
   toOpenAITools,
+  toToolResultContent,
   toXaiContent,
 } from "./game-agent-drivers";
 
@@ -435,6 +436,83 @@ describe("driver toolset override", () => {
     const req = create.mock.calls[0][0] as { tools: Array<{ function: { name: string } }> };
     expect(req.tools).toHaveLength(AGENT_TOOLS.length + 1);
     expect(req.tools.map((t) => t.function.name)).toContain("generate_background_image");
+  });
+});
+
+describe("tool results carrying images (view_game frames)", () => {
+  it("Anthropic: a plain string without images, image blocks then the text with them", () => {
+    expect(toToolResultContent({ id: "t1", content: "ok" })).toBe("ok");
+    expect(toToolResultContent({ id: "t1", content: "ok", images: [] })).toBe("ok");
+    expect(toToolResultContent({ id: "t1", content: "ok", images: ["nonsense"] })).toBe("ok");
+    const blocks = toToolResultContent({ id: "t1", content: "look", images: [PNG, JPEG] });
+    expect(blocks).toEqual([
+      { type: "image", source: { type: "base64", media_type: "image/png", data: "AAAA" } },
+      { type: "image", source: { type: "base64", media_type: "image/jpeg", data: "BBBB" } },
+      { type: "text", text: "look" },
+    ]);
+  });
+
+  it("xAI: keeps tool messages text-only and delivers the frames in a user message after them", async () => {
+    const toolCallTurn = streamOf({
+      choices: [
+        {
+          delta: {
+            tool_calls: [
+              { index: 0, id: "call_1", function: { name: "view_game", arguments: "{}" } },
+            ],
+          },
+          finish_reason: "tool_calls",
+        },
+      ],
+      usage: { prompt_tokens: 1, completion_tokens: 1 },
+    });
+    const endTurn = streamOf({
+      choices: [{ delta: { content: "done" }, finish_reason: "stop" }],
+      usage: { prompt_tokens: 1, completion_tokens: 1 },
+    });
+    create.mockResolvedValueOnce(toolCallTurn).mockResolvedValueOnce(endTurn);
+
+    const driver = createGameDriver("xai", {
+      apiKey: "k",
+      model: "grok-4.3",
+      systemPrompt: "SYS",
+      maxTokens: 10,
+    });
+    driver.seed(undefined, "go");
+    await driver.runTurn();
+    driver.addToolResults([{ id: "call_1", content: "report", images: [JPEG] }]);
+    await driver.runTurn();
+
+    const req = create.mock.calls[1][0] as {
+      messages: Array<{ role: string; content: unknown; tool_call_id?: string }>;
+    };
+    const tail = req.messages.slice(-2);
+    expect(tail[0]).toMatchObject({ role: "tool", tool_call_id: "call_1", content: "report" });
+    expect(tail[1].role).toBe("user");
+    expect(tail[1].content).toEqual([
+      { type: "image_url", image_url: { url: JPEG } },
+      { type: "text", text: "The screenshot frames from the tool result(s) above, in order." },
+    ]);
+  });
+
+  it("xAI: adds no extra message when results carry no images", async () => {
+    create.mockResolvedValueOnce(
+      streamOf({
+        choices: [{ delta: { content: "ok" }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 1, completion_tokens: 1 },
+      }),
+    );
+    const driver = createGameDriver("xai", {
+      apiKey: "k",
+      model: "grok-4.3",
+      systemPrompt: "SYS",
+      maxTokens: 10,
+    });
+    driver.seed(undefined, "go");
+    driver.addToolResults([{ id: "call_1", content: "report" }]);
+    await driver.runTurn();
+    const req = create.mock.calls[0][0] as { messages: Array<{ role: string }> };
+    expect(req.messages.map((m) => m.role)).toEqual(["system", "user", "tool"]);
   });
 });
 

@@ -116,6 +116,11 @@ export interface AgentCodeResult {
   /** A preview-image generation attempt threw during the run. */
   previewImageFailed?: boolean;
   /**
+   * The screenshot service was enabled but never delivered frames (down,
+   * timed out, malformed reply), so the game shipped without a visual check.
+   */
+  visualCheckFailed?: boolean;
+  /**
    * The run only regenerated the preview image (parent asked for a new one in
    * chat) — code, markdown and every other field are the UNCHANGED existing
    * values and must not be re-persisted as a content update.

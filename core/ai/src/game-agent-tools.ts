@@ -15,7 +15,11 @@ import {
   BACKGROUND_IMAGE_PLACEHOLDER,
   BACKGROUND_STYLE_BLOCK,
   hasBackgroundPlaceholder,
+  injectBackgroundImage,
 } from "@dodi/games/background-image";
+import { visualCheckRubric } from "@dodi/games/design-language";
+import { SCREENSHOT_LIMITS } from "@dodi/games/screenshot-contract";
+import type { GameCommand, GamePerspective } from "@dodi/types/games";
 import {
   CHAR_STROKE_COORDS,
   CHAR_STROKES_GUIDE,
@@ -310,7 +314,10 @@ const GENERATE_BACKGROUND_IMAGE_TOOL: Anthropic.Tool = {
         type: "string",
         description:
           "Scene description for the illustration: environment/backdrop only (no main " +
-          "characters, no interactive objects, no UI). It MUST be text-free — absolutely no " +
+          "characters, no interactive objects, no UI). Describe the world itself, never a " +
+          "surface, plate, board, table top, frame, panel, card or empty spot meant to hold " +
+          "game elements: your code draws those, and a painted one never lines up with them. " +
+          "It MUST be text-free — absolutely no " +
           "letters, numbers, words, or signs anywhere in the image (game text stays DOM/SVG " +
           "so it can be translated). Match the game's theme, mood, and required perspective.",
       },
@@ -369,20 +376,72 @@ const GENERATE_PREVIEW_IMAGE_TOOL: Anthropic.Tool = {
   },
 };
 
+/** Cost guard: screenshot-service renders the model may request per agent run. */
+export const MAX_VIEW_GAME_CALLS = 2;
+
+const VIEW_GAME_TOOL: Anthropic.Tool = {
+  name: "view_game",
+  description:
+    "Render your CURRENT game code in a real browser and SEE it: returns real screenshots " +
+    "(the opening screen, then one after each optional step) plus any runtime errors the page " +
+    "threw. Call it AFTER your final write_game_code + validate_game and before you finish " +
+    `(at most ${MAX_VIEW_GAME_CALLS} calls per build: look, fix, look again). Use steps to ` +
+    "reach the states a child sees most (first answer, mid-game, success) with commands from " +
+    "the capabilities you declared. Judge every frame against the Visual Design Language and " +
+    "fix what is wrong with edit_game_code, then validate_game. A frame that did not change " +
+    "after a command means that command handler is broken.",
+  input_schema: {
+    type: "object" as const,
+    properties: {
+      steps: {
+        type: "array",
+        maxItems: SCREENSHOT_LIMITS.MAX_STEPS,
+        description:
+          "Interactions to drive after the opening screen; a frame is captured after each. " +
+          "Omit for the opening screen only.",
+        items: {
+          type: "object",
+          properties: {
+            label: {
+              type: "string",
+              description: "What this frame shows, e.g. 'after the first correct answer'.",
+            },
+            command: {
+              type: "object",
+              description:
+                "A dodi:command from your declared capabilities: { type, payload? }.",
+              properties: {
+                type: { type: "string" },
+                payload: { type: "object" },
+              },
+              required: ["type"],
+            },
+          },
+          required: ["label"],
+        },
+      },
+    },
+    required: [],
+  },
+};
+
 /**
  * The agent's toolset. The image tools appear only when usable: background /
  * preview generation when the respective setting + an image provider are on,
- * uploaded backgrounds when the parent's message carries reference images.
+ * uploaded backgrounds when the parent's message carries reference images,
+ * view_game when the account has a screenshot service configured.
  */
 export function buildAgentTools(opts: {
   backgroundImage: boolean;
   uploadedImages?: boolean;
   previewImage?: boolean;
+  viewGame?: boolean;
 }): Anthropic.Tool[] {
   const extras: Anthropic.Tool[] = [];
   if (opts.backgroundImage) extras.push(GENERATE_BACKGROUND_IMAGE_TOOL);
   if (opts.uploadedImages) extras.push(USE_UPLOADED_BACKGROUND_TOOL);
   if (opts.previewImage) extras.push(GENERATE_PREVIEW_IMAGE_TOOL);
+  if (opts.viewGame) extras.push(VIEW_GAME_TOOL);
   return extras.length > 0 ? [...AGENT_TOOLS, ...extras] : AGENT_TOOLS;
 }
 
@@ -397,6 +456,114 @@ function backgroundUsageInstruction(firstLine: string): string {
     "  background: var(--background-image) center / cover no-repeat;",
     `Never write a data: URL yourself — the app substitutes ${BACKGROUND_IMAGE_PLACEHOLDER} with the real image after you finish. Layer your gradients/shapes and all text as DOM elements on top of it.`,
   ].join("\n");
+}
+
+// ---------------------------------------------------------------------------
+// Rendering (screenshot service) — loop-side shapes
+// ---------------------------------------------------------------------------
+
+/** One interaction the renderer drives after the opening screen. */
+export interface RenderGameStep {
+  label: string;
+  command?: GameCommand;
+}
+
+export interface RenderGameInput {
+  /** The bundle WITH its background injected: exactly what the sandbox loads. */
+  code: string;
+  steps: RenderGameStep[];
+}
+
+export interface RenderGameFrame {
+  label: string;
+  /** Image data URL, already bounded by the client. */
+  image: string;
+}
+
+export interface RenderGameOutput {
+  /** Frame 0 is the opening screen, then one per step. */
+  frames: RenderGameFrame[];
+  /** The game sent game:ready before the renderer's timeout. */
+  ready: boolean;
+  warnings: string[];
+  /** Uncaught exceptions and console.error output from the page. */
+  errors: string[];
+  /**
+   * Measured layout problems (UI elements covering each other), one readable
+   * line each, naming the frame. Absent from services that do not measure.
+   */
+  layoutIssues?: string[];
+}
+
+/**
+ * The model-facing text for a render: which frames it is looking at, whether
+ * the game came up, what it threw, then the rubric. Shared by the view_game
+ * tool result and the loop's forced check so both say the same thing.
+ */
+export function renderReport(
+  output: RenderGameOutput,
+  perspective?: GamePerspective | null,
+): string {
+  const lines: string[] = [];
+  if (output.frames.length === 0) {
+    lines.push("No frame could be captured.");
+  } else {
+    lines.push(
+      `${output.frames.length} real screenshot(s) of your game are attached, in this order:`,
+    );
+    output.frames.forEach((frame, i) => lines.push(`${i + 1}. ${frame.label}`));
+  }
+  if (!output.ready) {
+    lines.push(
+      "",
+      "RUNTIME FAILURE: the game never sent game:ready. It most likely threw during " +
+        "initialization or never handled dodi:init. Fix that first; it matters more than " +
+        "any visual issue.",
+    );
+  }
+  if (output.errors.length > 0) {
+    lines.push("", "Runtime errors captured from the page:");
+    for (const error of output.errors) lines.push(`- ${error}`);
+  }
+  if (output.warnings.length > 0) {
+    lines.push("", "Warnings:");
+    for (const warning of output.warnings) lines.push(`- ${warning}`);
+  }
+  if (output.layoutIssues?.length) {
+    lines.push(
+      "",
+      "LAYOUT COLLISIONS measured in the rendered page (element positions, not a guess from " +
+        "the image). Move or resize elements so none of these touch, unless the parent " +
+        "explicitly asked for that overlap:",
+    );
+    for (const issue of output.layoutIssues) lines.push(`- ${issue}`);
+  }
+  lines.push("", visualCheckRubric(perspective));
+  return lines.join("\n");
+}
+
+/** Defensive coercion of the model's `steps` input (the xAI driver may hand back junk). */
+function parseRenderSteps(value: unknown): RenderGameStep[] {
+  if (!Array.isArray(value)) return [];
+  const steps: RenderGameStep[] = [];
+  for (const raw of value.slice(0, SCREENSHOT_LIMITS.MAX_STEPS)) {
+    const item = typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>) : {};
+    const label = typeof item.label === "string" ? item.label.trim() : "";
+    if (!label) continue;
+    const step: RenderGameStep = { label: label.slice(0, SCREENSHOT_LIMITS.MAX_LABEL_CHARS) };
+    const command =
+      typeof item.command === "object" && item.command !== null
+        ? (item.command as Record<string, unknown>)
+        : null;
+    if (command && typeof command.type === "string" && command.type.trim()) {
+      step.command = { type: command.type.trim() };
+      if (typeof command.payload === "object" && command.payload !== null) {
+        step.command.payload = command.payload as GameCommand["payload"];
+      }
+    }
+    steps.push(step);
+  }
+  return steps;
 }
 
 // ---------------------------------------------------------------------------
@@ -449,6 +616,25 @@ export interface ToolContext {
   previewImageCalls?: number;
   /** Set when a preview generation attempt threw (studio shows a notice). */
   previewImageFailed?: boolean;
+  /**
+   * Client-injected renderer (the account's screenshot service). Present only
+   * when the setting is on. Receives the bundle WITH its background injected
+   * and answers with real frames, or null when the service is unavailable
+   * (never throws; the loop treats a throw like null).
+   */
+  renderGame?: (input: RenderGameInput) => Promise<RenderGameOutput | null>;
+  /** Renders spent this run (cost guard). */
+  viewGameCalls?: number;
+  /** Set when a render attempt returned nothing (studio shows a notice). */
+  viewGameFailed?: boolean;
+  /**
+   * The model's latest view_game measured layout collisions. The loop then
+   * re-renders the final code before finishing, since a fix may not have
+   * been checked (or the collisions ignored).
+   */
+  lastViewHadLayoutIssues?: boolean;
+  /** Configured perspective, for the rubric wording in render reports. */
+  perspective?: GamePerspective | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -520,7 +706,7 @@ export async function executeTool(
   toolName: string,
   toolInput: Record<string, unknown>,
   context: ToolContext,
-): Promise<{ result: string; writeResult?: LastWriteResult }> {
+): Promise<{ result: string; writeResult?: LastWriteResult; images?: string[] }> {
   switch (toolName) {
     case "write_game_code": {
       const code = typeof toolInput.code === "string" ? toolInput.code : "";
@@ -906,6 +1092,46 @@ export async function executeTool(
           }),
         };
       }
+    }
+
+    case "view_game": {
+      if (!context.renderGame) {
+        return toolError({ error: "Visual checks are not enabled for this account." });
+      }
+      const code = context.existingCode;
+      if (!code) {
+        return toolError({
+          error: "No game code to view yet. Write it with write_game_code first.",
+        });
+      }
+      context.viewGameCalls = (context.viewGameCalls ?? 0) + 1;
+      if (context.viewGameCalls > MAX_VIEW_GAME_CALLS) {
+        return toolError({
+          error:
+            `Visual check budget for this build is used up (${MAX_VIEW_GAME_CALLS} per build). ` +
+            "Finish with what you have already seen.",
+        });
+      }
+      // The loop keeps the bundle in placeholder form; the renderer must see
+      // the real background or the model "fixes" a broken url() that is fine.
+      const background = context.freshBackgroundImage ?? context.carriedBackgroundImage;
+      const renderable = background ? injectBackgroundImage(code, background) : code;
+      const output = await context
+        .renderGame({ code: renderable, steps: parseRenderSteps(toolInput.steps) })
+        .catch(() => null);
+      if (!output) {
+        context.viewGameFailed = true;
+        return toolError({
+          error:
+            "The screenshot service is unavailable right now. Continue without a visual " +
+            "check and finish the task.",
+        });
+      }
+      context.lastViewHadLayoutIssues = Boolean(output.layoutIssues?.length);
+      return {
+        result: renderReport(output, context.perspective),
+        images: output.frames.map((frame) => frame.image),
+      };
     }
 
     case "read_existing_game": {

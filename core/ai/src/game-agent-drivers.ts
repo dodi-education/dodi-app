@@ -57,6 +57,13 @@ export interface GameToolCall {
 export interface GameToolResult {
   id: string;
   content: string;
+  /**
+   * Frames the tool wants the model to SEE (view_game screenshots), as data
+   * URLs. Anthropic takes them inside the tool_result; OpenAI-style tool
+   * messages are text-only, so the xAI driver delivers them in a user message
+   * right after the results.
+   */
+  images?: string[];
 }
 
 export interface GameTurn {
@@ -116,19 +123,33 @@ function parseJsonObject(raw: string | undefined | null): Record<string, unknown
 // Anthropic driver
 // ---------------------------------------------------------------------------
 
+/** One base64 image block from a data URL that already passed validImages. */
+function toImageBlock(image: string): Anthropic.ImageBlockParam {
+  const parsed = parseImageDataUrl(image)!;
+  return {
+    type: "image",
+    source: { type: "base64", media_type: parsed.mediaType, data: parsed.base64 },
+  };
+}
+
 /** Content blocks for one turn — images first, then the text. Empty when blank. */
 function toAnthropicBlocks(content: UserContent): Anthropic.ContentBlockParam[] {
-  const blocks: Anthropic.ContentBlockParam[] = [];
-  for (const image of validImages(content.images)) {
-    const parsed = parseImageDataUrl(image)!;
-    blocks.push({
-      type: "image",
-      source: { type: "base64", media_type: parsed.mediaType, data: parsed.base64 },
-    });
-  }
+  const blocks: Anthropic.ContentBlockParam[] = validImages(content.images).map(toImageBlock);
   const text = content.text.trim();
   if (text) blocks.push({ type: "text", text });
   return blocks;
+}
+
+/**
+ * tool_result content: the plain string in the common case; image blocks
+ * followed by the text when the tool returned frames for the model to look at.
+ */
+export function toToolResultContent(
+  result: GameToolResult,
+): string | Array<Anthropic.TextBlockParam | Anthropic.ImageBlockParam> {
+  const images = validImages(result.images);
+  if (images.length === 0) return result.content;
+  return [...images.map(toImageBlock), { type: "text", text: result.content }];
 }
 
 /**
@@ -312,7 +333,7 @@ class AnthropicGameDriver implements GameCodeDriver {
       content: results.map((r) => ({
         type: "tool_result" as const,
         tool_use_id: r.id,
-        content: r.content,
+        content: toToolResultContent(r),
       })),
     });
   }
@@ -511,8 +532,21 @@ class XaiGameDriver implements GameCodeDriver {
   }
 
   addToolResults(results: GameToolResult[]): void {
+    const images: string[] = [];
     for (const r of results) {
       this.#messages.push({ role: "tool", tool_call_id: r.id, content: r.content });
+      images.push(...validImages(r.images));
+    }
+    // OpenAI-style tool messages carry text only, so frames a tool returned
+    // ride in one user message right behind the results they belong to.
+    if (images.length > 0) {
+      this.#messages.push({
+        role: "user",
+        content: toXaiContent({
+          text: "The screenshot frames from the tool result(s) above, in order.",
+          images,
+        }),
+      });
     }
   }
 }

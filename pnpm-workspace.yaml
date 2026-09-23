@@ -2,5 +2,6 @@ packages:
   - "clients/*"
   - "landing"
   - "platform"
+  - "screenshot"
   - "agent"
   - "core/*"

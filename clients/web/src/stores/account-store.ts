@@ -8,7 +8,8 @@
 import { create } from "zustand";
 
 import { dodi } from "@/lib/api";
-import type { Account } from "@dodi/types/database";
+import { parseGameScreenshotServiceSettings } from "@dodi/games/screenshot-contract";
+import type { Account, GameScreenshotServiceSettings, Json } from "@dodi/types/database";
 
 /** Plaintext (opt-out; unset ⇒ on) toggles the server reads to decide whether
  *  to send transactional email. Stored in accounts.notification_preferences. */
@@ -80,3 +81,20 @@ export const useAccountStore = create<AccountState>((set, get) => ({
 
   reset: () => set({ account: null, loaded: false, loadFailed: false }),
 }));
+
+/**
+ * The account's Game Studio screenshot-service choice (the default while the
+ * account is unloaded).
+ */
+export function gameScreenshotServiceOf(
+  account: Account | null,
+): GameScreenshotServiceSettings {
+  return parseGameScreenshotServiceSettings(account?.game_screenshot_service);
+}
+
+/** Mirror a saved screenshot-service choice into the cached account. */
+export function patchGameScreenshotService(settings: GameScreenshotServiceSettings): void {
+  useAccountStore
+    .getState()
+    .patchLocal({ game_screenshot_service: settings as unknown as Json });
+}

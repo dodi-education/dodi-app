@@ -44,9 +44,13 @@ describe("AGENT_LIMITS", () => {
     // regression here silently widens cost risk, so pin them exactly.
     // MAX_TOKENS was deliberately raised 8k → 100k on 2026-07-17 (prod builds
     // truncated at 8k) — headroom, not expected spend; real writes stay ~10-15k.
+    // MAX_VISUAL_FIX_ROUNDS (2026-09-22) adds at most two turns when a
+    // screenshot service is on and the model skipped view_game: one to edit,
+    // one to validate or retry.
     expect(AGENT_LIMITS).toEqual({
       MAX_AGENT_TURNS: 15,
       MAX_VALIDATION_RETRIES: 1,
+      MAX_VISUAL_FIX_ROUNDS: 2,
       MAX_TOKENS: 100_000,
     });
   });
@@ -1194,5 +1198,313 @@ describe("live activity + narration", () => {
         signal: controller.signal,
       }),
     ).rejects.toBeInstanceOf(AgentAbortedError);
+  });
+});
+
+describe("visual check loop integration", () => {
+  const FRAME = "data:image/jpeg;base64,RlJBTUU=";
+  const BG = "data:image/jpeg;base64,QkFDS0dST1VORA==";
+  const PLACEHOLDER_BLOCK = `<style id="background-image">:root{--background-image:url("{{BACKGROUND_IMAGE}}")}</style>`;
+  const compliant = (extra = ""): string =>
+    `<!doctype html><html><head><script type="application/dodi-translations">{"sourceLocale":"en","locales":{"en":{"game.title":"Game"}}}</script>${extra}</head><body><script>
+      document.title = dodi.translate('game.title');
+      window.addEventListener('message', function (e) {
+        if (e.data.type === 'dodi:init') parent.postMessage({ type: 'game:ready', payload: { capabilities: [] } }, '*');
+        if (e.data.type === 'dodi:command') parent.postMessage({ type: 'game:result' }, '*');
+      });
+    </script></body></html>`;
+
+  const turn = (toolCalls: GameTurn["toolCalls"], hasText = false): GameTurn => ({
+    toolCalls,
+    text: hasText ? "Looks good." : "",
+    hasText,
+    expectsToolResults: toolCalls.length > 0,
+    stopReason: toolCalls.length > 0 ? "tool_use" : "end_turn",
+    usage: emptyUsage,
+  });
+  const writeTurn = (code: string): GameTurn =>
+    turn([
+      {
+        id: "w1",
+        name: "write_game_code",
+        input: { code, markdown: "m", title: "T", capabilities: [] },
+      },
+    ]);
+  const editTurn = (id: string): GameTurn =>
+    turn([
+      {
+        id,
+        name: "edit_game_code",
+        input: {
+          edits: [
+            { old_text: "document.title = dodi.translate('game.title');", new_text: "document.title = dodi.translate('game.title') + '!';" },
+          ],
+          changeSummary: "- fixed",
+        },
+      },
+    ]);
+  const rendered = (patch: Partial<RenderOutput> = {}): RenderOutput => ({
+    frames: [{ label: "initial", image: FRAME }],
+    ready: true,
+    warnings: [],
+    errors: [],
+    ...patch,
+  });
+  type RenderOutput = NonNullable<Awaited<ReturnType<NonNullable<Parameters<typeof runGameAgent>[0]["onViewGame"]>>>>;
+
+  /** Scripted driver that also records user messages (the forced check's channel). */
+  function capturingDriver(turns: GameTurn[]) {
+    const toolResults: GameToolResult[][] = [];
+    const userMessages: UserContent[] = [];
+    let seedText = "";
+    let turnsRun = 0;
+    const driver: GameCodeDriver = {
+      seed: (_t, first) => {
+        seedText = typeof first === "string" ? first : first.text;
+      },
+      addUserMessage: (content) => {
+        userMessages.push(typeof content === "string" ? { text: content } : content);
+      },
+      addToolResults: (rs) => {
+        toolResults.push(rs);
+      },
+      runTurn: () => Promise.resolve(turns[Math.min(turnsRun++, turns.length - 1)]),
+    };
+    return { driver, toolResults, userMessages, getSeedText: () => seedText, turns: () => turnsRun };
+  }
+
+  const run = (driver: GameCodeDriver, onViewGame?: Parameters<typeof runGameAgent>[0]["onViewGame"]) => {
+    mockDriverFactory = () => driver;
+    return runGameAgent({ provider: "anthropic", apiKey: "k", model: "m", task: TASK, onViewGame });
+  };
+
+  it("exposes view_game, the prompt section and the recipe step only with a service", async () => {
+    let captured: GameDriverOptions | undefined;
+    mockDriverFactory = (...args: unknown[]) => {
+      captured = args[1] as GameDriverOptions;
+      return driverReturning([writeTurn(compliant()), turn([])]);
+    };
+    await runGameAgent({ provider: "anthropic", apiKey: "k", model: "m", task: TASK });
+    expect(captured!.tools!.map((t) => t.name)).not.toContain("view_game");
+    expect(captured!.systemPrompt).not.toContain("## Visual Check");
+
+    const withService = capturingDriver([writeTurn(compliant()), turn([])]);
+    mockDriverFactory = (...args: unknown[]) => {
+      captured = args[1] as GameDriverOptions;
+      return withService.driver;
+    };
+    await runGameAgent({
+      provider: "anthropic",
+      apiKey: "k",
+      model: "m",
+      task: TASK,
+      onViewGame: vi.fn().mockResolvedValue(rendered()),
+    });
+    expect(captured!.tools!.map((t) => t.name)).toContain("view_game");
+    expect(captured!.systemPrompt).toContain("## Visual Check");
+    expect(withService.getSeedText()).toContain("5. Look at the finished game with view_game");
+    expect(withService.getSeedText()).toContain("A visual check is available");
+  });
+
+  it("view_game renders the bundle with its background and hands the frames back as a tool result", async () => {
+    const captured = capturingDriver([
+      turn([{ id: "b1", name: "generate_background_image", input: { scene: "meadow" } }]),
+      writeTurn(compliant(PLACEHOLDER_BLOCK)),
+      turn([{ id: "v1", name: "view_game", input: { steps: [{ label: "after a tap", command: { type: "submit_answer" } }] } }]),
+      turn([], true),
+    ]);
+    const onViewGame = vi.fn().mockResolvedValue(
+      rendered({ frames: [{ label: "initial", image: FRAME }, { label: "after a tap", image: FRAME }] }),
+    );
+    mockDriverFactory = () => captured.driver;
+    const result = await runGameAgent({
+      provider: "anthropic",
+      apiKey: "k",
+      model: "m",
+      task: TASK,
+      onGenerateBackgroundImage: vi.fn().mockResolvedValue(BG),
+      onViewGame,
+    });
+
+    expect(onViewGame).toHaveBeenCalledTimes(1);
+    const input = onViewGame.mock.calls[0][0];
+    expect(input.code).toContain(BG);
+    expect(input.code).not.toContain("{{BACKGROUND_IMAGE}}");
+    expect(input.steps).toEqual([{ label: "after a tap", command: { type: "submit_answer" } }]);
+    const viewResult = captured.toolResults[2][0];
+    expect(viewResult.images).toEqual([FRAME, FRAME]);
+    expect(viewResult.content).toContain("2. after a tap");
+    // The model looked itself: no forced check, no extra user message.
+    expect(captured.userMessages).toHaveLength(0);
+    expect(result.visualCheckFailed).toBeUndefined();
+    expect(result.codeBundle).toContain("{{BACKGROUND_IMAGE}}");
+    expect(result.validationPassed).toBe(true);
+  });
+
+  it("forces one check when the model never looked, and lets it fix what it sees", async () => {
+    const captured = capturingDriver([
+      writeTurn(compliant()),
+      turn([], true), // finishes without view_game
+      editTurn("e1"), // fix round 1
+      turn([{ id: "val", name: "validate_game", input: {} }]), // fix round 2
+      turn([], true), // never reached: rounds are bounded
+    ]);
+    const onViewGame = vi.fn().mockResolvedValue(rendered());
+    const steps: AgentStep[] = [];
+    mockDriverFactory = () => captured.driver;
+    const result = await runGameAgent({
+      provider: "anthropic",
+      apiKey: "k",
+      model: "m",
+      task: TASK,
+      onViewGame,
+      onStep: (s) => steps.push(s),
+    });
+
+    expect(onViewGame).toHaveBeenCalledTimes(1);
+    expect(onViewGame.mock.calls[0][0].steps).toEqual([]);
+    expect(steps).toContain("visual_check");
+    expect(captured.userMessages).toHaveLength(1);
+    const [message] = captured.userMessages;
+    expect(message.images).toEqual([FRAME]);
+    expect(message.text).toContain("rendered your game for you");
+    expect(message.text).toContain("1. initial");
+    expect(message.text).toContain("edit_game_code");
+    // write, end, edit, validate = 4 turns; the 5th scripted turn is never run.
+    expect(captured.turns()).toBe(4);
+    expect(result.iterationCount).toBe(4);
+    expect(result.codeBundle).toContain("dodi.translate('game.title') + '!'");
+    expect(result.validationPassed).toBe(true);
+    expect(result.visualCheckFailed).toBeUndefined();
+  });
+
+  it("bounds the fix rounds even when the model keeps editing", async () => {
+    const captured = capturingDriver([writeTurn(compliant()), turn([], true), editTurn("e1")]);
+    mockDriverFactory = () => captured.driver;
+    await run(captured.driver, vi.fn().mockResolvedValue(rendered()));
+    expect(captured.turns()).toBe(2 + AGENT_LIMITS.MAX_VISUAL_FIX_ROUNDS);
+  });
+
+  it("stops the fix round as soon as the model answers without a tool call", async () => {
+    const captured = capturingDriver([writeTurn(compliant()), turn([], true)]);
+    await run(captured.driver, vi.fn().mockResolvedValue(rendered()));
+    // write, end, one confirmation turn.
+    expect(captured.turns()).toBe(3);
+  });
+
+  it("reports a crash on init as a runtime failure in the forced check", async () => {
+    const captured = capturingDriver([writeTurn(compliant()), turn([], true)]);
+    await run(
+      captured.driver,
+      vi.fn().mockResolvedValue(rendered({ ready: false, frames: [], errors: ["TypeError: boom"] })),
+    );
+    const [message] = captured.userMessages;
+    expect(message.text).toContain("RUNTIME FAILURE");
+    expect(message.text).toContain("TypeError: boom");
+    expect(message.images).toEqual([]);
+  });
+
+  it("an unavailable service flags visualCheckFailed but never fails the build", async () => {
+    // Forced check path: the render returns nothing.
+    const forced = capturingDriver([writeTurn(compliant()), turn([], true)]);
+    const forcedResult = await run(forced.driver, vi.fn().mockResolvedValue(null));
+    expect(forcedResult.visualCheckFailed).toBe(true);
+    expect(forcedResult.validationPassed).toBe(true);
+    expect(forced.userMessages).toHaveLength(0);
+    expect(forced.turns()).toBe(2);
+
+    // Model-initiated path: view_game came back empty, so no forced retry either.
+    const own = capturingDriver([
+      writeTurn(compliant()),
+      turn([{ id: "v1", name: "view_game", input: {} }]),
+      turn([], true),
+    ]);
+    const onViewGame = vi.fn().mockRejectedValue(new Error("down"));
+    const ownResult = await run(own.driver, onViewGame);
+    expect(onViewGame).toHaveBeenCalledTimes(1);
+    expect(ownResult.visualCheckFailed).toBe(true);
+    expect(ownResult.validationPassed).toBe(true);
+    expect(own.toolResults[1][0].images).toBeUndefined();
+  });
+
+  const CLOCK_OVER_BAR = 'div.clock "12" covers div.progress (284×14 px at 160,120), frame 1 (initial)';
+
+  it("hands measured layout collisions to the model as facts to fix", async () => {
+    const captured = capturingDriver([
+      writeTurn(compliant()),
+      turn([{ id: "v1", name: "view_game", input: {} }]),
+      turn([], true),
+    ]);
+    await run(captured.driver, vi.fn().mockResolvedValue(rendered({ layoutIssues: [CLOCK_OVER_BAR] })));
+    const report = captured.toolResults[1][0].content;
+    expect(report).toContain("LAYOUT COLLISIONS measured");
+    expect(report).toContain(`- ${CLOCK_OVER_BAR}`);
+    expect(report).toContain("UI elements never collide");
+  });
+
+  it("re-renders the final code when the model's last look found collisions, and lets it fix them", async () => {
+    const captured = capturingDriver([
+      writeTurn(compliant()),
+      turn([{ id: "v1", name: "view_game", input: {} }]), // sees the collision
+      turn([], true), // finishes without fixing or looking again
+      editTurn("e1"), // fix round after the re-check
+      turn([], true),
+    ]);
+    const onViewGame = vi
+      .fn()
+      .mockResolvedValueOnce(rendered({ layoutIssues: [CLOCK_OVER_BAR] }))
+      .mockResolvedValueOnce(rendered({ layoutIssues: [CLOCK_OVER_BAR] }));
+    await run(captured.driver, onViewGame);
+
+    expect(onViewGame).toHaveBeenCalledTimes(2);
+    expect(captured.userMessages).toHaveLength(1);
+    const [message] = captured.userMessages;
+    expect(message.text).toContain("measured layout collisions, so the app rendered your final code again");
+    expect(message.text).toContain(CLOCK_OVER_BAR);
+    // write, view, end, edit, confirm.
+    expect(captured.turns()).toBe(5);
+  });
+
+  it("a clean re-check ends quietly, without an extra model turn", async () => {
+    const captured = capturingDriver([
+      writeTurn(compliant()),
+      turn([{ id: "v1", name: "view_game", input: {} }]),
+      editTurn("e1"), // fixes the collision but never looks again
+      turn([], true),
+    ]);
+    const onViewGame = vi
+      .fn()
+      .mockResolvedValueOnce(rendered({ layoutIssues: [CLOCK_OVER_BAR] }))
+      .mockResolvedValueOnce(rendered());
+    await run(captured.driver, onViewGame);
+
+    expect(onViewGame).toHaveBeenCalledTimes(2);
+    expect(onViewGame.mock.calls[1][0].code).toContain("dodi.translate('game.title') + '!'");
+    expect(captured.userMessages).toHaveLength(0);
+    expect(captured.turns()).toBe(4);
+  });
+
+  it("no re-check when the model's last look was clean", async () => {
+    const captured = capturingDriver([
+      writeTurn(compliant()),
+      turn([{ id: "v1", name: "view_game", input: {} }]),
+      turn([{ id: "v2", name: "view_game", input: {} }]),
+      turn([], true),
+    ]);
+    const onViewGame = vi
+      .fn()
+      .mockResolvedValueOnce(rendered({ layoutIssues: [CLOCK_OVER_BAR] }))
+      .mockResolvedValueOnce(rendered());
+    await run(captured.driver, onViewGame);
+    expect(onViewGame).toHaveBeenCalledTimes(2);
+    expect(captured.userMessages).toHaveLength(0);
+  });
+
+  it("without a service the loop is unchanged: no render, no flag, no extra turns", async () => {
+    const captured = capturingDriver([writeTurn(compliant()), turn([], true)]);
+    const result = await run(captured.driver);
+    expect(captured.turns()).toBe(2);
+    expect(captured.userMessages).toHaveLength(0);
+    expect(result.visualCheckFailed).toBeUndefined();
   });
 });

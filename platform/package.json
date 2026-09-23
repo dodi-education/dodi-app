@@ -11,10 +11,10 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "db:migrate": "tsx db/migrate.ts",
-    "db:reset": "tsx db/reset.ts",
-    "db:seed": "tsx db/seed.ts",
-    "db:codegen": "tsx db/codegen.ts"
+    "db:migrate": "tsx --env-file-if-exists=.env.local db/migrate.ts",
+    "db:reset": "tsx --env-file-if-exists=.env.local db/reset.ts",
+    "db:seed": "tsx --env-file-if-exists=.env.local db/seed.ts",
+    "db:codegen": "tsx --env-file-if-exists=.env.local db/codegen.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",

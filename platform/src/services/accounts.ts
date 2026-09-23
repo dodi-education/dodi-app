@@ -1,7 +1,13 @@
 import type { Updateable } from "kysely";
 
+import { parseGameScreenshotServiceSettings } from "@dodi/games/screenshot-contract";
 import type { StoredDatePreferences } from "@dodi/intl";
-import type { Account, Database, Json } from "@dodi/types/database";
+import type {
+  Account,
+  Database,
+  GameScreenshotServiceSettings,
+  Json,
+} from "@dodi/types/database";
 
 import type { Db } from "@/lib/db";
 import { isUniqueViolation } from "@/lib/db-errors";
@@ -106,6 +112,33 @@ export async function updateAccountNotificationPreferences(
     .execute();
 
   return merged;
+}
+
+/**
+ * The account's Game Studio screenshot-service choice, parsed defensively from
+ * the jsonb column (anything malformed reads as the default).
+ */
+export function gameScreenshotServiceOf(account: Account): GameScreenshotServiceSettings {
+  return parseGameScreenshotServiceSettings(account.game_screenshot_service);
+}
+
+/**
+ * Replace the account's screenshot-service choice (the settings form submits
+ * the whole object, like date_preferences). `mode` stays plaintext so
+ * POST /api/games/screenshot can enforce the opt-in; `customUrlEnc`, when
+ * present, is already sealed (`enc:v1:`) by the client and never read here.
+ */
+export async function updateAccountGameScreenshotService(
+  db: Db,
+  accountId: string,
+  settings: GameScreenshotServiceSettings,
+): Promise<GameScreenshotServiceSettings> {
+  await db
+    .updateTable("accounts")
+    .set({ game_screenshot_service: settings as unknown as Json })
+    .where("id", "=", accountId)
+    .execute();
+  return settings;
 }
 
 /**

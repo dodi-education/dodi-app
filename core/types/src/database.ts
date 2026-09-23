@@ -131,6 +131,23 @@ export type NewsletterSignupInsert = Insert<"newsletter_signups">;
 
 /** Registration gate controlled by the platform's REGISTRATION_MODE env var. */
 export type RegistrationMode = "open" | "invite" | "closed";
+
+/**
+ * Which screenshot service the Game Studio's visual check uses:
+ * `off` = no game code leaves the browser; `dodi` = the platform's worker;
+ * `custom` = a self-hosted service speaking the same contract.
+ */
+export type GameScreenshotServiceMode = "off" | "dodi" | "custom";
+
+/**
+ * Shape of `accounts.game_screenshot_service` (jsonb). `mode` is plaintext so
+ * the platform can enforce the opt-in; the custom URL is an `enc:v1:` field
+ * sealed client-side, since only the browser ever calls it.
+ */
+export interface GameScreenshotServiceSettings {
+  mode: GameScreenshotServiceMode;
+  customUrlEnc?: string;
+}
 export type KidInsert = Insert<"kids">;
 export type KidUpdate = Update<"kids">;
 

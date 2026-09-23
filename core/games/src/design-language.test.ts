@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { designLanguageDoc, PERSPECTIVE_LABELS } from "./design-language";
+import { designLanguageDoc, PERSPECTIVE_LABELS, visualCheckRubric } from "./design-language";
 
 describe("designLanguageDoc", () => {
   it("always contains the quality-floor sections", () => {
@@ -65,5 +65,30 @@ describe("designLanguageDoc", () => {
   it("perspective branches differ from each other", () => {
     const docs = (["bird", "side", "isometric"] as const).map((p) => designLanguageDoc(p));
     expect(new Set(docs).size).toBe(3);
+  });
+});
+
+describe("visualCheckRubric", () => {
+  it("mirrors the quality floor as checks and routes fixes through edit_game_code", () => {
+    const rubric = visualCheckRubric();
+    expect(rubric).toContain("edit_game_code");
+    expect(rubric).toContain("4:5 canvas");
+    expect(rubric).toContain("never a flat white");
+    expect(rubric).toContain("never browser defaults");
+    expect(rubric).toContain("44x44");
+    expect(rubric).toContain("did not change after a command");
+  });
+
+  it("names the configured perspective, or asks for consistency when unset", () => {
+    expect(visualCheckRubric(null)).toContain("never mixed");
+    for (const p of ["bird", "side", "isometric"] as const) {
+      const rubric = visualCheckRubric(p);
+      expect(rubric).toContain(PERSPECTIVE_LABELS[p]);
+      expect(rubric).not.toContain("never mixed");
+    }
+  });
+
+  it("stays short enough to ride in every tool result", () => {
+    expect(visualCheckRubric("isometric").length).toBeLessThan(1500);
   });
 });

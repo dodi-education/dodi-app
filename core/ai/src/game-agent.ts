@@ -18,6 +18,7 @@ import {
   BACKGROUND_IMAGE_PLACEHOLDER,
   extractBackgroundImage,
   hasBackgroundPlaceholder,
+  injectBackgroundImage,
 } from "@dodi/games/background-image";
 import type { AgentCodeResult, AgentTaskRequest, GenerateGamePayload, UpdateGamePayload } from "@dodi/types/tasks";
 import type { AgentActivityEvent, AgentStep } from "@dodi/types/agent-progress";
@@ -29,7 +30,10 @@ import { getModelOutputCap } from "./providers";
 import {
   buildAgentTools,
   executeTool,
+  renderReport,
   type LastWriteResult,
+  type RenderGameInput,
+  type RenderGameOutput,
   type ToolContext,
 } from "./game-agent-tools";
 import {
@@ -51,10 +55,15 @@ export type { PriorTurn } from "./game-agent-drivers";
  * this is deliberate headroom, not expected spend. The effective per-request
  * value is clamped to the model's own output cap (`getModelOutputCap`), since
  * requesting above a model's maximum is a 400 on Anthropic.
+ *
+ * `MAX_VISUAL_FIX_ROUNDS` bounds the turns the forced visual check may add
+ * when the model never called view_game itself: two, so one turn can edit and
+ * the next can validate (or retry a failed edit).
  */
 export const AGENT_LIMITS = {
   MAX_AGENT_TURNS: 15,
   MAX_VALIDATION_RETRIES: 1,
+  MAX_VISUAL_FIX_ROUNDS: 2,
   MAX_TOKENS: 100_000,
 } as const;
 
@@ -137,6 +146,13 @@ export interface RunGameAgentParams {
    * edits don't spend an image generation every time.
    */
   hasExistingPreviewImage?: boolean;
+  /**
+   * Client-injected renderer: the account's screenshot service. Presence
+   * enables the view_game tool AND a forced visual check after validation when
+   * the model never looked itself. Receives the bundle with its background
+   * injected; resolves null (never throws) when the service is unavailable.
+   */
+  onViewGame?: (input: RenderGameInput) => Promise<RenderGameOutput | null>;
 }
 
 /** How many of the most recent image-bearing user turns re-send their images. */
@@ -154,6 +170,7 @@ const STEP_BY_TOOL: Partial<Record<string, AgentStep>> = {
   write_game_code: "writing_code",
   edit_game_code: "writing_code",
   validate_game: "validating",
+  view_game: "visual_check",
 };
 
 /**
@@ -176,7 +193,15 @@ export function trimPriorImages(turns: PriorTurn[] | undefined): PriorTurn[] | u
   return reversed.reverse();
 }
 
-function buildCodeTaskUserMessage(task: AgentTaskRequest): string {
+/** The closing step of both task recipes when a screenshot service is on. */
+const VISUAL_CHECK_STEP =
+  "Look at the finished game with view_game and fix anything that looks wrong or is " +
+  "broken (edit_game_code, then validate_game)";
+
+function buildCodeTaskUserMessage(
+  task: AgentTaskRequest,
+  opts: { visualCheck: boolean },
+): string {
   if (task.taskType === "generate_game") {
     const payload = task.payload as GenerateGamePayload;
     // An agreed plan came out of the studio's Plan step: the parent already
@@ -213,6 +238,7 @@ function buildCodeTaskUserMessage(task: AgentTaskRequest): string {
       "3. Validate with validate_game",
       "4. Fix any issues and re-validate if needed",
     );
+    if (opts.visualCheck) lines.push(`5. ${VISUAL_CHECK_STEP}`);
     return lines.join("\n");
   }
 
@@ -246,6 +272,7 @@ function buildCodeTaskUserMessage(task: AgentTaskRequest): string {
     "3. Validate with validate_game",
     "4. Fix any issues and re-validate if needed",
   );
+  if (opts.visualCheck) lines.push(`5. ${VISUAL_CHECK_STEP}`);
   return lines.join("\n");
 }
 
@@ -264,6 +291,7 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
     onPrepareBackgroundImage,
     onGeneratePreviewImage,
     hasExistingPreviewImage,
+    onViewGame,
   } = params;
   const emitStep = onStep ?? (() => {});
   const checkAborted = (): void => {
@@ -299,12 +327,14 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
       sourceLocale: task.childContext.locale ?? "en",
       perspective: goalPayload.perspective ?? null,
       narrationLanguage,
+      visualCheck: Boolean(onViewGame),
     }),
     maxTokens: Math.min(AGENT_LIMITS.MAX_TOKENS, getModelOutputCap(provider, model)),
     tools: buildAgentTools({
       backgroundImage: Boolean(onGenerateBackgroundImage),
       uploadedImages: Boolean(goalPayload.images?.length),
       previewImage: Boolean(onGeneratePreviewImage),
+      viewGame: Boolean(onViewGame),
     }),
     onActivity: emitActivity,
     signal,
@@ -318,6 +348,8 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
     prepareBackgroundImage: onPrepareBackgroundImage,
     generatePreviewImage: onGeneratePreviewImage,
     referenceImages: goalPayload.images,
+    renderGame: onViewGame,
+    perspective: goalPayload.perspective ?? null,
   };
   if (task.taskType === "update_game") {
     const payload = task.payload as UpdateGamePayload;
@@ -380,8 +412,22 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
         "write_game_code + validate_game, call generate_preview_image once with a scene " +
         "description of the finished game's key visual — it becomes the game's list icon."
     : "";
+  // A screenshot service is configured: the model can (and should) look at
+  // real frames of its game before finishing. If it doesn't, the loop looks
+  // for it once and asks for fixes (see the forced check below).
+  const viewNote = onViewGame
+    ? "\n\nA visual check is available: after your final write + validate_game, call " +
+      "view_game to SEE real screenshots of your game and fix anything that looks wrong or " +
+      "is broken before you finish. If you skip it, the app renders the opening screen for " +
+      "you and asks you to fix what it finds."
+    : "";
   driver.seed(trimPriorImages(priorTurns), {
-    text: buildCodeTaskUserMessage(task) + carriedNote + backgroundNote + previewNote,
+    text:
+      buildCodeTaskUserMessage(task, { visualCheck: Boolean(onViewGame) }) +
+      carriedNote +
+      backgroundNote +
+      previewNote +
+      viewNote,
     images: taskImages,
   });
 
@@ -414,7 +460,7 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
   const runToolTurn = async (call: GameToolCall): Promise<GameToolResult> => {
     const step = STEP_BY_TOOL[call.name];
     if (step) emitStep(step);
-    const { result, writeResult } = await executeTool(call.name, call.input, toolContext);
+    const { result, writeResult, images } = await executeTool(call.name, call.input, toolContext);
     if (writeResult) {
       lastWrite = writeResult;
       toolContext.existingCode = writeResult.code;
@@ -423,7 +469,7 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
       const { code: _code, markdown: _markdown, ...meta } = writeResult;
       toolContext.currentMeta = meta;
     }
-    return { id: call.id, content: result };
+    return images?.length ? { id: call.id, content: result, images } : { id: call.id, content: result };
   };
 
   // Agentic loop
@@ -553,6 +599,54 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
     }
   }
 
+  // Forced visual check. Runs when a screenshot service is on and either the
+  // model finished without ever looking at its game, or its last look measured
+  // layout collisions (a fix it never re-checked, or collisions it ignored).
+  // Render the final code, hand the frames over with the rubric, and give it a
+  // bounded number of turns to fix what it sees. A clean re-check ends quietly
+  // without a model turn. A failed render never fails the build; the studio
+  // shows a notice instead. Runs before the final validation so a fix here is
+  // validated too.
+  let visualCheckFailed = Boolean(toolContext.viewGameFailed);
+  const neverLooked = !toolContext.viewGameCalls;
+  if (onViewGame && (neverLooked || toolContext.lastViewHadLayoutIssues)) {
+    checkAborted();
+    emitStep("visual_check");
+    const background = toolContext.freshBackgroundImage ?? toolContext.carriedBackgroundImage;
+    const output = await onViewGame({
+      code: background ? injectBackgroundImage(lastWrite.code, background) : lastWrite.code,
+      steps: [],
+    }).catch(() => null);
+    const hasFindings =
+      output !== null &&
+      (neverLooked || !output.ready || output.errors.length > 0 || Boolean(output.layoutIssues?.length));
+    if (!output) {
+      visualCheckFailed = true;
+    } else if (hasFindings) {
+      driver.addUserMessage({
+        text:
+          (neverLooked
+            ? "You finished without calling view_game, so the app rendered your game for you.\n\n"
+            : "Your last view_game measured layout collisions, so the app rendered your final " +
+              "code again before finishing.\n\n") +
+          renderReport(output, goalPayload.perspective ?? null) +
+          "\n\nIf every check passes, answer with one short sentence and no tool call. " +
+          "Otherwise fix the misses with edit_game_code, then validate_game.",
+        images: output.frames.map((frame) => frame.image),
+      });
+      for (let round = 0; round < AGENT_LIMITS.MAX_VISUAL_FIX_ROUNDS; round++) {
+        checkAborted();
+        const fix = await runTurnChecked(driver);
+        iterationCount++;
+        addUsage(fix.usage);
+        if (fix.toolCalls.length === 0) break;
+        const fixResults = await Promise.all(fix.toolCalls.map(runToolTurn));
+        driver.addToolResults(fixResults);
+        if (!fix.expectsToolResults) break;
+      }
+    }
+  }
+
   const finalValidation = validateGameCode(lastWrite.code, goalOpts());
 
   // The bundle stays in placeholder form — the caller injects the image before
@@ -577,6 +671,7 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
     backgroundImageFailed: toolContext.backgroundImageFailed,
     previewImage: toolContext.freshPreviewImage,
     previewImageFailed: toolContext.previewImageFailed,
+    visualCheckFailed: visualCheckFailed || undefined,
     metadata: { capabilities: lastWrite.capabilities },
     learningGoal,
     successDefinition,

@@ -14,6 +14,8 @@ export type AgentStep =
   | "writing_code"
   | "validating"
   | "fixing_validation"
+  /** Rendering the game through the screenshot service and looking at it. */
+  | "visual_check"
   | "finalizing";
 
 /**

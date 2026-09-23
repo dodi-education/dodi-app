@@ -35,7 +35,28 @@ export interface AgentPromptContext {
    * necessarily the child's game language). Unset ⇒ no narration instruction.
    */
   narrationLanguage?: string;
+  /**
+   * A screenshot service is configured, so the view_game tool exists: teach
+   * the agent to look at real frames of its game before finishing.
+   */
+  visualCheck?: boolean;
 }
+
+const VISUAL_CHECK_SECTION = `
+## Visual Check
+The view_game tool renders your game in a real browser and returns real screenshots plus any
+runtime errors the page threw. Use it AFTER your final write + validate_game, before you finish:
+look at every frame critically against the Visual Design Language, fix what is wrong with
+edit_game_code, and validate again. Steps let you reach the states a child sees most (first
+answer, mid-game, success) with commands from your declared capabilities. If you finish without
+calling it, the app renders the opening screen for you and asks you to fix what it finds.
+The renderer also MEASURES the page: it lists UI elements that cover or cut into each other
+(e.g. a clock over the progress bar). Fix every listed collision by moving or resizing
+elements, then look again. Only an overlap the parent explicitly asked for (or pure
+decoration such as a badge on a card corner) may stay: mark that element with the
+\`data-overlap-ok\` attribute so the check knows it is intended. If your last look still
+found collisions, the app re-renders your final code before you finish.
+`;
 
 export function buildAgentSystemPrompt(context: AgentPromptContext): string {
   const ageLine = context.age
@@ -215,7 +236,7 @@ Before considering your code complete, use the validate_game tool to check for e
 If validation fails, fix the issues and validate again (up to 3 attempts).
 After edit_game_code you may call validate_game without the code parameter: it validates
 your latest code.
-
+${context.visualCheck ? VISUAL_CHECK_SECTION : ""}
 ## Markdown Documentation
 When writing game code, also generate a markdown briefing document that includes:
 - Game Overview: what the game is about and how to play

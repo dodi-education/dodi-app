@@ -1,0 +1,26 @@
+{
+  "name": "@dodi/screenshot",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --env-file-if-exists=.env.local src/main.ts",
+    "start": "tsx src/main.ts",
+    "browsers": "playwright install chromium-headless-shell",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@dodi/games": "workspace:*",
+    "@dodi/types": "workspace:*",
+    "playwright": "1.63.0",
+    "tsx": "4.23.13"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "typescript": "^5",
+    "vitest": "^4.1.8"
+  }
+}

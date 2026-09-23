@@ -8,6 +8,9 @@ import {
   MAX_BACKGROUND_IMAGE_CALLS,
   MAX_GAME_CODE_EDITS,
   MAX_PREVIEW_IMAGE_CALLS,
+  MAX_VIEW_GAME_CALLS,
+  renderReport,
+  type RenderGameOutput,
   type ToolContext,
 } from "./game-agent-tools";
 
@@ -38,6 +41,140 @@ describe("buildAgentTools", () => {
     expect(on.map((t) => t.name)).toContain("generate_preview_image");
     const all = buildAgentTools({ backgroundImage: true, uploadedImages: true, previewImage: true });
     expect(all).toHaveLength(AGENT_TOOLS.length + 3);
+  });
+
+  it("adds view_game only when a screenshot service is configured", () => {
+    const off = buildAgentTools({ backgroundImage: false });
+    const on = buildAgentTools({ backgroundImage: false, viewGame: true });
+    expect(off.map((t) => t.name)).not.toContain("view_game");
+    expect(on.map((t) => t.name)).toContain("view_game");
+    const all = buildAgentTools({
+      backgroundImage: true,
+      uploadedImages: true,
+      previewImage: true,
+      viewGame: true,
+    });
+    expect(all).toHaveLength(AGENT_TOOLS.length + 4);
+  });
+});
+
+describe("executeTool view_game", () => {
+  const FRAME = "data:image/jpeg;base64,RlJBTUU=";
+  const BG = "data:image/jpeg;base64,QkFDS0dST1VORA==";
+  const CODE = `<html><head><style id="background-image">:root{--background-image:url("{{BACKGROUND_IMAGE}}")}</style></head><body>game</body></html>`;
+  const output = (patch: Partial<RenderGameOutput> = {}): RenderGameOutput => ({
+    frames: [{ label: "initial", image: FRAME }],
+    ready: true,
+    warnings: [],
+    errors: [],
+    ...patch,
+  });
+
+  it("errors when no service is configured or there is no code yet", async () => {
+    const noService = await executeTool("view_game", {}, { existingCode: CODE });
+    expect(JSON.parse(noService.result)).toMatchObject({ ok: false });
+    const noCode = await executeTool("view_game", {}, { renderGame: vi.fn() });
+    expect(JSON.parse(noCode.result)).toMatchObject({ ok: false });
+    expect(noCode.result).toContain("write_game_code first");
+  });
+
+  it("renders the bundle WITH its background injected and returns the frames to look at", async () => {
+    const renderGame = vi.fn().mockResolvedValue(output());
+    const context: ToolContext = {
+      existingCode: CODE,
+      freshBackgroundImage: BG,
+      renderGame,
+      perspective: "side",
+    };
+    const { result, images } = await executeTool(
+      "view_game",
+      { steps: [{ label: "after first tap", command: { type: "submit_answer", payload: { answer: "3" } } }] },
+      context,
+    );
+    const input = renderGame.mock.calls[0][0];
+    expect(input.code).toContain(BG);
+    expect(input.code).not.toContain("{{BACKGROUND_IMAGE}}");
+    expect(input.steps).toEqual([
+      { label: "after first tap", command: { type: "submit_answer", payload: { answer: "3" } } },
+    ]);
+    expect(images).toEqual([FRAME]);
+    expect(result).toContain("1. initial");
+    expect(result).toContain("Side-on");
+    expect(result).toContain("edit_game_code");
+    expect(result).not.toContain("RUNTIME FAILURE");
+    expect(context.viewGameCalls).toBe(1);
+  });
+
+  it("falls back to the carried background and tolerates junk steps", async () => {
+    const renderGame = vi.fn().mockResolvedValue(output());
+    const context: ToolContext = { existingCode: CODE, carriedBackgroundImage: BG, renderGame };
+    await executeTool(
+      "view_game",
+      { steps: [{ nope: 1 }, { label: "  " }, { label: "ok", command: { type: "" } }, "x"] },
+      context,
+    );
+    const input = renderGame.mock.calls[0][0];
+    expect(input.code).toContain(BG);
+    expect(input.steps).toEqual([{ label: "ok" }]);
+  });
+
+  it("reports a crashed game as a runtime failure with the captured errors", async () => {
+    const context: ToolContext = {
+      existingCode: CODE,
+      renderGame: vi
+        .fn()
+        .mockResolvedValue(output({ ready: false, errors: ["TypeError: x is undefined"], frames: [] })),
+    };
+    const { result, images } = await executeTool("view_game", {}, context);
+    expect(result).toContain("RUNTIME FAILURE");
+    expect(result).toContain("TypeError: x is undefined");
+    expect(result).toContain("No frame could be captured");
+    expect(images).toEqual([]);
+  });
+
+  it("marks the run failed (never throws) when the service returns nothing", async () => {
+    for (const renderGame of [
+      vi.fn().mockResolvedValue(null),
+      vi.fn().mockRejectedValue(new Error("down")),
+    ]) {
+      const context: ToolContext = { existingCode: CODE, renderGame };
+      const { result, images } = await executeTool("view_game", {}, context);
+      expect(JSON.parse(result)).toMatchObject({ ok: false });
+      expect(result).toContain("unavailable");
+      expect(images).toBeUndefined();
+      expect(context.viewGameFailed).toBe(true);
+    }
+  });
+
+  it("enforces the per-run render budget", async () => {
+    const context: ToolContext = {
+      existingCode: CODE,
+      renderGame: vi.fn().mockResolvedValue(output()),
+    };
+    for (let i = 0; i < MAX_VIEW_GAME_CALLS; i++) {
+      const { images } = await executeTool("view_game", {}, context);
+      expect(images).toEqual([FRAME]);
+    }
+    const { result, images } = await executeTool("view_game", {}, context);
+    expect(JSON.parse(result)).toMatchObject({ ok: false });
+    expect(images).toBeUndefined();
+  });
+
+  it("renderReport lists frames in order and appends the rubric", () => {
+    const report = renderReport(
+      output({
+        frames: [
+          { label: "initial", image: FRAME },
+          { label: "after first answer", image: FRAME },
+        ],
+        warnings: ["step 1: no game:result within 500ms"],
+      }),
+      null,
+    );
+    expect(report).toContain("2 real screenshot(s)");
+    expect(report.indexOf("1. initial")).toBeLessThan(report.indexOf("2. after first answer"));
+    expect(report).toContain("no game:result within 500ms");
+    expect(report).toContain("never mixed");
   });
 });
 

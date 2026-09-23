@@ -144,3 +144,39 @@ MOTION & ACCESSIBILITY:
 ${perspectiveSection}
 `.trim();
 }
+
+/** One-line reminder of each perspective's staging rule for the rubric. */
+const PERSPECTIVE_CHECK: Record<GamePerspective, string> = {
+  bird: "top-down: textured ground plane, top-view sprites, soft shadows directly beneath objects",
+  side: "side-on: layered parallax backdrop, a visible floor line, contact shadows under grounded objects",
+  isometric:
+    "isometric 2.5D: objects drawn with bright top faces and darker sides, no tilted playfield, upright readable text",
+};
+
+/**
+ * The checklist the agent applies to REAL screenshots of its own game (the
+ * view_game tool and the forced visual check). Deliberately the inverse of the
+ * BANNED list and the perspective rules above, so the model judges the render
+ * by the same floor it was asked to build to. Kept short: it rides along in
+ * every tool result.
+ */
+export function visualCheckRubric(perspective?: GamePerspective | null): string {
+  const perspectiveLine = perspective
+    ? `- Staged consistently as ${PERSPECTIVE_LABELS[perspective]} (${PERSPECTIVE_CHECK[perspective]}).`
+    : "- One perspective applied consistently on every screen, never mixed.";
+  return [
+    "Judge every frame against this checklist and fix each miss with edit_game_code:",
+    "- The game fills the whole 4:5 canvas: nothing clipped, no scrollbars, no empty band.",
+    "- The background is layered (gradient plus soft shapes), never a flat white or single-color page.",
+    "- Buttons, inputs and lists look like toys (rounded, extruded, shadowed), never browser defaults.",
+    "- Every text is crisp and readable on a container or contrast treatment; nothing overlaps or is cut off.",
+    "- UI elements never collide: nothing covers or cuts into a header, prompt, progress bar, score,",
+    "  button or another element, and stacked elements keep a clear gap (unless the parent asked",
+    "  for the overlap). Measured collisions listed above are facts: fix every one of them.",
+    "- Touch targets read as at least 44x44 px and the primary action is obvious to a child.",
+    "- Objects have depth (shadows, top and side faces); the scene reads as a place, not a form.",
+    perspectiveLine,
+    "- No placeholder text, debug output, raw JSON or empty/broken image areas are visible.",
+    "- A frame that did not change after a command means that command handler is broken: fix it.",
+  ].join("\n");
+}

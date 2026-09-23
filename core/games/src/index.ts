@@ -10,6 +10,7 @@ export * from "./design-language";
 export * from "./background-image";
 export * from "./char-strokes";
 export * from "./bridge-protocol";
+export * from "./screenshot-contract";
 export * from "./toolbox";
 export * from "./command-markers";
 export * from "./normalize-commands";

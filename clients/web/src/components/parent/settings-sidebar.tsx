@@ -30,6 +30,11 @@ function useSettingsNav(): SettingsNavItem[] {
       label: t("navAiProviders"),
       icon: "sparkles",
     },
+    {
+      href: "/parent/settings/game-studio",
+      label: t("navGameStudio"),
+      icon: "games",
+    },
     { href: "/parent/settings/devices", label: t("navDevices"), icon: "qrcode" },
   ];
 }

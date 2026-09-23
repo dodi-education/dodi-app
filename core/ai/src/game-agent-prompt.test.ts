@@ -38,6 +38,19 @@ describe("buildAgentSystemPrompt", () => {
     );
   });
 
+  it("teaches the visual check only when a screenshot service is configured", () => {
+    const withCheck = buildAgentSystemPrompt({ ...BASE, visualCheck: true });
+    expect(withCheck).toContain("## Visual Check");
+    expect(withCheck).toContain("view_game");
+    expect(withCheck).toContain("renders the opening screen for you");
+    // Sits right after Validation, before the docs section.
+    expect(withCheck.indexOf("## Validation")).toBeLessThan(withCheck.indexOf("## Visual Check"));
+    expect(withCheck.indexOf("## Visual Check")).toBeLessThan(
+      withCheck.indexOf("## Markdown Documentation"),
+    );
+    expect(buildAgentSystemPrompt(BASE)).not.toContain("## Visual Check");
+  });
+
   it("requires the translations block with the child's source locale", () => {
     const prompt = buildAgentSystemPrompt(BASE);
     expect(prompt).toContain("## In-Game Text & Translations (REQUIRED)");
