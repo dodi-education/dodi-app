@@ -199,6 +199,29 @@ describe("game publications", () => {
       expect(published.current_game_version_id).toBeNull();
     });
 
+    it("stamps the source's current version so the client can spot later edits", async () => {
+      const version = await t.serviceDb
+        .insertInto("game_versions")
+        .values({ game_id: SOURCE_ID, account_id: ACCOUNT, code_bundle: "enc:v1:bundle" })
+        .returning("id")
+        .executeTakeFirstOrThrow();
+      await t.serviceDb
+        .updateTable("games")
+        .set({ current_game_version_id: version.id })
+        .where("id", "=", SOURCE_ID)
+        .execute();
+
+      const published = await submitPublication(t.serviceDb, {
+        sourceGameId: SOURCE_ID,
+        accountId: ACCOUNT,
+        content: CONTENT,
+      });
+
+      expect(published.source_game_version_id).toBe(version.id);
+      // The copy itself still has no version chain.
+      expect(published.current_game_version_id).toBeNull();
+    });
+
     it("copies the plaintext facets from the source row", async () => {
       const published = await submitPublication(t.serviceDb, {
         sourceGameId: SOURCE_ID,

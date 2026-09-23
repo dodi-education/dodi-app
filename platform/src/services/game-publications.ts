@@ -249,6 +249,9 @@ export async function submitPublication(
     account_id: accountId,
     published_by_account_id: accountId,
     source_game_id: sourceGameId,
+    // Which build this is, so the dialog can tell whether the parent has
+    // changed the game since submitting (see the column comment).
+    source_game_version_id: source.current_game_version_id,
     kid_id: null,
     is_system: false,
     // A catalog listing is not a library entry; it is played from Discover.

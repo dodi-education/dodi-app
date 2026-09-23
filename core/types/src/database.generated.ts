@@ -365,6 +365,10 @@ export interface Games {
   review_attempts: Generated<number>;
   source_game_id: string | null;
   /**
+   * Publication copies only: the source game's current_game_version_id when it was submitted. Lets the client tell whether the parent changed the game since. NULL elsewhere.
+   */
+  source_game_version_id: string | null;
+  /**
    * jsonb holding an enc:v1: STRING scalar for private games (sealed SuccessCriteria JSON); a plain object for system games and publication copies. Server cannot decrypt.
    */
   success_criteria: Generated<Json>;

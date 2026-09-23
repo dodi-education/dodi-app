@@ -305,6 +305,7 @@ function toPublicGame(row: PublicGameRow): Game {
     plan_enc: null,
     current_game_version_id: null,
     source_game_id: null,
+    source_game_version_id: null,
     system_key: null,
     rejected_at: null,
     rejection_kind: null,

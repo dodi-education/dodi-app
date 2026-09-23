@@ -14,6 +14,12 @@
  * A first publish also asks for the account's public handle, because every real
  * name in dodi is encrypted and a listing can only credit a name the parent
  * deliberately chose for publication.
+ *
+ * Two modes. A FORM (first submit, changes requested, or an explicit resubmit)
+ * asks for input and has a primary submit action. A STATUS view (in review,
+ * live, rejected) needs nothing from the parent: its primary action just
+ * closes, and resubmitting sits behind a disclosure that spells out its cost,
+ * so a waiting parent never mistakes it for the next step.
  */
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -31,8 +37,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { Icon } from "@/components/shared/icon";
 import { AgeRange, isValidAgeRange } from "@/components/parent/games/age-range";
+import { PublishRejectionReasons } from "@/components/parent/games/publish-rejection-reasons";
+import { PublishStatusStepper } from "@/components/parent/games/publish-status-stepper";
+import { PublishStatusView } from "@/components/parent/games/publish-status-view";
+import { PublishTranslationsReview } from "@/components/parent/games/publish-translations-review";
 import { dodi } from "@/lib/api";
-import { useAccountStore } from "@/stores/account-store";
+import { type NotificationPreferences, useAccountStore } from "@/stores/account-store";
 import {
   decryptGameResponse,
   sealGameFields,
@@ -115,6 +125,12 @@ export function PublishDialog({ open, gameId, built, onClose }: PublishDialogPro
   const [sourceGame, setSourceGame] = useState<Game | null>(null);
   /** An existing publication's listing rows — paid translations to reuse. */
   const [knownListings, setKnownListings] = useState<Record<string, ListingText>>({});
+  /** The source game's head build, compared against the copy's stamp. */
+  const [sourceVersionId, setSourceVersionId] = useState<string | null>(null);
+  /** The parent chose "Resubmit" from a status view: show the form again. */
+  const [isResubmitting, setIsResubmitting] = useState(false);
+  /** Withdraw/unpublish asks once before it deletes the copy. */
+  const [isConfirmingWithdraw, setIsConfirmingWithdraw] = useState(false);
 
   useEffect(() => {
     if (open) void loadAccount();
@@ -174,6 +190,9 @@ export function PublishDialog({ open, gameId, built, onClose }: PublishDialogPro
           });
           if (typeof game?.target_age_min === "number") setAgeMin(game.target_age_min);
           if (typeof game?.target_age_max === "number") setAgeMax(game.target_age_max);
+          setSourceVersionId(game?.current_game_version_id ?? null);
+          setIsResubmitting(false);
+          setIsConfirmingWithdraw(false);
           setError(null);
           setHandle("");
           setReview(null);
@@ -318,6 +337,8 @@ export function PublishDialog({ open, gameId, built, onClose }: PublishDialogPro
         publication: Game;
       };
       setPublication(created);
+      setSourceVersionId(created.source_game_version_id);
+      setIsResubmitting(false);
       setReview(null);
       setSourceGame(null);
     } catch (e) {
@@ -345,6 +366,8 @@ export function PublishDialog({ open, gameId, built, onClose }: PublishDialogPro
       });
       if (!res.ok) throw new Error(t("publishFailedGeneric"));
       setPublication(null);
+      setIsConfirmingWithdraw(false);
+      setIsResubmitting(false);
     } catch (e) {
       setError(e instanceof Error && e.message ? e.message : t("publishFailedGeneric"));
     } finally {
@@ -361,12 +384,24 @@ export function PublishDialog({ open, gameId, built, onClose }: PublishDialogPro
     (!review ||
       Object.values(review.translations).every((entry) => entry.title.trim().length > 0));
   // A hard rejection is permanent — the platform refuses a resubmit anyway, so
-  // don't offer one. Soft rejection keeps the button as the "fix and resubmit".
+  // don't offer one.
   const canResubmit = state !== "rejected";
+  const isFormMode =
+    review !== null || state === "none" || state === "changes-requested" || isResubmitting;
   const rejectionReasons =
     state === "changes-requested" || state === "rejected"
       ? parseRejectionReasons(publication?.rejection_reasons ?? null)
       : [];
+  // Only a code change counts: the copy's stamp and the source's head build
+  // are both known and differ. Copies submitted before the stamp existed
+  // (NULL) never show the hint rather than a wrong one.
+  const isEditedSinceSubmit =
+    publication?.source_game_version_id != null &&
+    sourceVersionId !== null &&
+    publication.source_game_version_id !== sourceVersionId;
+  const prefs = (account?.notification_preferences ?? null) as NotificationPreferences | null;
+  const isOutcomeEmailOn = prefs?.publication_outcome_email !== false;
+  const monthlyLimit = account?.monthly_game_publication_limit ?? 0;
 
   const badgeClass =
     state === "published"
@@ -382,6 +417,44 @@ export function PublishDialog({ open, gameId, built, onClose }: PublishDialogPro
         : state === "changes-requested"
           ? t("publishChangesRequested")
           : t("publishInReview");
+  const description = review
+    ? t("publishReviewTranslations")
+    : isResubmitting
+      ? t("publishResubmitDescription")
+      : state === "none"
+        ? t("publishDescription")
+        : state === "changes-requested"
+          ? t("publishReasonsIntro")
+          : state === "rejected"
+            ? t("publishRejectedHardNotice")
+            : state === "published"
+              ? t("publishLiveDescription")
+              : t("publishSubmitted");
+  const submitLabel =
+    busy && !review
+      ? t("publishTranslating")
+      : review
+        ? t("publishConfirm")
+        : state === "none"
+          ? t("publishSubmit")
+          : t("publishResubmit");
+
+  const openStudio = () => {
+    if (!gameId) return;
+    onClose();
+    router.push(`/parent/game-studio/${gameId}`);
+  };
+
+  const withdrawButton = (
+    <Button
+      variant="ghost"
+      className="text-danger hover:bg-danger-soft hover:text-danger sm:mr-auto"
+      onClick={() => setIsConfirmingWithdraw(true)}
+      disabled={busy}
+    >
+      {state === "published" ? t("publishUnpublish") : t("publishWithdraw")}
+    </Button>
+  );
 
   return (
     <Dialog
@@ -396,111 +469,59 @@ export function PublishDialog({ open, gameId, built, onClose }: PublishDialogPro
             {t("publishTitle")}
             {state !== "none" && <span className={badgeClass}>{badgeLabel}</span>}
           </DialogTitle>
-          <DialogDescription>
-            {review
-              ? t("publishReviewTranslations")
-              : state === "none"
-                ? t("publishDescription")
-                : state === "changes-requested"
-                  ? t("publishReasonsIntro")
-                  : state === "rejected"
-                    ? t("publishRejectedHardNotice")
-                    : t("publishSubmitted")}
-          </DialogDescription>
+          <DialogDescription>{loaded ? description : t("publishLoading")}</DialogDescription>
         </DialogHeader>
 
-        {rejectionReasons.length > 0 && (
-          <ul className="flex flex-col gap-2">
-            {rejectionReasons.map((reason, i) => (
-              <li
-                key={`${reason.code}-${i}`}
-                className={
-                  state === "rejected"
-                    ? "rounded-lg bg-danger-soft px-3 py-2 text-xs"
-                    : "rounded-lg bg-warning-soft px-3 py-2 text-xs"
-                }
-              >
-                <span
-                  className={
-                    state === "rejected"
-                      ? "font-semibold text-danger"
-                      : "font-semibold text-warning"
-                  }
-                >
-                  {t(`publishReason_${reason.code}`)}
-                </span>
-                {reason.note && (
-                  <p className="mt-0.5 text-muted-foreground">{reason.note}</p>
-                )}
-              </li>
-            ))}
-          </ul>
+        {loaded && state !== "none" && !review && !isResubmitting && (
+          <PublishStatusStepper state={state} />
+        )}
+
+        {!review && !isResubmitting && (
+          <PublishRejectionReasons reasons={rejectionReasons} isPermanent={state === "rejected"} />
+        )}
+
+        {state === "changes-requested" && !review && gameId && (
+          <Button variant="outline" className="self-start" onClick={openStudio} disabled={busy}>
+            <Icon name="edit" size={16} />
+            {t("publishOpenInStudio")}
+          </Button>
+        )}
+
+        {loaded && !isFormMode && publication && (state === "in-review" || state === "published") && (
+          <PublishStatusView
+            state={state}
+            publication={publication}
+            isEditedSinceSubmit={isEditedSinceSubmit}
+            isOutcomeEmailOn={isOutcomeEmailOn}
+            monthlyLimit={monthlyLimit}
+            onResubmit={() => {
+              setError(null);
+              setIsConfirmingWithdraw(false);
+              setIsResubmitting(true);
+            }}
+          />
         )}
 
         {review && (
-          <div className="flex max-h-[50vh] flex-col gap-3 overflow-y-auto">
-            <p className="text-xs text-muted-foreground">
-              {t("publishReviewTranslationsHint")}
-            </p>
-            {Object.entries(review.translations).map(([locale, entry]) => {
-              const isSource = locale === review.sourceLocale;
-              return (
-                <div key={locale} className="flex flex-col gap-1.5">
-                  <label className="text-xs font-semibold uppercase text-ink-2">
-                    {locale}
-                    {isSource && (
-                      <span className="ml-1.5 normal-case text-faint">
-                        {t("publishSourceLanguage")}
-                      </span>
-                    )}
-                  </label>
-                  <Input
-                    value={entry.title}
-                    disabled={isSource || busy}
-                    maxLength={200}
-                    aria-label={t("publishTranslatedTitle", { locale })}
-                    onChange={(e) =>
-                      setReview((r) =>
-                        r
-                          ? {
-                              ...r,
-                              translations: {
-                                ...r.translations,
-                                [locale]: { ...entry, title: e.target.value },
-                              },
-                            }
-                          : r,
-                      )
-                    }
-                  />
-                  <textarea
-                    value={entry.description}
-                    disabled={isSource || busy}
-                    maxLength={5000}
-                    rows={2}
-                    aria-label={t("publishTranslatedDescription", { locale })}
-                    className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring disabled:cursor-not-allowed disabled:opacity-50"
-                    onChange={(e) =>
-                      setReview((r) =>
-                        r
-                          ? {
-                              ...r,
-                              translations: {
-                                ...r.translations,
-                                [locale]: { ...entry, description: e.target.value },
-                              },
-                            }
-                          : r,
-                      )
-                    }
-                  />
-                </div>
-              );
-            })}
+          <PublishTranslationsReview
+            review={review}
+            disabled={busy}
+            onChange={(locale, entry) =>
+              setReview((r) =>
+                r ? { ...r, translations: { ...r.translations, [locale]: entry } } : r,
+              )
+            }
+          />
+        )}
+
+        {isResubmitting && !review && state === "published" && (
+          <div className="flex gap-2 rounded-lg bg-warning-soft px-3 py-2 text-xs text-ink-2">
+            <Icon name="alert" size={16} className="shrink-0 text-warning" />
+            <p>{t("publishResubmitLiveWarning")}</p>
           </div>
         )}
 
-        {!review && loaded && built && canResubmit && (
+        {isFormMode && !review && loaded && built && canResubmit && (
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-ink-2">
               {t("recommendedAge")}
@@ -524,7 +545,7 @@ export function PublishDialog({ open, gameId, built, onClose }: PublishDialogPro
           </div>
         )}
 
-        {!review && state === "none" && !storedHandle && (
+        {isFormMode && !review && loaded && !storedHandle && (
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-ink-2">
               {t("publishHandleLabel")}
@@ -548,7 +569,7 @@ export function PublishDialog({ open, gameId, built, onClose }: PublishDialogPro
           </div>
         )}
 
-        {!built && (
+        {isFormMode && !built && (
           <p className="text-xs text-muted-foreground">{t("publishNeedsBuild")}</p>
         )}
 
@@ -558,39 +579,77 @@ export function PublishDialog({ open, gameId, built, onClose }: PublishDialogPro
           </div>
         )}
 
+        {isConfirmingWithdraw && (
+          <p role="alert" className="rounded-lg bg-danger-soft px-3 py-2 text-xs text-ink-2">
+            {state === "published" ? t("publishUnpublishConfirm") : t("publishWithdrawConfirm")}
+          </p>
+        )}
+
         <DialogFooter>
-          {/* Hard-rejected submissions are retained server-side as moderation
-              evidence — withdraw would be a silent no-op, so it isn't offered. */}
-          {!review && state !== "none" && state !== "rejected" && (
-            <Button variant="outline" onClick={withdraw} disabled={busy}>
-              {t("publishWithdraw")}
-            </Button>
-          )}
-          {review && gameId && (
-            // The translations already live in the source game, so leaving for
-            // the studio preview loses nothing — publishing resumes free.
-            <Button
-              variant="outline"
-              disabled={busy}
-              onClick={() => {
-                onClose();
-                router.push(`/parent/game-studio/${gameId}/preview`);
-              }}
-            >
-              {t("publishReviewInStudio")}
-            </Button>
-          )}
-          {canResubmit && (
-            <Button onClick={submit} disabled={!canSubmit || !loaded}>
-              <Icon name="world_up" size={16} />
-              {busy && !review
-                ? t("publishTranslating")
-                : review
-                  ? t("publishConfirm")
-                  : state === "none"
-                    ? t("publishSubmit")
-                    : t("publishResubmit")}
-            </Button>
+          {isConfirmingWithdraw ? (
+            <>
+              <Button
+                variant="outline"
+                onClick={() => setIsConfirmingWithdraw(false)}
+                disabled={busy}
+              >
+                {t("publishKeep")}
+              </Button>
+              <Button variant="destructive" onClick={withdraw} disabled={busy}>
+                {state === "published" ? t("publishUnpublish") : t("publishWithdraw")}
+              </Button>
+            </>
+          ) : review ? (
+            <>
+              {gameId && (
+                // The translations already live in the source game, so leaving for
+                // the studio preview loses nothing — publishing resumes free.
+                <Button
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => {
+                    onClose();
+                    router.push(`/parent/game-studio/${gameId}/preview`);
+                  }}
+                >
+                  {t("publishReviewInStudio")}
+                </Button>
+              )}
+              <Button onClick={submit} disabled={!canSubmit || !loaded}>
+                <Icon name="world_up" size={16} />
+                {submitLabel}
+              </Button>
+            </>
+          ) : isFormMode ? (
+            <>
+              {isResubmitting ? (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setError(null);
+                    setIsResubmitting(false);
+                  }}
+                  disabled={busy}
+                >
+                  {t("publishBack")}
+                </Button>
+              ) : (
+                state === "changes-requested" && withdrawButton
+              )}
+              <Button onClick={submit} disabled={!canSubmit || !loaded}>
+                <Icon name="world_up" size={16} />
+                {submitLabel}
+              </Button>
+            </>
+          ) : (
+            <>
+              {/* Hard-rejected submissions are retained server-side as moderation
+                  evidence — withdraw would be a silent no-op, so it isn't offered. */}
+              {loaded && state !== "rejected" && withdrawButton}
+              <Button onClick={onClose} disabled={busy}>
+                {state === "in-review" ? t("publishDone") : t("publishClose")}
+              </Button>
+            </>
           )}
         </DialogFooter>
       </DialogContent>
