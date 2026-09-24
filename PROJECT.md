@@ -399,8 +399,8 @@ The MVP focuses on delivering a functional, delightful core experience:
 - [x] PWA manifest + service worker
 - [x] Offline game caching
 - [ ] Dodi appearance customization
-- [ ] Onboarding tutorial
-- [ ] Performance optimization
+- [x] Onboarding tutorial
+- [xM] Performance optimization
 - [x] Merge all migrations into a single schema baseline before deploying the DB.
 
 ---
@@ -410,7 +410,6 @@ The MVP focuses on delivering a functional, delightful core experience:
 - **Nostr foundation + account export**: `nsec` vault root, `npub` on accounts, encrypted export/import for self-host
 - **Native apps**: Port to iOS/Android via React Native or Capacitor
 - **Managed AI**: Offer built-in AI so parents don't need API keys
-- **Game marketplace (dodi Discover)**: Kids share and discover games from the community (later: optional Nostr discovery bus)
 - **Curriculum alignment**: Map games to educational standards
 - **Institutional accounts**: Schools and tutoring centers
 - **Advanced analytics**: Learning progress dashboards for parents
@@ -466,8 +465,7 @@ parent-defined goal — and, in future, generate challenges like "Solve 3 math g
 
 - Memory / transcripts (implemented foundation):
 
-- Credit balances
-
+- Credit balance
 
 - Configure Voice (Provider/Style) per persona
 
@@ -488,7 +486,6 @@ parent-defined goal — and, in future, generate challenges like "Solve 3 math g
 - Investigate sessionResumption for google voice
 
 - New system games:
-  -  
   - Writing / Reading: Divide generated sentences into text blocks which are randomly laid out. Kid must put the blocks into correct order and read the sentence.
 
 - Connect dodi-bot for
@@ -497,9 +494,3 @@ parent-defined goal — and, in future, generate challenges like "Solve 3 math g
 
 Notifications:
 - Game agent finished
-
-Security:
-- Add captchas to registration / login / pw-reset
-- Check CSRF safety
-- Check sql injection vector
-- In production DB/system errors should never be displayed to the users. Only generic errors should be displayed in prodouction.
