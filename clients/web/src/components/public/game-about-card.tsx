@@ -6,8 +6,8 @@ import type { DiscoverGameDetail } from "@dodi/types/games";
 
 /**
  * Game description card in the public game page's sidebar, under the dodi
- * intro card: byline (publisher handle, or dodi for system games), target
- * age, tag icons and the full game description. Server rendered so the
+ * intro card: target age and tag icons, then the full game description led
+ * by the byline (publisher handle, or dodi for system games). Server rendered so the
  * description stays part of the SEO HTML after it moved out of the title bar.
  */
 export function GameAboutCard({ game }: { game: DiscoverGameDetail }) {
@@ -26,14 +26,6 @@ export function GameAboutCard({ game }: { game: DiscoverGameDetail }) {
         {t("aboutTitle")}
       </h2>
       <div className="mt-2.5 flex flex-wrap items-center gap-2">
-        {author ? (
-          <>
-            <span className="text-sm font-bold text-ink">{author}</span>
-            <span aria-hidden className="text-muted-foreground">
-              ·
-            </span>
-          </>
-        ) : null}
         <span className="rounded-full border border-border-strong px-2.5 py-0.5 text-xs font-semibold text-ink-2">
           {t("ageFrom", { age: game.target_age_min })}
         </span>
@@ -57,6 +49,9 @@ export function GameAboutCard({ game }: { game: DiscoverGameDetail }) {
         })}
       </div>
       <p className="mt-4 border-t border-border pt-4 text-sm font-semibold leading-relaxed text-ink-2">
+        {author ? (
+          <span className="font-bold text-ink">{author}: </span>
+        ) : null}
         {game.description}
       </p>
     </section>

@@ -8,6 +8,7 @@ import {
   getGameStats,
   getPublishedGame,
   getPublishedGameDetail,
+  getPublishedGamePreviewImage,
   getPublishedGamesByIds,
   listPublishedGames,
   listPublishedGameCatalog,
@@ -290,6 +291,34 @@ describe("getPublishedGameDetail", () => {
   it("returns null for pending and private rows", async () => {
     await expect(getPublishedGameDetail(t.serviceDb, PENDING)).resolves.toBeNull();
     await expect(getPublishedGameDetail(t.serviceDb, PRIVATE)).resolves.toBeNull();
+  });
+});
+
+describe("getPublishedGamePreviewImage", () => {
+  const PREVIEW = "data:image/jpeg;base64,/9j/AA==";
+
+  it("returns the stored preview of a LIVE game", async () => {
+    await t.serviceDb
+      .updateTable("games")
+      .set({ preview_image: PREVIEW })
+      .where("id", "=", PUB_1)
+      .execute();
+    await expect(getPublishedGamePreviewImage(t.serviceDb, PUB_1)).resolves.toBe(PREVIEW);
+  });
+
+  it("returns null for a LIVE game without a preview", async () => {
+    await expect(getPublishedGamePreviewImage(t.serviceDb, PUB_2)).resolves.toBeNull();
+  });
+
+  it("returns null for pending, private and missing rows", async () => {
+    await t.serviceDb
+      .updateTable("games")
+      .set({ preview_image: PREVIEW })
+      .where("id", "in", [PENDING, PRIVATE])
+      .execute();
+    await expect(getPublishedGamePreviewImage(t.serviceDb, PENDING)).resolves.toBeNull();
+    await expect(getPublishedGamePreviewImage(t.serviceDb, PRIVATE)).resolves.toBeNull();
+    await expect(getPublishedGamePreviewImage(t.serviceDb, MISSING)).resolves.toBeNull();
   });
 });
 

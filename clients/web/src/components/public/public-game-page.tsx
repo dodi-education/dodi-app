@@ -9,7 +9,10 @@ import { PublicActionButtons } from "@/components/public/public-action-buttons";
 import { PublicFooter } from "@/components/public/public-footer";
 import { PublicGamePlay } from "@/components/public/public-game-play";
 import { PublicHeader } from "@/components/public/public-header";
-import { publicGamePath } from "@/lib/public-game-urls";
+import {
+  publicGamePath,
+  publicGamePreviewImageUrl,
+} from "@/lib/public-game-urls";
 import { siteUrl } from "@/lib/site-links";
 import {
   coerceProgressKind,
@@ -56,6 +59,7 @@ export function PublicGamePage({
   const appUrl = (
     process.env.NEXT_PUBLIC_APP_URL ?? "https://app.dodi.app"
   ).replace(/\/+$/, "");
+  const previewImageUrl = publicGamePreviewImageUrl(game);
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": ["Game", "LearningResource"],
@@ -71,9 +75,7 @@ export function PublicGamePage({
       name: "dodi",
       url: siteUrl("home", locale),
     },
-    ...(game.preview_image?.startsWith("/")
-      ? { image: `${appUrl}${game.preview_image}` }
-      : {}),
+    ...(previewImageUrl ? { image: previewImageUrl } : {}),
   };
 
   const cards = (

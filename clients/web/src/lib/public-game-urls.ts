@@ -29,3 +29,25 @@ export function publicGameLanguageAlternates(id: string): Record<string, string>
     "x-default": `${origin}/games/${id}`,
   };
 }
+
+/**
+ * Absolute, scraper-fetchable URL of a published game's small preview image
+ * (og:image, JSON-LD), or `undefined` when there is none. System games carry
+ * same-origin path previews; parent publications store data URLs, which link
+ * previews reject, so those point at the platform's public preview-image
+ * endpoint that serves the decoded bytes. Always the PUBLIC API origin, never
+ * API_URL_INTERNAL: the URL is fetched by third-party scrapers.
+ */
+export function publicGamePreviewImageUrl(game: {
+  id: string;
+  preview_image: string | null;
+}): string | undefined {
+  const preview = game.preview_image;
+  if (!preview) return undefined;
+  if (preview.startsWith("/")) return `${appOrigin()}${preview}`;
+  const api = process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, "");
+  if (preview.startsWith("data:image/") && api) {
+    return `${api}/api/public/games/${encodeURIComponent(game.id)}/preview-image`;
+  }
+  return undefined;
+}

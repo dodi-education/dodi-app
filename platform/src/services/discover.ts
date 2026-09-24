@@ -297,6 +297,25 @@ export async function getPublishedGameDetail(
 }
 
 /**
+ * The stored `preview_image` of one LIVE published game (a data URL for
+ * parent publications, a same-origin path for system games), or `null` when
+ * the game is not live or has no preview. Backs the public preview-image
+ * endpoint that link previews (og:image) point at.
+ */
+export async function getPublishedGamePreviewImage(
+  service: Db,
+  gameId: string,
+): Promise<string | null> {
+  const row = await service
+    .selectFrom("games")
+    .select("preview_image")
+    .where("id", "=", gameId)
+    .where("published_at", "is not", null)
+    .executeTakeFirst();
+  return row?.preview_image ?? null;
+}
+
+/**
  * Re-shape a projected published row as a full `Game` for the play paths.
  * Owner fields are nulled: this is the only Game shape a non-owner family
  * ever receives. `publication_requested_at` stays set, so the client's

@@ -4,6 +4,7 @@ import { getTranslations } from "next-intl/server";
 import {
   appOrigin,
   publicGameLanguageAlternates,
+  publicGamePreviewImageUrl,
 } from "@/lib/public-game-urls";
 import type { DiscoverGameDetail } from "@dodi/types/games";
 
@@ -30,11 +31,8 @@ export async function publicGameMetadata(
   const title = `${game.title}: ${t("metaTitleSuffix")}`;
   const description = metaDescription(game.description);
   const canonical = `${appOrigin()}${canonicalPath}`;
-  // Only system games carry same-origin path previews; parent publications
-  // store data URLs, which OG scrapers reject — those pages go without image.
-  const previewUrl = game.preview_image?.startsWith("/")
-    ? `${appOrigin()}${game.preview_image}`
-    : undefined;
+  // The small square preview: link previews render it as a thumbnail card.
+  const previewUrl = publicGamePreviewImageUrl(game);
 
   return {
     title,
@@ -51,7 +49,13 @@ export async function publicGameMetadata(
       title,
       description,
       locale,
-      ...(previewUrl ? { images: [{ url: previewUrl }] } : {}),
+      ...(previewUrl ? { images: [{ url: previewUrl, alt: game.title }] } : {}),
+    },
+    twitter: {
+      card: "summary",
+      title,
+      description,
+      ...(previewUrl ? { images: [previewUrl] } : {}),
     },
   };
 }
