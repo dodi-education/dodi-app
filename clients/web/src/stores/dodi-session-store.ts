@@ -218,6 +218,11 @@ async function withAiActivity<T>(kind: DodiActivity, fn: () => Promise<T>): Prom
 
 let client: VoiceClient | null = null;
 let streamer: AudioStreamer | null = null;
+// Whether the model has finished generating its current turn (no audio chunk
+// since the last turnComplete). It streams faster than realtime, so the voice
+// usually keeps playing well past turnComplete: dodi stops speaking only once
+// the turn is complete AND the streamer has played out its queue.
+let modelTurnComplete = true;
 let recorder: AudioRecorder | null = null;
 let abortController: AbortController | null = null;
 
@@ -536,6 +541,11 @@ function clearPendingBridgeCalls(): void {
   pendingBridgeCalls = [];
 }
 
+/** Loudness of dodi's voice playing right now, 0..1; drives the 3D jaw. */
+export function dodiOutputLevel(): number {
+  return streamer?.outputLevel() ?? 0;
+}
+
 /** New AudioStreamer pre-set to the current kid's persisted output volume, so
  *  the first utterance already plays at the chosen loudness (no jump). */
 function createStreamer(): AudioStreamer {
@@ -545,7 +555,24 @@ function createStreamer(): AudioStreamer {
       ? readKidVolume(currentKidId)
       : useCompanionVolumeStore.getState().volume,
   );
+  // The queue ran dry. Mid-turn that is only a gap in the stream (more voice
+  // is coming); a retired streamer must not touch the current one's speech.
+  // Only clears the flag, never transitions state.
+  s.onPlaybackEnd(() => {
+    if (streamer !== s || !modelTurnComplete) return;
+    useDodiSessionStore.setState({ dodiSpeaking: false });
+  });
   return s;
+}
+
+/** The model's turn is over: stop speaking now if nothing is left to play,
+ *  otherwise when the streamer reports the queue played out. */
+function endSpeakingAfterPlayback(
+  set: (partial: Partial<DodiSessionState>) => void,
+): void {
+  modelTurnComplete = true;
+  if ((streamer?.backlogSeconds() ?? 0) > 0) return;
+  set({ dodiSpeaking: false });
 }
 
 function cleanup(): void {
@@ -1071,7 +1098,8 @@ function finishGameSpeech(
       client.disconnect();
     }
     client = null;
-    set({ dodiSpeaking: false });
+    // Retiring the socket doesn't cut the queued voice; it plays out.
+    endSpeakingAfterPlayback(set);
   }
 }
 
@@ -1929,6 +1957,7 @@ function createEventHandler(
           tapStartedAtMs = null;
           console.info("tap_to_first_audio_ms", elapsed);
         }
+        modelTurnComplete = false;
         set({ dodiSpeaking: true });
         streamer?.addPcmChunk(event.data);
         break;
@@ -2235,14 +2264,15 @@ function createEventHandler(
 
         // A deaf read-aloud completes here too (it may have no greeting) — end
         // it before the greeting gate so the borrowed pooled socket is retired
-        // and the speaking indicator clears.
+        // and the speaking indicator clears once the read-aloud has played out.
         if (gameSpeechActive) {
-          set({ dodiSpeaking: false });
+          endSpeakingAfterPlayback(set);
           finishGameSpeech(set, get);
         }
 
         if (!greetingSent) return;
-        set({ dodiSpeaking: false });
+        // Generation is done, but the voice may still be queued for seconds.
+        endSpeakingAfterPlayback(set);
 
         // End of the model's turn — finalize the current (Dodi) round as one entry.
         flushRound();

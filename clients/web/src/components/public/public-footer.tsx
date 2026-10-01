@@ -24,7 +24,6 @@ export function PublicFooter({ locale }: { locale: string }) {
       links: [
         { label: t("footerApp"), href: siteUrl("app", locale) },
         { label: t("footerCompanion"), href: siteUrl("companion", locale) },
-        { label: t("footerPricing"), href: siteUrl("pricing", locale) },
         { label: t("footerOpenApp"), href: "/" },
       ],
     },

@@ -388,6 +388,8 @@ interface XaiAccumulatedTurn {
  * Per-turn accumulator for OpenAI-compatible streaming chunks: reassembles the
  * assistant message (content + tool calls, usage from the final chunk) while
  * emitting AgentActivityEvents as deltas arrive. Create a fresh one per turn.
+ * write_progress fires only for genuinely streamed arguments, never for a call
+ * that arrives whole in the chunk carrying its name (xAI's behaviour).
  */
 export function createXaiTurnAccumulator(
   emit: (event: AgentActivityEvent) => void = () => {},
@@ -425,13 +427,18 @@ export function createXaiTurnAccumulator(
           calls[tc.index] = call;
         }
         if (tc.id) call.id = tc.id;
+        const carriesName = Boolean(tc.function?.name);
         if (tc.function?.name) {
           call.name = tc.function.name;
           emit({ type: "tool_started", name: call.name });
         }
         if (tc.function?.arguments) {
           call.arguments += tc.function.arguments;
-          if (isWriteStreamTool(call.name)) {
+          // Only arguments streamed in chunks AFTER the one naming the call are
+          // real progress (OpenAI streams them incrementally). xAI delivers the
+          // finished call whole in one chunk, name and arguments together, so a
+          // count there would just jump 0 → total: announce the call only.
+          if (!carriesName && isWriteStreamTool(call.name)) {
             emit({ type: "write_progress", chars: call.arguments.length });
           }
         }

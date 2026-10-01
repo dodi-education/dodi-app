@@ -50,6 +50,7 @@ import {
   type PlanSurface as PlanSurfaceKind,
 } from "@/components/parent/games/studio-panes";
 import { RichText } from "@/components/parent/games/rich-text";
+import { planSettingsSave, resolveDraftGate } from "@/components/parent/games/settings-save";
 import { AgentRunHistory } from "@/components/parent/games/agent-run-history";
 import { AgentRunTimeline } from "@/components/parent/games/agent-run-timeline";
 import {
@@ -451,6 +452,9 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
   }>({});
   const [justSaved, setJustSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+  // A build-starting settings save is in flight: the studio already shows the
+  // agent view (see saveSettings) while the save lands.
+  const [isStartingBuild, setIsStartingBuild] = useState(false);
 
   // ----- Plan step -------------------------------------------------------
   // Still on the Plan step: a brand-new game, or a persisted planning draft
@@ -551,7 +555,13 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
   const isPlanMode = isPlanning && view === "plan";
   // Building is locked until the settings are saved (new-game hard gate): that
   // is what ends planning, and for an unplanned draft it also mints the id.
-  const locked = isPlanning && !isPlanMode;
+  // A save that starts a planned build opens the chat early (the handoff), but
+  // the composer stays locked until the save has landed.
+  const { isPaneLocked, isComposerLocked } = resolveDraftGate({
+    isPlanning,
+    isPlanMode,
+    isStartingBuild,
+  });
   const hasPlan = planDraft.trim().length > 0;
   // On a phone the Plan step IS the chat pane: no Game/dodi switch, and the
   // sketch and the plan open over the thread instead of on the other tab. A
@@ -560,7 +570,13 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
   // composer drops to a single line until there is something typed in it.
   const isMobilePlan = vertical && isPlanMode;
   const mobileSurfaceOpen = isMobilePlan && planSurface !== "chat";
-  const panes = resolveStudioPanes({ vertical, locked, isPlanMode, mtab, planSurface });
+  const panes = resolveStudioPanes({
+    vertical,
+    locked: isPaneLocked,
+    isPlanMode,
+    mtab,
+    planSurface,
+  });
   // Side by side, the Plan step's chat spans the studio until a surface takes
   // the stage; then the chat is the sidebar again.
   const chatFullscreen = !vertical && panes.showChat && !panes.showMain;
@@ -586,7 +602,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
   // configured Game generation model. Without one we lock the composer (just
   // like the unsaved-draft gate) and surface a subtle warning above the input.
   const needsGameProvider = hasGameProvider === false;
-  const composerLocked = locked || needsGameProvider;
+  const composerLocked = isComposerLocked || needsGameProvider;
 
   // Resolve whether a Game generation model is configured. Drives the composer
   // lock + warning so we never fall back to the voice/thinking model for a
@@ -1315,6 +1331,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
 
   const stepLabel = (s: AgentStep): string => {
     const map: Record<AgentStep, string> = {
+      thinking: t("stepThinking"),
       reading_docs: t("stepReadingDocs"),
       generating_image: t("stepGeneratingImage"),
       generating_preview: t("stepGeneratingPreview"),
@@ -1646,7 +1663,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     }
     // New-game hard gate: a draft must be persisted (giving us a game id) before
     // Dodi can build. The composer is disabled in this state, but guard anyway.
-    if (locked) {
+    if (isComposerLocked) {
       setError(t("saveBeforeBuild"));
       setView("settings");
       return;
@@ -2085,6 +2102,19 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
       age: !isValidAgeRange(game.targetAgeMin, game.targetAgeMax),
     };
     if (nextInvalid.title || nextInvalid.learningGoal || nextInvalid.audience || nextInvalid.age) {
+      // DEBUG (mobile "Save & start building" does nothing): the red marker
+      // may be scrolled out of view on a phone.
+      const invalidFields = Object.keys(nextInvalid)
+        .filter((k) => nextInvalid[k as keyof typeof nextInvalid])
+        .join(",");
+      console.warn("[game-studio] settings save blocked by validation:", invalidFields);
+      reportErrorLog({
+        context: "game_save",
+        kidId: primaryKidId,
+        gameId: gameIdRef.current,
+        errorName: "SaveBlockedByValidation",
+        errorMessage: `invalid fields: ${invalidFields}`,
+      });
       setInvalid(nextInvalid);
       setView("settings");
       return;
@@ -2092,35 +2122,82 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     setInvalid({});
     setError(null);
     setSaving(true);
+    const savePlan = planSettingsSave({ isPlanning, hasAcceptedPlan: acceptedPlan !== null });
+    if (savePlan.isBuildStart) {
+      // Hand off to the agent view BEFORE the first await: the parent watches
+      // the save land and the build start instead of a disabled button.
+      setIsStartingBuild(true);
+      setThinking(true);
+      setNarration(t("savingSettings"));
+      setViewState("preview");
+      if (gameIdRef.current) {
+        window.history.replaceState(null, "", studioUrl(gameIdRef.current, "preview"));
+      }
+      if (vertical) setMtab("chat");
+    }
+    // End the handoff in the same render that ends planning, so the auto-build
+    // effect's send() sees thinking === false and starts the build.
+    const finishHandoff = (): void => {
+      if (!savePlan.isBuildStart) return;
+      setThinking(false);
+      setNarration("");
+      setIsStartingBuild(false);
+    };
+    // DEBUG (mobile "Save & start building" does nothing): trace each awaited
+    // step, and report the step a save is stuck on — phones have no console.
+    const saveStartedAt = startFailureTimer();
+    let saveStep = "await_planning_write";
+    const markSaveStep = (next: string): void => {
+      saveStep = next;
+      console.debug("[game-studio] settings save:", next, `${Date.now() - saveStartedAt}ms`);
+    };
+    const saveWatchdog = setTimeout(() => {
+      console.error("[game-studio] settings save stalled at", saveStep);
+      reportErrorLog({
+        context: "game_save",
+        kidId: primaryKidId,
+        gameId: gameIdRef.current,
+        errorName: "SaveStalled",
+        errorMessage: `settings save still pending after 20s (isPlanning=${isPlanning}, hasAcceptedPlan=${acceptedPlan !== null}, vertical=${vertical})`,
+        meta: browserFailureMeta(saveStartedAt, { lastStep: saveStep }),
+      });
+    }, 20_000);
     try {
       // Let a planning write in flight land first (it may be the very create
       // that mints the id), and never queue another: this save ends planning.
       planningDirtyRef.current = false;
+      markSaveStep("await_planning_write");
       await planningInflightRef.current;
       const gameId = gameIdRef.current;
       if (gameId) {
         // Map the success definition to structured criteria IN THE BROWSER (the
         // provider key stays in the vault); send only the mapped result. With no
         // provider configured (or on a mapping error) we persist the text and
-        // leave the existing criteria untouched.
+        // leave the existing criteria untouched. A build-starting save skips it:
+        // the first build maps the definition itself and persists the criteria.
         let mappedCriteria: { success_criteria: unknown; progress_kind: ProgressKind } | null = null;
-        try {
-          const gameCfg = await resolveClientGame();
-          const mapped = await mapSuccessDefinition(
-            gameCfg
-              ? { providerId: gameCfg.provider, modelId: gameCfg.model, apiKey: gameCfg.apiKey }
-              : null,
-            game.successDefinition,
-            { learningGoal: game.learningGoal },
-          );
-          mappedCriteria = {
-            success_criteria: mapped.successCriteria,
-            progress_kind: mapped.progressKind,
-          };
-        } catch {
-          /* no provider / mapping failed — persist the text, keep criteria as-is */
+        if (savePlan.shouldMapSuccessDefinition) {
+          try {
+            markSaveStep("resolve_game_model");
+            const gameCfg = await resolveClientGame();
+            markSaveStep("map_success_definition");
+            const mapped = await mapSuccessDefinition(
+              gameCfg
+                ? { providerId: gameCfg.provider, modelId: gameCfg.model, apiKey: gameCfg.apiKey }
+                : null,
+              game.successDefinition,
+              { learningGoal: game.learningGoal },
+            );
+            mappedCriteria = {
+              success_criteria: mapped.successCriteria,
+              progress_kind: mapped.progressKind,
+            };
+          } catch {
+            /* no provider / mapping failed — persist the text, keep criteria as-is */
+          }
         }
         if (mappedCriteria) setField("progressKind", mappedCriteria.progress_kind);
+        markSaveStep("seal_fields");
         const sealed = await sealGameFields({
           title: game.title || undefined,
           learning_goal: game.learningGoal,
@@ -2129,6 +2206,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
             ? { success_criteria: mappedCriteria.success_criteria as Json }
             : {}),
         });
+        markSaveStep("patch_game");
         const res = await dodi.request(`/api/games/${gameId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -2154,10 +2232,13 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
           }),
         });
         if (!res.ok) throw new Error(await readError(res));
+        markSaveStep("decrypt_response");
         useGameStore
           .getState()
           .put(await decryptGameResponse((await res.json()) as Game));
+        markSaveStep("save_listing_translations");
         await listingTranslations.save();
+        markSaveStep("saved");
 
         if (isPlanning) {
           // Nothing left to persist from the Plan step; drop a queued write so
@@ -2166,14 +2247,13 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
           setIsPlanning(false);
           if (acceptedPlan) {
             // A plan was agreed, so this save IS the start of the build (the
-            // effect below starts it once the chat is unlocked).
+            // effect below starts it once the chat is unlocked). The view was
+            // already handed over when the save began.
             pendingAutoBuildRef.current = {
               text: `${t("planBuildIntro")}\n\n${acceptedPlan}`,
               images: planImage ? [planImage] : [],
             };
-            setViewState("preview");
-            window.history.replaceState(null, "", studioUrl(gameId, "preview"));
-            if (vertical) setMtab("chat");
+            finishHandoff();
             return;
           }
           if (adoptedIdRef.current) {
@@ -2191,6 +2271,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
         // code yet we seal the placeholder ourselves — the server can't write
         // plaintext into an encrypted column, and only we can read the marker
         // back to tell "unbuilt" from a real game.
+        markSaveStep("create_game");
         const sealed = await sealGameCreateFields({
           title: game.title.trim(),
           learningGoal: game.learningGoal || undefined,
@@ -2243,9 +2324,8 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
           adoptedIdRef.current = true;
           gameIdRef.current = data.id;
           setGame((g) => ({ ...g, id: data.id }));
-          setViewState("preview");
-          window.history.replaceState(null, "", `/parent/game-studio/${data.id}/preview`);
-          if (vertical) setMtab("chat");
+          window.history.replaceState(null, "", studioUrl(data.id, "preview"));
+          finishHandoff();
           return;
         }
 
@@ -2258,9 +2338,26 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
       router.refresh();
       setTimeout(() => setJustSaved(false), 2200);
     } catch (e) {
+      console.error("[game-studio] settings save failed at", saveStep, e);
+      reportErrorLog({
+        context: "game_save",
+        kidId: primaryKidId,
+        gameId: gameIdRef.current,
+        ...describeError(e, []),
+        meta: browserFailureMeta(saveStartedAt, { lastStep: saveStep }),
+      });
       const reason = e instanceof Error && e.message ? e.message : "";
       setError(reason ? t("saveFailed", { reason }) : t("saveFailedGeneric"));
+      if (savePlan.isBuildStart) {
+        // Back to the form: its error line shows why, and Save retries.
+        pendingAutoBuildRef.current = null;
+        finishHandoff();
+        setView("settings");
+        if (vertical) setMtab("game");
+      }
     } finally {
+      clearTimeout(saveWatchdog);
+      setIsStartingBuild(false);
       setSaving(false);
     }
   }

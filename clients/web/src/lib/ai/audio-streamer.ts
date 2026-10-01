@@ -5,9 +5,12 @@
 export class AudioStreamer {
   private context: AudioContext | null = null;
   private gain: GainNode | null = null;
+  private analyser: AnalyserNode | null = null;
+  private levelSamples: Float32Array<ArrayBuffer> | null = null;
   private volume = 1;
   private scheduledTime = 0;
   private activeSources: AudioBufferSourceNode[] = [];
+  private playbackEndCallback: (() => void) | null = null;
 
   private ensureContext(): AudioContext {
     if (!this.context) {
@@ -17,8 +20,27 @@ export class AudioStreamer {
       this.gain = this.context.createGain();
       this.gain.gain.value = this.volume;
       this.gain.connect(this.context.destination);
+      // Sources feed the meter before the gain, so the 3D character's mouth
+      // moves with the voice whatever the volume slider says.
+      this.analyser = this.context.createAnalyser();
+      this.analyser.fftSize = 512;
+      this.analyser.connect(this.gain);
     }
     return this.context;
+  }
+
+  /**
+   * Loudness of what is playing right now, 0..1 (RMS scaled so normal speech
+   * reaches about 1). 0 before anything has played.
+   */
+  outputLevel(): number {
+    if (!this.analyser) return 0;
+    this.levelSamples ??= new Float32Array(this.analyser.fftSize);
+    this.analyser.getFloatTimeDomainData(this.levelSamples);
+    let sum = 0;
+    for (const v of this.levelSamples) sum += v * v;
+    const rms = Math.sqrt(sum / this.levelSamples.length);
+    return Math.min(1, rms * 5);
   }
 
   /**
@@ -57,7 +79,7 @@ export class AudioStreamer {
     // Schedule for gapless playback
     const source = ctx.createBufferSource();
     source.buffer = buffer;
-    source.connect(this.gain ?? ctx.destination);
+    source.connect(this.analyser ?? ctx.destination);
 
     const now = ctx.currentTime;
     const startTime = Math.max(now, this.scheduledTime);
@@ -66,11 +88,24 @@ export class AudioStreamer {
 
     this.activeSources.push(source);
 
-    // Cleanup finished sources
+    // Cleanup finished sources. A source missing from the list was cut by
+    // stop(), which reports nothing; only the natural end of the last queued
+    // chunk counts as the voice having played out.
     source.onended = () => {
       const idx = this.activeSources.indexOf(source);
-      if (idx !== -1) this.activeSources.splice(idx, 1);
+      if (idx === -1) return;
+      this.activeSources.splice(idx, 1);
+      if (this.activeSources.length === 0) this.playbackEndCallback?.();
     };
+  }
+
+  /**
+   * Register a callback for when everything queued has finished playing (the
+   * last scheduled chunk ended naturally). Not called by stop() / destroy().
+   * One callback per streamer; a later call replaces the earlier one.
+   */
+  onPlaybackEnd(callback: () => void): void {
+    this.playbackEndCallback = callback;
   }
 
   /**
@@ -125,7 +160,10 @@ export class AudioStreamer {
 
   async destroy(): Promise<void> {
     this.stop();
+    this.playbackEndCallback = null;
     this.gain = null;
+    this.analyser = null;
+    this.levelSamples = null;
     if (this.context) {
       await this.context.close();
       this.context = null;

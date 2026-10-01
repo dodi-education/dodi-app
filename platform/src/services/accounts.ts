@@ -6,6 +6,7 @@ import type {
   Account,
   Database,
   GameScreenshotServiceSettings,
+  InterfacePreferences,
   Json,
 } from "@dodi/types/database";
 
@@ -108,6 +109,35 @@ export async function updateAccountNotificationPreferences(
   await db
     .updateTable("accounts")
     .set({ notification_preferences: merged as unknown as Json })
+    .where("id", "=", accountId)
+    .execute();
+
+  return merged;
+}
+
+/**
+ * Merge partial interface toggles into the account's stored preferences (so
+ * updating one toggle never clobbers the others) and return the merged result.
+ */
+export async function updateAccountInterfacePreferences(
+  db: Db,
+  accountId: string,
+  prefs: InterfacePreferences,
+): Promise<InterfacePreferences> {
+  const existing = await db
+    .selectFrom("accounts")
+    .select("interface_preferences")
+    .where("id", "=", accountId)
+    .executeTakeFirstOrThrow();
+
+  const merged: InterfacePreferences = {
+    ...(existing.interface_preferences as InterfacePreferences),
+    ...prefs,
+  };
+
+  await db
+    .updateTable("accounts")
+    .set({ interface_preferences: merged as unknown as Json })
     .where("id", "=", accountId)
     .execute();
 

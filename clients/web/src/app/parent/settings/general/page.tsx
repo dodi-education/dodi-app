@@ -4,6 +4,7 @@ import { useTranslations } from "next-intl";
 import { useEffect } from "react";
 
 import { DateTimeSettings } from "@/components/parent/date-time-settings";
+import { InterfaceSettings } from "@/components/parent/interface-settings";
 import { FieldRow } from "@/components/parent/rows";
 import { Section } from "@/components/parent/section";
 import { LanguageSwitcher } from "@/components/shared/language-switcher";
@@ -44,6 +45,8 @@ export default function GeneralSettingsPage() {
           </span>
         </FieldRow>
       </Section>
+
+      <InterfaceSettings />
 
       <DateTimeSettings />
     </div>

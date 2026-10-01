@@ -23,6 +23,7 @@ function useStepLabel(): (step: AgentStep) => string {
   const t = useTranslations("gameStudio");
   return (step) => {
     const map: Record<AgentStep, string> = {
+      thinking: t("runLogStepThinking"),
       reading_docs: t("runLogStepReadingDocs"),
       generating_image: t("runLogStepGeneratingImage"),
       generating_preview: t("runLogStepGeneratingPreview"),

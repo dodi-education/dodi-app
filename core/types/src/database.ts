@@ -148,6 +148,15 @@ export interface GameScreenshotServiceSettings {
   mode: GameScreenshotServiceMode;
   customUrlEnc?: string;
 }
+
+/**
+ * Shape of `accounts.interface_preferences` (jsonb): plaintext look-and-feel
+ * toggles. Opt-out: an absent key reads as the client default.
+ */
+export interface InterfacePreferences {
+  /** Render the companion as the 3D character (false ⇒ the 2D artwork). */
+  is_3d_enabled?: boolean;
+}
 export type KidInsert = Insert<"kids">;
 export type KidUpdate = Update<"kids">;
 

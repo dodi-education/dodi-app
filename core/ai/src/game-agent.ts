@@ -307,8 +307,15 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
     onActivity?.(event);
   };
   // A mid-stream abort surfaces as a provider SDK error — normalize it so
-  // pressing Stop never reads as a build failure.
-  const runTurnChecked = async (driver: { runTurn(): Promise<GameTurn> }): Promise<GameTurn> => {
+  // pressing Stop never reads as a build failure. Every model turn opens a step
+  // ("thinking" by default): a provider that delivers its tool call whole only
+  // at the end of the turn would otherwise leave the previous tool's step on
+  // screen for the whole generation.
+  const runTurnChecked = async (
+    driver: { runTurn(): Promise<GameTurn> },
+    step: AgentStep = "thinking",
+  ): Promise<GameTurn> => {
+    emitStep(step);
     try {
       return await driver.runTurn();
     } catch (err) {
@@ -575,7 +582,6 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
   // Final validation with a bounded fix loop.
   const validation = validateGameCode(lastWrite.code, goalOpts());
   if (!validation.valid && validationRetries < AGENT_LIMITS.MAX_VALIDATION_RETRIES) {
-    emitStep("fixing_validation");
     driver.addUserMessage(
       `Final validation failed with errors:\n${validation.errors.join("\n")}\n\n` +
         `Please fix these issues — with edit_game_code for targeted fixes, or ` +
@@ -585,7 +591,7 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
     for (let retry = 0; retry < AGENT_LIMITS.MAX_VALIDATION_RETRIES; retry++) {
       checkAborted();
       validationRetries++;
-      const fix = await runTurnChecked(driver);
+      const fix = await runTurnChecked(driver, "fixing_validation");
       iterationCount++;
       addUsage(fix.usage);
 

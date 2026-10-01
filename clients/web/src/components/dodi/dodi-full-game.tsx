@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import Image from "next/image";
 import { useTranslations } from "next-intl";
 
+import { DodiFigure } from "@/components/dodi/dodi-figure";
 import { Icon, type IconName } from "@/components/shared/icon";
 import { ListeningPulse } from "@/components/kid/listening-pulse";
 import { useOnline } from "@/hooks/use-online";
@@ -14,7 +14,6 @@ import {
   type CompanionMessage,
 } from "@/stores/dodi-session-store";
 import { cn } from "@/lib/utils";
-import { getDodiImage } from "@/lib/dodi-image";
 
 /**
  * A contextual quick action the panel offers for the current game (save a
@@ -110,11 +109,10 @@ export function DodiFullGame({
           {dodiState === "active" && !dodiSpeaking && !isThinking && (
             <ListeningPulse className="-inset-2" />
           )}
-          <Image
-            src={isThinking ? "/images/dodi-thinking.png" : getDodiImage(dodiState, false)}
+          <DodiFigure
+            state={dodiState}
+            isThinking={isThinking}
             alt={activityKind === "image" ? "dodi is creating a picture" : activityKind === "writing" ? "dodi is writing" : activityKind === "thinking" ? "dodi is thinking" : dodiState === "active" ? "dodi listening" : dodiState === "deaf" ? "dodi can't hear you" : "dodi sleeping"}
-            fill
-            sizes="300px"
             className="relative z-[1] object-contain"
           />
         </button>

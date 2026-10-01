@@ -8,6 +8,11 @@
 import type { AgentCodeResult } from "./tasks";
 
 export type AgentStep =
+  /**
+   * The model is working on its next move between tool calls, e.g. reasoning
+   * or generating a tool call a provider only delivers whole.
+   */
+  | "thinking"
   | "reading_docs"
   | "generating_image"
   | "generating_preview"

@@ -7,6 +7,7 @@ import {
   getAccount,
   updateAccountDatePreferences,
   updateAccountGameScreenshotService,
+  updateAccountInterfacePreferences,
   updateAccountLanguage,
   updateAccountNotificationPreferences,
   updateAccountParentPin,
@@ -32,6 +33,13 @@ const NotificationPreferencesSchema = z
   })
   .partial();
 
+/** Plaintext (opt-out) interface toggles. Partial ⇒ merged server-side. */
+const InterfacePreferencesSchema = z
+  .object({
+    is_3d_enabled: z.boolean(),
+  })
+  .partial();
+
 const UpdateAccountSchema = z.object({
   datePreferences: DatePreferencesSchema.optional(),
   // Parent UI language (BCP-47 short code, e.g. "en"/"de").
@@ -43,6 +51,7 @@ const UpdateAccountSchema = z.object({
   // Game Studio screenshot service: plaintext mode + an `enc:v1:` sealed custom
   // URL. The server validates only the envelope; it never sees the URL.
   gameScreenshotService: GameScreenshotServiceSettingsSchema.optional(),
+  interfacePreferences: InterfacePreferencesSchema.optional(),
 });
 
 /** User-authed: the caller's account (subscribed plan, entitlements, preferences). */
@@ -53,7 +62,7 @@ export async function GET(request: Request): Promise<Response> {
   return NextResponse.json({ account });
 }
 
-/** User-authed: update account-level preferences (date/time display, UI language). */
+/** User-authed: update account-level preferences (date/time display, UI language, interface). */
 export async function PATCH(request: Request): Promise<Response> {
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
@@ -74,6 +83,7 @@ export async function PATCH(request: Request): Promise<Response> {
     parentPinEnc,
     notificationPreferences,
     gameScreenshotService,
+    interfacePreferences,
   } = result.data;
 
   try {
@@ -96,11 +106,15 @@ export async function PATCH(request: Request): Promise<Response> {
     const savedGameScreenshotService = gameScreenshotService
       ? await updateAccountGameScreenshotService(db, accountId, gameScreenshotService)
       : undefined;
+    const savedInterfacePreferences = interfacePreferences
+      ? await updateAccountInterfacePreferences(db, accountId, interfacePreferences)
+      : undefined;
     return NextResponse.json({
       datePreferences: savedDatePreferences,
       language,
       notificationPreferences: savedNotificationPreferences,
       gameScreenshotService: savedGameScreenshotService,
+      interfacePreferences: savedInterfacePreferences,
     });
   } catch (error) {
     return serverErrorResponse(error, "Failed to update account", "api/account#PATCH", {

@@ -1,29 +1,34 @@
 "use client";
 
 import { useEffect } from "react";
-import Image from "next/image";
 import { useTranslations } from "next-intl";
 
 import { Icon } from "@/components/shared/icon";
 import { Button } from "@/components/ui/button";
+import { DodiFigure } from "@/components/dodi/dodi-figure";
 import { SpeechBubble } from "@/components/dodi/speech-bubble";
 import { ListeningPulse } from "@/components/kid/listening-pulse";
 import { useDodiSessionStore } from "@/stores/dodi-session-store";
 import { useDodiContext } from "@/hooks/use-dodi-context";
 import { useKids } from "@/hooks/use-kids";
 import { useOnline } from "@/hooks/use-online";
-import { getDodiImage } from "@/lib/dodi-image";
 
 interface DodiFullHomeProps {
   kidId: string;
   hasProvider: boolean;
 }
 
-/** Shared stage wrapper: vertically centered column with mascot sizing. */
+/**
+ * Shared stage wrapper: vertically centered column with mascot sizing. It
+ * fills the page, which is where the 3D character can be turned and zoomed
+ * (`data-character-area`, see lib/character/character-gestures.ts).
+ */
 function Stage({ children }: { children: React.ReactNode }) {
   return (
-    <div className="my-auto flex flex-col items-center gap-5 py-4">
-      {children}
+    <div data-character-area className="flex w-full flex-1 flex-col items-center">
+      <div className="my-auto flex flex-col items-center gap-5 py-4">
+        {children}
+      </div>
     </div>
   );
 }
@@ -35,8 +40,10 @@ function MascotWrap({
   listening?: boolean;
   children: React.ReactNode;
 }) {
+  // The figure is 76% of this box: 300px on desktop (395px box), unless the
+  // window is too short for it.
   return (
-    <div className="relative flex aspect-square w-[clamp(170px,38vh,300px)] items-center justify-center">
+    <div className="relative flex aspect-square w-[clamp(170px,38vh,300px)] items-center justify-center md:w-[min(395px,55vh)]">
       {listening ? <ListeningPulse /> : null}
       {children}
     </div>
@@ -102,11 +109,10 @@ export function DodiFullHome({
       <Stage>
         <MascotWrap>
           <div className={mascotImageClass + " size-[76%]"}>
-            <Image
-              src={getDodiImage("sleep", false)}
+            <DodiFigure
+              canRender3d
+              state="sleep"
               alt="dodi sleeping"
-              fill
-              sizes="300px"
               className="object-contain"
               priority
             />
@@ -131,11 +137,10 @@ export function DodiFullHome({
       <Stage>
         <MascotWrap>
           <div className={mascotImageClass + " size-[76%]"}>
-            <Image
-              src={getDodiImage("disconnected", false)}
+            <DodiFigure
+              canRender3d
+              state="disconnected"
               alt="dodi sleeping"
-              fill
-              sizes="300px"
               className="object-contain"
               priority
             />
@@ -157,11 +162,10 @@ export function DodiFullHome({
       <Stage>
         <MascotWrap>
           <div className={mascotImageClass + " size-[76%]"}>
-            <Image
-              src={getDodiImage("connecting", false)}
+            <DodiFigure
+              canRender3d
+              state="connecting"
               alt="dodi waking up"
-              fill
-              sizes="300px"
               className="object-contain"
               priority
             />
@@ -194,11 +198,10 @@ export function DodiFullHome({
                 : tVoice("voiceAriaStartListening")
             }
           >
-            <Image
-              src={getDodiImage(dodiState, false)}
+            <DodiFigure
+              canRender3d
+              state={dodiState}
               alt={dodiState === "active" ? "dodi listening" : "dodi can't hear you"}
-              fill
-              sizes="300px"
               className="object-contain"
               priority
             />
@@ -246,11 +249,10 @@ export function DodiFullHome({
             className={mascotButtonClass}
             aria-label={t("tapToStart")}
           >
-            <Image
-              src={getDodiImage("sleep", false)}
+            <DodiFigure
+              canRender3d
+              state="sleep"
               alt="dodi sleeping — tap to wake"
-              fill
-              sizes="300px"
               className="object-contain"
               priority
             />
@@ -275,11 +277,10 @@ export function DodiFullHome({
       <Stage>
         <MascotWrap>
           <div className={mascotImageClass + " size-[76%]"}>
-            <Image
-              src={getDodiImage("disconnected", false)}
+            <DodiFigure
+              canRender3d
+              state="disconnected"
               alt="dodi sleeping"
-              fill
-              sizes="300px"
               className="object-contain"
               priority
             />
@@ -316,11 +317,10 @@ export function DodiFullHome({
           className={mascotButtonClass}
           aria-label={t("tapToStart")}
         >
-          <Image
-            src={getDodiImage("disconnected", false)}
+          <DodiFigure
+            canRender3d
+            state="disconnected"
             alt="dodi sleeping — tap to wake"
-            fill
-            sizes="300px"
             className="object-contain"
             priority
           />

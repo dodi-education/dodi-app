@@ -9,7 +9,12 @@ import { create } from "zustand";
 
 import { dodi } from "@/lib/api";
 import { parseGameScreenshotServiceSettings } from "@dodi/games/screenshot-contract";
-import type { Account, GameScreenshotServiceSettings, Json } from "@dodi/types/database";
+import type {
+  Account,
+  GameScreenshotServiceSettings,
+  InterfacePreferences,
+  Json,
+} from "@dodi/types/database";
 
 /** Plaintext (opt-out; unset ⇒ on) toggles the server reads to decide whether
  *  to send transactional email. Stored in accounts.notification_preferences. */
@@ -97,4 +102,26 @@ export function patchGameScreenshotService(settings: GameScreenshotServiceSettin
   useAccountStore
     .getState()
     .patchLocal({ game_screenshot_service: settings as unknown as Json });
+}
+
+/** The account's interface toggles (empty while the account is unloaded). */
+export function interfacePreferencesOf(account: Account | null): InterfacePreferences {
+  const stored = account?.interface_preferences;
+  return stored && typeof stored === "object" && !Array.isArray(stored)
+    ? (stored as InterfacePreferences)
+    : {};
+}
+
+/** Mirror saved interface toggles into the cached account. */
+export function patchInterfacePreferences(prefs: InterfacePreferences): void {
+  useAccountStore
+    .getState()
+    .patchLocal({ interface_preferences: prefs as unknown as Json });
+}
+
+/** Whether dodi renders as the 3D character. Opt-out: on unless turned off. */
+export function useIs3dEnabled(): boolean {
+  return useAccountStore(
+    (s) => interfacePreferencesOf(s.account).is_3d_enabled !== false,
+  );
 }

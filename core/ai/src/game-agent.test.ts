@@ -1155,6 +1155,34 @@ describe("live activity + narration", () => {
     expect(steps).toContain("writing_code");
   });
 
+  it("starts a thinking step with every model turn, so a finished tool's step ends", async () => {
+    // xAI delivers a tool call whole, at the END of its turn: without a step at
+    // turn start, minutes of code generation were logged as the previous
+    // tool's step ("Painting the background").
+    mockDriverFactory = () =>
+      driverReturning([
+        {
+          toolCalls: [{ id: "d1", name: "read_bridge_docs", input: {} }],
+          text: "",
+          hasText: false,
+          expectsToolResults: true,
+          stopReason: "tool_use",
+          usage: emptyUsage,
+        },
+        idleTurn,
+      ]);
+    const steps: AgentStep[] = [];
+    await runGameAgent({
+      provider: "xai",
+      apiKey: "k",
+      model: "m",
+      task: TASK,
+      onStep: (s) => steps.push(s),
+    }).catch(() => {});
+
+    expect(steps).toEqual(["thinking", "reading_docs", "thinking"]);
+  });
+
   it("passes the narration language into the system prompt", async () => {
     const captured = captureDriverOpts();
     await runGameAgent({

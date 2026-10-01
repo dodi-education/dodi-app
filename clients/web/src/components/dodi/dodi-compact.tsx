@@ -1,8 +1,8 @@
 "use client";
 
-import Image from "next/image";
 import { useTranslations } from "next-intl";
 
+import { DodiFigure } from "@/components/dodi/dodi-figure";
 import { Icon } from "@/components/shared/icon";
 import {
   useDodiSessionStore,
@@ -11,7 +11,6 @@ import {
 } from "@/stores/dodi-session-store";
 import { useOnline } from "@/hooks/use-online";
 import { cn } from "@/lib/utils";
-import { getDodiImage } from "@/lib/dodi-image";
 
 export function DodiCompact() {
   const t = useTranslations("games");
@@ -68,15 +67,11 @@ export function DodiCompact() {
         className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-dodi-200 bg-white shadow-sm transition-shadow hover:shadow-md disabled:opacity-60"
         aria-label={ariaLabel}
       >
-        <Image
-          src={
-            isThinking
-              ? "/images/dodi-head-thinking.png"
-              : getDodiImage(dodiState, true)
-          }
+        <DodiFigure
+          state={dodiState}
+          isThinking={isThinking}
+          isHead
           alt={isThinking ? t("voiceThinkingAlt") : "dodi"}
-          width={32}
-          height={32}
           className={cn("rounded-full", isThinking && "animate-kspin")}
         />
         {/* Speaking indicator ring */}

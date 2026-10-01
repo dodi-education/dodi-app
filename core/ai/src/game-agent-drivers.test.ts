@@ -299,6 +299,29 @@ describe("createXaiTurnAccumulator", () => {
     ]);
   });
 
+  it("reports no write progress for a tool call delivered whole in one chunk", () => {
+    // xAI never streams tool-call arguments: the finished call arrives in one
+    // chunk, so a "characters written" count would only jump 0 → total.
+    const events: AgentActivityEvent[] = [];
+    const acc = createXaiTurnAccumulator((e) => events.push(e));
+    acc.push({
+      choices: [
+        {
+          delta: {
+            tool_calls: [
+              { index: 0, id: "w1", function: { name: "write_game_code", arguments: '{"code":"x"}' } },
+            ],
+          },
+          finish_reason: "tool_calls",
+        },
+      ],
+    } as never);
+    expect(events).toEqual([{ type: "tool_started", name: "write_game_code" }]);
+    expect(acc.finish().toolCalls).toEqual([
+      { id: "w1", name: "write_game_code", arguments: '{"code":"x"}' },
+    ]);
+  });
+
   it("only reports write progress for code-writing tools' arguments", () => {
     const events: AgentActivityEvent[] = [];
     const acc = createXaiTurnAccumulator((e) => events.push(e));

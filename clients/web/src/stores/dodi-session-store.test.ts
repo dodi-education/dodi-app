@@ -44,6 +44,8 @@ const {
   kidById,
   gamesByKid,
   tryResumeResult,
+  streamerBacklog,
+  streamerPlaybackEnd,
 } = vi.hoisted(() => ({
   runClientMemoryUpdate: vi.fn(),
   beginDaySpy: vi.fn(),
@@ -74,6 +76,10 @@ const {
   // Controls whether the AudioStreamer resumes without a gesture. false ⇒ the
   // store lands in transient gesture-needed deaf (distinct from persisted deaf).
   tryResumeResult: { current: true },
+  // Seconds of voice the mocked streamer still has queued, and the callback the
+  // store registered for "the last queued chunk has finished playing".
+  streamerBacklog: { current: 0 },
+  streamerPlaybackEnd: { current: null as (() => void) | null },
 }));
 
 vi.mock("@/lib/api", () => ({ dodi: { request: dodiRequestSpy } }));
@@ -153,7 +159,10 @@ vi.mock("@/lib/ai/audio-streamer", () => ({
     }
     addPcmChunk() {}
     backlogSeconds() {
-      return 0;
+      return streamerBacklog.current;
+    }
+    onPlaybackEnd(callback: () => void) {
+      streamerPlaybackEnd.current = callback;
     }
   },
 }));
@@ -295,6 +304,8 @@ function installTestEnv() {
   createdClients.current = [];
   mockVoiceProvider.current = "gemini";
   tryResumeResult.current = true;
+  streamerBacklog.current = 0;
+  streamerPlaybackEnd.current = null;
   useDodiSessionStore.setState({ state: "disconnected", context: { type: "home" } });
 }
 
@@ -1837,5 +1848,86 @@ describe("dodi session store — offline guard", () => {
     await connect(PID);
     expect(beginDaySpy).toHaveBeenCalled();
     expect(createdClients.current.length).toBeGreaterThan(0);
+  });
+});
+
+describe("dodi session store — speaking lasts as long as the voice plays", () => {
+  beforeEach(() => {
+    installTestEnv();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  async function connectActive() {
+    await connect(PID);
+    fire({ type: "setupComplete" });
+    await flush();
+    expect(useDodiSessionStore.getState().state).toBe("active");
+  }
+
+  /** The streamer plays out what it had queued and reports it. */
+  function playOut() {
+    streamerBacklog.current = 0;
+    streamerPlaybackEnd.current?.();
+  }
+
+  // The bug: the model streams faster than realtime, so its turn completes
+  // while seconds of voice are still queued; the talk animation (and the
+  // "dodi speaking" bubble) stopped there instead of when the voice ended.
+  it("keeps speaking after the model's turn completes while voice is still queued", async () => {
+    await connectActive();
+    fire({ type: "audio", data: "AAAA" });
+    streamerBacklog.current = 6.2;
+    fire({ type: "turnComplete" });
+    expect(useDodiSessionStore.getState().dodiSpeaking).toBe(true);
+
+    playOut();
+    expect(useDodiSessionStore.getState().dodiSpeaking).toBe(false);
+  });
+
+  it("stops speaking at turn end when nothing is left to play", async () => {
+    await connectActive();
+    fire({ type: "audio", data: "AAAA" });
+    streamerBacklog.current = 0;
+    fire({ type: "turnComplete" });
+    expect(useDodiSessionStore.getState().dodiSpeaking).toBe(false);
+  });
+
+  it("keeps speaking through a pause in the stream while the model's turn is still going", async () => {
+    await connectActive();
+    fire({ type: "audio", data: "AAAA" });
+    // The queue ran dry mid-turn (the network was slower than playback).
+    playOut();
+    expect(useDodiSessionStore.getState().dodiSpeaking).toBe(true);
+
+    fire({ type: "audio", data: "AAAA" });
+    streamerBacklog.current = 1;
+    fire({ type: "turnComplete" });
+    expect(useDodiSessionStore.getState().dodiSpeaking).toBe(true);
+    playOut();
+    expect(useDodiSessionStore.getState().dodiSpeaking).toBe(false);
+  });
+
+  it("a new turn's voice keeps speaking even if the previous turn's playback ends late", async () => {
+    await connectActive();
+    fire({ type: "audio", data: "AAAA" });
+    streamerBacklog.current = 2;
+    fire({ type: "turnComplete" });
+    // The next turn starts streaming before the first one has played out.
+    fire({ type: "audio", data: "AAAA" });
+    streamerBacklog.current = 4;
+    streamerPlaybackEnd.current?.(); // a stale end must not clear speaking
+    expect(useDodiSessionStore.getState().dodiSpeaking).toBe(true);
+  });
+
+  it("still stops at once on a barge-in", async () => {
+    await connectActive();
+    fire({ type: "audio", data: "AAAA" });
+    streamerBacklog.current = 5;
+    fire({ type: "interrupted" });
+    expect(useDodiSessionStore.getState().dodiSpeaking).toBe(false);
+    expect(streamerStopSpy).toHaveBeenCalled();
   });
 });

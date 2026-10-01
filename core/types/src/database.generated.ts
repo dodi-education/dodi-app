@@ -59,6 +59,10 @@ export interface Accounts {
   game_screenshot_service: Generated<Json>;
   id: string;
   /**
+   * Plaintext interface toggles ({ is_3d_enabled? }); absent keys read as the client default. Merged on update.
+   */
+  interface_preferences: Generated<Json>;
+  /**
    * Parent UI language (BCP-47 short code, e.g. en/de). Durable source of truth; cached client-side in the NEXT_LOCALE cookie and re-seeded at login.
    */
   language: Generated<string>;

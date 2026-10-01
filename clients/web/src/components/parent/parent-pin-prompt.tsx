@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 
@@ -24,6 +25,10 @@ import { useVaultStore } from "@/stores/vault-store";
 export function ParentPinPrompt() {
   const t = useTranslations("parentPin");
   const pinEnc = useAccountStore((s) => s.account?.parent_pin_enc ?? null);
+  // The prompt lives in the shared /parent layout, so it stays mounted across
+  // sidebar navigation (and the clicked link takes focus). Keying the input by
+  // path remounts it per route so autoFocus reclaims focus.
+  const pathname = usePathname();
 
   const [value, setValue] = useState("");
   const [error, setError] = useState(false);
@@ -85,6 +90,7 @@ export function ParentPinPrompt() {
 
         <div className="mt-6">
           <PinInput
+            key={pathname}
             value={value}
             onChange={(v) => {
               setError(false);
