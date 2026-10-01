@@ -1,5 +1,6 @@
 import { getRequestConfig } from "next-intl/server";
 import { cookies, headers } from "next/headers";
+import { loadMessages } from "@dodi/intl/messages";
 
 import { resolveLocale } from "./resolve-locale";
 
@@ -17,6 +18,6 @@ export default getRequestConfig(async () => {
 
   return {
     locale,
-    messages: (await import(`./messages/${locale}.json`)).default,
+    messages: await loadMessages(locale),
   };
 });

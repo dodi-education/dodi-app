@@ -4,7 +4,7 @@ import { useTranslations } from "next-intl";
 
 import { AgentRunFrames } from "@/components/parent/games/agent-run-frames";
 import { Icon } from "@/components/shared/icon";
-import type { AgentRunCheck } from "@/lib/games/agent-run-log";
+import type { AgentRunCheck } from "@dodi/studio/agent-run-log";
 import { cn } from "@/lib/utils";
 
 interface AgentRunCheckItemProps {

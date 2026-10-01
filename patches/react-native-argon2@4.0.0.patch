@@ -1,0 +1,57 @@
+diff --git a/android/build.gradle b/android/build.gradle
+index 6a928cdab930e0d7fabdbc26c4be5d8d4a78605b..ed2f29a43e5864fd80db15cf65b097f92da10ebb 100644
+--- a/android/build.gradle
++++ b/android/build.gradle
+@@ -1,26 +1,20 @@
+ apply plugin: 'com.android.library'
+ 
++// Patched for Gradle 9 / AGP 8 (dodi): jcenter() is gone, the library's own
++// AGP 4.1 buildscript conflicts with the app's, and AGP 8 needs a namespace.
++
+ def safeExtGet(prop, fallback) {
+     rootProject.ext.has(prop) ? rootProject.ext.get(prop) : fallback
+ }
+ 
+-buildscript {
+-    repositories {
+-        google()
+-        mavenCentral()
+-    }
+-    dependencies {
+-        classpath 'com.android.tools.build:gradle:4.1.0'
+-    }
+-}
+-
+ android {
+-    compileSdkVersion safeExtGet('compileSdkVersion', 30)
+-    buildToolsVersion safeExtGet('buildToolsVersion', '30.0.3')
++    namespace 'com.poowf.argon2'
++    compileSdkVersion safeExtGet('compileSdkVersion', 36)
++    buildToolsVersion safeExtGet('buildToolsVersion', '36.0.0')
+ 
+     defaultConfig {
+-        minSdkVersion safeExtGet('minSdkVersion', 21)
+-        targetSdkVersion safeExtGet('targetSdkVersion', 30)
++        minSdkVersion safeExtGet('minSdkVersion', 24)
++        targetSdkVersion safeExtGet('targetSdkVersion', 36)
+         versionCode 1
+         versionName '1.0'
+     }
+@@ -28,7 +22,7 @@ android {
+ 
+ repositories {
+     google()
+-    jcenter()
++    mavenCentral()
+ }
+ 
+ dependencies {
+diff --git a/android/src/main/AndroidManifest.xml b/android/src/main/AndroidManifest.xml
+index 7eb4fea32c22f43bf56bdfd1df15d16f23788a4c..9a40236b94715132bb1e1fab5816fbcd58da432c 100644
+--- a/android/src/main/AndroidManifest.xml
++++ b/android/src/main/AndroidManifest.xml
+@@ -1,3 +1,3 @@
+ <?xml version="1.0" encoding="utf-8"?>
+-<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.poowf.argon2" >
++<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+ </manifest>

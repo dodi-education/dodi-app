@@ -9,7 +9,7 @@ import {
   restoreRunLog,
   runChecks,
   startAgentRun,
-} from "@/lib/games/agent-run-log";
+} from "./agent-run-log";
 
 const T0 = 1_000_000;
 

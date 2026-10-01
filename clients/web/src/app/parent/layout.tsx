@@ -1,3 +1,4 @@
+import { BuildActivityHost } from "@/components/parent/games/build-activity-host";
 import { ParentPinGate } from "@/components/parent/parent-pin-gate";
 import { ParentShell } from "@/components/shared/parent-shell";
 import { VaultGate } from "@/components/vault/vault-gate";
@@ -14,6 +15,7 @@ export default function ParentLayout({
     <ParentShell>
       <VaultGate>
         <ParentPinGate>{children}</ParentPinGate>
+        <BuildActivityHost />
       </VaultGate>
     </ParentShell>
   );

@@ -1,0 +1,19 @@
+{
+  "name": "@dodi/parity",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "check": "tsx src/cli.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "tsx": "4.23.13",
+    "typescript": "^5",
+    "vitest": "^4.1.8",
+    "yaml": "^2.8.1"
+  }
+}

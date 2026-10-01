@@ -12,12 +12,11 @@ import { Icon } from "@/components/shared/icon";
 import { Button } from "@/components/ui/button";
 import { useKids } from "@/hooks/use-kids";
 import { dodi } from "@/lib/api";
-
-interface DashboardStats {
-  sessionsToday: number;
-  sessionsThisWeek: number;
-  gamesCreated: number;
-}
+import {
+  type DashboardStats,
+  EMPTY_DASHBOARD_STATS,
+  loadDashboardStats,
+} from "@dodi/client-state/dashboard";
 
 export default function DashboardPage() {
   const t = useTranslations("dashboard");
@@ -25,21 +24,13 @@ export default function DashboardPage() {
   // kids fetched only for the count (empty state) + IDs; names/ages are
   // decrypted client-side in the KidsGlance island.
   const { kids } = useKids();
-  const [stats, setStats] = useState<DashboardStats>({
-    sessionsToday: 0,
-    sessionsThisWeek: 0,
-    gamesCreated: 0,
-  });
+  const [stats, setStats] = useState<DashboardStats>(EMPTY_DASHBOARD_STATS);
 
   useEffect(() => {
     let cancelled = false;
-    dodi
-      .request("/api/dashboard")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d: DashboardStats | null) => {
-        if (!cancelled && d) setStats(d);
-      })
-      .catch(() => {});
+    void loadDashboardStats(dodi).then((d) => {
+      if (!cancelled && d) setStats(d);
+    });
     return () => {
       cancelled = true;
     };

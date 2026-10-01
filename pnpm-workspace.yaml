@@ -5,3 +5,4 @@ packages:
   - "screenshot"
   - "agent"
   - "core/*"
+  - "tools/*"

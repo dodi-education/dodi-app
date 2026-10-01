@@ -7,8 +7,9 @@ import { Section } from "@/components/parent/section";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { authClient } from "@/lib/auth/client";
-import { useVaultStore } from "@/stores/vault-store";
+import { webAuthApi } from "@/lib/auth/auth-api";
+import { clientState } from "@/lib/client-state";
+import { changePassword } from "@dodi/client-state/change-password";
 
 /**
  * Change-password form for a signed-in parent whose vault is already unlocked
@@ -29,35 +30,21 @@ export function ChangePassword() {
     setError(null);
     setDone(false);
 
-    if (password !== confirm) {
-      setError(t("passwordsNoMatch"));
-      return;
-    }
-    if (password.length < 8) {
-      setError(t("passwordTooShort"));
-      return;
-    }
-
     setBusy(true);
-    try {
-      // Auth first (validates length/session); only then re-wrap the vault, so a
-      // rejected auth update leaves the vault untouched.
-      const { error: authError } = await authClient.$fetch("/password/set", {
-        method: "POST",
-        body: { password },
-      });
-      if (authError) {
-        throw new Error(authError.message ?? t("changePasswordFailed"));
-      }
-      await useVaultStore.getState().changePassword(password);
+    // Auth first (validates length/session); only then the vault is re-wrapped,
+    // so a rejected auth update leaves the vault untouched.
+    const outcome = await changePassword(
+      { auth: webAuthApi, vault: clientState.vault },
+      { password, confirm },
+    );
+    if (outcome.kind === "done") {
       setDone(true);
       setPassword("");
       setConfirm("");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t("changePasswordFailed"));
-    } finally {
-      setBusy(false);
+    } else {
+      setError(outcome.key ? t(outcome.key) : (outcome.message ?? t("changePasswordFailed")));
     }
+    setBusy(false);
   }
 
   return (

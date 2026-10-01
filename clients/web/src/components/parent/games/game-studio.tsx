@@ -26,7 +26,6 @@ import { STAGE } from "@/lib/games/stage";
 import { sanitizeGameBundle } from "@dodi/games/sanitizer";
 import { extractTranslations, hasTranslationsBlock } from "@dodi/games/translations";
 import { UNBUILT_GAME_PLACEHOLDER } from "@dodi/games/placeholder";
-import { injectBackgroundImage } from "@dodi/games/background-image";
 import { normalizeLocale } from "@dodi/intl/locales";
 import { locales } from "@/i18n/config";
 import { CodeViewer } from "@/components/parent/games/code-viewer";
@@ -53,27 +52,29 @@ import { RichText } from "@/components/parent/games/rich-text";
 import { planSettingsSave, resolveDraftGate } from "@/components/parent/games/settings-save";
 import { AgentRunHistory } from "@/components/parent/games/agent-run-history";
 import { AgentRunTimeline } from "@/components/parent/games/agent-run-timeline";
+import type { ResumableBuild } from "@dodi/studio/build-manager";
 import {
-  type AgentRunLog,
-  type AgentRunOutcome,
-  boundRunLogs,
-  restoreRunLog,
-} from "@/lib/games/agent-run-log";
-import { createAgentRunRecorder, RUN_FRAME_BOUND } from "@/lib/games/agent-run-recorder";
+  SCREENSHOT_BOUND,
+  type StudioBuildGame,
+  type StudioBuildOutcome,
+  type StudioBuildTexts,
+} from "@dodi/studio/build-runner";
+import {
+  restoreTranscript,
+  sealableTranscript,
+  sealTranscript,
+  type StudioChatMessage,
+  toPriorTurns,
+} from "@dodi/studio/transcript";
 import { cn } from "@/lib/utils";
-import {
-  capImages,
-  downscaleDataUrl,
-  fileToDataUrl,
-  squareThumbnailDataUrl,
-} from "@/lib/games/thumbnail";
-import { gameDebugWarn } from "@dodi/games/debug";
+import { capImages, downscaleDataUrl, fileToDataUrl } from "@/lib/games/thumbnail";
 import { useKids } from "@/hooks/use-kids";
 import { type ListingTranslations, useListingTranslations } from "@/hooks/use-listing-translations";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { useNavigationGuard } from "@/hooks/use-navigation-guard";
 import { useWakeLock } from "@/hooks/use-wake-lock";
 import { useBreadcrumbStore } from "@/stores/breadcrumb-store";
+import { studioBuildStore, useStudioBuild } from "@/stores/studio-build-store";
 import {
   decryptGameResponse,
   decryptVersionResponse,
@@ -81,22 +82,13 @@ import {
   sealGameFields,
   useGameStore,
 } from "@/stores/game-store";
-import { gameScreenshotServiceOf, useAccountStore } from "@/stores/account-store";
+import { useAccountStore } from "@/stores/account-store";
 import { useVaultStore } from "@/stores/vault-store";
-import {
-  captureGameFrames,
-  isDodiScreenshotServiceUnavailable,
-  type ScreenshotTarget,
-} from "@/lib/games/screenshot-service";
 import { resolveClientGame } from "@/lib/ai/resolve-client-game";
 import { resolveClientImage } from "@/lib/ai/resolve-client-image";
-import { createClientImageProvider } from "@dodi/ai/image-providers/factory";
-import { buildBackgroundPrompt } from "@dodi/ai/image-providers/background-prompt";
-import { buildPreviewPrompt } from "@dodi/ai/image-providers/preview-prompt";
 import { calculateChildAge, getLanguageDisplayName } from "@dodi/ai/dodi-context";
 import { buildLearningContext, measureLearningContext } from "@dodi/ai/learning-context";
-import { runGameAgent, AgentAbortedError, GameAgentError, type PriorTurn } from "@dodi/ai/game-agent";
-import type { RenderGameInput, RenderGameOutput } from "@dodi/ai/game-agent-tools";
+import { AgentAbortedError } from "@dodi/ai/game-agent";
 import { runPlanAgent } from "@dodi/ai/game-plan-agent";
 import { derivePlanSettings } from "@dodi/ai/plan-settings";
 import { reportUsage } from "@/lib/usage/report-usage";
@@ -110,9 +102,8 @@ import { mapSuccessDefinition } from "@dodi/ai/success-mapping";
 import type { AgentStep } from "@dodi/types/agent-progress";
 import type { Game, GameVersion, Json } from "@dodi/types/database";
 import type { GamePerspective } from "@dodi/types/games";
-import type { AgentCodeResult, AgentTaskRequest } from "@dodi/types/tasks";
 import { coerceSuccessCriteria } from "@dodi/games/game-spec";
-import type { ProgressKind, SuccessCriteria } from "@dodi/games/success";
+import type { ProgressKind } from "@dodi/games/success";
 
 interface KidOption {
   id: string;
@@ -125,41 +116,16 @@ interface KidOption {
   language: string;
 }
 
-export interface StudioGame {
+/** The studio's game: the build baseline (`StudioBuildGame`) plus the editor's own fields. */
+export interface StudioGame extends StudioBuildGame {
   id: string | null;
-  title: string;
-  tags: string[];
-  description: string;
-  learningGoal: string;
-  successDefinition: string;
-  progressKind: ProgressKind;
-  /** Structured success mapping — the baseline edit-only builds must preserve. */
-  successCriteria: SuccessCriteria;
   /** Recommended player age range — a plaintext facet shown on dodi Discover. */
   targetAgeMin: number;
   targetAgeMax: number;
-  codeBundle: string;
   /** Head of the game's version chain (server-managed); null = pre-versioning code. */
   currentGameVersionId: string | null;
-  markdown: string;
-  /** Specific kid IDs this game is shared with (empty when family). */
-  audienceIds: string[];
-  /** Shared with the whole family. */
-  isFamily: boolean;
-  /** Dodi has built this game at least once (false for a freshly-saved draft). */
-  built: boolean;
   /** Playable by kids. Parent-created games start inactive until activated. */
   isActive: boolean;
-  /** Required camera perspective for the design (null = dodi chooses). */
-  perspective: GamePerspective | null;
-  /** Generate an AI background image during builds (needs an image provider). */
-  generateBackgroundImage: boolean;
-  /** Generate an AI game-list preview image after builds (needs an image provider). */
-  generatePreviewImage: boolean;
-  /** Standard commands the built game implements (metadata.capabilities). */
-  capabilities: string[];
-  /** 100×100 JPEG data URL shown in game lists (E2EE at rest; null = none yet). */
-  previewImage: string | null;
   /** enc:v1: sealed prior studio conversation, restored on re-entry. */
   agentTranscriptEnc?: string | null;
   /** enc:v1: sealed Plan-step state; set while the game is still being planned. */
@@ -187,25 +153,7 @@ interface GameStudioProps {
   initialView?: StudioView;
 }
 
-interface ChatMessage {
-  role: "user" | "assistant";
-  text: string;
-  /** Attached reference images (downscaled data URLs) on user turns. */
-  images?: string[];
-  /** Assistant turns whose build changed the code — anchors Show changes | Revert. */
-  hasCodeChange?: boolean;
-  /** What the game agent did for this reply (display only, never fed to the model). */
-  run?: AgentRunLog;
-}
-
-/** Prior turns for the model: text and images only, never a run log. */
-function toPriorTurns(history: ChatMessage[]): PriorTurn[] {
-  return history.map((m) => ({
-    role: m.role,
-    text: m.text,
-    ...(m.images?.length ? { images: m.images } : {}),
-  }));
-}
+type ChatMessage = StudioChatMessage;
 
 /** Lean version-history entry from GET /api/games/[id]/versions (no code). */
 interface GameVersionEntry {
@@ -229,12 +177,8 @@ const COMPOSER_ONE_LINE = 28;
 const COMPOSER_SURFACE_MAX = 96;
 /** Max reference images a single message can carry. */
 const MAX_ATTACHMENTS = 3;
-/** Sealed-transcript guard: only this many trailing messages keep their images. */
-const TRANSCRIPT_IMAGE_MESSAGES = 6;
 /** How long the Plan step waits after a change before re-sealing it onto the row. */
 const PLANNING_PERSIST_DELAY_MS = 800;
-/** Square edge of the game-list preview the generated image is cropped to. */
-const PREVIEW_IMAGE_SIZE = 100;
 
 function emptyGame(): StudioGame {
   return {
@@ -293,23 +237,8 @@ function readStoredSize(key: string, min: number, max: number, fallback: number)
 }
 
 /** Unseal a persisted conversation transcript for the initial thread (resume). */
-function restoreTranscript(initialGame?: StudioGame): ChatMessage[] {
-  const enc = initialGame?.agentTranscriptEnc;
-  if (!enc) return [];
-  const session = useVaultStore.getState().session;
-  if (!session) return [];
-  try {
-    const restored = session.decryptJson<ChatMessage[]>(enc);
-    if (!Array.isArray(restored)) return [];
-    // Transcripts sealed before run logs existed simply have no `run`.
-    return restored.map(({ run, ...m }) => {
-      const restoredRun = restoreRunLog(run);
-      return restoredRun ? { ...m, run: restoredRun } : m;
-    });
-  } catch {
-    // malformed / wrong key — start clean
-    return [];
-  }
+function restoreInitialTranscript(initialGame?: StudioGame): ChatMessage[] {
+  return restoreTranscript(useVaultStore.getState().session, initialGame?.agentTranscriptEnc);
 }
 
 export function GameStudio({ initialGame, initialView }: GameStudioProps) {
@@ -404,7 +333,9 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
   // Initial thread = the unsealed prior conversation (resume), or empty. The
   // Plan step shares it: the brainstorming turns become the head of the build
   // conversation, so the coding agent inherits everything that was discussed.
-  const [messages, setMessages] = useState<ChatMessage[]>(() => restoreTranscript(initialGame));
+  const [localMessages, setMessages] = useState<ChatMessage[]>(() =>
+    restoreInitialTranscript(initialGame),
+  );
   const [draft, setDraft] = useState("");
   // Reference images staged for the next message (downscaled data URLs).
   const [pendingImages, setPendingImages] = useState<string[]>([]);
@@ -413,20 +344,43 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
   // child nodes so the drop overlay doesn't flicker.
   const [isDragOver, setIsDragOver] = useState(false);
   const dragDepthRef = useRef(0);
-  const [thinking, setThinking] = useState(false);
-  // Keep the screen awake while the agent runs — on mobile, screen dim → lock
-  // kills the in-flight provider fetch and the whole build with it.
-  useWakeLock(thinking);
-  const [step, setStep] = useState<AgentStep | null>(null);
-  // Live "working aloud" text streamed from the model while it builds — shown
-  // under the thinking indicator. Ephemeral: reset per text block, never persisted.
-  const [narration, setNarration] = useState("");
-  // Cumulative streamed size of the current write_game_code call, rounded to
-  // 200-char steps so state updates (re-renders) stay coarse. 0 = hidden.
-  const [writeChars, setWriteChars] = useState(0);
-  // The running build's timeline (run log), shown live in the thinking block
-  // and attached to the build's reply when it ends. Null outside a build.
-  const [liveRun, setLiveRun] = useState<AgentRunLog | null>(null);
+  // Work this screen runs itself: a plan turn, or the save that starts a
+  // build. Builds run in the studio build store instead (see below), so they
+  // outlive this component.
+  const [isLocalBusy, setThinking] = useState(false);
+  // Keep the screen awake while a plan turn runs (builds: BuildActivityHost).
+  useWakeLock(isLocalBusy);
+  // Live "working aloud" text of a plan turn (builds stream theirs into the store).
+  const [localNarration, setNarration] = useState("");
+
+  // This game's build, if one is running on this device. The store owns it;
+  // this screen only shows it, and adopts its outcome when it ends.
+  const activeBuild = useStudioBuild((s) =>
+    s.active && s.active.gameId === game.id ? s.active : null,
+  );
+  const pendingOutcome = useStudioBuild((s) => (game.id ? s.outcomes[game.id] : undefined));
+  // Another game's build holds the device's single build slot.
+  const isOtherBuildRunning = useStudioBuild(
+    (s) => s.active !== null && s.active.gameId !== game.id,
+  );
+  // A build is being handed to the store (the edit screenshot is captured
+  // first); counts as busy, but is not a plan turn the navigation guard needs.
+  const [isStartingBuildRun, setIsStartingBuildRun] = useState(false);
+  const thinking = isLocalBusy || isStartingBuildRun || activeBuild !== null;
+  const step: AgentStep | null = activeBuild?.step ?? null;
+  // Live "working aloud" text streamed from the model — shown under the
+  // thinking indicator. Ephemeral: reset per text block, never persisted.
+  const narration = activeBuild ? activeBuild.narration : localNarration;
+  // Cumulative streamed size of the current write, in 200-char steps. 0 = hidden.
+  const writeChars = activeBuild?.writeChars ?? 0;
+  // The running build's timeline (run log), shown live in the thinking block.
+  const liveRun = activeBuild?.runLog ?? null;
+  // The thread: the running build's (it carries the in-flight message), then
+  // a finished build's until this screen adopts it, else the screen's own.
+  const messages =
+    activeBuild?.transcript ?? pendingOutcome?.transcript ?? localMessages;
+  // An interrupted build of this game that can continue from its checkpoint.
+  const [resumable, setResumable] = useState<ResumableBuild | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Background generation was enabled but the build produced no image — tells
   // the parent whether the model skipped the tool or generation failed.
@@ -435,13 +389,12 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
   // had no preview yet, and the build still ended without one.
   const [previewNotice, setPreviewNotice] = useState<"skipped" | "failed" | null>(null);
   // A screenshot service was on but never delivered frames this build. A
-  // platform without a configured worker is a silent skip (see the ref), so
-  // self-hosters are not nagged; real failures do get the notice.
+  // platform without a configured worker is a silent skip, so self-hosters
+  // are not nagged; real failures do get the notice.
   const [visualCheckNotice, setVisualCheckNotice] = useState(false);
-  const screenshotUnavailableRef = useRef(false);
   // The account setting that picks the screenshot service (single-flight
-  // shared cache; already loaded by the parent shell in the common case).
-  const account = useAccountStore((s) => s.account);
+  // shared cache; already loaded by the parent shell in the common case). The
+  // build reads it from the store when it starts.
   const loadAccount = useAccountStore((s) => s.load);
   // Mandatory settings fields left empty on save — drives the red field markers.
   const [invalid, setInvalid] = useState<{
@@ -735,29 +688,14 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
   };
 
   // Resume: the initial thread is unsealed from the persisted transcript in the
-  // useState initializer above (restoreTranscript), so re-entry picks up where
+  // useState initializer above (restoreInitialTranscript), so re-entry picks up where
   // the parent left off — a locked vault or wrong key just yields an empty thread.
-
-  // Keep the sealed transcript bounded: images beyond the trailing window are
-  // display-only history nobody re-feeds — drop them from the sealed copy so
-  // agent_transcript_enc doesn't grow by hundreds of KB per attachment forever.
-  // Run logs are bounded the same way: only the trailing runs keep their
-  // (thumbnail) frames, and full-size captures never leave the session.
-  const sealableTranscript = (transcript: ChatMessage[]): ChatMessage[] =>
-    boundRunLogs(transcript).map((m, i) =>
-      m.images?.length && i < transcript.length - TRANSCRIPT_IMAGE_MESSAGES
-        ? { ...m, images: undefined }
-        : m,
-    );
 
   // Persist the (sealed) conversation alongside the game. `null` clears it.
   const persistTranscript = async (transcript: ChatMessage[] | null): Promise<void> => {
     if (!game.id) return;
     const session = useVaultStore.getState().session;
-    const agent_transcript_enc =
-      transcript && transcript.length > 0 && session
-        ? session.encryptJson(sealableTranscript(transcript))
-        : null;
+    const agent_transcript_enc = session ? sealTranscript(session, transcript) : null;
     await dodi.request(`/api/games/${game.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -930,111 +868,6 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     [],
   );
 
-  // Persist a completed build — game fields + sealed transcript, no provider key
-  // (generation already happened in the browser). The studio always has a game id
-  // here (the composer is locked until the draft is saved). Returns the updated
-  // row so the caller can adopt the new version-chain head.
-  const persistBuild = async (
-    result: AgentCodeResult,
-    safeCode: string,
-    transcript: ChatMessage[],
-  ): Promise<Game | null> => {
-    if (!game.id) return null;
-    const session = useVaultStore.getState().session;
-    const agent_transcript_enc = session
-      ? session.encryptJson(sealableTranscript(transcript))
-      : null;
-    const sealed = await sealGameFields({
-      title: result.title || undefined,
-      description: result.description,
-      code_bundle: safeCode,
-      markdown: result.markdown,
-      learning_goal: result.learningGoal,
-      success_definition: result.successDefinition,
-      success_criteria: result.successCriteria as unknown as Json,
-      // The agent-generated list preview rides along with the build persist.
-      ...(result.previewImage ? { preview_image: result.previewImage } : {}),
-    });
-    const res = await dodi.request(`/api/games/${game.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ...sealed,
-        tags: result.tags,
-        progress_kind: result.progressKind,
-        metadata: result.metadata,
-        agent_transcript_enc,
-        audience: { isFamily: game.isFamily, audienceIds: game.audienceIds },
-      }),
-    });
-    if (!res.ok) throw new Error(await readError(res));
-    const saved = await decryptGameResponse((await res.json()) as Game);
-    useGameStore.getState().put(saved);
-    return saved;
-  };
-
-  // ----- Game-list preview image -----------------------------------------
-
-  // Client-side preview-image generation injected into the agent loop (only
-  // when the setting is on): resolve provider + vault key, generate a square
-  // icon — with the game's background image riding along as a style reference
-  // when one exists — then crop it to the 100×100 list preview ourselves.
-  const makePreviewImage = async (
-    scene: string,
-    backgroundImage?: string,
-  ): Promise<string> => {
-    const image = await resolveClientImage();
-    if (!image) throw new Error("No image provider configured");
-    const provider = createClientImageProvider(image.provider, image.apiKey, image.model);
-    const generated = await provider.generateImage(
-      buildPreviewPrompt(scene, { hasStyleReference: Boolean(backgroundImage) }),
-      {
-        aspectRatio: "1:1",
-        referenceImages: backgroundImage ? [backgroundImage] : undefined,
-      },
-    );
-    const square = await squareThumbnailDataUrl(generated.dataUrl, PREVIEW_IMAGE_SIZE);
-    if (!square) {
-      gameDebugWarn("preview", "cropping the generated preview image failed");
-      throw new Error("Preview image processing failed");
-    }
-    return square;
-  };
-
-  // ----- Visual check (screenshot service) --------------------------------
-
-  // Which screenshot service this build may use, from the account setting.
-  // "custom" needs the unlocked vault to open the sealed URL; anything that
-  // cannot be resolved means no visual check this build.
-  const resolveScreenshotTarget = (): ScreenshotTarget | null => {
-    const setting = gameScreenshotServiceOf(account);
-    if (setting.mode === "dodi") {
-      return isDodiScreenshotServiceUnavailable() ? null : { mode: "dodi" };
-    }
-    if (setting.mode === "custom" && setting.customUrlEnc) {
-      const session = useVaultStore.getState().session;
-      if (!session) return null;
-      try {
-        const url = session.decryptField(setting.customUrlEnc);
-        return url ? { mode: "custom", url } : null;
-      } catch {
-        return null;
-      }
-    }
-    return null;
-  };
-
-  // Client-side render injected into the agent loop: the sandbox document goes
-  // to the configured service and real frames come back for the model to look
-  // at. This is the moment game code leaves the browser, and the only one.
-  const makeGameView = async (input: RenderGameInput): Promise<RenderGameOutput | null> => {
-    const target = resolveScreenshotTarget();
-    if (!target) return null;
-    const output = await captureGameFrames(input, target);
-    if (!output && isDodiScreenshotServiceUnavailable()) screenshotUnavailableRef.current = true;
-    return output;
-  };
-
   // Export and publish live in the game list's actions menu, not here — both act
   // on the persisted row, so they don't need the studio's live state.
 
@@ -1047,9 +880,10 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     });
   };
 
-  // Stop the in-browser agent loop; send()'s finally block resets the UI.
+  // Stop the running plan turn or build; each resets the UI as it ends.
   const stop = (): void => {
     abortRef.current?.abort();
+    if (activeBuild) studioBuildStore.stop();
   };
 
   // ----- Version history -------------------------------------------------
@@ -1327,7 +1161,9 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
   };
 
   // The loop runs inside this tab — warn before any action that would kill it.
-  useNavigationGuard(thinking, t("leaveWhileRunningConfirm"));
+  // Only a plan turn dies with this screen. A build lives in the build store,
+  // so moving around the app is fine (BuildActivityHost guards tab close).
+  useNavigationGuard(isLocalBusy, t("leaveWhileRunningConfirm"));
 
   const stepLabel = (s: AgentStep): string => {
     const map: Record<AgentStep, string> = {
@@ -1342,39 +1178,6 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
       finalizing: t("stepFinalizing"),
     };
     return map[s];
-  };
-
-  // Bound an image for the bundle: downscale to the stage size, recompress once
-  // if it's still heavy (~160k data-URL chars ≈ 120KB binary).
-  const boundBackgroundImage = async (dataUrl: string): Promise<string> => {
-    let scaled = await downscaleDataUrl(dataUrl, {
-      maxWidth: STAGE.logicalWidth,
-      maxHeight: STAGE.logicalHeight,
-      quality: 0.8,
-    });
-    if (scaled && scaled.length > 160_000) {
-      scaled = await downscaleDataUrl(dataUrl, {
-        maxWidth: STAGE.logicalWidth,
-        maxHeight: STAGE.logicalHeight,
-        quality: 0.6,
-      });
-    }
-    if (!scaled) throw new Error("Background image processing failed");
-    return scaled;
-  };
-
-  // Client-side background-image generation injected into the agent loop (only
-  // when the setting is on): resolve provider + vault key, generate at the
-  // stage's aspect, and bound the result before it enters the bundle.
-  const makeBackgroundImage = async (scene: string): Promise<string> => {
-    const image = await resolveClientImage();
-    if (!image) throw new Error("No image provider configured");
-    const provider = createClientImageProvider(image.provider, image.apiKey, image.model);
-    const generated = await provider.generateImage(
-      buildBackgroundPrompt(scene, game.perspective),
-      { aspectRatio: `${STAGE.aspectW}:${STAGE.aspectH}` },
-    );
-    return boundBackgroundImage(generated.dataUrl);
   };
 
   // ----- Plan step --------------------------------------------------------
@@ -1652,6 +1455,23 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     isAgreedPlan?: boolean;
   }
 
+  /** The replies a build writes into the thread, in the parent's UI language. */
+  const buildTexts = (): StudioBuildTexts => ({
+    buildSummaryTitle: t("buildSummaryTitle"),
+    stopped: t("stopped"),
+    paused: t("buildPaused"),
+    buildFailed: t("buildFailed"),
+    previewUpdated: t("previewUpdatedMessage"),
+    previewUpdateFailed: t("previewUpdateFailedMessage"),
+  });
+
+  const resetBuildNotices = (): void => {
+    setError(null);
+    setBgNotice(null);
+    setPreviewNotice(null);
+    setVisualCheckNotice(false);
+  };
+
   async function send(raw?: string, opts?: SendOptions): Promise<void> {
     const text = (raw ?? draft).trim();
     if (!text || thinking) return;
@@ -1663,7 +1483,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     }
     // New-game hard gate: a draft must be persisted (giving us a game id) before
     // Dodi can build. The composer is disabled in this state, but guard anyway.
-    if (isComposerLocked) {
+    if (isComposerLocked || !game.id) {
       setError(t("saveBeforeBuild"));
       setView("settings");
       return;
@@ -1679,415 +1499,186 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
       setView("settings");
       return;
     }
-    setError(null);
-    setBgNotice(null);
-    setPreviewNotice(null);
-    setVisualCheckNotice(false);
+    // One build per device: another game's build holds the slot.
+    if (isOtherBuildRunning) {
+      setError(t("otherBuildRunning"));
+      return;
+    }
+    resetBuildNotices();
     setDraft("");
     // Attachments belong to this message — stage them and clear the strip. A
     // studio-started build (the accepted plan) brings its own image instead.
     const attachments = opts?.images ?? pendingImages;
     setPendingImages([]);
-    // Capture the conversation before this prompt so we can seed the agent's
-    // continuity on resume, then show the new user turn.
+    // A new message supersedes an interrupted build of this game.
+    if (resumable) {
+      setResumable(null);
+      void studioBuildStore.discardResumable(game.id);
+    }
+    // Show the new turn right away; the build's own thread takes over once
+    // it runs, and the outcome's replaces both.
     const history = messages;
-    const withUser: ChatMessage[] = [
+    setMessages([
       ...history,
       { role: "user", text, ...(attachments.length ? { images: attachments } : {}) },
-    ];
-    setMessages(withUser);
-    setThinking(true);
-    setStep(null);
-    setNarration("");
-    setWriteChars(0);
-    // Record what the agent does this build (steps, narration, screenshot
-    // checks) for the "How dodi built this" timeline under its reply.
-    const recorder = createAgentRunRecorder({
-      onChange: setLiveRun,
-      thumbnail: (url) => downscaleDataUrl(url, RUN_FRAME_BOUND),
-    });
-    setLiveRun(null);
-    const finishRun = (outcome: AgentRunOutcome): { run: AgentRunLog } => ({
-      run: recorder.finish(outcome),
-    });
-
-    // First build of a freshly-saved draft uses generate_game semantics (build
-    // from scratch) even though the game id exists; later edits are updates.
-    const isUpdate = game.built;
+    ]);
+    setIsStartingBuildRun(true);
 
     // Edit tasks attach a screenshot of the current game so the model sees what
     // it is changing. Best-effort: capture failure → text-only edit.
     let screenshot: string | undefined;
-    if (isUpdate && sandboxRef.current) {
+    if (game.built && sandboxRef.current) {
       const raw = await sandboxRef.current
         .requestSnapshot({ preferGameCapture: game.capabilities.includes("get_snapshot") })
         .catch(() => null);
-      const scaled = raw
-        ? await downscaleDataUrl(raw, { maxWidth: 768, maxHeight: 960, quality: 0.8 })
-        : null;
+      const scaled = raw ? await downscaleDataUrl(raw, SCREENSHOT_BOUND) : null;
       screenshot = scaled ?? undefined;
     }
 
-    const payload = isUpdate
-      ? {
-          instruction: text,
-          screenshot,
-          existingCode: game.codeBundle,
-          existingMarkdown: game.markdown,
-          // Baseline for surgical edits: an edit-only build returns these
-          // unchanged, so persistBuild cannot wipe them.
-          existingMeta: {
-            title: game.title,
-            description: game.description,
-            tags: game.tags,
-            progressKind: game.progressKind,
-            successCriteria: game.successCriteria,
-            capabilities: game.capabilities,
-          },
-          title: game.title || undefined,
-          learningGoal: game.learningGoal || undefined,
-          successDefinition: game.successDefinition || undefined,
-          perspective: game.perspective ?? undefined,
-          images: attachments.length ? attachments : undefined,
-        }
-      : {
-          prompt: text,
-          isAgreedPlan: opts?.isAgreedPlan || undefined,
-          title: game.title || undefined,
-          tags: game.tags,
-          learningGoal: game.learningGoal || undefined,
-          successDefinition: game.successDefinition || undefined,
-          perspective: game.perspective ?? undefined,
-          images: attachments.length ? attachments : undefined,
-        };
-
-    const controller = new AbortController();
-    abortRef.current = controller;
-    // Failure telemetry inputs: the loop runs entirely in the browser, so the
-    // report below is the only trace a failed build leaves anywhere.
-    const startedAt = startFailureTimer();
-    let lastStep: AgentStep | null = null;
-    let gameCfg: Awaited<ReturnType<typeof resolveClientGame>> = null;
-    try {
-      // The provider key lives only in the unlocked vault — resolve it here and
-      // run the ENTIRE agent loop in the browser, so it never reaches our servers.
-      gameCfg = await resolveClientGame();
-      if (!gameCfg) {
-        setThinking(false);
-        setError(t("needProviderKey"));
-        return;
-      }
-
-      const kid = kids.find((k) => k.id === primaryKidId);
-
-      // Memory/parent-notes, birthdate and name are E2EE — assemble the agent's
-      // learning context, age and language in the browser. None of this leaves
-      // the tab: the loop calls the provider directly with the vault key.
-      const learningContext = buildLearningContext(
-        kids,
-        { isFamily: game.isFamily, audienceIds: game.audienceIds },
-        primaryKidId,
-      );
-      const age = calculateChildAge(kid?.birthdate ?? null) ?? undefined;
-
-      const task: AgentTaskRequest = {
-        kidId: primaryKidId,
-        taskType: isUpdate ? "update_game" : "generate_game",
-        gameId: game.id ?? undefined,
-        childContext: {
-          name: kid?.name ?? "",
-          age,
-          language: getLanguageDisplayName(kid?.language ?? "en"),
-          locale: normalizeLocale(kid?.language),
-          learningContext,
-        },
-        payload: payload as AgentTaskRequest["payload"],
-      };
-
-      const result = await runGameAgent({
-        provider: gameCfg.provider,
-        apiKey: gameCfg.apiKey,
-        model: gameCfg.model,
-        task,
-        priorTurns: toPriorTurns(history),
-        signal: controller.signal,
-        onStep: (s) => {
-          lastStep = s;
-          setStep(s);
-          recorder.onStep(s);
-        },
-        // Live activity: narration text streams into the line under the loader;
-        // the write ticker counts streamed write_game_code input. Rounding to
-        // 200-char steps keeps re-renders coarse (React skips equal states).
-        onActivity: (e) => {
-          recorder.onActivity(e);
-          if (e.type === "narration_start") setNarration("");
-          else if (e.type === "narration_delta") setNarration((n) => n + e.text);
-          else if (
-            e.type === "tool_started" &&
-            (e.name === "write_game_code" || e.name === "edit_game_code")
-          )
-            setWriteChars(0);
-          else if (e.type === "write_progress") setWriteChars(Math.floor(e.chars / 200) * 200);
-        },
-        // Narration is for the parent watching the studio — their UI language.
-        narrationLanguage: getLanguageDisplayName(locale),
-        onGenerateBackgroundImage: game.generateBackgroundImage ? makeBackgroundImage : undefined,
-        // Independent of the generate toggle: "use my attached image as the
-        // background" needs no image provider, just the bundle-size bound.
-        onPrepareBackgroundImage: boundBackgroundImage,
-        onGeneratePreviewImage: game.generatePreviewImage ? makePreviewImage : undefined,
-        hasExistingPreviewImage: Boolean(game.previewImage),
-        // Only when the setting resolves to a service now: with none, the model
-        // never even sees the view_game tool.
-        onViewGame: resolveScreenshotTarget() ? recorder.wrapViewGame(makeGameView) : undefined,
-      });
-
-      // Preview-only run: the parent asked for a new preview image and nothing
-      // else changed — persist just the preview + transcript, leave the game
-      // fields and version chain untouched.
-      if (result.previewOnly && game.id) {
-        if (!result.previewImage) {
-          setPreviewNotice("failed");
-          const withFail: ChatMessage[] = [
-            ...withUser,
-            { role: "assistant", text: t("previewUpdateFailedMessage"), ...finishRun("failed") },
-          ];
-          setMessages(withFail);
-          void persistTranscript(withFail).catch(() => {
-            /* best effort — the visible thread already has the reply */
-          });
-          return;
-        }
-        const preview = result.previewImage;
-        const gameId = game.id;
-        const withDodi: ChatMessage[] = [
-          ...withUser,
-          { role: "assistant", text: t("previewUpdatedMessage"), ...finishRun("completed") },
-        ];
-        setMessages(withDodi);
-        setGame((g) => ({ ...g, previewImage: preview }));
-        reportUsage({
-          eventType: "game_edit",
-          kidId: primaryKidId,
-          gameId,
-          provider: gameCfg.provider,
-          model: gameCfg.model,
-          usage: result.usage,
-          meta: { turns: result.iterationCount },
-        });
-        try {
-          const session = useVaultStore.getState().session;
-          const sealed = await sealGameFields({ preview_image: preview });
-          const res = await dodi.request(`/api/games/${gameId}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              preview_image: sealed.preview_image,
-              agent_transcript_enc: session
-                ? session.encryptJson(sealableTranscript(withDodi))
-                : null,
-            }),
-          });
-          if (!res.ok) throw new Error(await readError(res));
-          useGameStore.getState().patchLocal(gameId, { preview_image: preview });
-          router.refresh();
-        } catch (saveErr) {
-          const reason = saveErr instanceof Error ? saveErr.message : "";
-          setError(reason ? t("saveFailed", { reason }) : t("saveFailedGeneric"));
-        }
-        return;
-      }
-
-      // Swap the background placeholder for the real image BEFORE anything
-      // renders or persists — the stored bundle stays self-contained.
-      const finalCode = result.backgroundImage
-        ? injectBackgroundImage(result.codeBundle, result.backgroundImage)
-        : result.codeBundle;
-      if (game.generateBackgroundImage && !result.backgroundImage) {
-        setBgNotice(result.backgroundImageFailed ? "failed" : "skipped");
-      }
-      // A preview was expected but never landed. With an existing preview,
-      // skipping the regeneration is a correct, deliberate choice — only a
-      // failed attempt is worth a notice then.
-      if (game.generatePreviewImage && !result.previewImage) {
-        if (result.previewImageFailed) setPreviewNotice("failed");
-        else if (!game.previewImage) setPreviewNotice("skipped");
-      }
-      if (result.visualCheckFailed && !screenshotUnavailableRef.current) {
-        setVisualCheckNotice(true);
-      }
-
-      // Sanitize client-side before it touches state/persistence (the games route
-      // sanitizes again server-side as defense-in-depth).
-      const safeCode = sanitizeGameBundle(finalCode).code;
-
-      // Mirrors the server's previous-version capture in updateCustomGame: a
-      // non-empty pre-build bundle that differs from the result. Anchors the
-      // Show changes | Revert links on this turn's reply.
-      const codeChanged = Boolean(game.codeBundle) && safeCode !== game.codeBundle;
-
-      // Record what this generation used (fire-and-forget). The tokens were spent
-      // regardless of whether the persist below succeeds, so report it here. We
-      // measure each context component's size (never its content) so we can track
-      // how they evolve across users over time.
-      const ctxSizes = measureLearningContext(
-        kids,
-        { isFamily: game.isFamily, audienceIds: game.audienceIds },
-        primaryKidId,
-      );
-      const gp = payload as Partial<{
-        prompt: string;
-        instruction: string;
-        learningGoal: string;
-        successDefinition: string;
-        tags: string[];
-      }>;
-      reportUsage({
-        eventType: isUpdate ? "game_edit" : "game_create",
-        kidId: primaryKidId,
-        gameId: game.id ?? null,
-        provider: gameCfg.provider,
-        model: gameCfg.model,
-        usage: result.usage,
-        meta: {
-          turns: result.iterationCount,
-          validationRetries: result.validationRetries,
-          outputChars: safeCode.length,
-          memoryChars: ctxSizes.memoryChars,
-          parentNotesChars: ctxSizes.parentNotesChars,
-          learningGoalChars: (gp.learningGoal ?? "").length,
-          successDefChars: (gp.successDefinition ?? "").length,
-          promptChars: (gp.prompt ?? gp.instruction ?? "").length,
-          tagsChars: (gp.tags ?? []).join(", ").length,
-        },
-      });
-
-      // The summary contract is bullet lines only; the client owns the title
-      // above the list (localized). Strip a model-authored heading line
-      // (non-bullet first line ending in ":") so it never doubles up.
-      const summary = (result.changeSummary ?? "")
-        .trim()
-        .replace(/^\s*[^-\n][^\n]*:\**\s*\n+/, "")
-        .trim();
-      const dodiText = summary
-        ? `${t("buildSummaryTitle")}\n${summary}`
-        : isUpdate
-          ? `Updated **${result.title}** — the preview and code are refreshed.`
-          : `Here's **${result.title}** — it's live in the preview; flip to Code to see what I wrote.`;
-      const withDodi: ChatMessage[] = [
-        ...withUser,
-        {
-          role: "assistant",
-          text: dodiText,
-          ...(codeChanged ? { hasCodeChange: true } : {}),
-          ...finishRun(result.validationPassed ? "completed" : "validation_failed"),
-        },
-      ];
-
-      const builtCapabilities = Array.isArray(result.metadata.capabilities)
-        ? (result.metadata.capabilities as string[])
-        : [];
-      setGame((g) => ({
-        ...g,
-        built: true,
-        title: result.title,
-        tags: result.tags,
-        description: result.description,
-        learningGoal: result.learningGoal,
-        successDefinition: result.successDefinition,
-        progressKind: result.progressKind,
-        // Keeps the next build in this session seeded with a fresh baseline.
-        successCriteria: result.successCriteria,
-        codeBundle: safeCode,
-        markdown: result.markdown,
-        capabilities: builtCapabilities,
-      }));
-      if (codeChanged) {
-        setReverted(false);
-        redoVersionRef.current = null;
-      }
-      setMessages(withDodi);
-      setView("preview");
-
-      // Persist the built game + the sealed transcript (no provider key involved).
-      try {
-        const row = await persistBuild(result, safeCode, withDodi);
-        if (row) {
-          // Adopt the server's new version head (an agent persist appends a
-          // version) and the freshly persisted list preview, if any.
-          setGame((g) => ({
-            ...g,
-            currentGameVersionId: row.current_game_version_id,
-            previewImage: row.preview_image,
-          }));
-          void loadVersions();
-        }
-        if (adoptedIdRef.current) {
-          // This studio adopted its id in place (planned draft → build) while
-          // the router still points at /game-studio/new. Everything is
-          // persisted now, so hand the route over to the game's own page.
-          adoptedIdRef.current = false;
-          router.replace(`/parent/game-studio/${game.id}/preview`);
-        } else {
-          router.refresh();
-        }
-      } catch (saveErr) {
-        const reason = saveErr instanceof Error ? saveErr.message : "";
-        setError(reason ? t("saveFailed", { reason }) : t("saveFailedGeneric"));
-        reportErrorLog({
-          context: "game_save",
-          kidId: primaryKidId,
-          gameId: game.id,
-          provider: gameCfg.provider,
-          model: gameCfg.model,
-          ...describeError(saveErr, [gameCfg.apiKey]),
-        });
-      }
-    } catch (err) {
-      // Pressing Stop aborts the loop — don't dress that up as a failure.
-      if (err instanceof AgentAbortedError || controller.signal.aborted) {
-        const stopped = finishRun("stopped");
-        setMessages((m) => [...m, { role: "assistant", text: t("stopped"), ...stopped }]);
-      } else {
-        // The user sees only the generic message (no server/provider errors
-        // bubble up) — the real error goes to telemetry, where the meta below
-        // separates a killed connection (offline/hidden tab) from a truncated
-        // write (stopReason max_tokens) or a provider API error (httpStatus).
-        console.error("[game-studio] build failed", err);
-        const diag = err instanceof GameAgentError ? err.diagnostics : null;
-        reportErrorLog({
-          context: isUpdate ? "game_update" : "game_build",
-          kidId: primaryKidId,
-          gameId: game.id,
-          provider: gameCfg?.provider,
-          model: gameCfg?.model,
-          ...describeError(err, gameCfg ? [gameCfg.apiKey] : []),
-          meta: browserFailureMeta(startedAt, {
-            lastStep: lastStep ?? undefined,
-            ...(diag
-              ? {
-                  turns: diag.turns,
-                  stopReason: diag.lastStopReason ?? undefined,
-                  sawToolCalls: diag.sawToolCalls,
-                  sawText: diag.sawText,
-                }
-              : {}),
-          }),
-        });
-        setError(t("buildFailed"));
-        const failed = finishRun("failed");
-        setMessages((m) => [...m, { role: "assistant", text: t("buildFailed"), ...failed }]);
-      }
-    } finally {
-      setThinking(false);
-      setStep(null);
-      setNarration("");
-      setWriteChars(0);
-      setLiveRun(null);
-      abortRef.current = null;
-    }
+    // The build runs in the studio build store: it outlives this screen, and
+    // the outcome comes back through `pendingOutcome` (applyBuildOutcome).
+    // Starting it sets the store's active build synchronously, so the busy
+    // state hands over without a gap.
+    setIsStartingBuildRun(false);
+    void studioBuildStore.start({
+      gameId: game.id,
+      game,
+      text,
+      images: attachments,
+      isAgreedPlan: opts?.isAgreedPlan,
+      screenshot,
+      history,
+      kids,
+      primaryKidId,
+      narrationLocale: locale,
+      texts: buildTexts(),
+    });
   }
+
+  /** Continue this game's interrupted build from its checkpoint. */
+  const resumeBuild = (): void => {
+    if (!game.id || thinking || isOtherBuildRunning) return;
+    resetBuildNotices();
+    setResumable(null);
+    void studioBuildStore.resume(game.id, buildTexts());
+  };
+
+  const discardResumableBuild = (): void => {
+    if (!game.id) return;
+    setResumable(null);
+    void studioBuildStore.discardResumable(game.id);
+  };
+
+  /**
+   * Take over a finished build: the thread, the game as built (already
+   * persisted by the build), and the notices about what didn't happen.
+   */
+  const applyBuildOutcome = (outcome: StudioBuildOutcome): void => {
+    if (outcome.kind === "no_provider") {
+      setMessages(outcome.transcript);
+      setError(t("needProviderKey"));
+      return;
+    }
+    setMessages(outcome.transcript);
+    const showSaveError = (reason: string): void =>
+      setError(reason ? t("saveFailed", { reason }) : t("saveFailedGeneric"));
+
+    if (outcome.kind === "stopped" || outcome.kind === "paused") return;
+    // A resumable failure's checkpoint is offered by the effect below, which
+    // runs whenever a build of this game ends.
+    if (outcome.kind === "failed") {
+      setError(t("buildFailed"));
+      return;
+    }
+    if (outcome.kind === "preview_only") {
+      if (!outcome.previewImage) {
+        setPreviewNotice("failed");
+        return;
+      }
+      const preview = outcome.previewImage;
+      setGame((g) => ({ ...g, previewImage: preview }));
+      if (outcome.saveError !== undefined) showSaveError(outcome.saveError);
+      else router.refresh();
+      return;
+    }
+
+    const { result, code, isCodeChanged, savedRow } = outcome;
+    setBgNotice(outcome.backgroundNotice);
+    setPreviewNotice(outcome.previewNotice);
+    setVisualCheckNotice(outcome.hasVisualCheckNotice);
+    const builtCapabilities = Array.isArray(result.metadata.capabilities)
+      ? (result.metadata.capabilities as string[])
+      : [];
+    setGame((g) => ({
+      ...g,
+      built: true,
+      title: result.title,
+      tags: result.tags,
+      description: result.description,
+      learningGoal: result.learningGoal,
+      successDefinition: result.successDefinition,
+      progressKind: result.progressKind,
+      // Keeps the next build in this session seeded with a fresh baseline.
+      successCriteria: result.successCriteria,
+      codeBundle: code,
+      markdown: result.markdown,
+      capabilities: builtCapabilities,
+      // Adopt the server's new version head (a build persist appends a
+      // version) and the freshly persisted list preview, if any.
+      ...(savedRow
+        ? {
+            currentGameVersionId: savedRow.current_game_version_id,
+            previewImage: savedRow.preview_image,
+          }
+        : {}),
+    }));
+    if (isCodeChanged) {
+      setReverted(false);
+      redoVersionRef.current = null;
+    }
+    setView("preview");
+    if (!savedRow) {
+      showSaveError(outcome.saveError ?? "");
+      return;
+    }
+    void loadVersions();
+    if (adoptedIdRef.current) {
+      // This studio adopted its id in place (planned draft → build) while
+      // the router still points at /game-studio/new. Everything is
+      // persisted now, so hand the route over to the game's own page.
+      adoptedIdRef.current = false;
+      router.replace(`/parent/game-studio/${game.id}/preview`);
+    } else {
+      router.refresh();
+    }
+  };
+
+  // Adopt a finished build — the moment it ends while this screen watches, or
+  // on return when it finished while the parent was elsewhere in the app.
+  useEffect(() => {
+    if (!pendingOutcome || !game.id) return;
+    const outcome = studioBuildStore.takeOutcome(game.id);
+    // Adopting the build store's result is syncing from an external system.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (outcome) applyBuildOutcome(outcome);
+    // applyBuildOutcome reads the live render; the outcome is the trigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingOutcome, game.id]);
+
+  // Offer to continue a build that a reload, a closed tab or a dropped
+  // connection interrupted (its checkpoint is sealed in this browser).
+  useEffect(() => {
+    const gameId = game.id;
+    if (!gameId || activeBuild) return;
+    let isCurrent = true;
+    void studioBuildStore.findResumable(gameId).then((found) => {
+      if (isCurrent) setResumable(found);
+    });
+    return () => {
+      isCurrent = false;
+    };
+    // Checked on entry and whenever a build of this game ends.
+  }, [game.id, activeBuild === null]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function saveSettings(): Promise<void> {
     if (saving) return;
@@ -3008,7 +2599,18 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
             {thinking && (
               <div className="mb-2 flex items-start gap-1.5 rounded-lg bg-primary-soft px-2.5 py-1.5 text-xs font-medium text-primary">
                 <Icon name="alert" size={14} className="mt-px shrink-0" />
-                <span>{t("agentRunningWarning")}</span>
+                <span>{t(activeBuild ? "buildRunningHint" : "agentRunningWarning")}</span>
+              </div>
+            )}
+            {resumable && !thinking && (
+              <div className="mb-2 flex flex-wrap items-center gap-2 rounded-lg bg-primary-soft px-2.5 py-1.5 text-xs font-medium text-primary">
+                <span className="min-w-0 flex-1">{t("resumeBuildNotice")}</span>
+                <Button size="sm" onClick={resumeBuild} disabled={isOtherBuildRunning}>
+                  {t("resumeBuild")}
+                </Button>
+                <Button size="sm" variant="ghost" onClick={discardResumableBuild}>
+                  {t("discardResumableBuild")}
+                </Button>
               </div>
             )}
             {error && (

@@ -10,7 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { AgentRunFrame } from "@/lib/games/agent-run-log";
+import type { AgentRunFrame } from "@dodi/studio/agent-run-log";
 
 interface AgentRunFramesProps {
   frames: AgentRunFrame[];

@@ -9,7 +9,7 @@ import {
   type AgentRunOutcome,
   formatRunClock,
   runChecks,
-} from "@/lib/games/agent-run-log";
+} from "@dodi/studio/agent-run-log";
 
 interface AgentRunHistoryProps {
   run: AgentRunLog;

@@ -22,11 +22,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PinInput } from "@/components/ui/pin-input";
-import { otpErrorMessage } from "@/components/auth/verify-code-form";
-import { authClient } from "@/lib/auth/client";
-import { captchaHeaders, isCaptchaError } from "@/lib/captcha/turnstile";
-
-const RESEND_COOLDOWN_SECONDS = 60;
+import { webAuthApi } from "@/lib/auth/auth-api";
+import { RESEND_COOLDOWN_SECONDS } from "@dodi/client-state/auth";
+import {
+  resendResetCode,
+  sendResetCode,
+  verifyResetCode,
+} from "@dodi/client-state/password-reset";
 
 export default function ResetPasswordPage() {
   const t = useTranslations("auth");
@@ -68,16 +70,13 @@ export default function ResetPasswordPage() {
 
     // A sign-in code (not a password-reset one): entering it signs the user
     // in, and /update-password then sets the new password on that session.
-    // The OTP step is the uniform response whether or not the email exists
-    // (anti-enumeration), so a rejected send still advances. A captcha
-    // rejection is the one exception: it says nothing about the email, and
-    // advancing would park the parent on a code that was never sent.
-    const { error: sendError } = await authClient.emailOtp.sendVerificationOtp(
-      { email, type: "sign-in" },
-      { headers: captchaHeaders(captcha.token) },
-    );
-    if (sendError && isCaptchaError(sendError.code)) {
-      setError(t("captchaFailed"));
+    // Every rejection but the captcha's advances (anti-enumeration).
+    const sendError = await sendResetCode(webAuthApi, {
+      email,
+      captchaToken: captcha.token,
+    });
+    if (sendError) {
+      setError(t(sendError));
       setLoading(false);
       return;
     }
@@ -92,9 +91,9 @@ export default function ResetPasswordPage() {
     setVerifying(true);
     setOtpError(null);
 
-    const { error } = await authClient.signIn.emailOtp({ email, otp: code });
+    const error = await verifyResetCode(webAuthApi, { email, code });
     if (error) {
-      setOtpError(otpErrorMessage(error.code, t));
+      setOtpError(t(error));
       setOtp("");
       setVerifying(false);
       return;
@@ -113,14 +112,12 @@ export default function ResetPasswordPage() {
       setOtpError(t("captchaUnavailable"));
       return;
     }
-    const { error } = await authClient.emailOtp.sendVerificationOtp(
-      { email, type: "sign-in" },
-      { headers: captchaHeaders(captcha.token) },
-    );
+    const error = await resendResetCode(webAuthApi, {
+      email,
+      captchaToken: captcha.token,
+    });
     if (error) {
-      setOtpError(
-        isCaptchaError(error.code) ? t("captchaFailed") : t("resendFailed"),
-      );
+      setOtpError(t(error));
       return;
     }
     setResendInfo(t("codeResent"));

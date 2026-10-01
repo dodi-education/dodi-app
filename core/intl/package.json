@@ -9,7 +9,8 @@
     "./locales": "./src/locales.ts",
     "./prefs": "./src/prefs.ts",
     "./format": "./src/format.ts",
-    "./age": "./src/age.ts"
+    "./age": "./src/age.ts",
+    "./messages": "./src/messages.ts"
   },
   "main": "./src/index.ts",
   "types": "./src/index.ts",

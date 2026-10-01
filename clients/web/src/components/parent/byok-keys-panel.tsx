@@ -30,11 +30,16 @@ import {
 
 import { siteUrl } from "@/lib/site-links";
 
-import { AI_PROVIDERS } from "@dodi/ai/providers";
-import { validateProviderKey } from "@dodi/ai/validate-key";
+import { clientState } from "@/lib/client-state";
 import { useProvidersStore } from "@/stores/providers-store";
+import { validateProviderKey } from "@dodi/ai/validate-key";
+import {
+  addableProviders,
+  addProviderKey,
+  byokKeyRows,
+} from "@dodi/client-state/byok-keys";
+import type { DraftModelConfig } from "@dodi/client-state/model-config";
 import type { AIProviderId } from "@dodi/types/ai";
-import type { DraftModelConfig } from "./capability-model-config";
 
 interface ByokKeysPanelProps {
   /** First key added on an unconfigured account seeds a default voice config. */
@@ -63,16 +68,8 @@ export function ByokKeysPanel({ onFirstKeySeeded }: ByokKeysPanelProps) {
   const [validationError, setValidationError] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const providers = Object.entries(providersMap ?? {}).map(([id, entry]) => ({
-    id: id as AIProviderId,
-    name: AI_PROVIDERS.find((p) => p.id === id)?.name ?? id,
-    keyPreview: entry?.keyPreview ?? "",
-    addedAt: entry?.addedAt ?? "",
-  }));
-
-  const availableProviders = AI_PROVIDERS.filter(
-    (p) => !p.isManaged && !providers.some((cp) => cp.id === p.id),
-  );
+  const providers = byokKeyRows(providersMap);
+  const availableProviders = addableProviders(providersMap);
 
   function resetDialog() {
     setSelectedProvider("");
@@ -91,56 +88,30 @@ export function ByokKeysPanel({ onFirstKeySeeded }: ByokKeysPanelProps) {
     setValidationStatus("idle");
     setValidationError("");
 
-    try {
-      const def = AI_PROVIDERS.find((p) => p.id === selectedProvider);
-      // Validate with a generateContent-capable model — NOT a Live (voice)
-      // model, which only works over the Live WebSocket and 404s generateContent.
-      const validateModel =
-        (def?.models.find((m) => !m.capabilities.includes("live")) ??
-          def?.models[0])?.id ?? "";
-
-      // Validate client-side (server never sees the plaintext key).
-      const result = await validateProviderKey(selectedProvider, apiKey, validateModel);
-      if (!result.valid) {
-        setValidationStatus("invalid");
-        setValidationError(result.error || t("keyInvalid"));
+    // Validated on this device (the server never sees the key), then sealed
+    // into the vault.
+    const outcome = await addProviderKey(
+      { providers: clientState.providers, validateKey: validateProviderKey },
+      { providerId: selectedProvider, apiKey },
+      () => {
+        setValidationStatus("valid");
         setValidating(false);
-        return;
-      }
-
-      setValidationStatus("valid");
-      setValidating(false);
-      setSaving(true);
-
-      const isFirst = Object.keys(providersMap ?? {}).length === 0;
-      // Encrypt + store under the vault.
-      await useProvidersStore.getState().addKey(selectedProvider, apiKey);
-
-      // First provider → seed a default voice config (model_config is plaintext).
-      if (isFirst && def && onFirstKeySeeded) {
-        const defaultModel =
-          def.models.find((m) => m.capabilities.includes("voice")) ?? def.models[0];
-        const defaultVoice = def.voices[0];
-        if (defaultModel && defaultVoice) {
-          onFirstKeySeeded({
-            voiceProvider: selectedProvider,
-            voiceModel: defaultModel.id,
-            voiceName: defaultVoice.id,
-          });
-        }
-      }
-
+        setSaving(true);
+      },
+    );
+    if (outcome.kind === "added") {
+      // First provider: seed a default voice config (model_config is plaintext).
+      if (outcome.seed && onFirstKeySeeded) onFirstKeySeeded(outcome.seed);
       setDialogOpen(false);
       resetDialog();
-    } catch (error) {
+    } else {
       setValidationStatus("invalid");
       setValidationError(
-        error instanceof Error ? error.message : "An unexpected error occurred",
+        outcome.kind === "invalid" ? outcome.error || t("keyInvalid") : outcome.error,
       );
-    } finally {
-      setValidating(false);
-      setSaving(false);
     }
+    setValidating(false);
+    setSaving(false);
   }
 
   async function handleRemoveProvider(providerId: AIProviderId) {

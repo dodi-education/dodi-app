@@ -1,0 +1,12 @@
+node_modules/
+.expo/
+.expo-export/
+dist/
+ios/
+android/
+.env.local
+credentials.json
+*.keystore
+*.jks
+expo-env.d.ts
+keystores/

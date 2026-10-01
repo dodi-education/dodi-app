@@ -15,37 +15,21 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-import { AI_PROVIDERS } from "@dodi/ai/providers";
-import { DODI_DEFAULT_MODEL, type AIProviderId } from "@dodi/types/ai";
+import {
+  defaultModelFor,
+  type DraftModelConfig,
+  isDraftSavable,
+  type ModelCapability as Capability,
+  modelOptionsFor as modelOptions,
+  providerOptionsFor,
+  voiceOptionsFor,
+  voiceProviderPatch,
+} from "@dodi/client-state/model-config";
+import type { AIProviderId } from "@dodi/types/ai";
+
+export { type DraftModelConfig, EMPTY_DRAFT } from "@dodi/client-state/model-config";
 
 const PROVIDER_NONE = "__none__";
-
-/** The settings page's editable mirror of AccountModelConfig ("" = unset). */
-export interface DraftModelConfig {
-  voiceProvider: AIProviderId | "";
-  voiceModel: string;
-  voiceName: string;
-  thinkingProvider: AIProviderId | "";
-  thinkingModel: string;
-  gameProvider: AIProviderId | "";
-  gameModel: string;
-  imageProvider: AIProviderId | "";
-  imageModel: string;
-}
-
-export const EMPTY_DRAFT: DraftModelConfig = {
-  voiceProvider: "",
-  voiceModel: "",
-  voiceName: "",
-  thinkingProvider: "",
-  thinkingModel: "",
-  gameProvider: "",
-  gameModel: "",
-  imageProvider: "",
-  imageModel: "",
-};
-
-type Capability = "voice" | "thinking" | "agentic" | "image";
 
 interface CapabilityModelConfigProps {
   config: DraftModelConfig;
@@ -90,39 +74,10 @@ export function CapabilityModelConfig({
   };
 
   function providerOptions(capability: Capability) {
-    const options: { id: AIProviderId; name: string }[] = [];
-    if (dodiSelectable) options.push({ id: "dodi", name: t("managedProviderOption") });
-    for (const p of byokProviders) {
-      const def = AI_PROVIDERS.find((d) => d.id === p.id);
-      const supports =
-        capability === "voice"
-          ? def?.supportsVoice
-          : capability === "thinking"
-            ? def?.supportsThinking
-            : capability === "agentic"
-              ? def?.supportsAgentic
-              : def?.supportsImage;
-      if (supports) options.push(p);
-    }
-    return options;
-  }
-
-  function modelOptions(provider: AIProviderId | "", capability: Capability) {
-    if (!provider) return [];
-    const def = AI_PROVIDERS.find((p) => p.id === provider);
-    return (
-      def?.models.filter((m) => m.capabilities.includes(capability)) ?? []
-    );
-  }
-
-  /** Default model when the provider changes: "default" for dodi, else the
-   *  first capability-matching model (existing BYOK behavior). */
-  function defaultModelFor(provider: AIProviderId, capability: Capability): string {
-    if (provider === "dodi") return DODI_DEFAULT_MODEL;
-    const def = AI_PROVIDERS.find((p) => p.id === provider);
-    return (
-      (def?.models.find((m) => m.capabilities.includes(capability)) ?? def?.models[0])
-        ?.id ?? ""
+    return providerOptionsFor(
+      capability,
+      byokProviders,
+      dodiSelectable ? t("managedProviderOption") : null,
     );
   }
 
@@ -168,7 +123,7 @@ export function CapabilityModelConfig({
     },
   ];
 
-  const voiceDef = AI_PROVIDERS.find((p) => p.id === config.voiceProvider);
+  const voices = voiceOptionsFor(config.voiceProvider);
   const voiceProviders = providerOptions("voice");
 
   return (
@@ -177,18 +132,7 @@ export function CapabilityModelConfig({
         <FieldRow label={t("voiceProvider")}>
           <Select
             value={config.voiceProvider}
-            onValueChange={(value) => {
-              const pid = value as AIProviderId;
-              const def = AI_PROVIDERS.find((p) => p.id === pid);
-              onChange({
-                voiceProvider: pid,
-                voiceModel: defaultModelFor(pid, "voice"),
-                voiceName:
-                  pid === "dodi"
-                    ? (def?.voices[0]?.id ?? "ara")
-                    : (def?.voices[0]?.id ?? ""),
-              });
-            }}
+            onValueChange={(value) => onChange(voiceProviderPatch(value as AIProviderId))}
           >
             <SelectTrigger className="w-full sm:w-[260px]">
               <SelectValue />
@@ -203,7 +147,7 @@ export function CapabilityModelConfig({
           </Select>
         </FieldRow>
 
-        {voiceDef && (
+        {voices && (
           <>
             {config.voiceProvider === "dodi" ? (
               <FieldRow label={t("voiceModel")}>
@@ -238,7 +182,7 @@ export function CapabilityModelConfig({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {voiceDef.voices.map((v) => (
+                  {voices.map((v) => (
                     <SelectItem key={v.id} value={v.id}>
                       {v.name}
                     </SelectItem>
@@ -309,15 +253,7 @@ export function CapabilityModelConfig({
               <SaveRow note={saved ? t("configSaved") : undefined}>
                 <Button
                   onClick={onSave}
-                  disabled={
-                    !config.voiceProvider ||
-                    !config.voiceModel ||
-                    !config.voiceName ||
-                    saving ||
-                    (Boolean(config.thinkingProvider) && !config.thinkingModel) ||
-                    (Boolean(config.gameProvider) && !config.gameModel) ||
-                    (Boolean(config.imageProvider) && !config.imageModel)
-                  }
+                  disabled={!isDraftSavable(config) || saving}
                   className="cursor-pointer"
                 >
                   {saving ? (

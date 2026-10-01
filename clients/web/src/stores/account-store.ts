@@ -1,127 +1,34 @@
-/**
- * Client cache of the caller's account row: one `/api/account` fetch shared by
- * every consumer (parent-PIN gate, date prefs, notification prefs, plan badge)
- * instead of a store per field. Sensitive fields stay sealed here (`enc:v1:`
- * blobs) — decryption happens at the consumer, where the VaultSession lives.
- * Mutations PATCH the API themselves and mirror the change via `patchLocal`.
- */
-import { create } from "zustand";
+// Shared logic: @dodi/client-state. This module binds the browser instance
+// (lib/client-state.ts) to React and keeps the app-facing names.
+import { bindStore } from "@dodi/client-state/react";
 
-import { dodi } from "@/lib/api";
-import { parseGameScreenshotServiceSettings } from "@dodi/games/screenshot-contract";
-import type {
-  Account,
-  GameScreenshotServiceSettings,
-  InterfacePreferences,
-  Json,
-} from "@dodi/types/database";
+import { clientState } from "@/lib/client-state";
 
-/** Plaintext (opt-out; unset ⇒ on) toggles the server reads to decide whether
- *  to send transactional email. Stored in accounts.notification_preferences. */
-export interface NotificationPreferences {
-  friend_approval_email?: boolean;
-  publication_outcome_email?: boolean;
-}
+import {
+  gameScreenshotServiceOf,
+  interfacePreferencesOf,
+  patchGameScreenshotService as patchScreenshotService,
+  patchInterfacePreferences as patchPreferences,
+} from "@dodi/client-state";
+import type { GameScreenshotServiceSettings, InterfacePreferences } from "@dodi/types/database";
 
-interface AccountState {
-  account: Account | null;
-  loaded: boolean;
-  /** True when the last load failed (network/offline) — the PIN gate fails open. */
-  loadFailed: boolean;
-  load: (force?: boolean) => Promise<void>;
-  /** Optimistic merge after a settings form PATCHes the account. */
-  patchLocal: (patch: Partial<Account>) => void;
-  /** Drop the cache (sign-out / account switch). */
-  reset: () => void;
-}
+export type { NotificationPreferences } from "@dodi/client-state";
+export { gameScreenshotServiceOf, interfacePreferencesOf };
 
-// Single-flight guard: concurrent callers (gate + providers mounting together)
-// ride the same fetch instead of each issuing their own.
-let inFlight: Promise<void> | null = null;
-
-export const useAccountStore = create<AccountState>((set, get) => ({
-  account: null,
-  loaded: false,
-  loadFailed: false,
-
-  load: async (force = false) => {
-    if (get().loaded && !force) return;
-    if (inFlight && !force) return inFlight;
-
-    inFlight = (async () => {
-      try {
-        const res = await dodi.request("/api/account");
-        if (!res.ok) {
-          // 401 = not signed in yet (the root DateFormatProvider also loads on
-          // public pages). Leave the store unloaded so the next load() after
-          // auth refetches instead of serving a cached failure to the PIN gate.
-          if (res.status === 401) return;
-          set({ loaded: true, loadFailed: true });
-          return;
-        }
-        const data = (await res.json()) as { account?: Account | null };
-        set({
-          account: data.account ?? null,
-          loaded: true,
-          loadFailed: false,
-        });
-      } catch {
-        set({ loaded: true, loadFailed: true });
-      }
-    })();
-
-    try {
-      await inFlight;
-    } finally {
-      inFlight = null;
-    }
-  },
-
-  // No-op before the first load (all mutating forms sit behind a loaded
-  // account); the next load carries the server truth regardless.
-  patchLocal: (patch) =>
-    set((state) => ({
-      account: state.account ? { ...state.account, ...patch } : state.account,
-    })),
-
-  reset: () => set({ account: null, loaded: false, loadFailed: false }),
-}));
-
-/**
- * The account's Game Studio screenshot-service choice (the default while the
- * account is unloaded).
- */
-export function gameScreenshotServiceOf(
-  account: Account | null,
-): GameScreenshotServiceSettings {
-  return parseGameScreenshotServiceSettings(account?.game_screenshot_service);
-}
+/** One `/api/account` fetch shared by every consumer; sensitive fields stay sealed. */
+export const useAccountStore = bindStore(clientState.account);
 
 /** Mirror a saved screenshot-service choice into the cached account. */
 export function patchGameScreenshotService(settings: GameScreenshotServiceSettings): void {
-  useAccountStore
-    .getState()
-    .patchLocal({ game_screenshot_service: settings as unknown as Json });
-}
-
-/** The account's interface toggles (empty while the account is unloaded). */
-export function interfacePreferencesOf(account: Account | null): InterfacePreferences {
-  const stored = account?.interface_preferences;
-  return stored && typeof stored === "object" && !Array.isArray(stored)
-    ? (stored as InterfacePreferences)
-    : {};
+  patchScreenshotService(clientState.account, settings);
 }
 
 /** Mirror saved interface toggles into the cached account. */
 export function patchInterfacePreferences(prefs: InterfacePreferences): void {
-  useAccountStore
-    .getState()
-    .patchLocal({ interface_preferences: prefs as unknown as Json });
+  patchPreferences(clientState.account, prefs);
 }
 
 /** Whether dodi renders as the 3D character. Opt-out: on unless turned off. */
 export function useIs3dEnabled(): boolean {
-  return useAccountStore(
-    (s) => interfacePreferencesOf(s.account).is_3d_enabled !== false,
-  );
+  return useAccountStore((s) => interfacePreferencesOf(s.account).is_3d_enabled !== false);
 }

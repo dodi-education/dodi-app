@@ -22,17 +22,21 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PinInput } from "@/components/ui/pin-input";
-import { isValidNsec } from "@dodi/crypto";
+import {
+  finalizeRegistration,
+  type FinishRegistrationOutcome,
+  RESEND_COOLDOWN_SECONDS,
+  type RegistrationMode,
+  resendCode,
+  startRegistration,
+  validateRegistration,
+  verifyRegistrationCode,
+} from "@dodi/client-state";
 import { NpubConflictError } from "@dodi/protocol/client";
-import { otpErrorMessage } from "@/components/auth/verify-code-form";
-import { dodi } from "@/lib/api";
-import { authClient } from "@/lib/auth/client";
-import { captchaHeaders, isCaptchaError } from "@/lib/captcha/turnstile";
-import { useVaultStore } from "@/stores/vault-store";
+import { webAuthApi } from "@/lib/auth/auth-api";
+import { clientState } from "@/lib/client-state";
 
-type RegistrationMode = "open" | "invite" | "closed";
-
-const RESEND_COOLDOWN_SECONDS = 60;
+const isNpubConflict = (error: unknown): boolean => error instanceof NpubConflictError;
 
 export default function RegisterPage() {
   const t = useTranslations("auth");
@@ -68,17 +72,9 @@ export default function RegisterPage() {
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      try {
-        const res = await dodi.request("/api/auth/registration-status");
-        const data = (await res.json()) as { mode?: RegistrationMode };
-        if (!cancelled) setMode(data.mode ?? "open");
-      } catch {
-        // The platform's registration gate is the real gate, so failing open for
-        // the UI is safe — a closed/invite server will still reject the signup.
-        if (!cancelled) setMode("open");
-      }
-    })();
+    void webAuthApi.registrationMode().then((next) => {
+      if (!cancelled) setMode(next);
+    });
     return () => {
       cancelled = true;
     };
@@ -91,38 +87,23 @@ export default function RegisterPage() {
     return () => clearTimeout(id);
   }, [resendCooldown]);
 
-  // Map a /register rejection (registration closed, bad invite code, captcha)
-  // to localized copy. Never echo raw auth errors — that could leak account
-  // existence.
-  function mapSignUpError(rejection: { message: string; code?: string }): string {
-    if (isCaptchaError(rejection.code)) return t("captchaFailed");
-    const m = rejection.message.toLowerCase();
-    if (m.includes("invite")) return t("invalidInviteCode");
-    if (m.includes("closed")) return t("registrationClosed");
-    return t("genericSignupError");
-  }
-
   async function handleRegister(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-
-    if (password !== confirmPassword) {
-      setError(t("passwordsNoMatch"));
+    const form = {
+      email,
+      password,
+      confirmPassword,
+      mode: mode ?? "open",
+      inviteCode,
+      importedNsec,
+    } as const;
+    // The challenge only runs once the form itself is valid.
+    const invalid = validateRegistration(form);
+    if (invalid) {
+      setError(t(invalid));
       return;
     }
-    if (password.length < 8) {
-      setError(t("passwordTooShort"));
-      return;
-    }
-    if (mode === "invite" && !inviteCode.trim()) {
-      setError(t("inviteRequired"));
-      return;
-    }
-    if (importedNsec.trim() && !isValidNsec(importedNsec)) {
-      setError(t("invalidAccountKey"));
-      return;
-    }
-
     setLoading(true);
 
     const captcha = await requestCaptchaToken(captchaRef);
@@ -132,55 +113,15 @@ export default function RegisterPage() {
       return;
     }
 
-    // The platform's /register front door (not Better Auth's own sign-up): it
-    // applies the registration gate and validates the invite code, emails the
-    // 6-digit confirmation code, and answers `{ ok: true }` for ANY well-formed
-    // email — new or already registered — so nothing here leaks account
-    // existence.
-    let rejection: { message: string; code?: string } | null = null;
-    try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL ?? ""}/api/auth/register`,
-        {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            ...captchaHeaders(captcha.token),
-          },
-          body: JSON.stringify({
-            email,
-            password,
-            inviteCode: mode === "invite" ? inviteCode.trim() : undefined,
-          }),
-        },
-      );
-      if (!res.ok) {
-        const body = (await res.json().catch(() => null)) as {
-          error?: string;
-          code?: string;
-        } | null;
-        rejection = { message: body?.error ?? "", code: body?.code };
-      }
-    } catch {
-      rejection = { message: "" };
-    }
-
-    if (rejection !== null) {
-      setError(mapSignUpError(rejection));
-      setLoading(false);
-      return;
-    }
-
-    // No session yet (the email must be confirmed first): build + seal the
-    // vault while the password is in hand, then drop the password and move to
-    // the in-page code step.
-    try {
-      await useVaultStore
-        .getState()
-        .createLocalVault(email, password, importedNsec.trim() || undefined);
-    } catch (err) {
-      console.error("[register] local vault creation failed", err);
-      setError(t("vaultSetupFailed"));
+    // Validates, registers (the platform emails the code and answers ok for
+    // any well-formed email, so nothing leaks account existence), then builds
+    // and seals the vault on this device while the password is in hand.
+    const failure = await startRegistration(
+      { auth: webAuthApi, vault: clientState.vault },
+      { ...form, captchaToken: captcha.token },
+    );
+    if (failure) {
+      setError(t(failure));
       setLoading(false);
       return;
     }
@@ -191,48 +132,38 @@ export default function RegisterPage() {
     setLoading(false);
   }
 
-  async function finalize() {
-    setVerifying(true);
-    setOtpError(null);
-    try {
-      await useVaultStore.getState().finalizeVault();
+  /** Act on the code step's outcome: on to the account key, or show why not. */
+  function handleFinish(outcome: FinishRegistrationOutcome) {
+    if (outcome.kind === "done") {
       router.push("/vault-setup");
       router.refresh();
       // Navigation unmounts this page; leave `verifying` set.
-    } catch (err) {
-      if (err instanceof NpubConflictError) {
-        // The imported Nostr key belongs to another account — retrying the
-        // persist can never succeed, so skip the retry loop and leave "use a
-        // different email" as the way out.
-        await useVaultStore.getState().discardLocalVault();
-        setOtpError(t("nsecTaken"));
-        setVerifying(false);
-        return;
-      }
-      setFinalizeError(true);
-      setOtpError(t("vaultSetupFailed"));
-      setVerifying(false);
+      return;
     }
+    // A consumed code with a failed persist: re-entering a code is pointless,
+    // so offer a plain retry of the persist step instead.
+    if (outcome.kind === "retry_finalize") setFinalizeError(true);
+    setOtpError(t(outcome.key));
+    setVerifying(false);
+  }
+
+  async function finalize() {
+    setVerifying(true);
+    setOtpError(null);
+    handleFinish(await finalizeRegistration(clientState.vault, isNpubConflict));
   }
 
   async function handleVerify(code: string) {
     if (code.length < 6 || verifying) return;
     setVerifying(true);
     setOtpError(null);
-
-    const { error } = await authClient.emailOtp.verifyEmail({
-      email,
-      otp: code,
-    });
-    if (error) {
-      setOtpError(otpErrorMessage(error.code, t));
-      setOtp("");
-      setVerifying(false);
-      return;
-    }
-    // Verified ⇒ signed in (the bearer arrived with the response) → persist the
-    // sealed vault + reveal phrase.
-    await finalize();
+    const outcome = await verifyRegistrationCode(
+      { auth: webAuthApi, vault: clientState.vault },
+      { email, code },
+      isNpubConflict,
+    );
+    if (outcome.kind === "error" && outcome.key !== "nsecTaken") setOtp("");
+    handleFinish(outcome);
   }
 
   async function handleResend() {
@@ -244,14 +175,9 @@ export default function RegisterPage() {
       setOtpError(t("captchaUnavailable"));
       return;
     }
-    const { error } = await authClient.emailOtp.sendVerificationOtp(
-      { email, type: "email-verification" },
-      { headers: captchaHeaders(captcha.token) },
-    );
-    if (error) {
-      setOtpError(
-        isCaptchaError(error.code) ? t("captchaFailed") : t("resendFailed"),
-      );
+    const failure = await resendCode(webAuthApi, { email, captchaToken: captcha.token });
+    if (failure) {
+      setOtpError(t(failure));
       return;
     }
     setResendInfo(t("codeResent"));
@@ -259,7 +185,7 @@ export default function RegisterPage() {
   }
 
   async function handleBackToForm() {
-    await useVaultStore.getState().discardLocalVault();
+    await clientState.vault.getState().discardLocalVault();
     setStep("form");
     setOtp("");
     setOtpError(null);

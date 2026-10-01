@@ -34,6 +34,13 @@ vi.mock("@/stores/providers-store", () => ({
   },
 }));
 
+// The shared game store + execution resolver, over this suite's providers fake.
+vi.mock("@/lib/client-state", async () =>
+  (await import("@/test-support/client-state")).testClientState({
+    getKey: (id) => getKey(id),
+  }),
+);
+
 vi.mock("@/stores/vault-store", () => ({
   useVaultStore: { getState: () => ({ session: vaultState.session }) },
 }));

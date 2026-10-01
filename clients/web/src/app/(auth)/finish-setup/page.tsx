@@ -19,44 +19,13 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { authClient, getSessionUser } from "@/lib/auth/client";
-import { captchaHeaders, isCaptchaError } from "@/lib/captcha/turnstile";
-import { useVaultStore } from "@/stores/vault-store";
-
-type SetupResult =
-  | { status: "ok"; created: boolean }
-  | { status: "wrong-password" }
-  | { status: "captcha-failed" }
-  | { status: "vault-failed" };
-
-/**
- * Verify the password against the account (so the vault password stays in sync
- * with auth), then bootstrap-or-unlock the E2EE vault. The password check is a
- * sign-in, so it carries the captcha token like the login form does.
- */
-async function runSetup(
-  email: string,
-  password: string,
-  captchaToken: string | null,
-): Promise<SetupResult> {
-  const { error: signInError } = await authClient.signIn.email(
-    { email, password },
-    { headers: captchaHeaders(captchaToken) },
-  );
-  if (signInError) {
-    return isCaptchaError(signInError.code)
-      ? { status: "captcha-failed" }
-      : { status: "wrong-password" };
-  }
-  try {
-    const { created } = await useVaultStore
-      .getState()
-      .unlockOrBootstrap(password);
-    return { status: "ok", created };
-  } catch {
-    return { status: "vault-failed" };
-  }
-}
+import { webAuthApi } from "@/lib/auth/auth-api";
+import { getSessionUser } from "@/lib/auth/client";
+import { clientState } from "@/lib/client-state";
+import {
+  finishSetup,
+  validateFinishSetup,
+} from "@dodi/client-state/finish-setup";
 
 /**
  * Safety net for the "authenticated but no vault" (needs-setup) state — reached
@@ -92,8 +61,9 @@ export default function FinishSetupPage() {
     e.preventDefault();
     if (!email) return;
     setError(null);
-    if (password.length < 8) {
-      setError(t("passwordTooShort"));
+    const invalid = validateFinishSetup(password);
+    if (invalid) {
+      setError(t(invalid));
       return;
     }
     setLoading(true);
@@ -105,19 +75,14 @@ export default function FinishSetupPage() {
       return;
     }
 
-    const res = await runSetup(email, password, captcha.token);
-    if (res.status === "wrong-password") {
-      setError(t("finishSetupWrongPassword"));
-      setLoading(false);
-      return;
-    }
-    if (res.status === "captcha-failed") {
-      setError(t("captchaFailed"));
-      setLoading(false);
-      return;
-    }
-    if (res.status === "vault-failed") {
-      setError(t("vaultSetupFailed"));
+    // Verify the password against the account (a captcha'd sign-in), then
+    // bootstrap-or-unlock the vault with it.
+    const res = await finishSetup(
+      { auth: webAuthApi, vault: clientState.vault },
+      { email, password, captchaToken: captcha.token },
+    );
+    if (res.kind === "error") {
+      setError(t(res.key));
       setLoading(false);
       return;
     }

@@ -12,7 +12,7 @@
  * visual check.
  */
 
-import { buildSandboxSrcDoc } from "@/components/games/game-sandbox";
+import { buildSandboxSrcDoc } from "@dodi/games/sandbox-doc";
 import { dodi } from "@/lib/api";
 import { downscaleDataUrl } from "@/lib/games/thumbnail";
 import type { RenderGameInput, RenderGameOutput } from "@dodi/ai/game-agent-tools";

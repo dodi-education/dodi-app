@@ -12,26 +12,19 @@ import { FieldRow } from "@/components/parent/rows";
 import { Section } from "@/components/parent/section";
 import { Switch } from "@/components/ui/switch";
 import { dodi } from "@/lib/api";
+import { clientState } from "@/lib/client-state";
+import { useAccountStore, type NotificationPreferences } from "@/stores/account-store";
 import {
-  useAccountStore,
-  type NotificationPreferences,
-} from "@/stores/account-store";
-import type { Account } from "@dodi/types/database";
+  notificationPreferencesOf,
+  notificationTogglesOf,
+  saveNotificationPreferences,
+} from "@dodi/client-state/account-settings";
 
 export default function NotificationsSettingsPage() {
   const t = useTranslations("settings");
-  const prefs = useAccountStore(
-    (s) =>
-      (s.account?.notification_preferences ?? null) as
-        | NotificationPreferences
-        | null,
-  );
+  const prefs = useAccountStore((s) => notificationPreferencesOf(s.account));
   const loaded = useAccountStore((s) => s.loaded);
   const load = useAccountStore((s) => s.load);
-  const setPrefs = (next: NotificationPreferences) =>
-    useAccountStore.getState().patchLocal({
-      notification_preferences: next as Account["notification_preferences"],
-    });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,27 +33,19 @@ export default function NotificationsSettingsPage() {
   }, [load]);
 
   // Opt-out: absent/undefined reads as on.
-  const friendApproval = prefs?.friend_approval_email !== false;
-  const publicationOutcome = prefs?.publication_outcome_email !== false;
+  const { isFriendApprovalOn: friendApproval, isPublicationOutcomeOn: publicationOutcome } =
+    notificationTogglesOf(prefs);
 
   async function saveToggle(patch: NotificationPreferences) {
     setError(null);
     setSaving(true);
-    const previous = prefs ?? {};
-    setPrefs({ ...previous, ...patch }); // optimistic
-    try {
-      const res = await dodi.request("/api/account", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ notificationPreferences: patch }),
-      });
-      if (!res.ok) throw new Error("save_failed");
-    } catch {
-      setPrefs(previous); // revert on failure
-      setError(t("notificationsSaveFailed"));
-    } finally {
-      setSaving(false);
-    }
+    // Optimistic; reverted when the save fails.
+    const isSaved = await saveNotificationPreferences(
+      { api: dodi, account: clientState.account },
+      patch,
+    );
+    if (!isSaved) setError(t("notificationsSaveFailed"));
+    setSaving(false);
   }
 
   return (

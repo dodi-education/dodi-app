@@ -14,6 +14,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 
 import { FieldRow, fieldSelectClass } from "@/components/parent/rows";
+import { listTimeZones } from "@dodi/client-state/date-preferences";
 import {
   formatDate,
   formatDateTime,
@@ -26,16 +27,6 @@ import {
 // Fixed sample instant (24 Jun 2026, 15:30 UTC) used for previews/examples.
 const SAMPLE = new Date("2026-06-24T15:30:00Z");
 
-function listTimeZones(): string[] {
-  const intl = Intl as typeof Intl & {
-    supportedValuesOf?: (key: "timeZone") => string[];
-  };
-  try {
-    return intl.supportedValuesOf?.("timeZone") ?? [];
-  } catch {
-    return [];
-  }
-}
 const TIME_ZONES = listTimeZones();
 
 export interface DateTimeFieldsProps {

@@ -12,12 +12,9 @@ import { FieldRow } from "@/components/parent/rows";
 import { Section } from "@/components/parent/section";
 import { Switch } from "@/components/ui/switch";
 import { dodi } from "@/lib/api";
-import {
-  interfacePreferencesOf,
-  patchInterfacePreferences,
-  useAccountStore,
-  useIs3dEnabled,
-} from "@/stores/account-store";
+import { clientState } from "@/lib/client-state";
+import { useAccountStore, useIs3dEnabled } from "@/stores/account-store";
+import { saveInterfacePreferences } from "@dodi/client-state/account-settings";
 import type { InterfacePreferences } from "@dodi/types/database";
 
 export function InterfaceSettings() {
@@ -30,21 +27,13 @@ export function InterfaceSettings() {
   async function saveToggle(patch: InterfacePreferences) {
     setError(null);
     setSaving(true);
-    const previous = interfacePreferencesOf(useAccountStore.getState().account);
-    patchInterfacePreferences({ ...previous, ...patch }); // optimistic
-    try {
-      const res = await dodi.request("/api/account", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ interfacePreferences: patch }),
-      });
-      if (!res.ok) throw new Error("save_failed");
-    } catch {
-      patchInterfacePreferences(previous); // revert on failure
-      setError(t("interfaceSaveFailed"));
-    } finally {
-      setSaving(false);
-    }
+    // Optimistic; reverted when the save fails.
+    const isSaved = await saveInterfacePreferences(
+      { api: dodi, account: clientState.account },
+      patch,
+    );
+    if (!isSaved) setError(t("interfaceSaveFailed"));
+    setSaving(false);
   }
 
   return (

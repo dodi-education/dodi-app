@@ -14,9 +14,11 @@ const nextConfig: NextConfig = {
   },
   transpilePackages: [
     "@dodi/ai",
+    "@dodi/client-state",
     "@dodi/crypto",
     "@dodi/games",
     "@dodi/protocol",
+    "@dodi/studio",
     "@dodi/types",
     "@dodi/vault",
   ],

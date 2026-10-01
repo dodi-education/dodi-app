@@ -35,6 +35,13 @@ vi.mock("@/stores/providers-store", () => ({
   },
 }));
 
+// The shared game store + execution resolver, over this suite's providers fake.
+vi.mock("@/lib/client-state", async () =>
+  (await import("@/test-support/client-state")).testClientState({
+    getKey: (id) => getKey(id),
+  }),
+);
+
 vi.mock("@/stores/vault-store", () => ({
   // The game store decrypts rows through this session; these cases are about
   // where the provider key comes from, so fields pass through unchanged.

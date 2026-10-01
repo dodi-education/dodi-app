@@ -38,13 +38,14 @@ import {
 } from "./game-agent-tools";
 import {
   createGameDriver,
+  type DriverTranscript,
   type GameToolCall,
   type GameToolResult,
   type GameTurn,
   type PriorTurn,
 } from "./game-agent-drivers";
 
-export type { PriorTurn } from "./game-agent-drivers";
+export type { DriverTranscript, PriorTurn } from "./game-agent-drivers";
 
 /**
  * Cost caps for a single game action. `MAX_TOKENS` is the per-write OUTPUT
@@ -153,6 +154,74 @@ export interface RunGameAgentParams {
    * injected; resolves null (never throws) when the service is unavailable.
    */
   onViewGame?: (input: RenderGameInput) => Promise<RenderGameOutput | null>;
+  /**
+   * Called at every turn boundary with the full loop state, so a build that the
+   * OS or a reload interrupts can continue from its last completed turn instead
+   * of starting over. The checkpoint carries the whole transcript (prompts,
+   * code, images): callers seal it before storing it anywhere. Awaited; a throw
+   * is ignored, since a missed checkpoint must never fail the build.
+   */
+  onCheckpoint?: (checkpoint: AgentCheckpoint) => Promise<void>;
+  /**
+   * Continue from a checkpoint instead of starting fresh. The caller passes the
+   * same provider, task and callbacks as the interrupted run; the transcript
+   * replaces the seeded first message and `priorTurns` is ignored.
+   */
+  resumeFrom?: AgentCheckpoint;
+}
+
+/** Which part of the loop the next model turn belongs to. */
+export type AgentLoopPhase = "main" | "validation_fix" | "visual_fix";
+
+/** The ToolContext fields that are run state; the callbacks are re-injected on resume. */
+const TOOL_STATE_KEYS = [
+  "existingCode",
+  "existingMarkdown",
+  "currentMeta",
+  "carriedBackgroundImage",
+  "freshBackgroundImage",
+  "backgroundImageCalls",
+  "backgroundImageFailed",
+  "freshPreviewImage",
+  "previewImageCalls",
+  "previewImageFailed",
+  "viewGameCalls",
+  "viewGameFailed",
+  "lastViewHadLayoutIssues",
+] as const satisfies readonly (keyof ToolContext)[];
+
+export type ToolRunState = Pick<ToolContext, (typeof TOOL_STATE_KEYS)[number]>;
+
+export const AGENT_CHECKPOINT_VERSION = 1;
+
+/**
+ * Everything needed to continue a game build after its last completed model
+ * turn: the provider transcript plus the loop's counters and tool state. Plain
+ * JSON. Resuming replays at most the one turn that was in flight.
+ */
+export interface AgentCheckpoint {
+  version: typeof AGENT_CHECKPOINT_VERSION;
+  phase: AgentLoopPhase;
+  /** Model turns already completed in `phase`; the resumed run starts the next. */
+  phaseTurns: number;
+  iterationCount: number;
+  validationRetries: number;
+  lastStopReason: string | null;
+  sawToolCalls: boolean;
+  sawText: boolean;
+  usage: TokenUsage;
+  lastWrite?: LastWriteResult;
+  visualCheckFailed: boolean;
+  tools: ToolRunState;
+  transcript: DriverTranscript;
+}
+
+function toolRunState(context: ToolContext): ToolRunState {
+  const state: ToolRunState = {};
+  for (const key of TOOL_STATE_KEYS) {
+    if (context[key] !== undefined) Object.assign(state, { [key]: context[key] });
+  }
+  return state;
 }
 
 /** How many of the most recent image-bearing user turns re-send their images. */
@@ -292,7 +361,12 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
     onGeneratePreviewImage,
     hasExistingPreviewImage,
     onViewGame,
+    onCheckpoint,
+    resumeFrom,
   } = params;
+  if (resumeFrom && resumeFrom.version !== AGENT_CHECKPOINT_VERSION) {
+    throw new Error(`Unsupported game build checkpoint version ${String(resumeFrom.version)}`);
+  }
   const emitStep = onStep ?? (() => {});
   const checkAborted = (): void => {
     if (signal?.aborted) throw new AgentAbortedError();
@@ -428,34 +502,64 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
       "is broken before you finish. If you skip it, the app renders the opening screen for " +
       "you and asks you to fix what it finds."
     : "";
-  driver.seed(trimPriorImages(priorTurns), {
-    text:
-      buildCodeTaskUserMessage(task, { visualCheck: Boolean(onViewGame) }) +
-      carriedNote +
-      backgroundNote +
-      previewNote +
-      viewNote,
-    images: taskImages,
-  });
+  if (resumeFrom) {
+    driver.restore(resumeFrom.transcript);
+    Object.assign(toolContext, resumeFrom.tools);
+  } else {
+    driver.seed(trimPriorImages(priorTurns), {
+      text:
+        buildCodeTaskUserMessage(task, { visualCheck: Boolean(onViewGame) }) +
+        carriedNote +
+        backgroundNote +
+        previewNote +
+        viewNote,
+      images: taskImages,
+    });
+  }
 
   const learningGoal = goalPayload.learningGoal ?? "";
   const successDefinition = goalPayload.successDefinition ?? "";
 
-  let lastWrite: LastWriteResult | undefined;
-  let iterationCount = 0;
-  let validationRetries = 0;
-  let lastStopReason: string | null = null;
-  let sawToolCalls = false;
-  let sawText = false;
+  let lastWrite: LastWriteResult | undefined = resumeFrom?.lastWrite;
+  let iterationCount = resumeFrom?.iterationCount ?? 0;
+  let validationRetries = resumeFrom?.validationRetries ?? 0;
+  let lastStopReason: string | null = resumeFrom?.lastStopReason ?? null;
+  let sawToolCalls = resumeFrom?.sawToolCalls ?? false;
+  let sawText = resumeFrom?.sawText ?? false;
+  let visualCheckFailed = resumeFrom?.visualCheckFailed ?? false;
+  const startPhase: AgentLoopPhase = resumeFrom?.phase ?? "main";
+  const startTurns = resumeFrom?.phaseTurns ?? 0;
 
   // Accumulate token usage across every model call (main loop + fix loop) so the
   // caller can report the true per-generation cost. Structural param type avoids
   // depending on the exact SDK usage type name.
-  const usage: TokenUsage = {
-    inputTokens: 0,
-    outputTokens: 0,
-    cacheWriteTokens: 0,
-    cacheReadTokens: 0,
+  const usage: TokenUsage = resumeFrom
+    ? { ...resumeFrom.usage }
+    : { inputTokens: 0, outputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0 };
+
+  // Called only between turns, when the transcript ends in a message the next
+  // model turn answers, so a resume can start straight with runTurn.
+  const checkpoint = async (phase: AgentLoopPhase, phaseTurns: number): Promise<void> => {
+    if (!onCheckpoint) return;
+    try {
+      await onCheckpoint({
+        version: AGENT_CHECKPOINT_VERSION,
+        phase,
+        phaseTurns,
+        iterationCount,
+        validationRetries,
+        lastStopReason,
+        sawToolCalls,
+        sawText,
+        usage: { ...usage },
+        lastWrite,
+        visualCheckFailed,
+        tools: toolRunState(toolContext),
+        transcript: driver.snapshot(),
+      });
+    } catch {
+      // A missed checkpoint only costs resumability, never the build.
+    }
   };
   const addUsage = (u: TokenUsage): void => {
     usage.inputTokens += u.inputTokens;
@@ -479,8 +583,16 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
     return images?.length ? { id: call.id, content: result, images } : { id: call.id, content: result };
   };
 
-  // Agentic loop
-  for (let turn = 0; turn < AGENT_LIMITS.MAX_AGENT_TURNS; turn++) {
+  // A fresh run is resumable from its very first turn: an interruption while
+  // that turn is in flight then costs one turn, not the build.
+  if (!resumeFrom) await checkpoint("main", 0);
+
+  // Agentic loop (skipped when resuming into a later phase)
+  for (
+    let turn = startPhase === "main" ? startTurns : AGENT_LIMITS.MAX_AGENT_TURNS;
+    turn < AGENT_LIMITS.MAX_AGENT_TURNS;
+    turn++
+  ) {
     checkAborted();
     const result = await runTurnChecked(driver);
     iterationCount++;
@@ -511,6 +623,7 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
             "edit_game_code for targeted changes to code that already exists), " +
             "then validate_game to verify it. Do not output code as text.",
         );
+        await checkpoint("main", turn + 1);
         continue;
       }
       break;
@@ -521,6 +634,7 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
     driver.addToolResults(toolResults);
 
     if (!result.expectsToolResults) break;
+    await checkpoint("main", turn + 1);
   }
 
   if (!lastWrite) {
@@ -579,30 +693,39 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
         hasBackgroundPlaceholder(lastWrite!.code)),
   });
 
-  // Final validation with a bounded fix loop.
-  const validation = validateGameCode(lastWrite.code, goalOpts());
-  if (!validation.valid && validationRetries < AGENT_LIMITS.MAX_VALIDATION_RETRIES) {
-    driver.addUserMessage(
-      `Final validation failed with errors:\n${validation.errors.join("\n")}\n\n` +
-        `Please fix these issues — with edit_game_code for targeted fixes, or ` +
-        `write_game_code for a rewrite — then validate_game.`,
-    );
-
-    for (let retry = 0; retry < AGENT_LIMITS.MAX_VALIDATION_RETRIES; retry++) {
-      checkAborted();
-      validationRetries++;
-      const fix = await runTurnChecked(driver, "fixing_validation");
-      iterationCount++;
-      addUsage(fix.usage);
-
-      if (fix.toolCalls.length === 0) break;
-
-      const fixResults = await Promise.all(fix.toolCalls.map(runToolTurn));
-      driver.addToolResults(fixResults);
-
-      const recheck = validateGameCode(lastWrite.code, goalOpts());
-      if (recheck.valid) break;
+  // Final validation with a bounded fix loop. A resume into the fix loop skips
+  // the check that opened it; a resume past it skips the loop.
+  let firstRetry: number = AGENT_LIMITS.MAX_VALIDATION_RETRIES;
+  if (startPhase === "validation_fix") {
+    firstRetry = startTurns;
+  } else if (startPhase === "main") {
+    const validation = validateGameCode(lastWrite.code, goalOpts());
+    if (!validation.valid && validationRetries < AGENT_LIMITS.MAX_VALIDATION_RETRIES) {
+      driver.addUserMessage(
+        `Final validation failed with errors:\n${validation.errors.join("\n")}\n\n` +
+          `Please fix these issues — with edit_game_code for targeted fixes, or ` +
+          `write_game_code for a rewrite — then validate_game.`,
+      );
+      await checkpoint("validation_fix", 0);
+      firstRetry = 0;
     }
+  }
+
+  for (let retry = firstRetry; retry < AGENT_LIMITS.MAX_VALIDATION_RETRIES; retry++) {
+    checkAborted();
+    validationRetries++;
+    const fix = await runTurnChecked(driver, "fixing_validation");
+    iterationCount++;
+    addUsage(fix.usage);
+
+    if (fix.toolCalls.length === 0) break;
+
+    const fixResults = await Promise.all(fix.toolCalls.map(runToolTurn));
+    driver.addToolResults(fixResults);
+
+    const recheck = validateGameCode(lastWrite.code, goalOpts());
+    if (recheck.valid) break;
+    await checkpoint("validation_fix", retry + 1);
   }
 
   // Forced visual check. Runs when a screenshot service is on and either the
@@ -612,45 +735,54 @@ export async function runGameAgent(params: RunGameAgentParams): Promise<AgentCod
   // bounded number of turns to fix what it sees. A clean re-check ends quietly
   // without a model turn. A failed render never fails the build; the studio
   // shows a notice instead. Runs before the final validation so a fix here is
-  // validated too.
-  let visualCheckFailed = Boolean(toolContext.viewGameFailed);
-  const neverLooked = !toolContext.viewGameCalls;
-  if (onViewGame && (neverLooked || toolContext.lastViewHadLayoutIssues)) {
-    checkAborted();
-    emitStep("visual_check");
-    const background = toolContext.freshBackgroundImage ?? toolContext.carriedBackgroundImage;
-    const output = await onViewGame({
-      code: background ? injectBackgroundImage(lastWrite.code, background) : lastWrite.code,
-      steps: [],
-    }).catch(() => null);
-    const hasFindings =
-      output !== null &&
-      (neverLooked || !output.ready || output.errors.length > 0 || Boolean(output.layoutIssues?.length));
-    if (!output) {
-      visualCheckFailed = true;
-    } else if (hasFindings) {
-      driver.addUserMessage({
-        text:
-          (neverLooked
-            ? "You finished without calling view_game, so the app rendered your game for you.\n\n"
-            : "Your last view_game measured layout collisions, so the app rendered your final " +
-              "code again before finishing.\n\n") +
-          renderReport(output, goalPayload.perspective ?? null) +
-          "\n\nIf every check passes, answer with one short sentence and no tool call. " +
-          "Otherwise fix the misses with edit_game_code, then validate_game.",
-        images: output.frames.map((frame) => frame.image),
-      });
-      for (let round = 0; round < AGENT_LIMITS.MAX_VISUAL_FIX_ROUNDS; round++) {
-        checkAborted();
-        const fix = await runTurnChecked(driver);
-        iterationCount++;
-        addUsage(fix.usage);
-        if (fix.toolCalls.length === 0) break;
-        const fixResults = await Promise.all(fix.toolCalls.map(runToolTurn));
-        driver.addToolResults(fixResults);
-        if (!fix.expectsToolResults) break;
+  // validated too. A resume into the fix rounds skips the render that opened them.
+  let firstRound: number = AGENT_LIMITS.MAX_VISUAL_FIX_ROUNDS;
+  if (startPhase === "visual_fix") {
+    firstRound = startTurns;
+  } else {
+    visualCheckFailed = Boolean(toolContext.viewGameFailed);
+    const neverLooked = !toolContext.viewGameCalls;
+    if (onViewGame && (neverLooked || toolContext.lastViewHadLayoutIssues)) {
+      checkAborted();
+      emitStep("visual_check");
+      const background = toolContext.freshBackgroundImage ?? toolContext.carriedBackgroundImage;
+      const output = await onViewGame({
+        code: background ? injectBackgroundImage(lastWrite.code, background) : lastWrite.code,
+        steps: [],
+      }).catch(() => null);
+      const hasFindings =
+        output !== null &&
+        (neverLooked || !output.ready || output.errors.length > 0 || Boolean(output.layoutIssues?.length));
+      if (!output) {
+        visualCheckFailed = true;
+      } else if (hasFindings) {
+        driver.addUserMessage({
+          text:
+            (neverLooked
+              ? "You finished without calling view_game, so the app rendered your game for you.\n\n"
+              : "Your last view_game measured layout collisions, so the app rendered your final " +
+                "code again before finishing.\n\n") +
+            renderReport(output, goalPayload.perspective ?? null) +
+            "\n\nIf every check passes, answer with one short sentence and no tool call. " +
+            "Otherwise fix the misses with edit_game_code, then validate_game.",
+          images: output.frames.map((frame) => frame.image),
+        });
+        await checkpoint("visual_fix", 0);
+        firstRound = 0;
       }
     }
+  }
+
+  for (let round = firstRound; round < AGENT_LIMITS.MAX_VISUAL_FIX_ROUNDS; round++) {
+    checkAborted();
+    const fix = await runTurnChecked(driver);
+    iterationCount++;
+    addUsage(fix.usage);
+    if (fix.toolCalls.length === 0) break;
+    const fixResults = await Promise.all(fix.toolCalls.map(runToolTurn));
+    driver.addToolResults(fixResults);
+    if (!fix.expectsToolResults) break;
+    await checkpoint("visual_fix", round + 1);
   }
 
   const finalValidation = validateGameCode(lastWrite.code, goalOpts());

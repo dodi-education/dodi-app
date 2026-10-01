@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
+import { otpErrorKey } from "@dodi/client-state";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -14,9 +15,7 @@ export function otpErrorMessage(
   code: string | undefined,
   t: (key: "wrongCode" | "codeExpired" | "tooManyAttempts") => string,
 ): string {
-  if (code === "OTP_EXPIRED") return t("codeExpired");
-  if (code === "TOO_MANY_ATTEMPTS") return t("tooManyAttempts");
-  return t("wrongCode");
+  return t(otpErrorKey(code) as "wrongCode" | "codeExpired" | "tooManyAttempts");
 }
 
 interface VerifyCodeFormProps {

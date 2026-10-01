@@ -13,7 +13,9 @@
     "lint": "turbo run lint",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
-    "db": "pnpm --filter @dodi/platform db:migrate"
+    "db": "pnpm --filter @dodi/platform db:migrate",
+    "parity:check": "pnpm --filter @dodi/parity check",
+    "verify": "turbo run typecheck lint test && pnpm parity:check"
   },
   "devDependencies": {
     "turbo": "^2.5.5",
@@ -22,6 +24,9 @@
   "pnpm": {
     "overrides": {
       "zod": "4.5.4"
+    },
+    "patchedDependencies": {
+      "react-native-argon2@4.0.0": "patches/react-native-argon2@4.0.0.patch"
     }
   }
 }

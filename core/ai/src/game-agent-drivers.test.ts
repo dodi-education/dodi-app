@@ -578,3 +578,60 @@ describe("XaiGameDriver image seeding", () => {
     ]);
   });
 });
+
+describe("transcript snapshot / restore (build checkpoints)", () => {
+  const opts = { apiKey: "k", model: "grok-4.3", systemPrompt: "SYS", maxTokens: 10 };
+
+  it("a restored xAI driver continues the exact conversation", async () => {
+    create.mockResolvedValueOnce(
+      streamOf({
+        choices: [
+          {
+            delta: {
+              tool_calls: [
+                { index: 0, id: "c1", function: { name: "read_bridge_docs", arguments: "{}" } },
+              ],
+            },
+            finish_reason: "tool_calls",
+          },
+        ],
+      }),
+    );
+    const first = createGameDriver("xai", opts);
+    first.seed(undefined, { text: "build it", images: [PNG] });
+    await first.runTurn();
+    first.addToolResults([{ id: "c1", content: "docs" }]);
+    const transcript = first.snapshot();
+
+    // The snapshot is a detached copy: later turns never leak into it.
+    first.addUserMessage("later nudge");
+    expect(JSON.parse(JSON.stringify(transcript))).toEqual(transcript);
+
+    create.mockResolvedValueOnce(
+      streamOf({ choices: [{ delta: { content: "done" }, finish_reason: "stop" }] }),
+    );
+    const resumed = createGameDriver("xai", opts);
+    resumed.restore(transcript);
+    await resumed.runTurn();
+
+    const req = create.mock.calls[1][0] as { messages: Array<{ role: string }> };
+    expect(req.messages.map((m) => m.role)).toEqual(["system", "user", "assistant", "tool"]);
+  });
+
+  it("snapshots the seeded Anthropic transcript in provider shape", () => {
+    const driver = createGameDriver("anthropic", opts);
+    driver.seed([{ role: "assistant", text: "hi" }], "make a game");
+    expect(driver.snapshot()).toEqual({
+      provider: "anthropic",
+      messages: [
+        { role: "assistant", content: "hi" },
+        { role: "user", content: "make a game" },
+      ],
+    });
+  });
+
+  it("refuses a transcript taken by another provider's driver", () => {
+    const driver = createGameDriver("anthropic", opts);
+    expect(() => driver.restore({ provider: "xai", messages: [] })).toThrow(/xai transcript/);
+  });
+});

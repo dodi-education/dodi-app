@@ -335,7 +335,9 @@
     "revoking": "Wird widerrufen...",
     "confirmRevokeDevice": "Dieses Gerät widerrufen? Es kann deine Daten dann nicht mehr entsperren.",
     "deviceRevoked": "Gerät widerrufen",
-    "revokeFailed": "Wir konnten dieses Gerät nicht widerrufen. Bitte versuche es erneut."
+    "revokeFailed": "Wir konnten dieses Gerät nicht widerrufen. Bitte versuche es erneut.",
+    "showApiKey": "API-Schlüssel anzeigen",
+    "hideApiKey": "API-Schlüssel verbergen"
   },
   "parentPin": {
     "settingsTitle": "Eltern-PIN",
@@ -968,7 +970,13 @@
     "importErrCode": "Der Spielcode des Archivs fehlt oder ist ungültig.",
     "importErrCodeTooLarge": "Der Spielcode überschreitet die Größenbeschränkung.",
     "importErrUnsafeCode": "Der Spielcode hat die Sicherheitsprüfung nicht bestanden.",
-    "importErrBackground": "Das Hintergrundbild fehlt im Archiv."
+    "importErrBackground": "Das Hintergrundbild fehlt im Archiv.",
+    "buildRunningHint": "Du kannst die App weiter benutzen, während dodi baut. Wenn du diesen Tab schließt oder neu lädst, pausiert der Build und du kannst ihn hier fortsetzen.",
+    "buildPaused": "Pausiert. dodi kann diesen Build dort fortsetzen, wo er aufgehört hat.",
+    "otherBuildRunning": "dodi baut gerade ein anderes Spiel. Warte, bis es fertig ist, und versuche es dann erneut.",
+    "resumeBuildNotice": "dodis letzter Build dieses Spiels wurde unterbrochen. Dort weitermachen, wo er aufgehört hat?",
+    "resumeBuild": "Weiterbauen",
+    "discardResumableBuild": "Verwerfen"
   },
   "friends": {
     "title": "Freunde",
@@ -1222,5 +1230,9 @@
     "footerCopyright": "© {year} dodi. Mit Sorgfalt für neugierige Kinder gemacht.",
     "footerOpenSource": "Open Source",
     "footerPrivacyFirst": "Datenschutz zuerst"
+  },
+  "buildActivity": {
+    "building": "dodi baut ein Spiel",
+    "open": "Ansehen"
   }
 }

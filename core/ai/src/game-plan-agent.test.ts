@@ -52,6 +52,8 @@ function recordingDriver(turns: GameTurn[]) {
     addToolResults: (results) => {
       toolResults.push(results);
     },
+    snapshot: () => ({ provider: "anthropic", messages: [] }),
+    restore: () => {},
     runTurn: () => Promise.resolve(turns[Math.min(i++, turns.length - 1)]),
   };
   return { driver, seeded, toolResults, calls: () => i };
@@ -216,6 +218,8 @@ describe("runPlanAgent", () => {
     const rec = recordingDriver([turn({ text: "ok" })]);
     mockDriverFactory = () => ({
       ...rec.driver,
+      snapshot: () => ({ provider: "anthropic", messages: [] }),
+      restore: () => {},
       runTurn: () => {
         controller.abort();
         return Promise.reject(new Error("The operation was aborted"));

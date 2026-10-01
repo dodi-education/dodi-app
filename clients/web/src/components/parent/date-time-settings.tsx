@@ -15,15 +15,16 @@ import { SaveRow } from "@/components/parent/save-row";
 import { Section } from "@/components/parent/section";
 import { Button } from "@/components/ui/button";
 import { dodi } from "@/lib/api";
+import { clientState } from "@/lib/client-state";
 import { useAccountStore } from "@/stores/account-store";
 import { useVaultStore } from "@/stores/vault-store";
+import { initialDateSettings, saveDateSettings } from "@dodi/client-state/date-preferences";
 import {
   defaultPref,
   type DateStyleId,
   type StoredDatePreferences,
   type TimeStyleId,
 } from "@dodi/intl";
-import type { Account } from "@dodi/types/database";
 
 export function DateTimeSettings() {
   const t = useTranslations("settings");
@@ -53,58 +54,34 @@ export function DateTimeSettings() {
   // ready, if an explicit timezone needs decrypting). Runs once.
   useEffect(() => {
     if (hydrated || !loaded) return;
-    if (accountStored?.timeZoneEnc && !session) return; // wait for the vault
+    // Null while a sealed timezone waits for the vault.
+    const initial = initialDateSettings(accountStored, session, {
+      dateStyle: base.dateStyle,
+      timeStyle: base.timeStyle,
+    });
+    if (!initial) return;
     // Initialize the controls from the loaded account prefs (one-time sync).
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setDateStyle(accountStored?.dateStyle ?? base.dateStyle);
-    setTimeStyle(accountStored?.timeStyle ?? base.timeStyle);
-    let tz = "auto";
-    if (accountStored?.timeZoneEnc && session) {
-      try {
-        tz = session.decryptField(accountStored.timeZoneEnc) ?? "auto";
-      } catch {
-        tz = "auto";
-      }
-    }
-    setTimeZone(tz);
+    setDateStyle(initial.dateStyle);
+    setTimeStyle(initial.timeStyle);
+    setTimeZone(initial.timeZone);
     setHydrated(true);
   }, [hydrated, loaded, accountStored, session, base.dateStyle, base.timeStyle]);
 
   async function handleSave() {
     setError(null);
     setSaving(true);
-    try {
-      let timeZoneEnc: string | null = null;
-      if (timeZone !== "auto") {
-        if (!session) throw new Error(t("dateVaultLocked"));
-        timeZoneEnc = session.encryptField(timeZone);
-      }
-      const datePreferences: StoredDatePreferences = {
-        dateStyle,
-        timeStyle,
-        timeZoneEnc,
-      };
-      const res = await dodi.request("/api/account", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ datePreferences }),
-      });
-      if (!res.ok) {
-        const data = (await res.json().catch(() => null)) as {
-          error?: string;
-        } | null;
-        throw new Error(data?.error || t("dateSaveFailed"));
-      }
-      useAccountStore.getState().patchLocal({
-        date_preferences: datePreferences as Account["date_preferences"],
-      });
+    const failure = await saveDateSettings(
+      { api: dodi, account: clientState.account, vault: clientState.vault },
+      { dateStyle, timeStyle, timeZone },
+    );
+    if (failure) {
+      setError("key" in failure ? t(failure.key) : failure.message);
+    } else {
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : t("dateSaveFailed"));
-    } finally {
-      setSaving(false);
     }
+    setSaving(false);
   }
 
   return (

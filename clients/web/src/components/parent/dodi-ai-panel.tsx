@@ -10,14 +10,22 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 
-import { AI_PROVIDERS } from "@dodi/ai/providers";
+import { clientState } from "@/lib/client-state";
 import { useDodiAIBillingStore } from "@/stores/dodi-ai-billing-store";
 import { useDodiAIDefaultsStore } from "@/stores/dodi-ai-defaults-store";
 import { useDodiAIKeyStore } from "@/stores/dodi-ai-key-store";
-import { useProvidersStore } from "@/stores/providers-store";
-import { DODI_DEFAULT_MODEL, type AIProviderId } from "@dodi/types/ai";
-
-import type { DraftModelConfig } from "./capability-model-config";
+import {
+  disableDodiAI,
+  enableDodiAI,
+  isDodiCustomized,
+  needsDodiCredits,
+  recommendedDodiConfig,
+} from "@dodi/client-state/dodi-ai-settings";
+import {
+  type DraftModelConfig,
+  formatEurCents as formatEur,
+  usesDodiAI,
+} from "@dodi/client-state/model-config";
 
 interface DodiAIPanelProps {
   config: DraftModelConfig;
@@ -25,13 +33,6 @@ interface DodiAIPanelProps {
   applyConfig: (next: DraftModelConfig) => Promise<boolean>;
   /** DELETE the config (disable with no BYOK fallback) and clear page state. */
   clearConfig: () => Promise<boolean>;
-}
-
-function formatEur(cents: number): string {
-  return new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency: "EUR",
-  }).format(cents / 100);
 }
 
 /**
@@ -48,6 +49,12 @@ export function DodiAIPanel({ config, applyConfig, clearConfig }: DodiAIPanelPro
   const billing = useDodiAIBillingStore((s) => s.billing);
   const keyStatus = useDodiAIKeyStore((s) => s.status);
   const defaults = useDodiAIDefaultsStore((s) => s.defaults);
+  const settingsDeps = {
+    dodiAIKeys: clientState.dodiAIKeys,
+    dodiAIDefaults: clientState.dodiAIDefaults,
+    dodiAIBilling: clientState.dodiAIBilling,
+    providers: clientState.providers,
+  };
 
   const [enabling, setEnabling] = useState(false);
   const [justEnabled, setJustEnabled] = useState(false);
@@ -58,64 +65,24 @@ export function DodiAIPanel({ config, applyConfig, clearConfig }: DodiAIPanelPro
     void useDodiAIDefaultsStore.getState().load();
   }, []);
 
-  const categories = ["voice", "thinking", "game", "image"] as const;
-  const enabled = categories.some(
-    (c) => config[`${c}Provider` as const] === "dodi",
-  );
-  const customized =
-    enabled &&
-    categories.some((c) => {
-      const provider = config[`${c}Provider` as const];
-      const model = config[`${c}Model` as const];
-      return provider === "dodi" && model !== DODI_DEFAULT_MODEL;
-    });
-  const needsCredits =
-    keyStatus === "no_balance" || (enabled && billing !== null && !billing.canUse);
-
-  function recommendedConfig(): DraftModelConfig {
-    return {
-      voiceProvider: "dodi",
-      voiceModel: DODI_DEFAULT_MODEL,
-      voiceName: defaults?.voice.voice ?? "ara",
-      thinkingProvider: "dodi",
-      thinkingModel: DODI_DEFAULT_MODEL,
-      gameProvider: "dodi",
-      gameModel: DODI_DEFAULT_MODEL,
-      imageProvider: "dodi",
-      imageModel: DODI_DEFAULT_MODEL,
-    };
-  }
+  const enabled = usesDodiAI(config);
+  const customized = isDodiCustomized(config);
+  const needsCredits = needsDodiCredits(config, keyStatus, billing);
 
   async function handleEnable() {
     if (enabling) return;
     setEnabling(true);
     setEnableError(null);
+    // Mint keys, then write the recommended config. An empty balance renders
+    // the needs-credits card via keyStatus; other failures get the inline error.
     try {
-      const keys = await useDodiAIKeyStore.getState().load(true);
-      if (!keys) {
-        // no_balance renders the needs-credits card via keyStatus; other
-        // failures get the inline error.
-        if (useDodiAIKeyStore.getState().status !== "no_balance") {
-          setEnableError(t("managedEnableFailed"));
-        }
-        return;
+      const outcome = await enableDodiAI(settingsDeps, applyConfig);
+      if (outcome.kind === "error") {
+        setEnableError(t(outcome.key));
+      } else if (outcome.kind === "enabled") {
+        setJustEnabled(true);
+        setTimeout(() => setJustEnabled(false), 5000);
       }
-      const loadedDefaults = await useDodiAIDefaultsStore.getState().load();
-      if (!loadedDefaults) {
-        setEnableError(t("managedUnavailable"));
-        return;
-      }
-      const ok = await applyConfig({
-        ...recommendedConfig(),
-        voiceName: loadedDefaults.voice.voice ?? "ara",
-      });
-      if (!ok) {
-        setEnableError(t("managedEnableFailed"));
-        return;
-      }
-      setJustEnabled(true);
-      setTimeout(() => setJustEnabled(false), 5000);
-      void useDodiAIBillingStore.getState().load(true);
     } finally {
       setEnabling(false);
     }
@@ -126,56 +93,11 @@ export function DodiAIPanel({ config, applyConfig, clearConfig }: DodiAIPanelPro
    *  enforcement stays on the balance/lock plane; only client memory is
    *  dropped. */
   async function handleDisable() {
-    const vaultProviders = Object.keys(
-      useProvidersStore.getState().providers ?? {},
-    ) as AIProviderId[];
-    const byokWith = (
-      flag: "supportsVoice" | "supportsThinking" | "supportsAgentic" | "supportsImage",
-    ) =>
-      vaultProviders
-        .map((id) => AI_PROVIDERS.find((p) => p.id === id))
-        .find((def) => def && !def.isManaged && def[flag]);
-
-    const next: DraftModelConfig = { ...config };
-    if (config.voiceProvider === "dodi") {
-      const def = byokWith("supportsVoice");
-      if (!def) {
-        // No BYOK voice fallback → the account returns to unconfigured.
-        const ok = await clearConfig();
-        if (ok) useDodiAIKeyStore.getState().clear();
-        return;
-      }
-      next.voiceProvider = def.id;
-      next.voiceModel =
-        (def.models.find((m) => m.capabilities.includes("voice")) ?? def.models[0])
-          ?.id ?? "";
-      next.voiceName = def.voices[0]?.id ?? "";
-    }
-    if (config.thinkingProvider === "dodi") {
-      const def = byokWith("supportsThinking");
-      next.thinkingProvider = def?.id ?? "";
-      next.thinkingModel =
-        def?.models.find((m) => m.capabilities.includes("thinking"))?.id ?? "";
-    }
-    if (config.gameProvider === "dodi") {
-      const def = byokWith("supportsAgentic");
-      next.gameProvider = def?.id ?? "";
-      next.gameModel =
-        def?.models.find((m) => m.capabilities.includes("agentic"))?.id ?? "";
-    }
-    if (config.imageProvider === "dodi") {
-      const def = byokWith("supportsImage");
-      next.imageProvider = def?.id ?? "";
-      next.imageModel =
-        def?.models.find((m) => m.capabilities.includes("image"))?.id ?? "";
-    }
-
-    const ok = await applyConfig(next);
-    if (ok) useDodiAIKeyStore.getState().clear();
+    await disableDodiAI(settingsDeps, config, applyConfig, clearConfig);
   }
 
   async function handleReset() {
-    await applyConfig(recommendedConfig());
+    await applyConfig(recommendedDodiConfig(defaults?.voice.voice));
   }
 
   const balanceLine =

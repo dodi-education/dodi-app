@@ -1,49 +1,20 @@
-import { create } from "zustand";
+// Shared logic: @dodi/client-state. This module binds the browser instance
+// (lib/client-state.ts) to React and keeps the app-facing names.
+import { bindStore } from "@dodi/client-state/react";
 
-/**
- * Single source of truth for connectivity.
- *
- * `navigator.onLine === false` is trustworthy ("definitely offline") but
- * `true` only means "maybe online" — so data stores additionally report their
- * fetch outcomes: a network-level failure flips the signal to offline, any
- * successful response flips it back. Consumers: the Dodi session guards (no
- * connect attempts offline), offline UI states, connectivity-aware links, and
- * the outbox flush triggers (subscribe to the offline→online edge).
- */
-interface ConnectivityState {
-  isOnline: boolean;
-  reportOnline: () => void;
-  reportOffline: () => void;
-}
+import { clientState } from "@/lib/client-state";
 
-export const useConnectivityStore = create<ConnectivityState>((set) => ({
-  // Only an explicit `false` means offline — node (tests/SSR) has a navigator
-  // without `onLine`, and "no signal" must default to online.
-  isOnline: typeof navigator === "undefined" || navigator.onLine !== false,
-  reportOnline: () => set({ isOnline: true }),
-  reportOffline: () => set({ isOnline: false }),
-}));
+import { onBackOnline as onConnectivityBackOnline } from "@dodi/client-state";
+
+/** Single source of truth for connectivity (data stores report fetch outcomes). */
+export const useConnectivityStore = bindStore(clientState.connectivity);
 
 /** Snapshot read for non-React callers (stores, sync modules). */
 export function isCurrentlyOnline(): boolean {
-  return useConnectivityStore.getState().isOnline;
+  return clientState.connectivity.getState().isOnline;
 }
 
-/**
- * Runs `callback` on every offline→online transition (and the browser
- * `online` event). Returns an unsubscribe function.
- */
+/** Runs `callback` on every offline→online transition. Returns an unsubscribe. */
 export function onBackOnline(callback: () => void): () => void {
-  return useConnectivityStore.subscribe((state, previous) => {
-    if (state.isOnline && !previous.isOnline) callback();
-  });
-}
-
-if (typeof window !== "undefined") {
-  window.addEventListener("online", () =>
-    useConnectivityStore.getState().reportOnline(),
-  );
-  window.addEventListener("offline", () =>
-    useConnectivityStore.getState().reportOffline(),
-  );
+  return onConnectivityBackOnline(clientState.connectivity, callback);
 }

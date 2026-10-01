@@ -1,83 +1,93 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import {
-  readPersistedUnlockedKidIds,
-  useActiveKidStore,
-} from "./active-kid-store";
 import type { Kid } from "@dodi/types/database";
+
+import { type ActiveKidStore, createActiveKidStore } from "./active-kid-store";
+import type { ActiveKidPersistence } from "./platform";
 
 function kid(id: string, extra: Partial<Kid> = {}): Kid {
   return { id, avatar_pin: null, language: "en", ...extra } as Kid;
 }
 
-function makeSessionStorage() {
-  let store: Record<string, string> = {};
+/** Session-scoped persistence that outlives a store (a full-document navigation). */
+function memoryPersistence(): ActiveKidPersistence {
+  let activeKidId: string | null = null;
+  let unlocked: string[] = [];
   return {
-    getItem: (k: string) => (k in store ? store[k] : null),
-    setItem: (k: string, v: string) => {
-      store[k] = String(v);
+    readActiveKidId: () => activeKidId,
+    writeActiveKid: (k) => {
+      activeKidId = k.id;
     },
-    removeItem: (k: string) => {
-      delete store[k];
-    },
-    clear: () => {
-      store = {};
+    readUnlockedKidIds: () => new Set(unlocked),
+    writeUnlockedKidIds: (ids) => {
+      unlocked = [...ids];
     },
   };
 }
 
+let persistence: ActiveKidPersistence;
+let store: ActiveKidStore;
+
 // A fresh store per test models a fresh page-load (no in-memory unlocks).
 beforeEach(() => {
-  (globalThis as { window?: unknown }).window = {
-    sessionStorage: makeSessionStorage(),
-  };
-  useActiveKidStore.setState({ activeKidId: null, unlockedKidIds: new Set() });
+  persistence = memoryPersistence();
+  store = createActiveKidStore(persistence);
 });
 
 describe("resolve", () => {
-  // In node there is no document.cookie, so resolve() sees no active-kid cookie —
-  // exactly the cold "/" entry that used to leave the home page on "No kid
-  // selected". It must select the first available profile.
+  // Nothing persisted yet: exactly the cold "/" entry that used to leave the
+  // home page on "No kid selected". It must select the first available profile.
   it("selects the first available profile on a cold entry", () => {
-    useActiveKidStore.getState().resolve([kid("first"), kid("second")]);
-    expect(useActiveKidStore.getState().activeKidId).toBe("first");
+    store.getState().resolve([kid("first"), kid("second")]);
+    expect(store.getState().activeKidId).toBe("first");
   });
 
   it("resolves to null for an account with no kids", () => {
-    useActiveKidStore.getState().resolve([]);
-    expect(useActiveKidStore.getState().activeKidId).toBeNull();
+    store.getState().resolve([]);
+    expect(store.getState().activeKidId).toBeNull();
+  });
+
+  it("keeps the persisted kid while it still exists, and persists a fallback", () => {
+    store.getState().setActive(kid("b"));
+    const nextPage = createActiveKidStore(persistence);
+    nextPage.getState().resolve([kid("a"), kid("b")]);
+    expect(nextPage.getState().activeKidId).toBe("b");
+
+    nextPage.getState().resolve([kid("a")]);
+    expect(nextPage.getState().activeKidId).toBe("a");
+    expect(persistence.readActiveKidId()).toBe("a");
   });
 
   it("is stable when re-resolved against the same list", () => {
-    const { resolve } = useActiveKidStore.getState();
+    const { resolve } = store.getState();
     resolve([kid("a"), kid("b")]);
-    const first = useActiveKidStore.getState().activeKidId;
+    const first = store.getState().activeKidId;
     resolve([kid("a"), kid("b")]);
-    expect(useActiveKidStore.getState().activeKidId).toBe(first);
+    expect(store.getState().activeKidId).toBe(first);
   });
 });
 
 describe("unlock lifecycle", () => {
   it("starts with nothing unlocked (a hard refresh re-prompts)", () => {
-    expect(useActiveKidStore.getState().unlockedKidIds.size).toBe(0);
+    expect(store.getState().unlockedKidIds.size).toBe(0);
   });
 
   it("markUnlocked records a solved profile for this page-load", () => {
-    useActiveKidStore.getState().markUnlocked("a");
-    expect(useActiveKidStore.getState().unlockedKidIds.has("a")).toBe(true);
+    store.getState().markUnlocked("a");
+    expect(store.getState().unlockedKidIds.has("a")).toBe(true);
   });
 
   it("setActive switches the active kid and unlocks it", () => {
-    useActiveKidStore.getState().setActive(kid("b"));
-    const state = useActiveKidStore.getState();
+    store.getState().setActive(kid("b"));
+    const state = store.getState();
     expect(state.activeKidId).toBe("b");
     expect(state.unlockedKidIds.has("b")).toBe(true);
   });
 
   it("markUnlocked returns a new Set reference so subscribers re-render", () => {
-    const before = useActiveKidStore.getState().unlockedKidIds;
-    useActiveKidStore.getState().markUnlocked("a");
-    expect(useActiveKidStore.getState().unlockedKidIds).not.toBe(before);
+    const before = store.getState().unlockedKidIds;
+    store.getState().markUnlocked("a");
+    expect(store.getState().unlockedKidIds).not.toBe(before);
   });
 
   // Offline tab switches are FULL-document navigations (the service worker
@@ -86,20 +96,16 @@ describe("unlock lifecycle", () => {
   // navigation. Unlocks must survive a reload within the same tab session —
   // same tradeoff as the sessionStorage-backed parent gate (lib/parent-lock).
   it("a solved puzzle survives a full-document navigation (offline tab switch)", () => {
-    useActiveKidStore.getState().markUnlocked("a");
+    store.getState().markUnlocked("a");
 
-    // Simulate the next page-load: fresh in-memory state, seeded the same way
-    // the store seeds itself at module init.
-    useActiveKidStore.setState({
-      activeKidId: null,
-      unlockedKidIds: readPersistedUnlockedKidIds(),
-    });
+    // The next page-load: a fresh store over the same session persistence.
+    const nextPage = createActiveKidStore(persistence);
 
-    expect(useActiveKidStore.getState().unlockedKidIds.has("a")).toBe(true);
+    expect(nextPage.getState().unlockedKidIds.has("a")).toBe(true);
   });
 
   it("setActive's unlock also survives a full-document navigation", () => {
-    useActiveKidStore.getState().setActive(kid("b"));
-    expect(readPersistedUnlockedKidIds().has("b")).toBe(true);
+    store.getState().setActive(kid("b"));
+    expect(persistence.readUnlockedKidIds().has("b")).toBe(true);
   });
 });

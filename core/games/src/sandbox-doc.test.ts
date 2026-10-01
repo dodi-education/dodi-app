@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildSandboxSrcDoc } from "./game-sandbox";
+import { buildSandboxSrcDoc } from "./sandbox-doc";
 
 const BUNDLE = [
   "<!doctype html>",

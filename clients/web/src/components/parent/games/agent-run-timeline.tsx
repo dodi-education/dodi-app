@@ -7,7 +7,7 @@ import {
   type AgentRunEntry,
   type AgentRunLog,
   formatRunClock,
-} from "@/lib/games/agent-run-log";
+} from "@dodi/studio/agent-run-log";
 import type { AgentStep } from "@dodi/types/agent-progress";
 
 interface AgentRunTimelineProps {

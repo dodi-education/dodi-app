@@ -15,30 +15,7 @@ export const ACTIVE_KID_COOKIE = "dodi-active-kid";
 export const KID_LOCALE_COOKIE = "dodi-kid-locale";
 export const VIEW_COOKIE = "dodi-view";
 
-/**
- * Pick the active kid id: keep the cookie's kid while it still exists, otherwise
- * fall back to the first (oldest) profile — the same rule the parent→kid switch
- * uses. Returns null only when the account has no kids.
- */
-export function pickActiveKidId(
-  kids: Kid[],
-  cookieId: string | null,
-): string | null {
-  if (cookieId && kids.some((k) => k.id === cookieId)) return cookieId;
-  return kids[0]?.id ?? null;
-}
-
-/**
- * A profile needs its avatar-PIN puzzle solved before dodi initializes, unless
- * it has already been unlocked this page-load (`unlocked`). A hard refresh
- * clears the in-memory unlocked set, so a locked profile re-prompts.
- */
-export function computeNeedsPin(
-  kid: Kid | null | undefined,
-  unlocked: ReadonlySet<string>,
-): boolean {
-  return !!kid?.avatar_pin && !unlocked.has(kid.id);
-}
+export { computeNeedsPin, pickActiveKidId } from "@dodi/client-state";
 
 /** Read the active-kid cookie (client only; null during SSR). */
 export function readActiveKidCookie(): string | null {

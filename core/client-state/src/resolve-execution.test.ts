@@ -24,34 +24,30 @@ const state = vi.hoisted(() => ({
   vaultKeys: {} as Record<string, string>,
 }));
 
-vi.mock("@/lib/dodi-ai", () => ({
-  isDodiAIConfigured: () => state.dodiConfigured,
-}));
-vi.mock("@/stores/dodi-ai-defaults-store", () => ({
-  useDodiAIDefaultsStore: {
-    getState: () => ({ load: async () => state.defaults }),
+import { createExecutionResolver } from "./resolve-execution";
+
+const { resolveExecution } = createExecutionResolver({
+  api: { request: () => Promise.reject(new Error("unused")) } as never,
+  dodiAI: {
+    isConfigured: () => state.dodiConfigured,
+    request: () => Promise.reject(new Error("unused")),
   },
-}));
-vi.mock("@/stores/dodi-ai-key-store", () => ({
-  useDodiAIKeyStore: {
+  dodiAIDefaults: { getState: () => ({ load: async () => state.defaults }) } as never,
+  dodiAIKeys: {
     getState: () => ({
       load: async () => state.managedKeys,
-      getKey: (p: string) =>
-        state.managedKeys?.find((k) => k.provider === p)?.apiKey ?? null,
+      getKey: (p: string) => state.managedKeys?.find((k) => k.provider === p)?.apiKey ?? null,
     }),
-  },
-}));
-vi.mock("@/stores/providers-store", () => ({
-  useProvidersStore: {
+  } as never,
+  providers: {
     getState: () => ({
       providers: state.vaultKeys,
       load: async () => state.vaultKeys,
       getKey: (p: string) => state.vaultKeys[p] ?? null,
     }),
-  },
-}));
+  } as never,
+});
 
-import { resolveExecution } from "./resolve-dodi-ai";
 
 describe("resolveExecution — dodi (managed)", () => {
   beforeEach(() => {
@@ -156,5 +152,49 @@ describe("resolveExecution — BYOK passthrough", () => {
       model: "claude-sonnet-4-6",
     });
     expect(resolved).toBeNull();
+  });
+});
+
+describe("resolveGame / resolveImage / resolveThinking — from the account config", () => {
+  const resolverWith = (config: Record<string, string> | null) =>
+    createExecutionResolver({
+      api: {
+        request: async (path: string) => {
+          expect(path).toBe("/api/ai/config");
+          return new Response(JSON.stringify(config));
+        },
+      } as never,
+      dodiAI: { isConfigured: () => false, request: () => Promise.reject(new Error("unused")) },
+      dodiAIDefaults: { getState: () => ({ load: async () => null }) } as never,
+      dodiAIKeys: { getState: () => ({ load: async () => null, getKey: () => null }) } as never,
+      providers: {
+        getState: () => ({
+          providers: { anthropic: {}, gemini: {} },
+          load: async () => ({}),
+          getKey: (p: string) => ({ anthropic: "sk-ant", gemini: "AIza" })[p] ?? null,
+        }),
+      } as never,
+    });
+
+  it("resolves each category from its own configured provider", async () => {
+    const resolver = resolverWith({
+      gameProvider: "anthropic",
+      gameModel: "claude-opus-4-8",
+      imageProvider: "gemini",
+      imageModel: "imagen",
+      voiceProvider: "gemini",
+    });
+    await expect(resolver.resolveGame()).resolves.toEqual({
+      provider: "anthropic",
+      model: "claude-opus-4-8",
+      apiKey: "sk-ant",
+    });
+    await expect(resolver.resolveImage()).resolves.toMatchObject({ provider: "gemini" });
+    // No explicit thinking provider: never falls back to the voice one.
+    await expect(resolver.resolveThinking()).resolves.toBeNull();
+  });
+
+  it("is null without an account config", async () => {
+    await expect(resolverWith(null).resolveGame()).resolves.toBeNull();
   });
 });

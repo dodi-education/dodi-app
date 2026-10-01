@@ -5,8 +5,8 @@ import type {
   RenderGameOutput,
 } from "@dodi/ai/game-agent-tools";
 
-import { type AgentRunLog, runChecks } from "@/lib/games/agent-run-log";
-import { createAgentRunRecorder } from "@/lib/games/agent-run-recorder";
+import { type AgentRunLog, runChecks } from "./agent-run-log";
+import { createAgentRunRecorder } from "./agent-run-recorder";
 
 const INPUT: RenderGameInput = {
   code: "<html></html>",

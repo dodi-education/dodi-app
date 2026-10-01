@@ -8,11 +8,22 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { dodi } from "@/lib/api";
+import { clientState } from "@/lib/client-state";
 import { markParentUnlocked } from "@/lib/parent-lock";
 import { useAccountStore } from "@/stores/account-store";
-import { useVaultStore } from "@/stores/vault-store";
+import {
+  PARENT_PIN_LENGTH as PIN_LENGTH,
+  removeParentPin,
+  sanitizePinInput,
+  saveParentPin,
+} from "@dodi/client-state/parent-pin";
 
-const PIN_LENGTH = 4;
+const pinDeps = () => ({
+  api: dodi,
+  account: clientState.account,
+  vault: clientState.vault,
+  parentLock: { markUnlocked: markParentUnlocked },
+});
 
 /**
  * Set / change / remove the 4-digit parent PIN. The vault is already unlocked
@@ -26,8 +37,6 @@ export function ParentPinSettings() {
   const pinEnc = useAccountStore((s) => s.account?.parent_pin_enc ?? null);
   const loaded = useAccountStore((s) => s.loaded);
   const load = useAccountStore((s) => s.load);
-  const setPinEnc = (parent_pin_enc: string | null) =>
-    useAccountStore.getState().patchLocal({ parent_pin_enc });
   const hasPin = pinEnc !== null;
 
   const [pin, setPin] = useState("");
@@ -50,50 +59,29 @@ export function ParentPinSettings() {
 
     if (pin.length !== PIN_LENGTH) return setError(t("invalid"));
 
-    const session = useVaultStore.getState().session;
-    if (!session) return setError(t("saveFailed"));
-
     setBusy("save");
-    try {
-      const parentPinEnc = session.encryptField(pin);
-      const res = await dodi.request("/api/account", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ parentPinEnc }),
-      });
-      if (!res.ok) throw new Error("save-failed");
-      // Mark unlocked BEFORE setting pinEnc so the gate never observes
-      // "PIN set + locked" for a frame (which would flash the prompt). We're
-      // already inside the parent area, so this just keeps it open.
-      markParentUnlocked();
-      setPinEnc(parentPinEnc);
+    // Seals the PIN, keeps this area unlocked, then caches the sealed blob.
+    const outcome = await saveParentPin(pinDeps(), pin);
+    if (outcome.kind === "done") {
       setPin("");
-      setDone(t("saved"));
-    } catch {
-      setError(t("saveFailed"));
-    } finally {
-      setBusy(null);
+      setDone(t(outcome.key));
+    } else {
+      setError(t(outcome.key));
     }
+    setBusy(null);
   }
 
   async function handleRemove() {
     clearFeedback();
     setBusy("remove");
-    try {
-      const res = await dodi.request("/api/account", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ parentPinEnc: null }),
-      });
-      if (!res.ok) throw new Error("remove-failed");
-      setPinEnc(null);
+    const outcome = await removeParentPin(pinDeps());
+    if (outcome.kind === "done") {
       setPin("");
-      setDone(t("removed"));
-    } catch {
-      setError(t("saveFailed"));
-    } finally {
-      setBusy(null);
+      setDone(t(outcome.key));
+    } else {
+      setError(t(outcome.key));
     }
+    setBusy(null);
   }
 
   return (
@@ -111,7 +99,7 @@ export function ParentPinSettings() {
             value={pin}
             onChange={(e) => {
               clearFeedback();
-              setPin(e.target.value.replace(/\D/g, "").slice(0, PIN_LENGTH));
+              setPin(sanitizePinInput(e.target.value));
             }}
             className="max-w-[12rem] tracking-[0.4em]"
           />

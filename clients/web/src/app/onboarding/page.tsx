@@ -22,16 +22,11 @@ import { Button } from "@/components/ui/button";
 import { VaultGate } from "@/components/vault/vault-gate";
 import { locales, type Locale } from "@/i18n/config";
 import { dodi } from "@/lib/api";
+import { clientState } from "@/lib/client-state";
 import { applyLocale, LOCALE_NAMES } from "@/lib/locale-preference";
 import { useAccountStore } from "@/stores/account-store";
-import { useVaultStore } from "@/stores/vault-store";
-import {
-  defaultPref,
-  type DateStyleId,
-  type StoredDatePreferences,
-  type TimeStyleId,
-} from "@dodi/intl";
-import type { Account } from "@dodi/types/database";
+import { saveAccountPreferences } from "@dodi/client-state/onboarding";
+import { defaultPref, type DateStyleId, type TimeStyleId } from "@dodi/intl";
 
 export default function OnboardingPage() {
   // Sealing the timezone needs a session; a reload here unlocks silently.
@@ -47,7 +42,6 @@ function PreferencesStep() {
   const ts = useTranslations("settings");
   const locale = useLocale();
   const router = useRouter();
-  const session = useVaultStore((s) => s.session);
   const loadAccount = useAccountStore((s) => s.load);
 
   const base = defaultPref(locale, "account");
@@ -85,32 +79,17 @@ function PreferencesStep() {
   async function handleContinue() {
     setError(null);
     setSaving(true);
-    try {
-      let timeZoneEnc: string | null = null;
-      if (timeZone !== "auto") {
-        if (!session) throw new Error(ts("dateVaultLocked"));
-        timeZoneEnc = session.encryptField(timeZone);
-      }
-      const datePreferences: StoredDatePreferences = {
-        dateStyle,
-        timeStyle,
-        timeZoneEnc,
-      };
-      const res = await dodi.request("/api/account", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ datePreferences, language: locale }),
-      });
-      if (!res.ok) throw new Error(t("saveFailed"));
-      useAccountStore.getState().patchLocal({
-        date_preferences: datePreferences as Account["date_preferences"],
-        language: locale,
-      });
-      finish();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : t("saveFailed"));
+    // An explicit timezone is sealed with the VaultSession before it is saved.
+    const failure = await saveAccountPreferences(
+      { api: dodi, account: clientState.account, vault: clientState.vault },
+      { dateStyle, timeStyle, timeZone, language: locale },
+    );
+    if (failure) {
+      setError(failure === "dateVaultLocked" ? ts(failure) : t(failure));
       setSaving(false);
+      return;
     }
+    finish();
   }
 
   return (

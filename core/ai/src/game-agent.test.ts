@@ -25,6 +25,8 @@ function driverReturning(turns: GameTurn[]): GameCodeDriver {
     seed: () => {},
     addUserMessage: () => {},
     addToolResults: () => {},
+    snapshot: () => ({ provider: "anthropic", messages: [] }),
+    restore: () => {},
     runTurn: () => Promise.resolve(turns[Math.min(i++, turns.length - 1)]),
   };
 }
@@ -415,6 +417,8 @@ describe("background image loop integration", () => {
       addToolResults: (rs) => {
         toolResults.push(rs);
       },
+      snapshot: () => ({ provider: "anthropic", messages: [] }),
+      restore: () => {},
       runTurn: () => Promise.resolve(turns[Math.min(i++, turns.length - 1)]),
     };
     return { driver, toolResults, getSeedText: () => seedText };
@@ -668,6 +672,8 @@ describe("preview image loop integration", () => {
       addToolResults: (rs) => {
         toolResults.push(rs);
       },
+      snapshot: () => ({ provider: "anthropic", messages: [] }),
+      restore: () => {},
       runTurn: () => Promise.resolve(turns[Math.min(i++, turns.length - 1)]),
     };
     return { driver, toolResults, nudges, getSeedText: () => seedText };
@@ -855,6 +861,8 @@ describe("surgical edit loop integration", () => {
       addToolResults: (rs) => {
         toolResults.push(rs);
       },
+      snapshot: () => ({ provider: "anthropic", messages: [] }),
+      restore: () => {},
       runTurn: () => Promise.resolve(turns[Math.min(i++, turns.length - 1)]),
     };
     return { driver, toolResults, getSeedText: () => seedText };
@@ -1210,6 +1218,8 @@ describe("live activity + narration", () => {
       seed: () => {},
       addUserMessage: () => {},
       addToolResults: () => {},
+      snapshot: () => ({ provider: "anthropic", messages: [] }),
+      restore: () => {},
       runTurn: () => {
         // The Stop button aborts while the provider request is in flight — the
         // SDK then rejects with its own error type, not AgentAbortedError.
@@ -1296,6 +1306,8 @@ describe("visual check loop integration", () => {
       addToolResults: (rs) => {
         toolResults.push(rs);
       },
+      snapshot: () => ({ provider: "anthropic", messages: [] }),
+      restore: () => {},
       runTurn: () => Promise.resolve(turns[Math.min(turnsRun++, turns.length - 1)]),
     };
     return { driver, toolResults, userMessages, getSeedText: () => seedText, turns: () => turnsRun };

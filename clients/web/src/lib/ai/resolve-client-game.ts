@@ -1,39 +1,14 @@
 /**
- * Resolve the "game generation" provider, model, and (vault-decrypted) API key
- * in the browser. Game authoring (creation, editing, success-definition mapping)
- * runs the Anthropic tool-use agent entirely client-side — the provider key
- * lives only in the unlocked vault and the server can never decrypt it.
- *
- * Mirrors resolve-client-thinking.ts. The game role is intentionally separate
- * from thinking: only agentic (tool-use) models can drive runGameAgent.
+ * The account's game provider, model and vault-decrypted key, resolved in the
+ * browser (keys live only in the unlocked vault). Null when no game model is
+ * configured or no key is available. Logic: `@dodi/client-state`.
  */
-import { dodi } from "@/lib/api";
-import { resolveExecution } from "@/lib/ai/resolve-dodi-ai";
-import type { AccountModelConfig, AIProviderId } from "@dodi/types/ai";
+import type { ResolvedExecution } from "@dodi/client-state";
 
-export interface ResolvedClientGame {
-  provider: Exclude<AIProviderId, "dodi">;
-  model: string;
-  apiKey: string;
-}
+import { clientState } from "@/lib/client-state";
 
-/**
- * Returns the game-generation provider/model/key, or null when no game model is
- * configured or no key is available (caller should prompt the parent to
- * configure a Game generation model in Settings).
- */
-export async function resolveClientGame(): Promise<ResolvedClientGame | null> {
-  const cfgRes = await dodi.request("/api/ai/config");
-  if (!cfgRes.ok) return null;
-  const config = (await cfgRes.json()) as AccountModelConfig | null;
-  if (!config) return null;
+export type ResolvedClientGame = ResolvedExecution;
 
-  const provider = config.gameProvider;
-  if (!provider) return null;
-
-  return resolveExecution({
-    provider,
-    category: "game",
-    model: config.gameModel,
-  });
+export function resolveClientGame(): Promise<ResolvedClientGame | null> {
+  return clientState.execution.resolveGame();
 }

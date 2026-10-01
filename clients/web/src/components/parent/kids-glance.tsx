@@ -8,6 +8,7 @@ import { KidRowActions } from "@/components/parent/kid-row-actions";
 import { Section } from "@/components/parent/section";
 import { Badge } from "@/components/ui/badge";
 import { useKids } from "@/hooks/use-kids";
+import { kidGlanceItems } from "@dodi/client-state/dashboard";
 import { ageFromBirthdate } from "@dodi/intl";
 
 const AVATAR_PALETTE = [
@@ -36,11 +37,9 @@ export function KidsGlance() {
           {tc("loading")}
         </div>
       ) : (
-        kids.map((kid, i) => {
-          const color = avatarColor(i);
+        kidGlanceItems(kids).map((kid) => {
+          const color = avatarColor(kid.colorIndex);
           const age = ageFromBirthdate(kid.birthdate);
-          // Embedded in the kid row (decrypted in decryptKid) — no personas fetch.
-          const personaName = kid.active_persona?.name ?? null;
           return (
             <Row key={kid.id} clickable>
               <Link
@@ -50,21 +49,22 @@ export function KidsGlance() {
                 <div
                   className={`flex size-[34px] shrink-0 items-center justify-center rounded-full text-[13px] font-bold ${color.bg} ${color.fg}`}
                 >
-                  {kid.display_name[0]?.toUpperCase()}
+                  {kid.initial}
                 </div>
                 <RowMain>
                   <RowTitle>
-                    {kid.display_name}
+                    {kid.name}
                     {age !== null ? (
                       <Badge variant="gray">{t("ageYears", { age })}</Badge>
                     ) : null}
                   </RowTitle>
                   <RowMeta>
-                    {kid.language.toUpperCase()}
-                    {personaName ? (
+                    {kid.languageLabel}
+                    {/* Embedded in the kid row (decrypted in decryptKid). */}
+                    {kid.personaName ? (
                       <>
                         <DotSep />
-                        {personaName}
+                        {kid.personaName}
                       </>
                     ) : null}
                   </RowMeta>

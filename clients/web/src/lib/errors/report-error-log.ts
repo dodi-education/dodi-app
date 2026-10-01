@@ -30,11 +30,14 @@ export function browserFailureMeta(
   startedAt: number,
   extra: ErrorLogMeta = {},
 ): ErrorLogMeta {
+  return { durationMs: Date.now() - startedAt, ...browserEnvironmentMeta(), ...extra };
+}
+
+/** The connectivity + tab-visibility half of `browserFailureMeta`. */
+export function browserEnvironmentMeta(): Pick<ErrorLogMeta, "online" | "visibility"> {
   return {
-    durationMs: Date.now() - startedAt,
     online: typeof navigator === "undefined" ? undefined : navigator.onLine,
     visibility: typeof document === "undefined" ? undefined : document.visibilityState,
-    ...extra,
   };
 }
 

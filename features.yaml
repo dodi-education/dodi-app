@@ -1,0 +1,370 @@
+# dodi feature manifest: which user-facing features exist on which client.
+#
+# Every web route and every mobile screen belongs to a feature here, and every
+# feature states its status per client. `pnpm parity:check` enforces this (see
+# scripts/parity-check.ts), so a feature can't land on one client without a
+# conscious decision about the other.
+#
+# Status per client:
+#   done         shipped; every listed path must exist
+#   planned      not there yet; needs `phase` (the roadmap phase) or `notes`
+#   n/a          deliberately not on this client; needs `notes` saying why
+#   mobile-only  (mobile field only) a native capability the web can't offer
+#
+# Fields: id, area, title, web, mobile, phase?, core?, web_paths?, mobile_paths?, notes?
+# Paths are relative to dodi-app/. `core` lists the shared packages carrying
+# the logic, which is where the logic belongs (clients hold UI + adapters).
+#
+# Mobile roadmap phases (see the mobile plan): 2 = scaffold, auth, vault,
+# parent shell, settings; 3 = Game Studio, background builds, games + play;
+# 4 = kid view, friends, snapshots, personas, kids; 5 = voice + 3D; 6 = hardening.
+
+features:
+  # ----- Auth & setup ---------------------------------------------------------
+  - id: auth.login
+    area: auth
+    title: Sign in (email + password, email code)
+    web: done
+    mobile: done
+    core: [protocol]
+    web_paths: ["clients/web/src/app/(auth)/login/page.tsx"]
+    mobile_paths:
+      - "clients/mobile/src/app/(auth)/login.tsx"
+      - "clients/mobile/src/app/index.tsx"
+      - "clients/mobile/src/app/(auth)/_layout.tsx"
+
+  - id: auth.register
+    area: auth
+    title: Register, with the vault sealed until the emailed code confirms
+    web: done
+    mobile: done
+    core: [client-state, vault]
+    web_paths:
+      - "clients/web/src/app/(auth)/register/page.tsx"
+      - "clients/web/src/app/(auth)/finish-setup/page.tsx"
+    mobile_paths:
+      - "clients/mobile/src/app/(auth)/register.tsx"
+      - "clients/mobile/src/app/finish-setup.tsx"
+
+  - id: auth.password-reset
+    area: auth
+    title: Forgot / change password (nsec-verified vault re-wrap)
+    web: done
+    mobile: done
+    core: [client-state, vault]
+    web_paths:
+      - "clients/web/src/app/(auth)/reset-password/page.tsx"
+      - "clients/web/src/app/(auth)/update-password/page.tsx"
+    mobile_paths:
+      - "clients/mobile/src/app/(auth)/reset-password.tsx"
+      - "clients/mobile/src/app/(auth)/update-password.tsx"
+
+  - id: setup.onboarding
+    area: setup
+    title: First-run onboarding
+    web: done
+    mobile: done
+    web_paths: ["clients/web/src/app/onboarding/page.tsx"]
+    mobile_paths:
+      - "clients/mobile/src/app/onboarding.tsx"
+
+  - id: setup.vault
+    area: setup
+    title: Vault setup and the one-time account key (nsec)
+    web: done
+    mobile: done
+    core: [client-state, vault, crypto]
+    web_paths: ["clients/web/src/app/vault-setup/page.tsx"]
+
+  # ----- Parent area ----------------------------------------------------------
+    mobile_paths:
+      - "clients/mobile/src/app/vault-setup.tsx"
+      - "clients/mobile/src/components/vault/vault-gate.tsx"
+
+  - id: parent.dashboard
+    area: parent
+    title: Parent dashboard
+    web: done
+    mobile: done
+    web_paths: ["clients/web/src/app/parent/dashboard/page.tsx"]
+    mobile_paths:
+      - "clients/mobile/src/app/parent/dashboard.tsx"
+      - "clients/mobile/src/app/parent/_layout.tsx"
+
+  - id: parent.pin-gate
+    area: parent
+    title: Optional parent PIN in front of the parent area
+    web: done
+    mobile: done
+    core: [client-state]
+    web_paths: ["clients/web/src/components/parent/parent-pin-gate.tsx"]
+    mobile_paths:
+      - "clients/mobile/src/components/parent/parent-pin-gate.tsx"
+
+  - id: parent.kids
+    area: parent
+    title: Kid profiles (list, create, edit)
+    web: done
+    mobile: planned
+    phase: 4
+    core: [client-state, vault]
+    web_paths:
+      - "clients/web/src/app/parent/kids/page.tsx"
+      - "clients/web/src/app/parent/kids/new/page.tsx"
+      - "clients/web/src/app/parent/kids/[id]/page.tsx"
+
+  - id: parent.kid-memory
+    area: parent
+    title: Kid memory dossier (read and edit)
+    web: done
+    mobile: planned
+    phase: 4
+    core: [vault]
+    web_paths: ["clients/web/src/app/parent/kids/[id]/memory/page.tsx"]
+
+  - id: parent.personas
+    area: parent
+    title: Companion personas (soul documents)
+    web: done
+    mobile: planned
+    phase: 4
+    core: [vault]
+    web_paths:
+      - "clients/web/src/app/parent/personas/page.tsx"
+      - "clients/web/src/app/parent/personas/new/page.tsx"
+      - "clients/web/src/app/parent/personas/[id]/page.tsx"
+
+  - id: parent.games
+    area: parent
+    title: Game library, Discover, publishing and sharing
+    web: done
+    mobile: planned
+    phase: 3
+    core: [client-state, games]
+    web_paths:
+      - "clients/web/src/app/parent/games/page.tsx"
+      - "clients/web/src/app/parent/games/[id]/page.tsx"
+
+  - id: parent.game-studio
+    area: parent
+    title: Game Studio (plan, build, edit, versions)
+    web: done
+    mobile: planned
+    phase: 3
+    core: [studio, ai, games, client-state]
+    web_paths:
+      - "clients/web/src/app/parent/game-studio/new/page.tsx"
+      - "clients/web/src/app/parent/game-studio/[id]/[[...tab]]/page.tsx"
+      - "clients/web/src/components/parent/games/game-studio.tsx"
+
+  - id: parent.game-studio.resume
+    area: parent
+    title: Resume an interrupted build from its on-device checkpoint
+    web: done
+    mobile: planned
+    phase: 3
+    core: [studio, ai]
+    web_paths:
+      - "clients/web/src/lib/games/build-checkpoint-store.ts"
+      - "clients/web/src/stores/studio-build-store.ts"
+
+  - id: parent.game-studio.background-build
+    area: parent
+    title: Builds keep running while the parent uses other apps
+    web: n/a
+    mobile: mobile-only
+    phase: 3
+    core: [studio]
+    notes: >-
+      A browser tab can't run in the background. The web keeps builds alive
+      across in-app navigation (BuildActivityHost) and resumes them after a
+      reload instead.
+
+  - id: parent.activities
+    area: parent
+    title: Activity feed
+    web: done
+    mobile: planned
+    phase: 4
+    web_paths: ["clients/web/src/app/parent/activities/page.tsx"]
+
+  - id: parent.snapshots
+    area: parent
+    title: Snapshot gallery (parent)
+    web: done
+    mobile: planned
+    phase: 4
+    web_paths: ["clients/web/src/app/parent/snapshots/page.tsx"]
+
+  - id: parent.usage
+    area: parent
+    title: AI usage and dodi AI balance
+    web: done
+    mobile: planned
+    phase: 4
+    core: [client-state]
+    web_paths: ["clients/web/src/app/parent/usage/page.tsx"]
+
+  - id: parent.event-logs
+    area: parent
+    title: Event logs
+    web: done
+    mobile: planned
+    phase: 4
+    web_paths: ["clients/web/src/app/parent/event-logs/page.tsx"]
+
+  # ----- Settings -------------------------------------------------------------
+  - id: settings.general
+    area: settings
+    title: General settings (language, date format, interface)
+    web: done
+    mobile: done
+    core: [intl, client-state]
+    web_paths:
+      - "clients/web/src/app/parent/settings/page.tsx"
+      - "clients/web/src/app/parent/settings/general/page.tsx"
+    mobile_paths:
+      - "clients/mobile/src/app/parent/settings/index.tsx"
+      - "clients/mobile/src/app/parent/settings/_layout.tsx"
+      - "clients/mobile/src/app/parent/settings/general.tsx"
+
+  - id: settings.security
+    area: settings
+    title: Security (password, account key, parent PIN)
+    web: done
+    mobile: done
+    core: [client-state, vault]
+    web_paths: ["clients/web/src/app/parent/settings/security/page.tsx"]
+    mobile_paths:
+      - "clients/mobile/src/app/parent/settings/security.tsx"
+
+  - id: settings.devices
+    area: settings
+    title: Paired devices
+    web: done
+    mobile: done
+    core: [client-state, vault]
+    web_paths: ["clients/web/src/app/parent/settings/devices/page.tsx"]
+    mobile_paths:
+      - "clients/mobile/src/app/parent/settings/devices.tsx"
+
+  - id: settings.ai-providers
+    area: settings
+    title: AI providers (BYOK keys, dodi AI, model per category)
+    web: done
+    mobile: done
+    core: [client-state, ai]
+    web_paths: ["clients/web/src/app/parent/settings/ai-providers/page.tsx"]
+    mobile_paths:
+      - "clients/mobile/src/app/parent/settings/ai-providers.tsx"
+
+  - id: settings.game-studio
+    area: settings
+    title: Game Studio settings (screenshot service)
+    web: done
+    mobile: planned
+    phase: 3
+    core: [client-state, games]
+    web_paths: ["clients/web/src/app/parent/settings/game-studio/page.tsx"]
+
+  - id: settings.notifications
+    area: settings
+    title: Email notification preferences
+    web: done
+    mobile: done
+    core: [client-state]
+    web_paths: ["clients/web/src/app/parent/settings/notifications/page.tsx"]
+
+  # ----- Kid view -------------------------------------------------------------
+    mobile_paths:
+      - "clients/mobile/src/app/parent/settings/notifications.tsx"
+
+  - id: kid.home
+    area: kid
+    title: Kid home with the companion
+    web: done
+    mobile: planned
+    phase: 4
+    core: [client-state]
+    web_paths: ["clients/web/src/app/(kid)/home/page.tsx"]
+
+  - id: kid.games
+    area: kid
+    title: Kid game library and play (sandboxed)
+    web: done
+    mobile: planned
+    phase: 3
+    core: [client-state, games]
+    web_paths:
+      - "clients/web/src/app/(kid)/games/page.tsx"
+      - "clients/web/src/app/(kid)/games/[id]/page.tsx"
+
+  - id: kid.friends
+    area: kid
+    title: Friends (E2EE friend cards)
+    web: done
+    mobile: planned
+    phase: 4
+    core: [protocol, vault]
+    web_paths: ["clients/web/src/app/(kid)/friends/page.tsx"]
+
+  - id: kid.snapshots
+    area: kid
+    title: Snapshots (kid view, replay)
+    web: done
+    mobile: planned
+    phase: 4
+    web_paths:
+      - "clients/web/src/app/(kid)/snapshots/page.tsx"
+      - "clients/web/src/app/(kid)/snapshots/[id]/page.tsx"
+
+  - id: kid.voice
+    area: kid
+    title: Voice conversation with the companion
+    web: done
+    mobile: planned
+    phase: 5
+    core: [ai]
+    web_paths: ["clients/web/src/stores/dodi-session-store.ts"]
+
+  - id: kid.character-3d
+    area: kid
+    title: Animated 3D companion
+    web: done
+    mobile: planned
+    phase: 5
+    web_paths: ["clients/web/src/components/dodi/dodi-character-3d.tsx"]
+
+  - id: kid.offline
+    area: kid
+    title: Offline kid view (cached ciphertext, autosave outbox)
+    web: done
+    mobile: planned
+    phase: 6
+    core: [client-state]
+    web_paths: ["clients/web/src/lib/offline/offline-cache.ts"]
+
+  # ----- Public / platform-specific ---------------------------------------------
+  - id: public.game-page
+    area: public
+    title: Public game page (SEO landing for published games)
+    web: done
+    mobile: n/a
+    web_paths: ["clients/web/src/app/[locale]/games/[id]/page.tsx"]
+    notes: A crawlable web page; the app opens shared links in the in-app player instead.
+
+  - id: mobile.notifications
+    area: mobile
+    title: Local notifications (build finished, build paused)
+    web: n/a
+    mobile: mobile-only
+    phase: 3
+    notes: Browser notifications are out of scope; the web studio shows outcomes in place.
+
+  - id: mobile.share-sheet
+    area: mobile
+    title: Native share sheet for public game links
+    web: n/a
+    mobile: mobile-only
+    phase: 4
+    notes: The web copies the link instead.

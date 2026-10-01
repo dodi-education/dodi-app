@@ -18,7 +18,7 @@ import {
   type AgentRunOutcome,
   reduceAgentRun,
   startAgentRun,
-} from "@/lib/games/agent-run-log";
+} from "./agent-run-log";
 
 /** Thumbnail bound for frames kept in the run log (and its sealed copy). */
 export const RUN_FRAME_BOUND = {
@@ -37,15 +37,19 @@ export interface AgentRunRecorder {
   wrapViewGame: (view: ViewGame) => ViewGame;
   /** Freeze the log with its outcome and return it. */
   finish: (outcome: AgentRunOutcome) => AgentRunLog;
+  /** The log so far (checkpointed alongside the agent state). */
+  current: () => AgentRunLog;
 }
 
 export function createAgentRunRecorder(options: {
   onChange: (log: AgentRunLog) => void;
   thumbnail: Thumbnail;
   now?: () => number;
+  /** Continue this log (a build resumed from a checkpoint) instead of a new one. */
+  initial?: AgentRunLog;
 }): AgentRunRecorder {
   const now = options.now ?? Date.now;
-  let log = startAgentRun(now());
+  let log = options.initial ?? startAgentRun(now());
   const dispatch = (event: AgentRunEvent): void => {
     const next = reduceAgentRun(log, event, now());
     if (next === log) return;
@@ -111,5 +115,6 @@ export function createAgentRunRecorder(options: {
       dispatch({ type: "finish", outcome });
       return log;
     },
+    current: () => log,
   };
 }

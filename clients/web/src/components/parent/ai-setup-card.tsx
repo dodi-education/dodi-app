@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { dodi } from "@/lib/api";
 import { useProvidersStore } from "@/stores/providers-store";
 import { useVaultStore } from "@/stores/vault-store";
+import { loadModelConfig, needsAiSetup } from "@dodi/client-state/dashboard";
 import type { AccountModelConfig } from "@dodi/types/ai";
 
 export function AiSetupCard() {
@@ -36,32 +37,16 @@ export function AiSetupCard() {
 
   useEffect(() => {
     let cancelled = false;
-    dodi
-      .request("/api/ai/config")
-      .then((r) => (r.ok ? (r.json() as Promise<AccountModelConfig | null>) : null))
-      .then((cfg) => {
-        if (!cancelled) setConfig(cfg);
-      })
-      .catch(() => {
-        if (!cancelled) setConfig(null);
-      });
+    void loadModelConfig(dodi).then((cfg) => {
+      if (!cancelled) setConfig(cfg);
+    });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  if (providers === null || config === undefined) return null;
-
-  const hasOwnKey = Object.keys(providers).length > 0;
-  const usesDodiAI =
-    config !== null &&
-    [
-      config.voiceProvider,
-      config.thinkingProvider,
-      config.gameProvider,
-      config.imageProvider,
-    ].includes("dodi");
-  if (hasOwnKey || usesDodiAI) return null;
+  // null while loading, false once a provider is in place.
+  if (!needsAiSetup(providers, config)) return null;
 
   return (
     <Section>

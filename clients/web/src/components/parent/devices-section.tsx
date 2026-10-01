@@ -12,7 +12,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { dodi } from "@/lib/api";
-import { useVaultStore } from "@/stores/vault-store";
+import { clientState } from "@/lib/client-state";
+import {
+  deviceStatusKey,
+  loadDevices,
+  pairDevice,
+  revokeDevice,
+} from "@dodi/client-state/devices";
 import type { Device } from "@dodi/types/database";
 
 const STATUS_BADGE: Record<string, "blue" | "success" | "gray"> = {
@@ -21,11 +27,7 @@ const STATUS_BADGE: Record<string, "blue" | "success" | "gray"> = {
   revoked: "gray",
 };
 
-interface ClaimedDevice {
-  id: string;
-  deviceId: string;
-  kemPublicKey: string;
-}
+const devicesDeps = () => ({ api: dodi, vault: clientState.vault });
 
 /**
  * Pair and revoke devices that can silently unlock the E2EE vault. Pairing wraps
@@ -45,13 +47,7 @@ export function DevicesSection() {
   const [notice, setNotice] = useState<string | null>(null);
 
   async function load() {
-    try {
-      const res = await dodi.request("/api/devices");
-      const data = res.ok ? await res.json() : { devices: [] };
-      setDevices(Array.isArray(data.devices) ? data.devices : []);
-    } catch {
-      setDevices([]);
-    }
+    setDevices(await loadDevices(dodi));
   }
 
   useEffect(() => {
@@ -68,34 +64,15 @@ export function DevicesSection() {
     if (!pairingCode) return;
 
     setPairing(true);
-    try {
-      const res = await dodi.request("/api/devices/claim", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ pairingCode }),
-      });
-      if (!res.ok) throw new Error("claim failed");
-      const claimed = (await res.json()) as ClaimedDevice;
-
-      // Wrap the VMK to the new device and persist, THEN activate it — so an
-      // activated device always has a usable wrap.
-      await useVaultStore.getState().addDevice({
-        deviceId: claimed.deviceId,
-        deviceKemPublicKey: claimed.kemPublicKey,
-      });
-      const act = await dodi.request(`/api/devices/${claimed.id}/activate`, {
-        method: "POST",
-      });
-      if (!act.ok) throw new Error("activate failed");
-
+    // Wraps the vault to the new device and persists that BEFORE activating it.
+    if (await pairDevice(devicesDeps(), pairingCode)) {
       setCode("");
       setNotice(t("devicePaired"));
       await load();
-    } catch {
+    } else {
       setError(t("pairFailed"));
-    } finally {
-      setPairing(false);
     }
+    setPairing(false);
   }
 
   async function handleRevoke(device: Device) {
@@ -103,27 +80,15 @@ export function DevicesSection() {
     setError(null);
     setNotice(null);
     setRevokingId(device.id);
-    try {
-      // Drop the vault wrap first so the device loses access even if the status
-      // update below fails.
-      await useVaultStore.getState().removeDevice(device.device_id);
-      const res = await dodi.request(`/api/devices/${device.id}/revoke`, {
-        method: "POST",
-      });
-      if (!res.ok) throw new Error("revoke failed");
+    // Drops the vault wrap first, so the device loses access even if the
+    // status update fails.
+    if (await revokeDevice(devicesDeps(), device)) {
       setNotice(t("deviceRevoked"));
       await load();
-    } catch {
+    } else {
       setError(t("revokeFailed"));
-    } finally {
-      setRevokingId(null);
     }
-  }
-
-  function statusLabel(status: string): string {
-    if (status === "active") return t("deviceStatusActive");
-    if (status === "revoked") return t("deviceStatusRevoked");
-    return t("deviceStatusPending");
+    setRevokingId(null);
   }
 
   return (
@@ -172,7 +137,7 @@ export function DevicesSection() {
               <RowTitle>
                 {device.name || t("unnamedDevice")}
                 <Badge variant={STATUS_BADGE[device.status] ?? "gray"}>
-                  {statusLabel(device.status)}
+                  {t(deviceStatusKey(device.status))}
                 </Badge>
               </RowTitle>
               <RowMeta>

@@ -8,24 +8,8 @@
 export const TURNSTILE_SCRIPT_URL =
   "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
 
-/** Header the platform reads the token from (Better Auth captcha contract). */
-export const CAPTCHA_HEADER = "x-captcha-response";
-
-/** Error codes the platform answers with when a token is missing or rejected. */
-const CAPTCHA_ERROR_CODES = new Set([
-  "MISSING_RESPONSE",
-  "VERIFICATION_FAILED",
-]);
-
-/** True for an auth error caused by the captcha check (not by credentials). */
-export function isCaptchaError(code: string | undefined | null): boolean {
-  return !!code && CAPTCHA_ERROR_CODES.has(code);
-}
-
-/** Request headers carrying the token; empty when captcha is off (token null). */
-export function captchaHeaders(token: string | null): Record<string, string> {
-  return token ? { [CAPTCHA_HEADER]: token } : {};
-}
+// The token header and captcha error codes are the shared auth contract.
+export { CAPTCHA_HEADER, captchaHeaders, isCaptchaError } from "@dodi/client-state";
 
 export interface TurnstileRenderOptions {
   sitekey: string;

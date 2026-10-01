@@ -1,6 +1,8 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+/* Colors + radius come from @dodi/design-tokens (shared with the mobile app). */
+@import "@dodi/design-tokens/tokens.css";
 
 /* Orientation-aware responsive variants (Dodi mobile rework).
    compact = portrait OR narrow viewport; wide = its logical complement.
@@ -60,38 +62,38 @@
   --radius-4xl: calc(var(--radius) + 16px);
 
   /* Design-system tokens (Dodi redesign) */
-  --color-ink: #22384E;
-  --color-ink-2: #3A5068;
-  --color-faint: #93A5B8;
-  --color-primary-hover: #2659BC;
-  --color-primary-soft: #EAF1FC;
-  --color-primary-soft-2: #DCE9FA;
-  --color-border-strong: #D3DDE8;
-  --color-success: #2E8B6A;
-  --color-success-soft: #E9F5F0;
-  --color-danger: #BF4F44;
-  --color-danger-soft: #FBEFEE;
-  --color-warning: #9A6B12;
-  --color-warning-soft: #FBF3E2;
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-faint: var(--faint);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-soft: var(--primary-soft);
+  --color-primary-soft-2: var(--primary-soft-2);
+  --color-border-strong: var(--border-strong);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
   --shadow-card: 0 1px 2px rgba(34, 56, 78, 0.04);
 
   /* Public-page footer (ported from the landing site's dark footer) */
-  --color-ink-deep: #20374D;
-  --color-mist: #AFC2D8;
-  --color-mist-2: #8FA3BC;
-  --color-mist-3: #7E92AC;
+  --color-ink-deep: var(--ink-deep);
+  --color-mist: var(--mist);
+  --color-mist-2: var(--mist-2);
+  --color-mist-3: var(--mist-3);
 
   /* Dodi brand scale — re-pointed to the new palette */
-  --color-dodi-50: #F5F8FB;
-  --color-dodi-100: #EAF1FC;
-  --color-dodi-200: #DCE9FA;
-  --color-dodi-300: #B9D2F4;
-  --color-dodi-400: #93A5B8;
-  --color-dodi-500: #2F6BD8;
-  --color-dodi-600: #2659BC;
-  --color-dodi-700: #3A5068;
-  --color-dodi-800: #22384E;
-  --color-dodi-900: #1A2B3D;
+  --color-dodi-50: var(--dodi-50);
+  --color-dodi-100: var(--dodi-100);
+  --color-dodi-200: var(--dodi-200);
+  --color-dodi-300: var(--dodi-300);
+  --color-dodi-400: var(--dodi-400);
+  --color-dodi-500: var(--dodi-500);
+  --color-dodi-600: var(--dodi-600);
+  --color-dodi-700: var(--dodi-700);
+  --color-dodi-800: var(--dodi-800);
+  --color-dodi-900: var(--dodi-900);
 
   /* Kid-view animations */
   --animate-kpulse: kpulse 2.6s ease-in-out infinite;
@@ -166,41 +168,6 @@
       transform: translateX(9px);
     }
   }
-}
-
-:root {
-  --radius: 0.5rem;
-  --background: #F5F8FB;
-  --foreground: #22384E;
-  --card: #FFFFFF;
-  --card-foreground: #22384E;
-  --popover: #FFFFFF;
-  --popover-foreground: #22384E;
-  --primary: #2F6BD8;
-  --primary-foreground: #FFFFFF;
-  --secondary: #EAF1FC;
-  --secondary-foreground: #2659BC;
-  --muted: #F5F8FB;
-  --muted-foreground: #61758C;
-  --accent: #EAF1FC;
-  --accent-foreground: #2F6BD8;
-  --destructive: #BF4F44;
-  --border: #E4EAF1;
-  --input: #D3DDE8;
-  --ring: #2F6BD8;
-  --chart-1: #2F6BD8;
-  --chart-2: #2E8B6A;
-  --chart-3: #7456C4;
-  --chart-4: #B0782A;
-  --chart-5: #3A5068;
-  --sidebar: #FFFFFF;
-  --sidebar-foreground: #22384E;
-  --sidebar-primary: #2F6BD8;
-  --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: #EAF1FC;
-  --sidebar-accent-foreground: #2F6BD8;
-  --sidebar-border: #E4EAF1;
-  --sidebar-ring: #2F6BD8;
 }
 
 @layer base {

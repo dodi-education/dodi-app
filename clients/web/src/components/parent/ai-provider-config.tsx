@@ -10,17 +10,21 @@ import { Badge } from "@/components/ui/badge";
 import { Section } from "@/components/parent/section";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-import { AI_PROVIDERS } from "@dodi/ai/providers";
+import { clientState } from "@/lib/client-state";
 import { useDodiAIKeyStore } from "@/stores/dodi-ai-key-store";
 import { useProvidersStore } from "@/stores/providers-store";
-import type { AIProviderId, AccountModelConfig } from "@dodi/types/ai";
-
-import { ByokKeysPanel } from "./byok-keys-panel";
 import {
-  CapabilityModelConfig,
+  byokProviderOptions,
+  clearModelConfig,
   type DraftModelConfig,
   EMPTY_DRAFT,
-} from "./capability-model-config";
+  isDodiSelectable,
+  loadModelConfigDraft,
+  saveModelConfig,
+} from "@dodi/client-state/model-config";
+
+import { ByokKeysPanel } from "./byok-keys-panel";
+import { CapabilityModelConfig } from "./capability-model-config";
 import { DodiAIPanel } from "./dodi-ai-panel";
 
 /**
@@ -45,31 +49,15 @@ export function AIProviderConfig() {
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      try {
-        await useProvidersStore.getState().load();
-        const res = await dodi.request("/api/ai/config");
-        if (cancelled) return;
-        if (res.ok) {
-          const cfg: AccountModelConfig | null = await res.json();
-          if (cfg) {
-            setConfig({
-              voiceProvider: cfg.voiceProvider,
-              voiceModel: cfg.voiceModel,
-              voiceName: cfg.voiceName,
-              thinkingProvider: cfg.thinkingProvider ?? "",
-              thinkingModel: cfg.thinkingModel ?? "",
-              gameProvider: cfg.gameProvider ?? "",
-              gameModel: cfg.gameModel ?? "",
-              imageProvider: cfg.imageProvider ?? "",
-              imageModel: cfg.imageModel ?? "",
-            });
-          }
-        }
-      } catch {
-        // Vault may be locked; the gate handles unlocking.
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+      // The vault's keys first, then the saved config; null when none (or the
+      // vault is locked: the gate handles unlocking).
+      const draft = await loadModelConfigDraft({
+        api: dodi,
+        providers: clientState.providers,
+      });
+      if (cancelled) return;
+      if (draft) setConfig(draft);
+      setLoading(false);
     }
     void load();
     return () => {
@@ -77,43 +65,17 @@ export function AIProviderConfig() {
     };
   }, []);
 
-  const byokProviders = Object.keys(providersMap ?? {}).map((id) => ({
-    id: id as AIProviderId,
-    name: AI_PROVIDERS.find((p) => p.id === id)?.name ?? id,
-  }));
-
-  const anyDodi =
-    config.voiceProvider === "dodi" ||
-    config.thinkingProvider === "dodi" ||
-    config.gameProvider === "dodi" ||
-    config.imageProvider === "dodi";
-  const dodiSelectable = dodiConfigured && (anyDodi || keyStatus === "active");
+  const byokProviders = byokProviderOptions(providersMap);
+  const dodiSelectable = isDodiSelectable(dodiConfigured, config, keyStatus);
 
   async function persist(next: DraftModelConfig): Promise<boolean> {
-    if (!next.voiceProvider || !next.voiceModel || !next.voiceName) return false;
-    const res = await dodi.request("/api/ai/config", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        voiceProvider: next.voiceProvider,
-        voiceModel: next.voiceModel,
-        voiceName: next.voiceName,
-        thinkingProvider: next.thinkingProvider || undefined,
-        thinkingModel: next.thinkingProvider ? next.thinkingModel : undefined,
-        gameProvider: next.gameProvider || undefined,
-        gameModel: next.gameProvider ? next.gameModel : undefined,
-        imageProvider: next.imageProvider || undefined,
-        imageModel: next.imageProvider ? next.imageModel : undefined,
-      }),
-    });
-    if (!res.ok) return false;
+    if (!(await saveModelConfig(dodi, next))) return false;
     setConfig(next);
     return true;
   }
 
   async function clearConfig(): Promise<boolean> {
-    const res = await dodi.request("/api/ai/config", { method: "DELETE" });
-    if (!res.ok) return false;
+    if (!(await clearModelConfig(dodi))) return false;
     setConfig(EMPTY_DRAFT);
     return true;
   }

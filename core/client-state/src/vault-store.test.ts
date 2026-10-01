@@ -19,36 +19,6 @@ const { sealedRef, saveVaultKeysMock, fetchVaultKeysMock, offlineCacheMock } =
     },
   }));
 
-vi.mock("@/lib/offline/offline-cache", () => ({
-  offlineCache: offlineCacheMock,
-}));
-
-// In-memory stand-in for the IndexedDB-backed seal (unavailable in the node env).
-vi.mock("@/lib/sealed-secret", () => ({
-  stashSealedSecret: vi.fn(async (s: string) => {
-    sealedRef.current = s;
-  }),
-  consumeSealedSecret: vi.fn(async () => {
-    const v = sealedRef.current;
-    sealedRef.current = null; // single-use: read wipes
-    return v;
-  }),
-  clearSealedSecret: vi.fn(async () => {
-    sealedRef.current = null;
-  }),
-}));
-
-// Mocking vault-client also keeps the real API/auth client out of the test.
-vi.mock("@/lib/vault-client", () => ({
-  saveVaultKeys: saveVaultKeysMock,
-  fetchVaultKeys: fetchVaultKeysMock,
-}));
-
-vi.mock("@/lib/parent-lock", () => ({
-  markParentUnlocked: vi.fn(),
-  clearParentUnlocked: vi.fn(),
-}));
-
 const MOCK_NSEC = "nsec1mockmockmockmockmockmockmockmockmockmock";
 const MOCK_NPUB_HEX = "ab".repeat(32);
 
@@ -71,7 +41,6 @@ vi.mock("@dodi/vault", () => ({
     deviceId: "dev-1",
     kem: { publicKey: new Uint8Array([9]), secretKey: new Uint8Array([8]) },
   })),
-  createIndexedDbDeviceKeystore: vi.fn(() => ({})),
   addDeviceToVault: vi.fn(),
   removeDeviceFromVault: vi.fn(),
   setVaultPassword: vi.fn(),
@@ -84,23 +53,49 @@ vi.mock("@dodi/crypto", () => ({
   toBase64Url: vi.fn(() => "b64url"),
   deriveVaultMasterKeyFromNsec: vi.fn(() => new Uint8Array([7, 7, 7])),
   nsecToNpubHex: vi.fn(() => "ab".repeat(32)),
-  // Imported by @/lib/argon2-worker (a vault-store side effect); registration
-  // itself is skipped in the node environment (no `window`).
-  setArgon2idExecutor: vi.fn(),
 }));
 
 import { unlockVaultWithDevice, unlockVaultWithPassword } from "@dodi/vault";
 
-import { useConnectivityStore } from "./connectivity-store";
-import { useVaultStore } from "./vault-store";
+import { createConnectivityStore, type ConnectivityStore } from "./connectivity-store";
+import { createVaultStore, type VaultStore } from "./vault-store";
+
+let store: VaultStore;
+let connectivity: ConnectivityStore;
 
 beforeEach(() => {
   sealedRef.current = null;
+  connectivity = createConnectivityStore(true);
+  store = createVaultStore({
+    api: {
+      request: () => Promise.reject(new Error("unused")),
+      getVaultKeys: fetchVaultKeysMock,
+      putVaultKeys: saveVaultKeysMock,
+    },
+    deviceKeystore: {} as never,
+    offlineCache: offlineCacheMock as never,
+    // In-memory stand-in for the device-local seal: single-use, a read wipes.
+    registrationSeal: {
+      stash: async (secret) => {
+        sealedRef.current = secret;
+      },
+      consume: async () => {
+        const value = sealedRef.current;
+        sealedRef.current = null;
+        return value;
+      },
+      clear: async () => {
+        sealedRef.current = null;
+      },
+    },
+    parentLock: { markUnlocked: vi.fn(), clear: vi.fn() },
+    connectivity,
+  });
   saveVaultKeysMock.mockReset();
   saveVaultKeysMock.mockResolvedValue(undefined);
   fetchVaultKeysMock.mockReset();
   fetchVaultKeysMock.mockResolvedValue(null);
-  useVaultStore.setState({
+  store.setState({
     status: "idle",
     session: null,
     pendingNsec: null,
@@ -111,7 +106,7 @@ beforeEach(() => {
 
 describe("vault-store register split", () => {
   it("createLocalVault seals the vault and writes nothing to the server", async () => {
-    await useVaultStore.getState().createLocalVault("parent@example.com", "hunter2-password");
+    await store.getState().createLocalVault("parent@example.com", "hunter2-password");
 
     expect(saveVaultKeysMock).not.toHaveBeenCalled();
     expect(sealedRef.current).toBeTruthy();
@@ -119,20 +114,20 @@ describe("vault-store register split", () => {
     expect(parsed.nsec).toBe(MOCK_NSEC);
     expect(parsed.storedKeys.passwordWrap).toBeTruthy();
     // No session, no status flip while still on public /register.
-    expect(useVaultStore.getState().session).toBeNull();
-    expect(useVaultStore.getState().status).toBe("idle");
+    expect(store.getState().session).toBeNull();
+    expect(store.getState().status).toBe("idle");
   });
 
   it("finalizeVault persists once (with the npub bind), activates the session, reveals the nsec", async () => {
-    await useVaultStore.getState().createLocalVault("parent@example.com", "hunter2-password");
-    await useVaultStore.getState().finalizeVault();
+    await store.getState().createLocalVault("parent@example.com", "hunter2-password");
+    await store.getState().finalizeVault();
 
     expect(saveVaultKeysMock).toHaveBeenCalledTimes(1);
     expect(saveVaultKeysMock).toHaveBeenCalledWith(
       expect.objectContaining({ vmkCheck: "enc:v1:x" }),
       { npub: MOCK_NPUB_HEX },
     );
-    const s = useVaultStore.getState();
+    const s = store.getState();
     expect(s.status).toBe("unlocked");
     expect(s.pendingNsec).toBe(MOCK_NSEC);
     expect(s.session).not.toBeNull();
@@ -141,47 +136,47 @@ describe("vault-store register split", () => {
   });
 
   it("bootstrap saves the keys with the npub bind and reveals the nsec", async () => {
-    await useVaultStore.getState().bootstrap("hunter2-password");
+    await store.getState().bootstrap("hunter2-password");
 
     expect(saveVaultKeysMock).toHaveBeenCalledWith(
       expect.objectContaining({ vmkCheck: "enc:v1:x" }),
       { npub: MOCK_NPUB_HEX },
     );
-    const s = useVaultStore.getState();
+    const s = store.getState();
     expect(s.status).toBe("unlocked");
     expect(s.pendingNsec).toBe(MOCK_NSEC);
   });
 
   it("retries via pendingVault when saveVaultKeys fails, without re-consuming the seal", async () => {
-    await useVaultStore.getState().createLocalVault("parent@example.com", "hunter2-password");
+    await store.getState().createLocalVault("parent@example.com", "hunter2-password");
 
     saveVaultKeysMock.mockRejectedValueOnce(new Error("network"));
-    await expect(useVaultStore.getState().finalizeVault()).rejects.toThrow();
+    await expect(store.getState().finalizeVault()).rejects.toThrow();
 
     // Seal was consumed on the first attempt, but the data is retained in memory.
     expect(sealedRef.current).toBeNull();
-    expect(useVaultStore.getState().pendingVault).not.toBeNull();
+    expect(store.getState().pendingVault).not.toBeNull();
 
-    await useVaultStore.getState().finalizeVault();
+    await store.getState().finalizeVault();
     expect(saveVaultKeysMock).toHaveBeenCalledTimes(2);
-    expect(useVaultStore.getState().status).toBe("unlocked");
+    expect(store.getState().status).toBe("unlocked");
   });
 
   it("finalizeVault throws when there is no seal and no pending vault", async () => {
-    await expect(useVaultStore.getState().finalizeVault()).rejects.toThrow(
+    await expect(store.getState().finalizeVault()).rejects.toThrow(
       /registration-seal-missing/,
     );
   });
 
   it("discardLocalVault clears the seal and the pending vault", async () => {
-    await useVaultStore.getState().createLocalVault("parent@example.com", "hunter2-password");
-    useVaultStore.setState({
+    await store.getState().createLocalVault("parent@example.com", "hunter2-password");
+    store.setState({
       pendingVault: { storedKeys: {} as never, nsec: "x" },
     });
 
-    await useVaultStore.getState().discardLocalVault();
+    await store.getState().discardLocalVault();
     expect(sealedRef.current).toBeNull();
-    expect(useVaultStore.getState().pendingVault).toBeNull();
+    expect(store.getState().pendingVault).toBeNull();
   });
 });
 
@@ -202,10 +197,10 @@ describe("vault-store password unlock (login fast path)", () => {
     const keys = keysFixture();
     fetchVaultKeysMock.mockResolvedValue(keys);
 
-    const { created } = await useVaultStore.getState().unlockOrBootstrap("pw");
+    const { created } = await store.getState().unlockOrBootstrap("pw");
 
     expect(created).toBe(false);
-    expect(useVaultStore.getState().status).toBe("unlocked");
+    expect(store.getState().status).toBe("unlocked");
     expect(fetchVaultKeysMock).toHaveBeenCalledTimes(1);
     expect(unlockVaultWithPassword).toHaveBeenCalledWith(keys, "pw");
   });
@@ -215,30 +210,30 @@ describe("vault-store password unlock (login fast path)", () => {
     // Registration write never settles — login must still complete.
     saveVaultKeysMock.mockReturnValue(new Promise(() => {}));
 
-    await useVaultStore.getState().unlockOrBootstrap("pw");
+    await store.getState().unlockOrBootstrap("pw");
 
-    expect(useVaultStore.getState().status).toBe("unlocked");
+    expect(store.getState().status).toBe("unlocked");
   });
 
   it("a failed device-registration write leaves the session unlocked", async () => {
     fetchVaultKeysMock.mockResolvedValue(keysFixture());
     saveVaultKeysMock.mockRejectedValue(new Error("offline"));
 
-    await useVaultStore.getState().unlockOrBootstrap("pw");
+    await store.getState().unlockOrBootstrap("pw");
     // Let the backgrounded registration settle (and its rejection be handled).
-    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(useVaultStore.getState().status).toBe("unlocked");
+    expect(store.getState().status).toBe("unlocked");
   });
 
   it("a wrong password locks with an error and rethrows", async () => {
     fetchVaultKeysMock.mockResolvedValue(keysFixture());
     vi.mocked(unlockVaultWithPassword).mockRejectedValue(new Error("bad key"));
 
-    await expect(useVaultStore.getState().unlockOrBootstrap("nope")).rejects.toThrow();
+    await expect(store.getState().unlockOrBootstrap("nope")).rejects.toThrow();
 
-    expect(useVaultStore.getState().status).toBe("locked");
-    expect(useVaultStore.getState().error).toBe("bad key");
+    expect(store.getState().status).toBe("locked");
+    expect(store.getState().error).toBe("bad key");
   });
 });
 
@@ -256,15 +251,15 @@ describe("vault-store offline silent unlock", () => {
     offlineCacheMock.writeVaultKeys.mockClear();
     offlineCacheMock.readVaultKeys.mockReset();
     offlineCacheMock.readVaultKeys.mockResolvedValue(null);
-    useConnectivityStore.setState({ isOnline: true });
+    connectivity.setState({ isOnline: true });
   });
 
   it("writes the wrapped keys through to the sealed offline cache when online", async () => {
     const keys = deviceKeys();
     fetchVaultKeysMock.mockResolvedValue(keys);
 
-    await expect(useVaultStore.getState().unlockSilently()).resolves.toBe(true);
-    expect(useVaultStore.getState().status).toBe("unlocked");
+    await expect(store.getState().unlockSilently()).resolves.toBe(true);
+    expect(store.getState().status).toBe("unlocked");
     expect(offlineCacheMock.writeVaultKeys).toHaveBeenCalledWith(keys);
   });
 
@@ -272,18 +267,18 @@ describe("vault-store offline silent unlock", () => {
     fetchVaultKeysMock.mockRejectedValue(new TypeError("fetch failed"));
     offlineCacheMock.readVaultKeys.mockResolvedValue(deviceKeys());
 
-    await expect(useVaultStore.getState().unlockSilently()).resolves.toBe(true);
-    expect(useVaultStore.getState().status).toBe("unlocked");
-    expect(useConnectivityStore.getState().isOnline).toBe(false);
+    await expect(store.getState().unlockSilently()).resolves.toBe(true);
+    expect(store.getState().status).toBe("unlocked");
+    expect(connectivity.getState().isOnline).toBe(false);
   });
 
   it("locks — never needs-setup — when the network fails and the cache is cold", async () => {
     fetchVaultKeysMock.mockRejectedValue(new TypeError("fetch failed"));
 
-    await expect(useVaultStore.getState().unlockSilently()).resolves.toBe(false);
+    await expect(store.getState().unlockSilently()).resolves.toBe(false);
     // needs-setup would bounce the kid to /finish-setup; a network failure
     // must never be read as "this account has no vault".
-    expect(useVaultStore.getState().status).toBe("locked");
+    expect(store.getState().status).toBe("locked");
   });
 });
 
@@ -296,37 +291,37 @@ describe("unlockOrBootstrap adopts an interrupted registration", () => {
   const EMAIL = "parent@example.com";
 
   it("persists the sealed vault instead of minting a new identity", async () => {
-    await useVaultStore
+    await store
       .getState()
       .createLocalVault(EMAIL, "hunter2-password", MOCK_NSEC);
     expect(saveVaultKeysMock).not.toHaveBeenCalled();
 
-    const { created } = await useVaultStore
+    const { created } = await store
       .getState()
       .unlockOrBootstrap("hunter2-password", EMAIL);
 
     expect(created).toBe(true);
     expect(saveVaultKeysMock).toHaveBeenCalledTimes(1);
     // The adopted vault is the sealed one, so the account keeps its nsec.
-    expect(useVaultStore.getState().pendingNsec).toBe(MOCK_NSEC);
+    expect(store.getState().pendingNsec).toBe(MOCK_NSEC);
     expect(saveVaultKeysMock.mock.calls[0][1]).toEqual({ npub: MOCK_NPUB_HEX });
-    expect(useVaultStore.getState().status).toBe("unlocked");
+    expect(store.getState().status).toBe("unlocked");
     expect(sealedRef.current).toBeNull();
   });
 
   it("never adopts a seal left by a different account", async () => {
-    await useVaultStore
+    await store
       .getState()
       .createLocalVault("someone-else@example.com", "hunter2-password", MOCK_NSEC);
 
-    const { created } = await useVaultStore
+    const { created } = await store
       .getState()
       .unlockOrBootstrap("hunter2-password", EMAIL);
 
     // A fresh vault is generated for this account, and the foreign seal is gone.
     expect(created).toBe(true);
     expect(sealedRef.current).toBeNull();
-    expect(useVaultStore.getState().status).toBe("unlocked");
+    expect(store.getState().status).toBe("unlocked");
   });
 
   it("unlocks normally when the account already has a stored vault", async () => {
@@ -337,11 +332,11 @@ describe("unlockOrBootstrap adopts an interrupted registration", () => {
       passwordWrap: { scheme: "password", salt: "s" },
       vmkCheck: "enc:v1:x",
     });
-    await useVaultStore
+    await store
       .getState()
       .createLocalVault(EMAIL, "hunter2-password", MOCK_NSEC);
 
-    const { created } = await useVaultStore
+    const { created } = await store
       .getState()
       .unlockOrBootstrap("hunter2-password", EMAIL);
 

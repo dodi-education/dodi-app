@@ -7,7 +7,8 @@
  */
 import { type Locale } from "@/i18n/config";
 import { dodi } from "@/lib/api";
-import { useAccountStore } from "@/stores/account-store";
+import { clientState } from "@/lib/client-state";
+import { persistLanguage } from "@dodi/client-state/onboarding";
 
 /** Native language names, for pickers with room for a full label. */
 export const LOCALE_NAMES: Record<Locale, string> = {
@@ -24,17 +25,8 @@ export function setLocaleCookie(locale: Locale): void {
  * request 401s: we swallow that and keep the cookie-only behaviour.
  */
 export function persistLocale(locale: Locale): void {
-  void dodi
-    .request("/api/account", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ language: locale }),
-    })
-    .then((res) => {
-      // Mirror into the shared account cache (no-op when signed out).
-      if (res.ok) useAccountStore.getState().patchLocal({ language: locale });
-    })
-    .catch(() => {});
+  // Mirrors into the shared account cache on success (no-op when signed out).
+  void persistLanguage({ api: dodi, account: clientState.account }, locale);
 }
 
 /** Cookie + account: the full effect of "the parent picked a language". */

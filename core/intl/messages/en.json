@@ -335,7 +335,9 @@
     "revoking": "Revoking...",
     "confirmRevokeDevice": "Revoke this device? It will no longer be able to unlock your data.",
     "deviceRevoked": "Device revoked",
-    "revokeFailed": "We couldn't revoke that device. Please try again."
+    "revokeFailed": "We couldn't revoke that device. Please try again.",
+    "showApiKey": "Show API key",
+    "hideApiKey": "Hide API key"
   },
   "parentPin": {
     "settingsTitle": "Parent PIN",
@@ -968,7 +970,13 @@
     "importErrCode": "The archive's game code is missing or invalid.",
     "importErrCodeTooLarge": "The game code exceeds the size limit.",
     "importErrUnsafeCode": "The game code failed the safety check.",
-    "importErrBackground": "The background image is missing from the archive."
+    "importErrBackground": "The background image is missing from the archive.",
+    "buildRunningHint": "You can keep using the app while dodi builds. If you close or reload this tab, the build pauses and you can continue it here.",
+    "buildPaused": "Paused. dodi can continue this build where it stopped.",
+    "otherBuildRunning": "dodi is already building another game. Wait until it is done, then try again.",
+    "resumeBuildNotice": "dodi's last build of this game was interrupted. Continue where it stopped?",
+    "resumeBuild": "Continue building",
+    "discardResumableBuild": "Discard"
   },
   "friends": {
     "title": "Friends",
@@ -1222,5 +1230,9 @@
     "footerCopyright": "© {year} dodi. Made with care for curious kids.",
     "footerOpenSource": "Open Source",
     "footerPrivacyFirst": "Privacy first"
+  },
+  "buildActivity": {
+    "building": "dodi is building a game",
+    "open": "View"
   }
 }

@@ -21,6 +21,7 @@
     "./tags": "./src/tags.ts",
     "./translations": "./src/translations.ts",
     "./sanitizer": "./src/sanitizer.ts",
+    "./sandbox-doc": "./src/sandbox-doc.ts",
     "./agent-validator": "./src/agent-validator.ts",
     "./export": "./src/export.ts",
     "./debug": "./src/debug.ts"

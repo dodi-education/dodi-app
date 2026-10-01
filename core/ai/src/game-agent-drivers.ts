@@ -82,9 +82,24 @@ export interface GameTurn {
   usage: TokenUsage;
 }
 
+/**
+ * The running transcript in the provider's own message format, as plain JSON.
+ * Taken between turns for build checkpoints (see `AgentCheckpoint`) and handed
+ * back to a fresh driver of the same provider to resume. It holds the whole
+ * conversation, attached images included, so callers seal it before storing.
+ */
+export interface DriverTranscript {
+  provider: AIProviderId;
+  messages: unknown[];
+}
+
 export interface GameCodeDriver {
   /** Initialize the transcript from any resumed turns + the concrete task. */
   seed(priorTurns: PriorTurn[] | undefined, firstUserMessage: string | UserContent): void;
+  /** A deep copy of the transcript so far (call between turns only). */
+  snapshot(): DriverTranscript;
+  /** Replace the transcript with one taken by `snapshot` (instead of `seed`). */
+  restore(transcript: DriverTranscript): void;
   /** Append a user message (nudges, validation-fix requests, attachments). */
   addUserMessage(content: string | UserContent): void;
   /** Run one model turn; appends the assistant reply to the transcript. */
@@ -105,6 +120,19 @@ export interface GameDriverOptions {
   onActivity?: (event: AgentActivityEvent) => void;
   /** Aborts the in-flight request mid-stream (Stop button). */
   signal?: AbortSignal;
+}
+
+/** Deep copy through JSON: the transcript is plain data and must survive storage. */
+function copyMessages<T>(messages: T[]): T[] {
+  return JSON.parse(JSON.stringify(messages)) as T[];
+}
+
+function assertTranscriptProvider(transcript: DriverTranscript, provider: AIProviderId): void {
+  if (transcript.provider !== provider) {
+    throw new Error(
+      `Cannot resume a ${transcript.provider} transcript with the ${provider} driver`,
+    );
+  }
 }
 
 function parseJsonObject(raw: string | undefined | null): Record<string, unknown> {
@@ -278,6 +306,15 @@ class AnthropicGameDriver implements GameCodeDriver {
   seed(priorTurns: PriorTurn[] | undefined, firstUserMessage: string | UserContent): void {
     this.#messages = priorTurns?.length ? toSeedMessages(priorTurns) : [];
     this.#messages.push({ role: "user", content: toAnthropicContent(firstUserMessage) });
+  }
+
+  snapshot(): DriverTranscript {
+    return { provider: "anthropic", messages: copyMessages(this.#messages) };
+  }
+
+  restore(transcript: DriverTranscript): void {
+    assertTranscriptProvider(transcript, "anthropic");
+    this.#messages = copyMessages(transcript.messages) as Anthropic.MessageParam[];
   }
 
   addUserMessage(content: string | UserContent): void {
@@ -480,6 +517,17 @@ class XaiGameDriver implements GameCodeDriver {
       }
     }
     this.#messages.push({ role: "user", content: toXaiContent(firstUserMessage) });
+  }
+
+  snapshot(): DriverTranscript {
+    return { provider: "xai", messages: copyMessages(this.#messages) };
+  }
+
+  restore(transcript: DriverTranscript): void {
+    assertTranscriptProvider(transcript, "xai");
+    this.#messages = copyMessages(
+      transcript.messages,
+    ) as OpenAI.Chat.Completions.ChatCompletionMessageParam[];
   }
 
   addUserMessage(content: string | UserContent): void {

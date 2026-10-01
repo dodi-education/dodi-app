@@ -16,10 +16,14 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { isValidNsec } from "@dodi/crypto";
-import { authClient } from "@/lib/auth/client";
-import { fetchVaultKeys } from "@/lib/vault-client";
-import { useVaultStore } from "@/stores/vault-store";
+import { webAuthApi } from "@/lib/auth/auth-api";
+import { dodi } from "@/lib/api";
+import { clientState } from "@/lib/client-state";
+import {
+  hasStoredVault,
+  updatePassword,
+  validateNewPassword,
+} from "@dodi/client-state/password-reset";
 
 /**
  * Second step of password reset. The user arrives here from /reset-password after
@@ -45,57 +49,41 @@ export default function UpdatePasswordPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    fetchVaultKeys()
-      .then((keys) => setHasVault(keys !== null))
-      .catch(() => setHasVault(false));
+    void hasStoredVault(dodi).then(setHasVault);
   }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
 
-    if (password !== confirmPassword) {
-      setError(t("passwordsNoMatch"));
-      return;
-    }
-    if (password.length < 8) {
-      setError(t("passwordTooShort"));
-      return;
-    }
-    if (hasVault && !isValidNsec(nsec)) {
-      setError(t("invalidAccountKey"));
+    const form = {
+      password,
+      confirmPassword,
+      nsec,
+      hasVault: hasVault === true,
+    };
+    const invalid = validateNewPassword(form);
+    if (invalid) {
+      setError(t(invalid));
       return;
     }
 
     setLoading(true);
 
-    try {
-      const updateAuthPassword = async () => {
-        const { error: authError } = await authClient.$fetch("/password/set", {
-          method: "POST",
-          body: { password },
-        });
-        if (authError) {
-          throw new Error(authError.message ?? t("updatePasswordFailed"));
-        }
-      };
-
-      if (hasVault) {
-        // Verifies the nsec, updates the auth password, then re-wraps the
-        // vault — all-or-nothing on the nsec check.
-        await useVaultStore
-          .getState()
-          .resetPasswordWithNsec(nsec, password, updateAuthPassword);
-      } else {
-        await updateAuthPassword();
-      }
-
-      router.push("/parent/dashboard");
-      router.refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t("updatePasswordFailed"));
+    // With a vault: verifies the nsec, updates the auth password, then
+    // re-wraps the vault (all-or-nothing on the nsec check).
+    const outcome = await updatePassword(
+      { auth: webAuthApi, vault: clientState.vault },
+      form,
+    );
+    if (outcome.kind === "error") {
+      setError(outcome.key ? t(outcome.key) : (outcome.message ?? ""));
       setLoading(false);
+      return;
     }
+
+    router.push("/parent/dashboard");
+    router.refresh();
   }
 
   return (
