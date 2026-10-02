@@ -3,13 +3,16 @@
  * for the app on every device of the family. Saved immediately, optimistic.
  */
 import { useState } from "react";
+import { View } from "react-native";
 import { useTranslations } from "use-intl";
 import { saveInterfacePreferences } from "@dodi/client-state/account-settings";
 import { interfacePreferencesOf } from "@dodi/client-state/account-store";
 import type { InterfacePreferences } from "@dodi/types/database";
 
 import { api } from "@/adapters/platform";
-import { Card, Notice, SwitchRow } from "@/components/ui";
+import { FieldRow } from "@/components/parent/rows";
+import { Section } from "@/components/parent/section";
+import { Switch, Text } from "@/components/ui";
 import { clientState, useAccountStore } from "@/lib/client-state";
 
 export function InterfaceSettings() {
@@ -29,15 +32,22 @@ export function InterfaceSettings() {
   }
 
   return (
-    <Card title={t("interfaceTitle")} description={t("interfaceDescription")}>
-      <SwitchRow
-        label={t("enable3d")}
-        description={t("enable3dHint")}
-        value={is3dEnabled}
-        disabled={!isLoaded || isSaving}
-        onValueChange={(next) => void saveToggle({ is_3d_enabled: next })}
-      />
-      {error ? <Notice tone="danger">{error}</Notice> : null}
-    </Card>
+    <Section title={t("interfaceTitle")} desc={t("interfaceDescription")}>
+      <FieldRow label={t("enable3d")} hint={t("enable3dHint")}>
+        <Switch
+          checked={is3dEnabled}
+          disabled={!isLoaded || isSaving}
+          onCheckedChange={(next) => void saveToggle({ is_3d_enabled: next })}
+          accessibilityLabel={t("enable3d")}
+        />
+      </FieldRow>
+      {error ? (
+        <View className="px-5 py-3">
+          <Text className="text-sm text-danger" accessibilityRole="alert">
+            {error}
+          </Text>
+        </View>
+      ) : null}
+    </Section>
   );
 }

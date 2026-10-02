@@ -58,4 +58,11 @@ describe("buildSandboxSrcDoc", () => {
     expect(blockIdx).toBeLessThan(shimIdx);
     expect(shimIdx).toBeLessThan(gameScriptIdx);
   });
+
+  it("routes outgoing messages to a native WebView host only when one exists", () => {
+    const doc = buildSandboxSrcDoc(BUNDLE);
+    const bridgeIdx = doc.indexOf("window.ReactNativeWebView&&window.parent===window");
+    expect(bridgeIdx).toBeGreaterThan(-1);
+    expect(bridgeIdx).toBeLessThan(doc.indexOf("console.log('game')"));
+  });
 });

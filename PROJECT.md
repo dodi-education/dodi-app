@@ -441,6 +441,16 @@ parent-defined goal — and, in future, generate challenges like "Solve 3 math g
 
 ## TODO
 
+- Add a "Playground" feature in kid view where kids can customize their character
+ - Kids should be able to learn their characters new tricks (e.g. new animations)
+ - Customize character look (colors, accessories)
+ - /home could become the "Playground" with a "masks-theater" side badge to switch between normal mode and playground mode which fades in tools to customize the character
+
+ - Add possibility to assign a character model to a persona
+ - Add kid setting canChangeCharacterModel
+
+- Add Timestamps to game agent chat entries
+
 - Add an API and/or MCP service for creating games.
 
 - Implement plan limits

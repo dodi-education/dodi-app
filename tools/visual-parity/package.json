@@ -1,0 +1,23 @@
+{
+  "name": "@dodi/visual-parity",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "capture:web": "tsx src/cli.ts web",
+    "capture:native": "tsx src/cli.ts native",
+    "report": "tsx src/cli.ts report",
+    "all": "tsx src/cli.ts all",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "playwright": "1.63.0",
+    "tsx": "4.23.13",
+    "typescript": "^5",
+    "vitest": "^4.1.8",
+    "yaml": "^2.8.1"
+  }
+}

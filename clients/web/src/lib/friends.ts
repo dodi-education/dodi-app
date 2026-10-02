@@ -1,439 +1,109 @@
 /**
- * Client-side friends layer: bridges the platform API with the E2EE friend-card
- * crypto. The server is blind — names/birthdates travel as `SealedEnvelope`
- * blobs that only the recipient kid's kid key can open, so all sealing and
- * opening happens here in the browser.
+ * Client-side friends layer: the shared `@dodi/client-state/friends` (E2EE
+ * friend cards, requests, lists) and `friend-approvals` (the parent's
+ * approvals) bound to this app's platform API. The app-facing names and
+ * signatures stay unchanged. The server is blind: names/birthdates travel as
+ * `SealedEnvelope` blobs only the recipient kid's kid key can open.
  */
-import {
-  type KidFriendKeys,
-  type SealedEnvelope,
-  generateKidFriendKeys,
-  openFriendCard,
-  publishedFriendKeys,
-  sealFriendCard,
-  unwrapKidSecretKeys,
-  wrapKidSecretKeys,
-} from "@dodi/protocol";
-import type {
-  FriendCard,
-  FriendPreviewCard,
-  Json,
-  Kid,
-} from "@dodi/types/database";
+import type { KidFriendKeys } from "@dodi/protocol";
+import * as approvals from "@dodi/client-state/friend-approvals";
+import * as friends from "@dodi/client-state/friends";
+import type { Kid } from "@dodi/types/database";
 import type { VaultSession } from "@dodi/vault";
 
 import { dodi } from "@/lib/api";
 
-export type FriendshipStatus =
-  | "pending"
-  | "awaiting_parent"
-  | "accepted"
-  | "rejected"
-  | "blocked";
-
-/** Raw friendship view as returned by the platform API. */
-export interface FriendshipView {
-  id: string;
-  status: FriendshipStatus;
-  role: "requester" | "addressee";
-  counterpartKidId: string;
-  counterpartSocialId: string | null;
-  counterpartSignPublicKey: string | null;
-  counterpartKemPublicKey: string | null;
-  card: string | null;
-  cardKind: "preview" | "full" | null;
-  nickname: string | null;
-  myParentPending: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface FriendTarget {
-  kidId: string;
-  kemPublicKey: string;
-  signPublicKey: string;
-}
-
-export interface PendingApproval {
-  friendshipId: string;
-  side: "requester" | "addressee";
-  kidId: string;
-  counterpartKidId: string;
-  counterpartSocialId: string | null;
-  counterpartSignPublicKey: string | null;
-  /** Requester's nickname ciphertext — set for outgoing (requester-side) approvals. */
-  nickname: string | null;
-  /** Requester's sealed preview card — set for incoming (addressee-side) approvals. */
-  previewCard: string | null;
-  createdAt: string;
-}
-
-/** A friendship decoded for rendering — the counterpart's identity opened from the sealed card. */
-export interface DecodedFriend {
-  id: string;
-  status: FriendshipStatus;
-  role: "requester" | "addressee";
-  /** Counterpart's public friend code (displayed as-is — no prefix). */
-  handle: string | null;
-  /** Counterpart's name, once a card has been delivered. */
-  name: string | null;
-  /** The requester's own private nickname for this friend (always set on requests they sent). */
-  nickname: string | null;
-  /** Counterpart's birthdate, once the full card has been delivered (accepted). */
-  birthdate: string | null;
-  avatarConfig: Json | null;
-  counterpartKemPublicKey: string | null;
-  /** While awaiting_parent: is this kid's own parent still the one to approve? */
-  myParentPending: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export class FriendsError extends Error {
-  constructor(
-    message: string,
-    readonly status?: number,
-  ) {
-    super(message);
-    this.name = "FriendsError";
-  }
-}
-
-async function jsonRequest<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await dodi.request(path, {
-    ...init,
-    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
-  });
-  if (!res.ok) {
-    let message = "Request failed";
-    try {
-      const body = (await res.json()) as { error?: string };
-      if (body.error) message = body.error;
-    } catch {
-      // non-JSON error body
-    }
-    throw new FriendsError(message, res.status);
-  }
-  if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
-}
-
-// ---------------------------------------------------------------------------
-// Handles
-// ---------------------------------------------------------------------------
-
-/**
- * Normalize a typed/pasted friend code to a bare social_id. Codes are canonically
- * UPPERCASE (see `generateSocialId`), so we uppercase here to make lookups
- * case-insensitive for the kid — they can type lowercase and still match. We also
- * tolerate a stray leading `@` in case someone pastes an older-style code.
- */
-export function normalizeHandle(raw: string): string {
-  return raw.trim().replace(/^@+/, "").toUpperCase();
-}
-
-/** Null-safe display of a social_id (the bare friend code, no prefix). */
-export function formatHandle(socialId: string | null | undefined): string {
-  return socialId ?? "";
-}
-
-/**
- * Extract a friend code from a scanned QR value. Dodi codes encode a deep link
- * (`…/friends?add=<code>`); we also accept a bare handle so a hand-typed or
- * third-party code still works. Returns "" if there's nothing usable.
- */
-export function parseScannedCode(value: string): string {
-  const raw = value.trim();
-  try {
-    const add = new URL(raw).searchParams.get("add");
-    if (add) return normalizeHandle(add);
-  } catch {
-    // Not a URL — treat the whole value as a handle.
-  }
-  return normalizeHandle(raw);
-}
-
-// ---------------------------------------------------------------------------
-// Keys + cards
-// ---------------------------------------------------------------------------
+export {
+  type CardRefreshTarget,
+  type DecodedFriend,
+  type FriendshipStatus,
+  type FriendshipView,
+  type FriendTarget,
+  FriendsError,
+  decodeView,
+  formatHandle,
+  normalizeHandle,
+  parseScannedCode,
+} from "@dodi/client-state/friends";
+export {
+  type PendingApproval,
+  readApprovalCounterpart,
+} from "@dodi/client-state/friend-approvals";
 
 /** Ensure the active kid has friend keys; generate + publish on first use. */
-export async function ensureFriendKeys(
-  kid: Kid,
-  session: VaultSession,
-): Promise<KidFriendKeys> {
-  if (kid.friend_secret_keys) {
-    return unwrapKidSecretKeys(session, kid.friend_secret_keys);
-  }
-  const keys = generateKidFriendKeys();
-  const published = publishedFriendKeys(keys);
-  const sealedSecretKeys = wrapKidSecretKeys(session, keys);
-  await jsonRequest(`/api/kids/${kid.id}/friend-keys`, {
-    method: "POST",
-    body: JSON.stringify({
-      kemPublicKey: published.kemPublicKey,
-      signPublicKey: published.signPublicKey,
-      sealedSecretKeys,
-    }),
-  });
-  return keys;
+export function ensureFriendKeys(kid: Kid, session: VaultSession): Promise<KidFriendKeys> {
+  return friends.ensureFriendKeys(dodi, kid, session);
 }
 
-function buildCards(kid: Kid): {
-  preview: FriendPreviewCard;
-  full: FriendCard;
-} {
-  const preview: FriendPreviewCard = {
-    displayName: kid.display_name,
-    avatarConfig: kid.avatar_config,
-  };
-  return { preview, full: { ...preview, birthdate: kid.birthdate } };
-}
-
-/** Open the sealed card the server delivered to me, plus my own private label. */
-export function decodeView(
-  view: FriendshipView,
-  myKeys: KidFriendKeys,
-  session?: VaultSession,
-): DecodedFriend {
-  let name: string | null = null;
-  let birthdate: string | null = null;
-  let avatarConfig: Json | null = null;
-  if (view.card) {
-    try {
-      const envelope = JSON.parse(view.card) as SealedEnvelope;
-      const card = openFriendCard<FriendCard>(
-        myKeys.kem.secretKey,
-        envelope,
-        view.counterpartSignPublicKey ?? undefined,
-      );
-      name = card.displayName ?? null;
-      birthdate = card.birthdate ?? null;
-      avatarConfig = card.avatarConfig ?? null;
-    } catch {
-      // Couldn't open (key mismatch / tampered) — fall back to handle only.
-    }
-  }
-  let nickname: string | null = null;
-  if (view.nickname && session) {
-    try {
-      nickname = session.decryptField(view.nickname);
-    } catch {
-      // Nickname unreadable — ignore.
-    }
-  }
-  return {
-    id: view.id,
-    status: view.status,
-    role: view.role,
-    handle: view.counterpartSocialId,
-    name,
-    nickname,
-    birthdate,
-    avatarConfig,
-    counterpartKemPublicKey: view.counterpartKemPublicKey,
-    myParentPending: view.myParentPending,
-    createdAt: view.createdAt,
-    updatedAt: view.updatedAt,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// API calls
-// ---------------------------------------------------------------------------
-
-export function lookupTarget(socialId: string): Promise<FriendTarget> {
-  return jsonRequest<FriendTarget>("/api/friends/lookup", {
-    method: "POST",
-    body: JSON.stringify({ socialId }),
-  });
+export function lookupTarget(socialId: string): Promise<friends.FriendTarget> {
+  return friends.lookupTarget(dodi, socialId);
 }
 
 /** Look up a friend by code, seal both cards to them, and send the request. */
-export async function sendFriendRequest(
+export function sendFriendRequest(
   kid: Kid,
   session: VaultSession,
   rawHandle: string,
   nickname: string,
 ): Promise<void> {
-  const socialId = normalizeHandle(rawHandle);
-  // Catch self-adds here: lookup only returns discoverable kids, so your own
-  // code would otherwise come back as "not found" before the server's self-check.
-  if (socialId === normalizeHandle(kid.social_id)) {
-    throw new FriendsError("cannot_add_self");
-  }
-  const keys = await ensureFriendKeys(kid, session);
-  const target = await lookupTarget(socialId);
-  const { preview, full } = buildCards(kid);
-  const previewCard = JSON.stringify(
-    sealFriendCard(target.kemPublicKey, preview, keys.sign),
-  );
-  const fullCard = JSON.stringify(
-    sealFriendCard(target.kemPublicKey, full, keys.sign),
-  );
-  // The nickname is the requester's own — sealed under their VMK, never shared.
-  await jsonRequest("/api/friends/request", {
-    method: "POST",
-    body: JSON.stringify({
-      requesterKidId: kid.id,
-      targetKidId: target.kidId,
-      previewCard,
-      fullCard,
-      nickname: session.encryptField(nickname.trim()),
-    }),
-  });
-  const { logKidActivity } = await import("@/lib/activities/log-activity");
-  logKidActivity({
-    kidId: kid.id,
-    event: "friend_request_sent",
-    message: "Friend request sent",
-  });
+  return friends.sendFriendRequest(dodi, kid, session, rawHandle, nickname);
 }
 
-/** A friendship whose card this kid seals, plus the key to re-seal it. */
-export interface CardRefreshTarget {
-  friendshipId: string;
-  side: "requester" | "addressee";
-  counterpartKemPublicKey: string | null;
-}
-
-export function fetchCardRefreshTargets(
-  kidId: string,
-): Promise<CardRefreshTarget[]> {
-  return jsonRequest<CardRefreshTarget[]>(
-    `/api/friends/card-targets?kidId=${encodeURIComponent(kidId)}`,
-  );
+export function fetchCardRefreshTargets(kidId: string): Promise<friends.CardRefreshTarget[]> {
+  return friends.fetchCardRefreshTargets(dodi, kidId);
 }
 
 /**
- * Re-seal this kid's shared card (name / avatar / birthdate) to every friend
- * so their lists always show current data. Call after editing any shared field.
- * No-op when the kid has no friendships, so it never forces friend-key
- * creation. Requires a DECRYPTED kid (display_name/avatar_config/birthdate).
+ * Re-seal this kid's shared card (name / avatar / birthdate) to every friend.
+ * Call after editing any shared field. Requires a DECRYPTED kid.
  */
-export async function refreshFriendCards(
-  kid: Kid,
-  session: VaultSession,
-): Promise<void> {
-  const targets = await fetchCardRefreshTargets(kid.id);
-  if (targets.length === 0) return;
-  const keys = await ensureFriendKeys(kid, session);
-  const { preview, full } = buildCards(kid);
-  const cards = targets
-    .filter((t) => t.counterpartKemPublicKey)
-    .map((t) => {
-      const kem = t.counterpartKemPublicKey as string;
-      const card = JSON.stringify(sealFriendCard(kem, full, keys.sign));
-      // The requester's name+avatar also travel in the preview (shown pre-accept);
-      // the addressee only ever has the full card.
-      return t.side === "requester"
-        ? {
-            friendshipId: t.friendshipId,
-            previewCard: JSON.stringify(sealFriendCard(kem, preview, keys.sign)),
-            card,
-          }
-        : { friendshipId: t.friendshipId, card };
-    });
-  if (cards.length === 0) return;
-  await jsonRequest("/api/friends/refresh-cards", {
-    method: "POST",
-    body: JSON.stringify({ kidId: kid.id, cards }),
-  });
+export function refreshFriendCards(kid: Kid, session: VaultSession): Promise<void> {
+  return friends.refreshFriendCards(dodi, kid, session);
 }
 
-export function fetchFriends(kidId: string): Promise<FriendshipView[]> {
-  return jsonRequest<FriendshipView[]>(
-    `/api/friends?kidId=${encodeURIComponent(kidId)}`,
-  );
+export function fetchFriends(kidId: string): Promise<friends.FriendshipView[]> {
+  return friends.fetchFriends(dodi, kidId);
 }
 
 export function fetchRequests(
   kidId: string,
   direction: "incoming" | "outgoing",
-): Promise<FriendshipView[]> {
-  return jsonRequest<FriendshipView[]>(
-    `/api/friends/requests?kidId=${encodeURIComponent(kidId)}&direction=${direction}`,
-  );
+): Promise<friends.FriendshipView[]> {
+  return friends.fetchRequests(dodi, kidId, direction);
 }
 
-export function fetchBlocked(kidId: string): Promise<FriendshipView[]> {
-  return jsonRequest<FriendshipView[]>(
-    `/api/friends/blocked?kidId=${encodeURIComponent(kidId)}`,
-  );
+export function fetchBlocked(kidId: string): Promise<friends.FriendshipView[]> {
+  return friends.fetchBlocked(dodi, kidId);
 }
 
 /** Accept an incoming request: seal my card to the requester and confirm. */
-export async function acceptRequest(
+export function acceptRequest(
   friendshipId: string,
   counterpartKemPublicKey: string | null,
   kid: Kid,
   myKeys: KidFriendKeys,
 ): Promise<void> {
-  if (!counterpartKemPublicKey) {
-    throw new FriendsError("Missing the other kid's key");
-  }
-  const { full } = buildCards(kid);
-  const addresseeCard = JSON.stringify(
-    sealFriendCard(counterpartKemPublicKey, full, myKeys.sign),
-  );
-  await jsonRequest(`/api/friends/${friendshipId}/respond`, {
-    method: "POST",
-    body: JSON.stringify({ kidId: kid.id, action: "accept", addresseeCard }),
-  });
-  const { logKidActivity } = await import("@/lib/activities/log-activity");
-  logKidActivity({
-    kidId: kid.id,
-    event: "friend_request_accepted",
-    message: "Friend request accepted",
-  });
+  return friends.acceptRequest(dodi, friendshipId, counterpartKemPublicKey, kid, myKeys);
 }
 
-export function rejectRequest(
-  friendshipId: string,
-  kidId: string,
-): Promise<void> {
-  return jsonRequest(`/api/friends/${friendshipId}/respond`, {
-    method: "POST",
-    body: JSON.stringify({ kidId, action: "reject" }),
-  });
+export function rejectRequest(friendshipId: string, kidId: string): Promise<void> {
+  return friends.rejectRequest(dodi, friendshipId, kidId);
 }
 
-export function removeFriend(
-  friendshipId: string,
-  kidId: string,
-): Promise<void> {
-  return jsonRequest(`/api/friends/${friendshipId}/remove`, {
-    method: "POST",
-    body: JSON.stringify({ kidId }),
-  });
+export function removeFriend(friendshipId: string, kidId: string): Promise<void> {
+  return friends.removeFriend(dodi, friendshipId, kidId);
 }
 
-export function blockFriend(
-  friendshipId: string,
-  kidId: string,
-): Promise<void> {
-  return jsonRequest(`/api/friends/${friendshipId}/block`, {
-    method: "POST",
-    body: JSON.stringify({ kidId }),
-  });
+export function blockFriend(friendshipId: string, kidId: string): Promise<void> {
+  return friends.blockFriend(dodi, friendshipId, kidId);
 }
 
-export function unblockFriend(
-  friendshipId: string,
-  kidId: string,
-): Promise<void> {
-  return jsonRequest(`/api/friends/${friendshipId}/unblock`, {
-    method: "POST",
-    body: JSON.stringify({ kidId }),
-  });
+export function unblockFriend(friendshipId: string, kidId: string): Promise<void> {
+  return friends.unblockFriend(dodi, friendshipId, kidId);
 }
 
-// ---------------------------------------------------------------------------
-// Parent approvals
-// ---------------------------------------------------------------------------
-
-export function fetchApprovals(): Promise<PendingApproval[]> {
-  return jsonRequest<PendingApproval[]>("/api/friends/approvals");
+export function fetchApprovals(): Promise<approvals.PendingApproval[]> {
+  return approvals.fetchApprovals(dodi);
 }
 
 export function setApproval(
@@ -441,40 +111,5 @@ export function setApproval(
   side: "requester" | "addressee",
   approve: boolean,
 ): Promise<void> {
-  return jsonRequest(`/api/friends/${friendshipId}/approve`, {
-    method: "POST",
-    body: JSON.stringify({ side, approve }),
-  });
-}
-
-/**
- * Resolve the counterpart's display name for a pending approval, client-side:
- * outgoing rows carry the kid's nickname (sealed under this account's VMK);
- * incoming rows carry the requester's preview card (opened with the kid's friend
- * keys, also under this account's VMK). Returns null if it can't be read, so the
- * caller can fall back to the public handle.
- */
-export function readApprovalCounterpart(
-  session: VaultSession,
-  approval: PendingApproval,
-  kidSecretKeys: string | null,
-): string | null {
-  try {
-    if (approval.side === "requester") {
-      return approval.nickname ? session.decryptField(approval.nickname) : null;
-    }
-    if (approval.previewCard && kidSecretKeys) {
-      const keys = unwrapKidSecretKeys(session, kidSecretKeys);
-      const envelope = JSON.parse(approval.previewCard) as SealedEnvelope;
-      const card = openFriendCard<FriendPreviewCard>(
-        keys.kem.secretKey,
-        envelope,
-        approval.counterpartSignPublicKey ?? undefined,
-      );
-      return card.displayName?.trim() || null;
-    }
-  } catch {
-    // Unreadable (locked vault / key mismatch) — caller falls back to the handle.
-  }
-  return null;
+  return approvals.setApproval(dodi, friendshipId, side, approve);
 }

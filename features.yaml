@@ -105,76 +105,100 @@ features:
     area: parent
     title: Kid profiles (list, create, edit)
     web: done
-    mobile: planned
-    phase: 4
+    mobile: done
     core: [client-state, vault]
     web_paths:
       - "clients/web/src/app/parent/kids/page.tsx"
       - "clients/web/src/app/parent/kids/new/page.tsx"
       - "clients/web/src/app/parent/kids/[id]/page.tsx"
+    mobile_paths:
+      - "clients/mobile/src/app/parent/kids/index.tsx"
+      - "clients/mobile/src/app/parent/kids/new.tsx"
+      - "clients/mobile/src/app/parent/kids/[id]/index.tsx"
 
   - id: parent.kid-memory
     area: parent
     title: Kid memory dossier (read and edit)
     web: done
-    mobile: planned
-    phase: 4
+    mobile: done
     core: [vault]
     web_paths: ["clients/web/src/app/parent/kids/[id]/memory/page.tsx"]
+    mobile_paths:
+      - "clients/mobile/src/app/parent/kids/[id]/memory.tsx"
 
   - id: parent.personas
     area: parent
     title: Companion personas (soul documents)
     web: done
-    mobile: planned
-    phase: 4
+    mobile: done
     core: [vault]
     web_paths:
       - "clients/web/src/app/parent/personas/page.tsx"
       - "clients/web/src/app/parent/personas/new/page.tsx"
       - "clients/web/src/app/parent/personas/[id]/page.tsx"
+    mobile_paths:
+      - "clients/mobile/src/app/parent/personas/index.tsx"
+      - "clients/mobile/src/app/parent/personas/new.tsx"
+      - "clients/mobile/src/app/parent/personas/[id].tsx"
 
   - id: parent.games
     area: parent
     title: Game library, Discover, publishing and sharing
     web: done
-    mobile: planned
-    phase: 3
+    mobile: done
     core: [client-state, games]
     web_paths:
       - "clients/web/src/app/parent/games/page.tsx"
       - "clients/web/src/app/parent/games/[id]/page.tsx"
+    mobile_paths:
+      - "clients/mobile/src/app/parent/games/index.tsx"
+      - "clients/mobile/src/app/parent/games/[id].tsx"
+    notes: >-
+      The app exports through the OS share sheet and imports with the document
+      picker (the web downloads a file and uses a file input); row menus open as
+      a bottom sheet.
 
   - id: parent.game-studio
     area: parent
     title: Game Studio (plan, build, edit, versions)
     web: done
-    mobile: planned
-    phase: 3
+    mobile: done
     core: [studio, ai, games, client-state]
     web_paths:
       - "clients/web/src/app/parent/game-studio/new/page.tsx"
       - "clients/web/src/app/parent/game-studio/[id]/[[...tab]]/page.tsx"
       - "clients/web/src/components/parent/games/game-studio.tsx"
+    mobile_paths:
+      - "clients/mobile/src/app/parent/game-studio/new.tsx"
+      - "clients/mobile/src/app/parent/game-studio/[id]/index.tsx"
+      - "clients/mobile/src/app/parent/game-studio/[id]/[tab].tsx"
+      - "clients/mobile/src/components/studio/game-studio.tsx"
+    notes: >-
+      The app has the phone layout only. Its code view is read-only (no
+      CodeMirror, so no manual code edits) and has no syntax highlighting.
 
   - id: parent.game-studio.resume
     area: parent
     title: Resume an interrupted build from its on-device checkpoint
     web: done
-    mobile: planned
-    phase: 3
+    mobile: done
     core: [studio, ai]
     web_paths:
       - "clients/web/src/lib/games/build-checkpoint-store.ts"
       - "clients/web/src/stores/studio-build-store.ts"
+    mobile_paths:
+      - "clients/mobile/src/adapters/checkpoint-store.ts"
+      - "clients/mobile/src/lib/studio-build-store.ts"
 
   - id: parent.game-studio.background-build
     area: parent
     title: Builds keep running while the parent uses other apps
     web: n/a
     mobile: mobile-only
-    phase: 3
     core: [studio]
+    mobile_paths:
+      - "clients/mobile/modules/background-build/index.ts"
+      - "clients/mobile/src/lib/background-build.tsx"
     notes: >-
       A browser tab can't run in the background. The web keeps builds alive
       across in-app navigation (BuildActivityHost) and resumes them after a
@@ -184,36 +208,43 @@ features:
     area: parent
     title: Activity feed
     web: done
-    mobile: planned
-    phase: 4
+    mobile: done
     web_paths: ["clients/web/src/app/parent/activities/page.tsx"]
+    mobile_paths:
+      - "clients/mobile/src/app/parent/activities.tsx"
 
   - id: parent.snapshots
     area: parent
     title: Snapshot gallery (parent)
     web: done
-    mobile: planned
-    phase: 4
+    mobile: done
     web_paths: ["clients/web/src/app/parent/snapshots/page.tsx"]
+    mobile_paths:
+      - "clients/mobile/src/app/parent/snapshots.tsx"
+    notes: >-
+      Export opens the OS share sheet, import the document picker.
 
   - id: parent.usage
     area: parent
     title: AI usage and dodi AI balance
     web: done
-    mobile: planned
-    phase: 4
+    mobile: done
     core: [client-state]
     web_paths: ["clients/web/src/app/parent/usage/page.tsx"]
+    mobile_paths:
+      - "clients/mobile/src/app/parent/usage.tsx"
 
   - id: parent.event-logs
     area: parent
     title: Event logs
     web: done
-    mobile: planned
-    phase: 4
+    mobile: done
     web_paths: ["clients/web/src/app/parent/event-logs/page.tsx"]
 
   # ----- Settings -------------------------------------------------------------
+    mobile_paths:
+      - "clients/mobile/src/app/parent/event-logs.tsx"
+
   - id: settings.general
     area: settings
     title: General settings (language, date format, interface)
@@ -262,10 +293,10 @@ features:
     area: settings
     title: Game Studio settings (screenshot service)
     web: done
-    mobile: planned
-    phase: 3
+    mobile: done
     core: [client-state, games]
     web_paths: ["clients/web/src/app/parent/settings/game-studio/page.tsx"]
+    mobile_paths: ["clients/mobile/src/app/parent/settings/game-studio.tsx"]
 
   - id: settings.notifications
     area: settings
@@ -283,57 +314,80 @@ features:
     area: kid
     title: Kid home with the companion
     web: done
-    mobile: planned
-    phase: 4
+    mobile: done
     core: [client-state]
     web_paths: ["clients/web/src/app/(kid)/home/page.tsx"]
+    mobile_paths:
+      - "clients/mobile/src/app/(kid)/home.tsx"
+      - "clients/mobile/src/app/(kid)/_layout.tsx"
 
   - id: kid.games
     area: kid
     title: Kid game library and play (sandboxed)
     web: done
-    mobile: planned
-    phase: 3
+    mobile: done
     core: [client-state, games]
     web_paths:
       - "clients/web/src/app/(kid)/games/page.tsx"
       - "clients/web/src/app/(kid)/games/[id]/page.tsx"
+    mobile_paths:
+      - "clients/mobile/src/app/(kid)/games/index.tsx"
+      - "clients/mobile/src/app/(kid)/games/[id].tsx"
+    notes: >-
+      The web's large-screen companion panel (DodiFullGame) has no phone
+      layout; the app drives the companion from the chrome, as the web does on
+      phones.
 
   - id: kid.friends
     area: kid
     title: Friends (E2EE friend cards)
     web: done
-    mobile: planned
-    phase: 4
+    mobile: done
     core: [protocol, vault]
     web_paths: ["clients/web/src/app/(kid)/friends/page.tsx"]
+    mobile_paths:
+      - "clients/mobile/src/app/(kid)/friends.tsx"
 
   - id: kid.snapshots
     area: kid
     title: Snapshots (kid view, replay)
     web: done
-    mobile: planned
-    phase: 4
+    mobile: done
     web_paths:
       - "clients/web/src/app/(kid)/snapshots/page.tsx"
       - "clients/web/src/app/(kid)/snapshots/[id]/page.tsx"
+    mobile_paths:
+      - "clients/mobile/src/app/(kid)/snapshots/index.tsx"
+      - "clients/mobile/src/app/(kid)/snapshots/[id].tsx"
 
   - id: kid.voice
     area: kid
     title: Voice conversation with the companion
     web: done
-    mobile: planned
-    phase: 5
-    core: [ai]
+    mobile: done
+    core: [ai, client-state]
     web_paths: ["clients/web/src/stores/dodi-session-store.ts"]
+    mobile_paths:
+      - "clients/mobile/src/lib/dodi-session-store.ts"
+      - "clients/mobile/src/adapters/audio-port.ts"
+    notes: >-
+      The app talks only while it is in the foreground (backgrounding ends the
+      session). Echo cancellation: iOS voice processing on the audio engine and
+      Android's VoiceCommunication input (patches/react-native-audio-api).
+      The web's large-screen game panel (DodiFullGame) has no phone layout, so
+      the app doesn't show it.
 
   - id: kid.character-3d
     area: kid
     title: Animated 3D companion
     web: done
-    mobile: planned
-    phase: 5
+    mobile: done
+    core: [character]
     web_paths: ["clients/web/src/components/dodi/dodi-character-3d.tsx"]
+    mobile_paths: ["clients/mobile/src/components/dodi/character-3d.tsx"]
+    notes: >-
+      The app renders with expo-gl (no supersampling, no pinch zoom) and falls
+      back to an inverted-hull outline where the edge pass can't run.
 
   - id: kid.offline
     area: kid
@@ -358,7 +412,7 @@ features:
     title: Local notifications (build finished, build paused)
     web: n/a
     mobile: mobile-only
-    phase: 3
+    mobile_paths: ["clients/mobile/src/lib/background-build.tsx"]
     notes: Browser notifications are out of scope; the web studio shows outcomes in place.
 
   - id: mobile.share-sheet

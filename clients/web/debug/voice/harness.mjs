@@ -3,7 +3,7 @@
  * Voice-session reproduction / debugging harness for the Gemini Live companion.
  *
  * Connects to the Gemini Live API over WebSocket exactly like the app's
- * `clients/web/src/lib/ai/gemini-live-client.ts`, using the real game-voice
+ * `core/ai/src/voice/gemini-live-client.ts`, using the real game-voice
  * system instruction + tool declarations (mirrored from
  * `core/ai/src/dodi-context.ts` and the Drawing briefing in
  * the system-game rows of the schema baseline). It drives the "draw a dog"

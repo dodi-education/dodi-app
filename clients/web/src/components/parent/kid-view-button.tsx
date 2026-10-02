@@ -1,11 +1,12 @@
 "use client";
 
-import { clearParentUnlocked } from "@/lib/parent-lock";
-import { useKidStore } from "@/stores/kid-store";
 import { useTranslations } from "next-intl";
+import { enterKidView } from "@dodi/client-state/kid-view";
 
 import { Icon } from "@/components/shared/icon";
-import type { Kid } from "@dodi/types/database";
+import { readActiveKidCookie, writeActiveKidCookies } from "@/lib/active-kid";
+import { clientState } from "@/lib/client-state";
+import { clearParentUnlocked, markParentUnlocked } from "@/lib/parent-lock";
 
 export function KidViewButton({ compact = false }: { compact?: boolean }) {
   const t = useTranslations("nav");
@@ -17,28 +18,20 @@ export function KidViewButton({ compact = false }: { compact?: boolean }) {
       return;
     }
     e.preventDefault();
-    // Resolve the active kid's language from the shared kid cache (usually
-    // already loaded by the parent area — no extra fetch).
-    let kids: Kid[] = [];
-    try {
-      kids = await useKidStore.getState().loadList();
-    } catch {
-      // Vault locked / fetch failed — switch views anyway, like before.
-    }
-    if (kids.length > 0) {
-      // Keep the last-used kid if it still exists, otherwise default to first
-      const existing = document.cookie.match(
-        /(?:^|; )dodi-active-kid=([^;]*)/,
-      );
-      const lastUsedId = existing ? decodeURIComponent(existing[1]) : null;
-      const kid = kids.find((p) => p.id === lastUsedId) ?? kids[0];
-      document.cookie = `dodi-active-kid=${kid.id}; path=/; max-age=86400`;
-      const kidLocale = kid.language ?? "en";
-      document.cookie = `dodi-kid-locale=${kidLocale}; path=/; max-age=86400`;
-    }
+    // Keep the last-used kid if it still exists, otherwise default to the
+    // first; persists it (+ its language) in the kid cookies. Leaving for kid
+    // view re-locks the parent area on this device. A locked vault / failed
+    // fetch switches views anyway.
+    await enterKidView({
+      kids: clientState.kids,
+      persistence: {
+        readActiveKidId: readActiveKidCookie,
+        writeActiveKid: (kid) =>
+          writeActiveKidCookies({ id: kid.id, language: kid.language ?? "en" }),
+      },
+      parentLock: { markUnlocked: markParentUnlocked, clear: clearParentUnlocked },
+    });
     document.cookie = "dodi-view=kid; path=/; max-age=86400";
-    // Leaving for kid view re-locks the parent area on this device.
-    clearParentUnlocked();
     // Full-document navigation, not router.push + refresh. The UI locale is
     // resolved server-side in the root layout from the cookies set above (see
     // i18n/resolve-locale.ts). Parent and kid routes share that root layout, so

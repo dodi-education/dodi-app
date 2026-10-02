@@ -1,26 +1,18 @@
 import { useEffect, useState } from "react";
 import { useTranslations } from "use-intl";
-import { persistLanguage } from "@dodi/client-state/onboarding";
-import { SUPPORTED_LOCALES, type Locale } from "@dodi/intl/locales";
 
 import { mobileAuthApi } from "@/adapters/auth";
-import { api } from "@/adapters/platform";
-import { FieldRow } from "@/components/settings/field-row";
+import { FieldRow } from "@/components/parent/rows";
+import { Section } from "@/components/parent/section";
 import { DateTimeSettings } from "@/components/settings/date-time-settings";
 import { InterfaceSettings } from "@/components/settings/interface-settings";
-import { Card, Screen, Text } from "@/components/ui";
-import { Badge } from "@/components/ui/badge";
-import { ChoiceList } from "@/components/ui/choice-list";
-import { clientState, useAccountStore } from "@/lib/client-state";
-import { useLocaleSetting } from "@/lib/intl";
+import { LanguageSwitcher } from "@/components/settings/language-switcher";
+import { Badge, Text } from "@/components/ui";
+import { useAccountStore } from "@/lib/client-state";
 
-/** Native language names. */
-const LOCALE_NAMES: Record<Locale, string> = { en: "English", de: "Deutsch" };
-
-/** General settings (web: parent/settings/general): account, interface, date and time. */
+/** General settings (web: parent/settings/general/page): account, interface, date and time. */
 export default function GeneralSettingsScreen() {
   const t = useTranslations("settings");
-  const { locale, setLocale } = useLocaleSetting();
   const tier = useAccountStore((s) => s.account?.subscribed_plan ?? "egg");
   const loadAccount = useAccountStore((s) => s.load);
   // Email and id from the auth session: display only.
@@ -40,36 +32,31 @@ export default function GeneralSettingsScreen() {
     };
   }, [loadAccount]);
 
-  /** This device switches now; the account carries it to the others. */
-  function changeLocale(next: Locale): void {
-    if (next === locale) return;
-    setLocale(next);
-    void persistLanguage({ api, account: clientState.account }, next);
-  }
-
   return (
-    <Screen>
-      <Card title={t("accountTitle")} description={t("accountDescription")}>
+    <>
+      <Section title={t("accountTitle")} desc={t("accountDescription")}>
         <FieldRow label={t("email")}>
-          <Text selectable>{user?.email ?? ""}</Text>
+          <Text selectable className="text-sm text-ink-2">
+            {user?.email ?? ""}
+          </Text>
+        </FieldRow>
+        <FieldRow label={t("language")}>
+          <LanguageSwitcher />
         </FieldRow>
         <FieldRow label={t("subscription")}>
-          <Badge label={t("tierLabel", { tier: tier.charAt(0).toUpperCase() + tier.slice(1) })} />
+          {/* web: className="capitalize" on the badge */}
+          <Badge variant="gray">{t("tierLabel", { tier: tier.charAt(0).toUpperCase() + tier.slice(1) })}</Badge>
         </FieldRow>
         <FieldRow label={t("accountId")}>
-          <Text selectable variant="muted" className="font-mono">
+          <Text selectable className="font-mono text-[12.5px] text-muted-foreground">
             {user?.id ?? ""}
           </Text>
         </FieldRow>
-        <ChoiceList
-          label={t("language")}
-          choices={SUPPORTED_LOCALES.map((l) => ({ value: l, label: LOCALE_NAMES[l] }))}
-          value={locale}
-          onChange={changeLocale}
-        />
-      </Card>
+      </Section>
+
       <InterfaceSettings />
+
       <DateTimeSettings />
-    </Screen>
+    </>
   );
 }

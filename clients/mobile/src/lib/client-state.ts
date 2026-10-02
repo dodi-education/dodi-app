@@ -20,3 +20,4 @@ export const useDodiAIBillingStore = bindStore(clientState.dodiAIBilling);
 export const useConnectivityStore = bindStore(clientState.connectivity);
 export const useActiveKidStore = bindStore(clientState.activeKid);
 export const useCaptchaStore = bindStore(clientState.captcha);
+export const useCompanionVolumeStore = bindStore(clientState.companionVolume);

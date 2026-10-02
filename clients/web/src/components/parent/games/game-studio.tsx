@@ -1,6 +1,5 @@
 "use client";
 
-import { dodi } from "@/lib/api";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -23,50 +22,102 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { STAGE } from "@/lib/games/stage";
-import { sanitizeGameBundle } from "@dodi/games/sanitizer";
 import { extractTranslations, hasTranslationsBlock } from "@dodi/games/translations";
-import { UNBUILT_GAME_PLACEHOLDER } from "@dodi/games/placeholder";
 import { normalizeLocale } from "@dodi/intl/locales";
 import { locales } from "@/i18n/config";
 import { CodeViewer } from "@/components/parent/games/code-viewer";
-import { AgeRange, isValidAgeRange } from "@/components/parent/games/age-range";
+import { AgeRange } from "@/components/parent/games/age-range";
 import { ListingTranslationsField } from "@/components/parent/games/listing-translations-field";
 import { TagPicker } from "@/components/parent/games/tag-picker";
 import { PlanActionRow, PlanEmptyActions } from "@/components/parent/games/plan-chat-actions";
 import { PlanSketchSurface } from "@/components/parent/games/plan-sketch-surface";
+import { PlanSurface } from "@/components/parent/games/plan-surface";
+import { ReferenceImageSheet } from "@/components/parent/games/reference-image-sheet";
+import { RichText } from "@/components/parent/games/rich-text";
+import { AgentRunHistory } from "@/components/parent/games/agent-run-history";
+import { isComposerSendKey } from "@/components/parent/games/composer-keys";
+import { AgentRunTimeline } from "@/components/parent/games/agent-run-timeline";
+import type { ResumableBuild } from "@dodi/studio/build-manager";
+import {
+  SCREENSHOT_BOUND,
+  type StudioBuildOutcome,
+  type StudioBuildTexts,
+} from "@dodi/studio/build-runner";
 import {
   type DraftView,
   EMPTY_PLANNING,
   type PlanningState,
   resolveInitialView,
   restorePlanning,
-} from "@/components/parent/games/plan-state";
-import { PlanSurface } from "@/components/parent/games/plan-surface";
-import { ReferenceImageSheet } from "@/components/parent/games/reference-image-sheet";
-import type { SketchStroke } from "@/components/parent/games/sketch-strokes";
+} from "@dodi/studio/plan-state";
+import {
+  findInvalidSettings,
+  invalidSettingsList,
+  planSettingsSave,
+  resolveDraftGate,
+} from "@dodi/studio/settings-save";
+import type { SketchStroke } from "@dodi/studio/sketch-strokes";
+import {
+  checkStudioProviders,
+  persistTranscript as persistTranscriptCore,
+  setGameActive,
+} from "@dodi/studio/studio-editor";
+import {
+  emptyStudioGame,
+  resolvePrimaryKidId,
+  type StudioGame,
+  type StudioView,
+} from "@dodi/studio/studio-game";
+import { gameAfterBuild } from "@dodi/studio/studio-outcome";
 import {
   resolveStudioPanes,
   type PlanSurface as PlanSurfaceKind,
-} from "@/components/parent/games/studio-panes";
-import { RichText } from "@/components/parent/games/rich-text";
-import { planSettingsSave, resolveDraftGate } from "@/components/parent/games/settings-save";
-import { AgentRunHistory } from "@/components/parent/games/agent-run-history";
-import { AgentRunTimeline } from "@/components/parent/games/agent-run-timeline";
-import type { ResumableBuild } from "@dodi/studio/build-manager";
+} from "@dodi/studio/studio-panes";
 import {
-  SCREENSHOT_BOUND,
-  type StudioBuildGame,
-  type StudioBuildOutcome,
-  type StudioBuildTexts,
-} from "@dodi/studio/build-runner";
+  applyPlanSettings,
+  createPlanningWriter,
+  derivePlanSettingsForStudio,
+  persistPlanning,
+  type PlanningWriter,
+  runPlanTurn,
+} from "@dodi/studio/studio-plan";
 import {
-  restoreTranscript,
-  sealableTranscript,
-  sealTranscript,
-  type StudioChatMessage,
-  toPriorTurns,
-} from "@dodi/studio/transcript";
+  createGameFromSettings,
+  mapSettingsSuccessDefinition,
+  patchGameSettings,
+} from "@dodi/studio/studio-settings";
+import {
+  type GameVersionEntry,
+  listGameVersions,
+  loadVersionCode,
+  restoreGameVersion,
+  saveCodeEdit,
+} from "@dodi/studio/studio-versions";
+import { restoreTranscript, type StudioChatMessage } from "@dodi/studio/transcript";
 import { cn } from "@/lib/utils";
+import {
+  activeToggle,
+  audiencePill,
+  chatHeader,
+  chatMessage,
+  chatThinking,
+  chatThread,
+  chatWelcome,
+  composer,
+  composerNotice,
+  emptyStage,
+  optionChip,
+  previewLocale as previewLocaleStyle,
+  stageBody,
+  stageHeader,
+  studioActionRow,
+  studioFrame,
+  studioSeg,
+  studioSettings,
+  studioTab,
+  studioTabBar,
+  studioTextarea,
+} from "@dodi/ui-recipes";
 import { capImages, downscaleDataUrl, fileToDataUrl } from "@/lib/games/thumbnail";
 import { useKids } from "@/hooks/use-kids";
 import { type ListingTranslations, useListingTranslations } from "@/hooks/use-listing-translations";
@@ -75,35 +126,17 @@ import { useNavigationGuard } from "@/hooks/use-navigation-guard";
 import { useWakeLock } from "@/hooks/use-wake-lock";
 import { useBreadcrumbStore } from "@/stores/breadcrumb-store";
 import { studioBuildStore, useStudioBuild } from "@/stores/studio-build-store";
-import {
-  decryptGameResponse,
-  decryptVersionResponse,
-  sealGameCreateFields,
-  sealGameFields,
-  useGameStore,
-} from "@/stores/game-store";
 import { useAccountStore } from "@/stores/account-store";
 import { useVaultStore } from "@/stores/vault-store";
-import { resolveClientGame } from "@/lib/ai/resolve-client-game";
-import { resolveClientImage } from "@/lib/ai/resolve-client-image";
-import { calculateChildAge, getLanguageDisplayName } from "@dodi/ai/dodi-context";
-import { buildLearningContext, measureLearningContext } from "@dodi/ai/learning-context";
-import { AgentAbortedError } from "@dodi/ai/game-agent";
-import { runPlanAgent } from "@dodi/ai/game-plan-agent";
-import { derivePlanSettings } from "@dodi/ai/plan-settings";
-import { reportUsage } from "@/lib/usage/report-usage";
+import { webStudioEditorPorts } from "@/lib/games/studio-ports";
 import {
   browserFailureMeta,
   describeError,
   reportErrorLog,
   startFailureTimer,
 } from "@/lib/errors/report-error-log";
-import { mapSuccessDefinition } from "@dodi/ai/success-mapping";
 import type { AgentStep } from "@dodi/types/agent-progress";
-import type { Game, GameVersion, Json } from "@dodi/types/database";
 import type { GamePerspective } from "@dodi/types/games";
-import { coerceSuccessCriteria } from "@dodi/games/game-spec";
-import type { ProgressKind } from "@dodi/games/success";
 
 interface KidOption {
   id: string;
@@ -116,36 +149,11 @@ interface KidOption {
   language: string;
 }
 
-/** The studio's game: the build baseline (`StudioBuildGame`) plus the editor's own fields. */
-export interface StudioGame extends StudioBuildGame {
-  id: string | null;
-  /** Recommended player age range — a plaintext facet shown on dodi Discover. */
-  targetAgeMin: number;
-  targetAgeMax: number;
-  /** Head of the game's version chain (server-managed); null = pre-versioning code. */
-  currentGameVersionId: string | null;
-  /** Playable by kids. Parent-created games start inactive until activated. */
-  isActive: boolean;
-  /** enc:v1: sealed prior studio conversation, restored on re-entry. */
-  agentTranscriptEnc?: string | null;
-  /** enc:v1: sealed Plan-step state; set while the game is still being planned. */
-  planEnc?: string | null;
-}
-
-/** The stage's three tabs. Doubles as the `/game-studio/{id}/{tab}` segment. */
-export type StudioView = "settings" | "code" | "preview";
-
-const STUDIO_VIEWS: readonly StudioView[] = ["settings", "code", "preview"];
-
-export function isStudioView(value: string | undefined): value is StudioView {
-  return value !== undefined && STUDIO_VIEWS.includes(value as StudioView);
-}
-
-// What the stage can show is `DraftView` (plan-state.ts): the three tabs, plus
-// "plan" while the game is still being planned. "plan" is deliberately NOT a
-// StudioView: it has no tab URL — `/game-studio/{id}/plan` falls back to the
-// default tab like any other unknown segment, and the studio reopens on the
-// Plan step from the persisted envelope instead.
+// What the stage can show is `DraftView` (@dodi/studio/plan-state): the three
+// tabs, plus "plan" while the game is still being planned. "plan" is
+// deliberately NOT a StudioView: it has no tab URL — `/game-studio/{id}/plan`
+// falls back to the default tab like any other unknown segment, and the studio
+// reopens on the Plan step from the persisted envelope instead.
 
 interface GameStudioProps {
   initialGame?: StudioGame;
@@ -154,13 +162,6 @@ interface GameStudioProps {
 }
 
 type ChatMessage = StudioChatMessage;
-
-/** Lean version-history entry from GET /api/games/[id]/versions (no code). */
-interface GameVersionEntry {
-  id: string;
-  previous_game_version_id: string | null;
-  created_at: string;
-}
 
 const SIDE_MIN = 300;
 const SIDE_MAX = 620;
@@ -180,44 +181,8 @@ const MAX_ATTACHMENTS = 3;
 /** How long the Plan step waits after a change before re-sealing it onto the row. */
 const PLANNING_PERSIST_DELAY_MS = 800;
 
-function emptyGame(): StudioGame {
-  return {
-    id: null,
-    title: "",
-    tags: [],
-    description: "",
-    learningGoal: "",
-    successDefinition: "",
-    progressKind: "open",
-    successCriteria: coerceSuccessCriteria(undefined),
-    // Match the server's default recommended range for new games (games.ts).
-    targetAgeMin: 4,
-    targetAgeMax: 12,
-    codeBundle: "",
-    currentGameVersionId: null,
-    markdown: "",
-    audienceIds: [],
-    // New games default to the whole family; parents narrow this if they want.
-    isFamily: true,
-    built: false,
-    isActive: false,
-    perspective: null,
-    generateBackgroundImage: false,
-    generatePreviewImage: false,
-    capabilities: [],
-    previewImage: null,
-  };
-}
-
-/** Pull the server's error message from a failed JSON response. */
-async function readError(res: Response): Promise<string> {
-  try {
-    const data = (await res.json()) as { error?: string };
-    return data.error || `HTTP ${res.status}`;
-  } catch {
-    return `HTTP ${res.status}`;
-  }
-}
+/** The studio editor's platform ports (API, vault, caches, AI resolution). */
+const editorPorts = webStudioEditorPorts;
 
 /**
  * The studio URL for a game and a stage view. The Plan step has no tab
@@ -241,6 +206,22 @@ function restoreInitialTranscript(initialGame?: StudioGame): ChatMessage[] {
   return restoreTranscript(useVaultStore.getState().session, initialGame?.agentTranscriptEnc);
 }
 
+/** The composer's warning and info lines. */
+const warningNotice = cn(
+  composerNotice.web,
+  composerNotice.box,
+  composerNotice.text,
+  composerNotice.warning,
+  composerNotice.warningText,
+);
+const primaryNotice = cn(
+  composerNotice.web,
+  composerNotice.box,
+  composerNotice.text,
+  composerNotice.primary,
+  composerNotice.primaryText,
+);
+
 export function GameStudio({ initialGame, initialView }: GameStudioProps) {
   const t = useTranslations("gameStudio");
   const locale = useLocale();
@@ -258,7 +239,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     language: p.language,
   }));
 
-  const [game, setGame] = useState<StudioGame>(initialGame ?? emptyGame());
+  const [game, setGame] = useState<StudioGame>(initialGame ?? emptyStudioGame());
   // The game id as of right now. `game.id` is null for a draft and is adopted
   // in place when a planned draft is saved, so callbacks that must not go stale
   // across that transition (setView's URL mirroring) read it from here.
@@ -480,6 +461,8 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
   // (matches the `compact` CSS variant). Landscape/desktop keep the resizable
   // side-by-side panes.
   const vertical = useMediaQuery("(orientation: portrait), (max-width: 767px)");
+  // Touch keyboards: Enter types a newline in the composer; sending is the button.
+  const isTouch = useMediaQuery("(pointer: coarse)");
   // New games open on the Game tab (the Plan step, then settings); existing
   // games open on the Dodi chat.
   const [mtab, setMtab] = useState<"game" | "chat">(
@@ -563,36 +546,21 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      try {
-        const res = await dodi.request("/api/ai/config");
-        if (cancelled) return;
-        if (!res.ok) {
-          setHasGameProvider(false);
-          setHasImageProvider(false);
-          return;
-        }
-        const cfg = (await res.json()) as { gameProvider?: string } | null;
-        setHasGameProvider(Boolean(cfg?.gameProvider));
-        // Full check incl. vault key (resolveClientImage re-reads the config).
-        const image = await resolveClientImage().catch(() => null);
-        if (!cancelled) {
-          setHasImageProvider(Boolean(image));
-          // New games default both image generations on — an illustrated
-          // background and a list preview are what a game is expected to look
-          // like. Only once an image provider is confirmed, though, so accounts
-          // without an image model never save a flag (or a checked-but-disabled
-          // switch) they can't use. Existing games keep their own settings.
-          if (image && !editing) {
-            setGame((g) =>
-              g.id ? g : { ...g, generatePreviewImage: true, generateBackgroundImage: true },
-            );
-          }
-        }
-      } catch {
-        if (!cancelled) {
-          setHasGameProvider(false);
-          setHasImageProvider(false);
-        }
+      const check = await checkStudioProviders(editorPorts(), (hasGame) => {
+        if (!cancelled) setHasGameProvider(hasGame);
+      });
+      if (cancelled) return;
+      setHasGameProvider(check.hasGameProvider);
+      setHasImageProvider(check.hasImageProvider);
+      // New games default both image generations on — an illustrated
+      // background and a list preview are what a game is expected to look
+      // like. Only once an image provider is confirmed, though, so accounts
+      // without an image model never save a flag (or a checked-but-disabled
+      // switch) they can't use. Existing games keep their own settings.
+      if (check.hasImageProvider && !editing) {
+        setGame((g) =>
+          g.id ? g : { ...g, generatePreviewImage: true, generateBackgroundImage: true },
+        );
       }
     })();
     return () => {
@@ -654,9 +622,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
   };
 
   // ── "Who can play" selection ───────────────────────────────────────────
-  const primaryKidId = game.isFamily
-    ? (kids[0]?.id ?? null)
-    : (game.audienceIds[0] ?? null);
+  const primaryKidId = resolvePrimaryKidId(game, kids);
   // ── Preview locale ─────────────────────────────────────────────────────
   // Defaults to the kid's game language (= the source locale of new builds);
   // the picker lets the parent test each platform language. Only games with a
@@ -694,13 +660,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
   // Persist the (sealed) conversation alongside the game. `null` clears it.
   const persistTranscript = async (transcript: ChatMessage[] | null): Promise<void> => {
     if (!game.id) return;
-    const session = useVaultStore.getState().session;
-    const agent_transcript_enc = session ? sealTranscript(session, transcript) : null;
-    await dodi.request(`/api/games/${game.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ agent_transcript_enc }),
-    });
+    await persistTranscriptCore(editorPorts(), game.id, transcript);
   };
 
   // ----- Plan step persistence -------------------------------------------
@@ -729,124 +689,59 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     messagesRef.current = messages;
     gameRef.current = game;
   });
-  const planningDirtyRef = useRef(false);
-  // The write loop in flight, so a settings save can wait for it: a planning
+  // The write loop (@dodi/studio/studio-plan): one write at a time, again if
+  // anything changed meanwhile. A settings save waits for it — a planning
   // write landing after the save would resurrect the envelope it just cleared.
-  const planningInflightRef = useRef<Promise<void> | null>(null);
 
   const persistPlanningNow = async (): Promise<void> => {
-    const session = useVaultStore.getState().session;
-    if (!session) return;
-    const transcript = messagesRef.current;
     const current = gameRef.current;
-    const planningState = planningRef.current;
-    const agentTranscriptEnc =
-      transcript.length > 0 ? session.encryptJson(sealableTranscript(transcript)) : null;
-    const planEnc = session.encryptJson(planningState);
-
-    const id = gameIdRef.current;
-    if (id) {
-      // An accepted plan also carries the settings derived from it, so a
-      // parent who leaves before saving finds the form filled in on return.
-      const derived = planningState.isAccepted
-        ? {
-            ...(await sealGameFields({
-              title: current.title,
-              learning_goal: current.learningGoal,
-              success_definition: current.successDefinition,
-            })),
-            tags: current.tags,
-            ...(isValidAgeRange(current.targetAgeMin, current.targetAgeMax)
-              ? { target_age_min: current.targetAgeMin, target_age_max: current.targetAgeMax }
-              : {}),
-            metadata: { perspective: current.perspective },
-          }
-        : {};
-      const res = await dodi.request(`/api/games/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...derived,
-          agent_transcript_enc: agentTranscriptEnc,
-          plan_enc: planEnc,
-        }),
-      });
-      if (!res.ok) throw new Error(await readError(res));
-      useGameStore.getState().put(await decryptGameResponse((await res.json()) as Game));
-      return;
-    }
-
-    // First turn: create the row. Mirrors the settings save of a brand-new
-    // game (sealed placeholder bundle, inactive, whole family) minus the
-    // settings themselves, which the parent has not filled in yet. Without a
-    // kid to own the row there is nothing to attach it to — planning simply
-    // stays in the browser, as it did before.
-    const kidId = current.isFamily ? (kids[0]?.id ?? null) : (current.audienceIds[0] ?? null);
-    if (!kidId) return;
-    const sealed = await sealGameCreateFields({
-      title: current.title.trim(),
-      codeBundle: UNBUILT_GAME_PLACEHOLDER,
+    const result = await persistPlanning(editorPorts(), {
+      gameId: gameIdRef.current,
+      game: current,
+      kidId: resolvePrimaryKidId(current, kids),
+      planning: planningRef.current,
+      transcript: messagesRef.current,
     });
-    const res = await dodi.request("/api/games", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        kidId,
-        ...sealed,
-        targetAgeMin: current.targetAgeMin,
-        targetAgeMax: current.targetAgeMax,
-        isActive: false,
-        audience: { isFamily: current.isFamily, audienceIds: current.audienceIds },
-        ...(agentTranscriptEnc ? { agentTranscriptEnc } : {}),
-        planEnc,
-      }),
-    });
-    if (!res.ok) throw new Error(await readError(res));
-    const data = (await res.json()) as { id: string };
-    useGameStore.getState().invalidate();
+    if (result.kind !== "created") return;
     // Adopt the id in place: a navigation would remount the studio and take
     // the live thread, the sketch and a running plan turn with it. The URL is
     // corrected here; the route is handed over once the settings are saved.
     adoptedIdRef.current = true;
-    gameIdRef.current = data.id;
-    setGame((g) => ({ ...g, id: data.id }));
-    window.history.replaceState(null, "", studioUrl(data.id, "plan"));
+    gameIdRef.current = result.gameId;
+    setGame((g) => ({ ...g, id: result.gameId }));
+    window.history.replaceState(null, "", studioUrl(result.gameId, "plan"));
   };
 
-  // Drain the dirty flag: one write at a time, and again if anything changed
-  // while a write was in flight. A failed write is reported once and the
-  // state stays in the browser — the next change tries again.
-  const flushPlanning = async (): Promise<void> => {
-    if (planningInflightRef.current) return;
-    const run = (async () => {
-      while (planningDirtyRef.current) {
-        planningDirtyRef.current = false;
-        try {
-          await persistPlanningNow();
-        } catch (err) {
-          console.error("[game-studio] persisting the plan draft failed", err);
-          const reason = err instanceof Error ? err.message : "";
-          setError(reason ? t("saveFailed", { reason }) : t("saveFailedGeneric"));
-          reportErrorLog({
-            context: "game_save",
-            kidId: primaryKidId,
-            gameId: gameIdRef.current,
-            ...describeError(err, []),
-          });
-        }
-      }
-    })();
-    planningInflightRef.current = run;
-    try {
-      await run;
-    } finally {
-      planningInflightRef.current = null;
-    }
+  // A failed write is reported once and the state stays in the browser — the
+  // next change tries again.
+  const onPlanningWriteError = (err: unknown): void => {
+    console.error("[game-studio] persisting the plan draft failed", err);
+    const reason = err instanceof Error ? err.message : "";
+    setError(reason ? t("saveFailed", { reason }) : t("saveFailedGeneric"));
+    reportErrorLog({
+      context: "game_save",
+      kidId: primaryKidId,
+      gameId: gameIdRef.current,
+      ...describeError(err, []),
+    });
   };
-  const flushPlanningRef = useRef(flushPlanning);
+  // The writer lives as long as the screen; it calls through refs so every
+  // write reads the latest render.
+  const persistPlanningRef = useRef(persistPlanningNow);
+  const onPlanningWriteErrorRef = useRef(onPlanningWriteError);
   useEffect(() => {
-    flushPlanningRef.current = flushPlanning;
+    persistPlanningRef.current = persistPlanningNow;
+    onPlanningWriteErrorRef.current = onPlanningWriteError;
   });
+  const planningWriterRef = useRef<PlanningWriter | null>(null);
+  // Effects and handlers only (never during render): created on first use.
+  const planningWriter = (): PlanningWriter => {
+    planningWriterRef.current ??= createPlanningWriter(
+      () => persistPlanningRef.current(),
+      (err) => onPlanningWriteErrorRef.current(err),
+    );
+    return planningWriterRef.current;
+  };
 
   // Mark the Plan step dirty on every change once there has been an
   // interaction (a message in the thread), and write it out after a pause.
@@ -854,8 +749,8 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
   // nothing here runs again.
   useEffect(() => {
     if (!isPlanning || messages.length === 0) return;
-    planningDirtyRef.current = true;
-    const timer = setTimeout(() => void flushPlanningRef.current(), PLANNING_PERSIST_DELAY_MS);
+    planningWriter().markDirty();
+    const timer = setTimeout(() => void planningWriter().flush(), PLANNING_PERSIST_DELAY_MS);
     return () => clearTimeout(timer);
   }, [isPlanning, messages, planDraft, acceptedPlan, planMode, sketchImage, photoImage, sketchStrokes]);
 
@@ -863,7 +758,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
   // the request outlives the component, the state lives on the server.
   useEffect(
     () => () => {
-      if (planningDirtyRef.current) void flushPlanningRef.current();
+      if (planningWriter().isDirty()) void planningWriter().flush();
     },
     [],
   );
@@ -891,14 +786,9 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
   // Refresh the lean version list (after builds / manual saves).
   const loadVersions = useCallback(async (): Promise<void> => {
     if (!game.id) return;
-    try {
-      const res = await dodi.request(`/api/games/${game.id}/versions`);
-      if (!res.ok) return;
-      const data = (await res.json()) as { versions: GameVersionEntry[] };
-      setVersions(data.versions);
-    } catch {
-      /* history is non-critical chrome — the studio works without it */
-    }
+    // Null = unavailable: history is non-critical chrome, the studio works without it.
+    const list = await listGameVersions(editorPorts(), game.id);
+    if (list) setVersions(list);
   }, [game.id]);
 
   useEffect(() => {
@@ -918,15 +808,10 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     if (versionCodes[previousVersionId] !== undefined) return;
     let cancelled = false;
     void (async () => {
-      try {
-        const res = await dodi.request(`/api/games/${gameId}/versions/${previousVersionId}`);
-        if (!res.ok) return;
-        const row = await decryptVersionResponse((await res.json()) as GameVersion);
-        if (!cancelled) {
-          setVersionCodes((m) => ({ ...m, [previousVersionId]: row.code_bundle }));
-        }
-      } catch {
-        /* diff stays unavailable — non-critical chrome */
+      // Null = the diff stays unavailable (non-critical chrome).
+      const code = await loadVersionCode(editorPorts(), gameId, previousVersionId);
+      if (code !== null && !cancelled) {
+        setVersionCodes((m) => ({ ...m, [previousVersionId]: code }));
       }
     })();
     return () => {
@@ -954,14 +839,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     setReverting(true);
     setError(null);
     try {
-      const res = await dodi.request(`/api/games/${game.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ restore_version_id: versionId }),
-      });
-      if (!res.ok) throw new Error(await readError(res));
-      const row = await decryptGameResponse((await res.json()) as Game);
-      useGameStore.getState().put(row);
+      const row = await restoreGameVersion(editorPorts(), game.id, versionId);
       setGame((g) => ({
         ...g,
         codeBundle: row.code_bundle,
@@ -1027,21 +905,10 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     setSavingEdit(true);
     setError(null);
     try {
-      // Sanitize the hand-edited code before sealing it — once encrypted, no
-      // later layer can inspect it.
-      const safeCode = sanitizeGameBundle(pending.code).code;
-      const sealed = await sealGameFields({ code_bundle: safeCode });
-      const res = await dodi.request(`/api/games/${game.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...sealed,
-          create_version: saveAsNewVersion,
-        }),
+      // Sanitized before sealing — once encrypted, no later layer can inspect it.
+      const row = await saveCodeEdit(editorPorts(), game.id, pending.code, {
+        isNewVersion: saveAsNewVersion,
       });
-      if (!res.ok) throw new Error(await readError(res));
-      const row = await decryptGameResponse((await res.json()) as Game);
-      useGameStore.getState().put(row);
       // Head overwritten in place → refresh its cached code with the saved result.
       if (!saveAsNewVersion && row.current_game_version_id) {
         const headId = row.current_game_version_id;
@@ -1221,95 +1088,53 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
 
     const controller = new AbortController();
     abortRef.current = controller;
-    const startedAt = startFailureTimer();
-    let gameCfg: Awaited<ReturnType<typeof resolveClientGame>> = null;
     try {
-      gameCfg = await resolveClientGame();
-      if (!gameCfg) {
+      const outcome = await runPlanTurn(
+        editorPorts(),
+        {
+          text,
+          attachments,
+          history,
+          currentPlan: planDraft || null,
+          kids,
+          primaryKidId,
+          replyLocale: locale,
+          gameId: () => gameIdRef.current,
+          texts: {
+            planProposedFallback: t("planProposedFallback"),
+            planUpdatedNote: t("planUpdatedNote"),
+            stopped: t("stopped"),
+            planFailed: t("planFailed"),
+          },
+        },
+        {
+          signal: controller.signal,
+          onActivity: (e) => {
+            if (e.type === "narration_start") setNarration("");
+            else if (e.type === "narration_delta") setNarration((n) => n + e.text);
+          },
+        },
+      );
+
+      if (outcome.kind === "no_provider") {
         setThinking(false);
         setError(t("needProviderKey"));
         return;
       }
-
-      // No audience is chosen during planning, so the context spans the whole
-      // family: the plan should fit whoever ends up playing it.
-      const kid = kids.find((k) => k.id === primaryKidId);
-      const learningContext = buildLearningContext(
-        kids,
-        { isFamily: true, audienceIds: [] },
-        primaryKidId ?? "",
-      );
-
-      const result = await runPlanAgent({
-        provider: gameCfg.provider,
-        apiKey: gameCfg.apiKey,
-        model: gameCfg.model,
-        childContext: {
-          age: calculateChildAge(kid?.birthdate ?? null) ?? undefined,
-          language: getLanguageDisplayName(kid?.language ?? "en"),
-          learningContext,
-        },
-        priorTurns: toPriorTurns(history),
-        message: { text, images: attachments.length ? attachments : undefined },
-        currentPlan: planDraft || null,
-        // The studio is a parent surface — dodi answers in the parent's language.
-        replyLanguage: getLanguageDisplayName(locale),
-        signal: controller.signal,
-        onActivity: (e) => {
-          if (e.type === "narration_start") setNarration("");
-          else if (e.type === "narration_delta") setNarration((n) => n + e.text);
-        },
-      });
-
-      if (result.plan) {
-        setPlanDraft(result.plan.summary);
+      if (outcome.kind === "stopped" || outcome.kind === "failed") {
+        if (outcome.kind === "failed") setError(t("planFailed"));
+        const reply = outcome.reply;
+        setMessages((m) => [...m, reply]);
+        return;
+      }
+      if (outcome.plan !== null) {
+        setPlanDraft(outcome.plan);
         setIsEditingPlan(false);
         // Side by side there is room to put the plan on the stage as it
         // arrives; on a phone it would cover the reply, so the pill waits.
         if (!vertical) setPlanSurface("plan");
       }
-
-      const ctxSizes = measureLearningContext(
-        kids,
-        { isFamily: true, audienceIds: [] },
-        primaryKidId ?? "",
-      );
-      reportUsage({
-        eventType: "game_plan",
-        kidId: primaryKidId,
-        // Null on the very first turn: the row is created right after it.
-        gameId: gameIdRef.current,
-        provider: gameCfg.provider,
-        model: gameCfg.model,
-        usage: result.usage,
-        meta: {
-          turns: result.turns,
-          promptChars: text.length,
-          memoryChars: ctxSizes.memoryChars,
-          parentNotesChars: ctxSizes.parentNotesChars,
-        },
-      });
-
-      const reply = result.reply.trim() || (result.plan ? t("planProposedFallback") : "");
-      const note = result.plan ? `\n\n${t("planUpdatedNote")}` : "";
-      if (reply) setMessages([...withUser, { role: "assistant", text: reply + note }]);
-    } catch (err) {
-      if (err instanceof AgentAbortedError || controller.signal.aborted) {
-        setMessages((m) => [...m, { role: "assistant", text: t("stopped") }]);
-      } else {
-        console.error("[game-studio] plan turn failed", err);
-        reportErrorLog({
-          context: "game_plan",
-          kidId: primaryKidId,
-          gameId: gameIdRef.current,
-          provider: gameCfg?.provider,
-          model: gameCfg?.model,
-          ...describeError(err, gameCfg ? [gameCfg.apiKey] : []),
-          meta: browserFailureMeta(startedAt, {}),
-        });
-        setError(t("planFailed"));
-        setMessages((m) => [...m, { role: "assistant", text: t("planFailed") }]);
-      }
+      if (outcome.reply) setMessages([...withUser, outcome.reply]);
     } finally {
       setThinking(false);
       setNarration("");
@@ -1375,40 +1200,18 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     setIsDerivingSettings(true);
     setError(null);
     try {
-      const gameCfg = await resolveClientGame();
-      if (gameCfg) {
-        const kid = kids.find((k) => k.id === primaryKidId);
-        const settings = await derivePlanSettings(
-          { providerId: gameCfg.provider, modelId: gameCfg.model, apiKey: gameCfg.apiKey },
-          text,
-          {
-            kidAge: calculateChildAge(kid?.birthdate ?? null) ?? undefined,
-            language: getLanguageDisplayName(locale),
-            defaultAgeMin: game.targetAgeMin,
-            defaultAgeMax: game.targetAgeMax,
-          },
-          (usage) =>
-            reportUsage({
-              eventType: "game_plan",
-              kidId: primaryKidId,
-              gameId: gameIdRef.current,
-              provider: gameCfg.provider,
-              model: gameCfg.model,
-              usage,
-            }),
-        );
-        setGame((g) => ({
-          ...g,
-          // A name the parent typed themselves wins over a derived one.
-          title: g.title.trim() || settings.title,
-          learningGoal: settings.learningGoal || g.learningGoal,
-          successDefinition: settings.successDefinition || g.successDefinition,
-          tags: settings.tags.length ? settings.tags : g.tags,
-          targetAgeMin: settings.targetAgeMin,
-          targetAgeMax: settings.targetAgeMax,
-          perspective: settings.perspective,
-        }));
-      }
+      // Null: no game model resolves — the parent fills the form themselves.
+      const settings = await derivePlanSettingsForStudio(editorPorts(), {
+        planText: text,
+        kids,
+        primaryKidId,
+        locale,
+        defaultAgeMin: game.targetAgeMin,
+        defaultAgeMax: game.targetAgeMax,
+        gameId: () => gameIdRef.current,
+      });
+      // A name the parent typed themselves wins over a derived one.
+      if (settings) setGame((g) => applyPlanSettings(g, settings));
     } catch (err) {
       console.error("[game-studio] deriving settings from the plan failed", err);
       setError(t("planSettingsFailed"));
@@ -1602,36 +1405,11 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
       return;
     }
 
-    const { result, code, isCodeChanged, savedRow } = outcome;
+    const { isCodeChanged, savedRow } = outcome;
     setBgNotice(outcome.backgroundNotice);
     setPreviewNotice(outcome.previewNotice);
     setVisualCheckNotice(outcome.hasVisualCheckNotice);
-    const builtCapabilities = Array.isArray(result.metadata.capabilities)
-      ? (result.metadata.capabilities as string[])
-      : [];
-    setGame((g) => ({
-      ...g,
-      built: true,
-      title: result.title,
-      tags: result.tags,
-      description: result.description,
-      learningGoal: result.learningGoal,
-      successDefinition: result.successDefinition,
-      progressKind: result.progressKind,
-      // Keeps the next build in this session seeded with a fresh baseline.
-      successCriteria: result.successCriteria,
-      codeBundle: code,
-      markdown: result.markdown,
-      capabilities: builtCapabilities,
-      // Adopt the server's new version head (a build persist appends a
-      // version) and the freshly persisted list preview, if any.
-      ...(savedRow
-        ? {
-            currentGameVersionId: savedRow.current_game_version_id,
-            previewImage: savedRow.preview_image,
-          }
-        : {}),
-    }));
+    setGame((g) => gameAfterBuild(g, outcome));
     if (isCodeChanged) {
       setReverted(false);
       redoVersionRef.current = null;
@@ -1686,18 +1464,18 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     // child/audience. Empty ones are flagged red instead of showing a message.
     // (Server schemas stay permissive so voice/system game creation, which has
     // no parent goal, still works.)
-    const nextInvalid = {
-      title: isPlanning && !game.title.trim(),
-      learningGoal: !game.learningGoal.trim(),
-      audience: !primaryKidId,
-      age: !isValidAgeRange(game.targetAgeMin, game.targetAgeMax),
-    };
-    if (nextInvalid.title || nextInvalid.learningGoal || nextInvalid.audience || nextInvalid.age) {
+    const nextInvalid = findInvalidSettings({
+      title: game.title,
+      learningGoal: game.learningGoal,
+      targetAgeMin: game.targetAgeMin,
+      targetAgeMax: game.targetAgeMax,
+      primaryKidId,
+      isPlanning,
+    });
+    const invalidFields = invalidSettingsList(nextInvalid);
+    if (invalidFields) {
       // DEBUG (mobile "Save & start building" does nothing): the red marker
       // may be scrolled out of view on a phone.
-      const invalidFields = Object.keys(nextInvalid)
-        .filter((k) => nextInvalid[k as keyof typeof nextInvalid])
-        .join(",");
       console.warn("[game-studio] settings save blocked by validation:", invalidFields);
       reportErrorLog({
         context: "game_save",
@@ -1756,9 +1534,9 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     try {
       // Let a planning write in flight land first (it may be the very create
       // that mints the id), and never queue another: this save ends planning.
-      planningDirtyRef.current = false;
+      planningWriter().discard();
       markSaveStep("await_planning_write");
-      await planningInflightRef.current;
+      await planningWriter().settled();
       const gameId = gameIdRef.current;
       if (gameId) {
         // Map the success definition to structured criteria IN THE BROWSER (the
@@ -1766,67 +1544,15 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
         // provider configured (or on a mapping error) we persist the text and
         // leave the existing criteria untouched. A build-starting save skips it:
         // the first build maps the definition itself and persists the criteria.
-        let mappedCriteria: { success_criteria: unknown; progress_kind: ProgressKind } | null = null;
-        if (savePlan.shouldMapSuccessDefinition) {
-          try {
-            markSaveStep("resolve_game_model");
-            const gameCfg = await resolveClientGame();
-            markSaveStep("map_success_definition");
-            const mapped = await mapSuccessDefinition(
-              gameCfg
-                ? { providerId: gameCfg.provider, modelId: gameCfg.model, apiKey: gameCfg.apiKey }
-                : null,
-              game.successDefinition,
-              { learningGoal: game.learningGoal },
-            );
-            mappedCriteria = {
-              success_criteria: mapped.successCriteria,
-              progress_kind: mapped.progressKind,
-            };
-          } catch {
-            /* no provider / mapping failed — persist the text, keep criteria as-is */
-          }
-        }
-        if (mappedCriteria) setField("progressKind", mappedCriteria.progress_kind);
-        markSaveStep("seal_fields");
-        const sealed = await sealGameFields({
-          title: game.title || undefined,
-          learning_goal: game.learningGoal,
-          success_definition: game.successDefinition,
-          ...(mappedCriteria
-            ? { success_criteria: mappedCriteria.success_criteria as Json }
-            : {}),
+        const mapped = savePlan.shouldMapSuccessDefinition
+          ? await mapSettingsSuccessDefinition(editorPorts(), game, markSaveStep)
+          : null;
+        if (mapped) setField("progressKind", mapped.progressKind);
+        await patchGameSettings(editorPorts(), gameId, game, {
+          mapped,
+          isEndingPlanning: isPlanning,
+          onStep: markSaveStep,
         });
-        markSaveStep("patch_game");
-        const res = await dodi.request(`/api/games/${gameId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            ...sealed,
-            tags: game.tags,
-            target_age_min: game.targetAgeMin,
-            target_age_max: game.targetAgeMax,
-            ...(mappedCriteria
-              ? { progress_kind: mappedCriteria.progress_kind }
-              : {}),
-            is_active: game.isActive,
-            // Shallow-merged server-side, so capabilities/drawingStyle survive.
-            metadata: {
-              perspective: game.perspective,
-              generateBackgroundImage: game.generateBackgroundImage,
-              generatePreviewImage: game.generatePreviewImage,
-            },
-            audience: { isFamily: game.isFamily, audienceIds: game.audienceIds },
-            // Saving the settings ends planning: the envelope goes, the row
-            // becomes a plain draft (or, with an accepted plan, a build).
-            ...(isPlanning ? { plan_enc: null } : {}),
-          }),
-        });
-        if (!res.ok) throw new Error(await readError(res));
-        markSaveStep("decrypt_response");
-        useGameStore
-          .getState()
-          .put(await decryptGameResponse((await res.json()) as Game));
         markSaveStep("save_listing_translations");
         await listingTranslations.save();
         markSaveStep("saved");
@@ -1834,7 +1560,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
         if (isPlanning) {
           // Nothing left to persist from the Plan step; drop a queued write so
           // it cannot resurrect the envelope after this save.
-          planningDirtyRef.current = false;
+          planningWriter().discard();
           setIsPlanning(false);
           if (acceptedPlan) {
             // A plan was agreed, so this save IS the start of the build (the
@@ -1863,43 +1589,13 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
         // plaintext into an encrypted column, and only we can read the marker
         // back to tell "unbuilt" from a real game.
         markSaveStep("create_game");
-        const sealed = await sealGameCreateFields({
-          title: game.title.trim(),
-          learningGoal: game.learningGoal || undefined,
-          successDefinition: game.successDefinition || undefined,
-          codeBundle: game.codeBundle || UNBUILT_GAME_PLACEHOLDER,
+        // The Plan conversation rides along (sealed) so a reload shows what was
+        // discussed, not an empty thread.
+        const newGameId = await createGameFromSettings(editorPorts(), {
+          kidId: primaryKidId,
+          game,
+          transcript: messages,
         });
-        // The Plan conversation is already worth keeping: seal it onto the new
-        // row so a reload shows what was discussed, not an empty thread.
-        const session = useVaultStore.getState().session;
-        const planTranscript =
-          messages.length > 0 && session
-            ? session.encryptJson(sealableTranscript(messages))
-            : null;
-        const res = await dodi.request("/api/games", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            kidId: primaryKidId,
-            ...sealed,
-            tags: game.tags,
-            targetAgeMin: game.targetAgeMin,
-            targetAgeMax: game.targetAgeMax,
-            progressKind: game.successDefinition.trim() ? "goal" : "open",
-            // Playable only once real code exists; an unbuilt draft is not.
-            isActive: Boolean(game.codeBundle),
-            metadata: {
-              perspective: game.perspective,
-              generateBackgroundImage: game.generateBackgroundImage,
-              generatePreviewImage: game.generatePreviewImage,
-            },
-            audience: { isFamily: game.isFamily, audienceIds: game.audienceIds },
-            ...(planTranscript ? { agentTranscriptEnc: planTranscript } : {}),
-          }),
-        });
-        if (!res.ok) throw new Error(await readError(res));
-        const data = (await res.json()) as { id: string };
-        useGameStore.getState().invalidate();
         setIsPlanning(false);
 
         if (acceptedPlan) {
@@ -1913,16 +1609,16 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
             images: planImage ? [planImage] : [],
           };
           adoptedIdRef.current = true;
-          gameIdRef.current = data.id;
-          setGame((g) => ({ ...g, id: data.id }));
-          window.history.replaceState(null, "", studioUrl(data.id, "preview"));
+          gameIdRef.current = newGameId;
+          setGame((g) => ({ ...g, id: newGameId }));
+          window.history.replaceState(null, "", studioUrl(newGameId, "preview"));
           finishHandoff();
           return;
         }
 
         // Move to the draft's own URL so the build binds to this id and
         // reload/recovery works. The chat unlocks on the [id] route.
-        router.push(`/parent/game-studio/${data.id}`);
+        router.push(`/parent/game-studio/${newGameId}`);
         return;
       }
       setJustSaved(true);
@@ -1974,21 +1670,15 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     const next = !game.isActive;
     const gameId = game.id;
     setField("isActive", next);
-    // The kid library reads is_active from the same cache, so flip it there too.
-    useGameStore.getState().patchLocal(gameId, { is_active: next });
     setTogglingActive(true);
     setError(null);
     try {
-      const res = await dodi.request(`/api/games/${gameId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ is_active: next }),
-      });
-      if (!res.ok) throw new Error(await readError(res));
+      // The kid library reads is_active from the game cache, so the core flips
+      // it there too (and back on failure).
+      await setGameActive(editorPorts(), gameId, next);
       router.refresh();
     } catch (e) {
       setField("isActive", !next); // revert the optimistic flip
-      useGameStore.getState().patchLocal(gameId, { is_active: !next });
       const reason = e instanceof Error && e.message ? e.message : "";
       setError(reason ? t("saveFailed", { reason }) : t("saveFailedGeneric"));
     } finally {
@@ -2060,14 +1750,14 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
 
   return (
     <div
-      className="fixed inset-x-0 top-[60px] bottom-0 z-30 flex flex-col border-t border-border bg-background wide:top-[72px] wide:left-56"
+      className={cn(studioFrame.webRoot, studioFrame.root)}
       data-screen-label={editing ? "Parent — Edit game" : "Parent — New game"}
     >
       {/* Mobile tab bar (vertical layout only; hidden while the Dodi pane is
           gated away — a draft past the Plan step and before its first save —
           and during the Plan step, which owns the whole screen). */}
       {panes.showTabBar && (
-        <div className="flex flex-shrink-0 gap-1 border-b border-border bg-card px-3 py-2">
+        <div className={cn(studioTabBar.web, studioTabBar.box)}>
           <StudioTab
             active={mtab === "game"}
             onClick={() => setMtab("game")}
@@ -2086,8 +1776,9 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
       {/* Two-pane: main stage + chat sidebar */}
       <div
         className={cn(
-          "flex min-h-0 flex-1 overflow-hidden",
-          vertical ? "flex-col" : "flex-row",
+          studioFrame.webPanes,
+          studioFrame.panes,
+          vertical ? studioFrame.panesVertical : studioFrame.webPanesSide,
         )}
       >
         {/* Main stage */}
@@ -2095,13 +1786,15 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
           className={cn(
             // min-w-0: let a wide Code view scroll inside the pane instead of
             // widening it and squeezing the Dodi sidebar.
-            "flex min-h-0 min-w-0 flex-1 flex-col bg-background",
+            studioFrame.webMain,
+            studioFrame.main,
             !panes.showMain && "hidden",
           )}
         >
           <div
             className={cn(
-              "flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border bg-card px-4 py-2.5 md:px-5",
+              stageHeader.web,
+              stageHeader.box,
               // The Plan step's surfaces bring their own header; the stage
               // switch returns once the plan is accepted or skipped.
               isPlanMode && "hidden",
@@ -2110,7 +1803,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
             {/* One switch for the whole stage — Preview / Code / Settings (the
                 settings gear folded in as a tab), plus Plan while the game is
                 still a draft. */}
-            <div className="inline-flex gap-0.5 rounded-[10px] border border-border bg-background p-[3px]">
+            <div className={cn(studioSeg.webGroup, studioSeg.group)}>
               {isPlanning && (
                 <SegTab active={view === "plan"} onClick={() => setView("plan")} icon="pencil" label={t("plan")} />
               )}
@@ -2122,7 +1815,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
               <div
                 role="group"
                 aria-label={t("previewLanguage")}
-                className="inline-flex gap-0.5 rounded-[10px] border border-border bg-background p-[3px]"
+                className={cn(studioSeg.webGroup, studioSeg.group)}
               >
                 {locales.map((code) => (
                   <button
@@ -2131,10 +1824,12 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
                     aria-pressed={previewLocale === code}
                     onClick={() => setPreviewLocaleChoice(code)}
                     className={cn(
-                      "rounded-[8px] px-2 py-1 text-[11px] font-semibold uppercase transition-colors",
+                      previewLocaleStyle.box,
+                      previewLocaleStyle.text,
+                      previewLocaleStyle.web,
                       previewLocale === code
-                        ? "bg-card text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground",
+                        ? cn(previewLocaleStyle.active, previewLocaleStyle.activeText, previewLocaleStyle.webActive)
+                        : cn(previewLocaleStyle.idleText, previewLocaleStyle.webIdle),
                     )}
                   >
                     {code}
@@ -2144,7 +1839,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
             )}
             {/* Audience + active state only exist once the game is created. */}
             {game.id && (
-              <div className="flex items-center gap-2.5">
+              <div className={cn(stageHeader.webRight, stageHeader.right)}>
                 {(game.isFamily || selectedKids.length > 0) && (
                   <div className="hidden items-center gap-1.5 text-[12.5px] font-medium text-muted-foreground sm:flex">
                     <span>{t("forLabel")}</span>
@@ -2178,22 +1873,26 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
                   onClick={() => void toggleActive()}
                   disabled={togglingActive}
                   className={cn(
-                    "inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+                    activeToggle.box,
+                    activeToggle.text,
+                    activeToggle.web,
                     game.isActive
-                      ? "border-primary-soft-2 bg-primary-soft text-primary"
-                      : "border-border-strong bg-card text-muted-foreground hover:border-faint",
+                      ? cn(activeToggle.on, activeToggle.onText)
+                      : cn(activeToggle.off, activeToggle.offText, activeToggle.webOff),
                   )}
                 >
                   <span
                     className={cn(
-                      "relative inline-flex h-4 w-[27px] shrink-0 items-center rounded-full transition-colors",
-                      game.isActive ? "bg-primary" : "bg-border-strong",
+                      activeToggle.track,
+                      activeToggle.webTrack,
+                      game.isActive ? activeToggle.trackOn : activeToggle.trackOff,
                     )}
                   >
                     <span
                       className={cn(
-                        "inline-block h-3 w-3 rounded-full bg-white shadow-sm transition-transform",
-                        game.isActive ? "translate-x-[13px]" : "translate-x-[2px]",
+                        activeToggle.thumb,
+                        activeToggle.webThumb,
+                        game.isActive ? activeToggle.thumbOn : activeToggle.thumbOff,
                       )}
                     />
                   </span>
@@ -2203,7 +1902,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
             )}
           </div>
 
-          <div className="relative min-h-0 min-w-0 flex-1 overflow-y-auto">
+          <div className={cn(stageBody.box, stageBody.web)}>
             {/* The stage stays mounted whenever code exists (hidden by CSS on the
                 other tabs) so the sandbox can serve edit-time screenshot capture
                 without a reload — hiding instead of unmounting keeps layout alive
@@ -2214,7 +1913,8 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
               <div
                 aria-hidden={view !== "preview" || undefined}
                 className={cn(
-                  "flex min-h-full items-center justify-center p-5 md:p-8",
+                  stageBody.webCenter,
+                  stageBody.center,
                   view !== "preview" &&
                     "pointer-events-none invisible absolute inset-0 -z-10 overflow-hidden",
                 )}
@@ -2232,7 +1932,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
               </div>
             )}
             {view === "preview" && !game.codeBundle && (
-              <div className="flex min-h-full items-center justify-center p-5 md:p-8">
+              <div className={cn(stageBody.webCenter, stageBody.center)}>
                 <EmptyStage title={t("previewEmpty")} />
               </div>
             )}
@@ -2260,7 +1960,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
                   searchPhrases={searchPhrases}
                 />
               ) : (
-                <div className="flex min-h-full items-center justify-center p-8">
+                <div className={cn(stageBody.webCenterCode, stageBody.centerCode)}>
                   <EmptyStage title={t("codeEmpty")} icon="code" />
                 </div>
               ))}
@@ -2299,9 +1999,10 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
         <div
           style={vertical || chatFullscreen ? undefined : { width: sideWidth }}
           className={cn(
-            "relative flex min-h-0 flex-col border-border bg-card",
+            studioFrame.webChat,
+            studioFrame.chat,
             !panes.showChat && "hidden",
-            vertical || chatFullscreen ? "w-full flex-1" : "flex-none border-l",
+            vertical || chatFullscreen ? studioFrame.chatVertical : studioFrame.webChatSide,
           )}
           onDragEnter={onInboxDragEnter}
           onDragLeave={onInboxDragLeave}
@@ -2339,29 +2040,31 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
           {/* Header */}
           <div
             className={cn(
-              "flex flex-shrink-0 items-center gap-3 border-b border-border px-4 py-3",
+              chatHeader.web,
+              chatHeader.box,
               mobileSurfaceOpen && "hidden",
             )}
           >
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary-soft p-0.5">
+            <div className={cn(chatHeader.webAvatar, chatHeader.avatar)}>
               <Image
                 src="/images/dodi-head-active.png"
                 alt=""
                 width={36}
                 height={36}
-                className="h-full w-full object-contain"
+                className={cn(chatHeader.avatarImage, chatHeader.webAvatarImage)}
               />
             </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-bold text-ink">{t("designerName")}</div>
-              <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+            <div className={chatHeader.info}>
+              <div className={chatHeader.name}>{t("designerName")}</div>
+              <div className={cn(chatHeader.webStatus, chatHeader.status, chatHeader.statusText)}>
                 <span
                   className={cn(
-                    "inline-block h-[7px] w-[7px] rounded-full",
-                    thinking ? "animate-pulse bg-primary" : "bg-success",
+                    chatHeader.webDot,
+                    chatHeader.dot,
+                    thinking ? cn(chatHeader.webDotBusy, chatHeader.dotBusy) : chatHeader.dotIdle,
                   )}
                 />
-                <span className="truncate">{statusText}</span>
+                <span className={chatHeader.webStatusLabel}>{statusText}</span>
               </div>
             </div>
             {/* Clear the conversation history (also available by typing /clear). */}
@@ -2371,7 +2074,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
               disabled={thinking || messages.length === 0}
               title={t("clearHistory")}
               aria-label={t("clearHistory")}
-              className="ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-danger-soft hover:text-danger disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
+              className={cn(chatHeader.clear, chatHeader.webClear)}
             >
               <Icon name="delete" size={16} />
             </button>
@@ -2419,20 +2122,23 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
           {/* Thread */}
           <div
             ref={threadRef}
-            className={cn("min-h-0 flex-1 overflow-y-auto", mobileSurfaceOpen && "hidden")}
+            className={cn(chatThread.box, chatThread.web, mobileSurfaceOpen && "hidden")}
           >
             <div
               className={cn(
-                "flex flex-col gap-[18px] px-[18px] pb-1.5 pt-[18px]",
+                chatThread.webInner,
+                chatThread.inner,
                 chatFullscreen && "mx-auto w-full max-w-[640px]",
               )}
             >
               {messages.length === 0 ? (
                 <div
                   className={cn(
-                    "flex flex-col items-center px-1 text-center",
+                    chatWelcome.web,
+                    chatWelcome.box,
+                    chatWelcome.text,
                     // The phone's Plan step needs the height for its actions.
-                    isMobilePlan ? "pb-2 pt-3" : "pb-2 pt-6",
+                    isMobilePlan ? chatWelcome.plan : chatWelcome.idle,
                   )}
                 >
                   {!isMobilePlan && (
@@ -2441,13 +2147,13 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
                       alt=""
                       width={56}
                       height={56}
-                      className="mb-3 h-14 w-14 object-contain"
+                      className={cn(chatWelcome.image, chatWelcome.webImage)}
                     />
                   )}
-                  <h2 className="text-[18px] font-bold tracking-tight text-ink">
+                  <h2 className={chatWelcome.title}>
                     {t(isPlanMode ? "planWelcomeTitle" : "welcomeTitle")}
                   </h2>
-                  <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
+                  <p className={chatWelcome.description}>
                     {t(isPlanMode ? "planWelcomeDesc" : "welcomeDesc")}
                   </p>
                   {isPlanMode ? (
@@ -2465,13 +2171,13 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
                     />
                   ) : (
                     !needsGameProvider && (
-                      <div className="mt-[18px] flex w-full flex-col gap-2">
+                      <div className={cn(chatWelcome.webList, chatWelcome.list)}>
                         {starters.map((s) => (
                           <button
                             key={s}
                             type="button"
                             onClick={() => void send(s)}
-                            className="flex items-center gap-2.5 rounded-lg border border-border bg-card px-3.5 py-[11px] text-left text-[13.5px] font-medium text-ink-2 transition-colors hover:border-primary hover:bg-primary-soft hover:text-primary"
+                            className={cn(studioActionRow.box, studioActionRow.text, studioActionRow.web)}
                           >
                             <Icon name="sparkles" size={14} className="shrink-0 text-primary" />
                             {s}
@@ -2484,23 +2190,23 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
               ) : (
                 messages.map((m, i) =>
                   m.role === "assistant" ? (
-                    <div key={i} className="flex items-start gap-3">
+                    <div key={i} className={cn(chatMessage.webRow, chatMessage.row)}>
                       <Image
                         src="/images/dodi-head-active.png"
                         alt=""
                         width={30}
                         height={30}
-                        className="-mt-px h-[30px] w-[30px] shrink-0 object-contain"
+                        className={cn(chatMessage.avatar, chatMessage.webAvatar)}
                       />
-                      <div className="min-w-0 flex-1 text-sm leading-[1.6] text-ink">
+                      <div className={cn(chatMessage.body, chatMessage.bodyText)}>
                         <RichText text={m.text} />
                         {m.run && <AgentRunHistory run={m.run} />}
                         {i === lastChangeIndex && (canDiff || reverted) && (
-                          <div className="mt-1.5 flex items-center gap-1.5 text-[11.5px] font-medium text-faint">
+                          <div className={cn(chatMessage.webLinks, chatMessage.links, chatMessage.linksText)}>
                             <button
                               type="button"
                               onClick={openChanges}
-                              className="underline-offset-2 transition-colors hover:text-primary hover:underline"
+                              className={chatMessage.webLink}
                             >
                               {t("showChanges")}
                             </button>
@@ -2509,7 +2215,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
                               type="button"
                               onClick={() => void revertCode()}
                               disabled={reverting || thinking}
-                              className="underline-offset-2 transition-colors hover:text-primary hover:underline disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-faint disabled:hover:no-underline"
+                              className={cn(chatMessage.webLink, chatMessage.webLinkDisableable)}
                             >
                               {reverted ? t("restoreVersion") : t("revertVersion")}
                             </button>
@@ -2518,10 +2224,10 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
                       </div>
                     </div>
                   ) : (
-                    <div key={i} className="flex justify-end">
-                      <div className="max-w-[88%] rounded-2xl rounded-tr-[5px] bg-primary-soft px-3.5 py-2.5 text-sm font-medium leading-[1.6] text-ink">
+                    <div key={i} className={cn(chatMessage.webUserRow, chatMessage.userRow)}>
+                      <div className={cn(chatMessage.bubble, chatMessage.bubbleText)}>
                         {m.images && m.images.length > 0 && (
-                          <div className="mb-2 flex flex-wrap gap-1.5">
+                          <div className={cn(chatMessage.webImages, chatMessage.images)}>
                             {m.images.map((img, j) => (
                               // Raw <img>: attachments are data URLs (next/image can't optimize them).
                               // eslint-disable-next-line @next/next/no-img-element
@@ -2529,7 +2235,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
                                 key={j}
                                 src={img}
                                 alt=""
-                                className="h-16 w-16 rounded-lg border border-border object-cover"
+                                className={cn(chatMessage.image, chatMessage.webImage)}
                               />
                             ))}
                           </div>
@@ -2541,30 +2247,30 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
                 )
               )}
               {thinking && (
-                <div className="flex items-start gap-3">
+                <div className={cn(chatMessage.webRow, chatMessage.row)}>
                   <Image
                     src="/images/dodi-head-active.png"
                     alt=""
                     width={30}
                     height={30}
-                    className="-mt-px h-[30px] w-[30px] shrink-0 object-contain"
+                    className={cn(chatMessage.avatar, chatMessage.webAvatar)}
                   />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex gap-1.5 py-1.5">
-                      <span className="h-[7px] w-[7px] animate-bounce rounded-full bg-faint [animation-delay:0ms]" />
-                      <span className="h-[7px] w-[7px] animate-bounce rounded-full bg-faint [animation-delay:150ms]" />
-                      <span className="h-[7px] w-[7px] animate-bounce rounded-full bg-faint [animation-delay:300ms]" />
+                  <div className={chatMessage.body}>
+                    <div className={cn(chatThinking.webDots, chatThinking.dots)}>
+                      {chatThinking.webDotDelays.map((delay) => (
+                        <span key={delay} className={cn(chatThinking.dot, chatThinking.webDot, delay)} />
+                      ))}
                     </div>
                     {liveRun && <AgentRunTimeline run={liveRun} isLive />}
                     {/* No aria-live: announcing every streamed delta would spam
                         screen readers — the header status line carries progress. */}
                     {narration.trim() && (
-                      <p className="mt-1 whitespace-pre-wrap text-[12.5px] italic leading-relaxed text-muted-foreground">
+                      <p className={cn(chatThinking.narration, chatThinking.webNarration)}>
                         {narration.trim()}
                       </p>
                     )}
                     {step === "writing_code" && writeChars > 0 && (
-                      <p className="mt-1 text-[11.5px] font-medium tabular-nums text-faint">
+                      <p className={chatThinking.writeProgress}>
                         {t("writeProgress", { chars: writeChars })}
                       </p>
                     )}
@@ -2578,18 +2284,18 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
           <div
             ref={composerRef}
             className={cn(
-              "flex-shrink-0 px-4 pb-3.5 pt-2",
+              composer.box,
               chatFullscreen && "mx-auto w-full max-w-[640px]",
             )}
           >
             {needsGameProvider && (
-              <div className="mb-2 flex items-start gap-1.5 rounded-lg bg-warning-soft px-2.5 py-1.5 text-xs font-medium text-warning">
+              <div className={warningNotice}>
                 <Icon name="alert" size={14} className="mt-px shrink-0" />
                 <span>
                   {t("needThinkingProvider")}{" "}
                   <Link
                     href="/parent/settings/ai-providers"
-                    className="font-semibold underline underline-offset-2 hover:opacity-80"
+                    className={cn(composerNotice.link, composerNotice.webLink)}
                   >
                     {t("openSettings")}
                   </Link>
@@ -2597,14 +2303,14 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
               </div>
             )}
             {thinking && (
-              <div className="mb-2 flex items-start gap-1.5 rounded-lg bg-primary-soft px-2.5 py-1.5 text-xs font-medium text-primary">
+              <div className={primaryNotice}>
                 <Icon name="alert" size={14} className="mt-px shrink-0" />
                 <span>{t(activeBuild ? "buildRunningHint" : "agentRunningWarning")}</span>
               </div>
             )}
             {resumable && !thinking && (
-              <div className="mb-2 flex flex-wrap items-center gap-2 rounded-lg bg-primary-soft px-2.5 py-1.5 text-xs font-medium text-primary">
-                <span className="min-w-0 flex-1">{t("resumeBuildNotice")}</span>
+              <div className={cn(composerNotice.web, composerNotice.resume, composerNotice.resumeText)}>
+                <span className={composerNotice.resumeLabel}>{t("resumeBuildNotice")}</span>
                 <Button size="sm" onClick={resumeBuild} disabled={isOtherBuildRunning}>
                   {t("resumeBuild")}
                 </Button>
@@ -2614,18 +2320,18 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
               </div>
             )}
             {error && (
-              <div className="mb-2 rounded-lg bg-danger-soft px-2.5 py-1.5 text-xs font-medium text-danger">
+              <div className={cn(composerNotice.error, composerNotice.errorText)}>
                 {error}
               </div>
             )}
             {bgNotice && (
-              <div className="mb-2 flex items-start gap-1.5 rounded-lg bg-warning-soft px-2.5 py-1.5 text-xs font-medium text-warning">
+              <div className={warningNotice}>
                 <Icon name="alert" size={14} className="mt-px shrink-0" />
                 <span>{t(bgNotice === "failed" ? "bgFailedNotice" : "bgSkippedNotice")}</span>
               </div>
             )}
             {previewNotice && (
-              <div className="mb-2 flex items-start gap-1.5 rounded-lg bg-warning-soft px-2.5 py-1.5 text-xs font-medium text-warning">
+              <div className={warningNotice}>
                 <Icon name="alert" size={14} className="mt-px shrink-0" />
                 <span>
                   {t(previewNotice === "failed" ? "previewFailedNotice" : "previewSkippedNotice")}
@@ -2633,12 +2339,12 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
               </div>
             )}
             {visualCheckNotice && (
-              <div className="mb-2 flex items-start gap-1.5 rounded-lg bg-warning-soft px-2.5 py-1.5 text-xs font-medium text-warning">
+              <div className={warningNotice}>
                 <Icon name="alert" size={14} className="mt-px shrink-0" />
                 <span>{t("visualCheckFailedNotice")}</span>
               </div>
             )}
-            <div className="relative rounded-2xl border border-border-strong bg-card px-4 pb-2.5 pt-3 shadow-[0_4px_18px_rgba(34,56,78,0.07)] transition-colors focus-within:border-primary">
+            <div className={cn(composer.card, composer.webCard)}>
               {/* Composer top resize handle (horizontal layout only) */}
               {!vertical && (
                 <div
@@ -2650,7 +2356,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
                 </div>
               )}
               {pendingImages.length > 0 && (
-                <div className="mb-2 flex flex-wrap gap-2">
+                <div className={cn(composer.webPending, composer.pending)}>
                   {pendingImages.map((img, i) => (
                     <div key={i} className="relative">
                       {/* Raw <img>: staged attachments are data URLs. */}
@@ -2658,7 +2364,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
                       <img
                         src={img}
                         alt=""
-                        className="h-12 w-12 rounded-lg border border-border object-cover"
+                        className={cn(composer.pendingImage, composer.webPendingImage)}
                       />
                       <button
                         type="button"
@@ -2666,7 +2372,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
                           setPendingImages((prev) => prev.filter((_, j) => j !== i))
                         }
                         aria-label={t("removeImage")}
-                        className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-ink text-white transition-colors hover:bg-danger"
+                        className={cn(composer.remove, composer.webRemove)}
                       >
                         <Icon name="close" size={11} strokeWidth={3} />
                       </button>
@@ -2683,7 +2389,8 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
                       : COMPOSER_ONE_LINE,
                 }}
                 disabled={composerLocked}
-                className="block w-full resize-none border-0 bg-transparent p-0 pb-1.5 text-[14.5px] leading-normal text-ink outline-none placeholder:text-faint disabled:cursor-not-allowed"
+                enterKeyHint={isTouch ? "enter" : "send"}
+                className={cn(composer.input, composer.inputText, composer.webInput)}
                 placeholder={
                   needsGameProvider
                     ? t("composerPlaceholderNoThinking")
@@ -2706,7 +2413,16 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
                   }
                 }}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
+                  if (
+                    isComposerSendKey(
+                      {
+                        key: e.key,
+                        shiftKey: e.shiftKey,
+                        isComposing: e.nativeEvent.isComposing,
+                      },
+                      { isTouch },
+                    )
+                  ) {
                     e.preventDefault();
                     // Slash-command: "/clear" wipes the conversation (with confirm).
                     if (draft.trim() === "/clear") {
@@ -2718,7 +2434,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
                   }
                 }}
               />
-              <div className="flex items-center justify-between">
+              <div className={cn(composer.webActions, composer.actions)}>
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -2741,7 +2457,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
                       ? t("attachLimitReached")
                       : t("attachImage")
                   }
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-primary-soft hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+                  className={cn(composer.attach, composer.webAttach)}
                 >
                   <Icon name="photo" size={18} />
                 </button>
@@ -2751,10 +2467,11 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
                   disabled={composerLocked || (thinking ? false : !draft.trim())}
                   aria-label={thinking ? t("stop") : t("send")}
                   className={cn(
-                    "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white transition-colors active:scale-95",
+                    composer.send,
+                    composer.webSend,
                     (thinking ? true : draft.trim() && !composerLocked)
-                      ? "bg-primary hover:bg-primary-hover"
-                      : "bg-border-strong",
+                      ? cn(composer.sendOn, composer.webSendOn)
+                      : composer.sendOff,
                   )}
                 >
                   <Icon name={thinking ? "stop" : "send"} size={17} />
@@ -2763,7 +2480,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
             </div>
             <p
               className={cn(
-                "mt-2 text-center text-[11px] leading-snug text-faint",
+                composer.footer,
                 mobileSurfaceOpen && "hidden",
               )}
             >
@@ -2854,10 +2571,12 @@ function SegTab({
       type="button"
       onClick={onClick}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-[7px] px-3.5 py-[7px] text-[13px] font-semibold transition-colors",
+        studioSeg.box,
+        studioSeg.text,
+        studioSeg.web,
         active
-          ? "bg-card text-ink shadow-[0_1px_2px_rgba(34,56,78,0.06)]"
-          : "text-muted-foreground hover:text-ink-2",
+          ? cn(studioSeg.active, studioSeg.activeText, studioSeg.webActive)
+          : cn(studioSeg.idleText, studioSeg.webIdle),
       )}
     >
       <Icon name={icon} size={15} />
@@ -2883,10 +2602,12 @@ function StudioTab({
       type="button"
       onClick={onClick}
       className={cn(
-        "inline-flex flex-1 items-center justify-center gap-1.5 rounded-[9px] border px-2.5 py-2 text-[13.5px] font-semibold transition-colors",
+        studioTab.box,
+        studioTab.text,
+        studioTab.web,
         active
-          ? "border-primary-soft-2 bg-primary-soft text-primary"
-          : "border-border bg-background text-muted-foreground",
+          ? cn(studioTab.active, studioTab.activeText)
+          : cn(studioTab.idle, studioTab.idleText),
       )}
     >
       <Icon name={icon} size={15} />
@@ -2897,11 +2618,11 @@ function StudioTab({
 
 function EmptyStage({ title, icon = "games" }: { title: string; icon?: "games" | "code" }) {
   return (
-    <div className="m-auto max-w-[280px] text-center">
-      <div className="mx-auto mb-3.5 flex h-14 w-14 items-center justify-center rounded-2xl border border-border bg-card text-faint">
-        <Icon name={icon} size={28} />
+    <div className={cn(emptyStage.box, emptyStage.text)}>
+      <div className={cn(emptyStage.webIconBox, emptyStage.iconBox)}>
+        <Icon name={icon} size={emptyStage.icon.size} />
       </div>
-      <div className="text-[13px] leading-relaxed text-muted-foreground">{title}</div>
+      <div className={emptyStage.title}>{title}</div>
     </div>
   );
 }
@@ -2924,16 +2645,18 @@ function AudienceButton({
       type="button"
       onClick={onClick}
       className={cn(
-        "inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm font-semibold transition-colors",
+        audiencePill.box,
+        audiencePill.text,
+        audiencePill.web,
         selected
-          ? "border-primary bg-primary-soft text-primary"
-          : "border-border-strong bg-card text-ink-2 hover:border-faint",
+          ? cn(audiencePill.selected, audiencePill.selectedText)
+          : cn(audiencePill.idle, audiencePill.idleText, audiencePill.webIdle),
       )}
     >
       {icon ? (
         <Icon name={icon} size={16} className={selected ? "text-primary" : "text-muted-foreground"} />
       ) : (
-        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary-soft text-[11px] font-bold text-primary">
+        <span className={cn(audiencePill.webInitial, audiencePill.initial, audiencePill.initialText)}>
           {initial}
         </span>
       )}
@@ -2983,7 +2706,7 @@ function SettingsForm({
   t: ReturnType<typeof useTranslations>;
 }) {
   return (
-    <div className="mx-auto flex max-w-[560px] flex-col gap-4 p-5 md:p-8">
+    <div className={cn(studioSettings.webForm, studioSettings.form)}>
       <Field label={t("gameName")} required>
         <Input
           value={game.title}
@@ -2997,9 +2720,9 @@ function SettingsForm({
       <Field label={t("forKid")} required>
         <div
           className={cn(
-            "flex flex-wrap gap-2",
-            invalid.audience &&
-              "-m-2 rounded-lg border border-destructive p-2 ring-2 ring-destructive/20",
+            studioSettings.webChips,
+            studioSettings.chips,
+            invalid.audience && cn(studioSettings.chipsInvalid, studioSettings.webChipsInvalid),
           )}
         >
           <AudienceButton
@@ -3025,7 +2748,7 @@ function SettingsForm({
 
       <Field label={t("learningGoal")} required>
         <textarea
-          className="min-h-[76px] w-full resize-y rounded-md border border-border-strong bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-soft-2 aria-invalid:border-destructive aria-invalid:ring-destructive/20"
+          className={cn(studioTextarea.goal, studioTextarea.box, studioTextarea.text, studioTextarea.web, studioTextarea.webInvalid)}
           value={game.learningGoal}
           placeholder={t("learningGoalPlaceholder")}
           aria-invalid={invalid.learningGoal || undefined}
@@ -3039,7 +2762,7 @@ function SettingsForm({
         hint={game.successDefinition ? t("progressKindGoal") : t("progressKindOpen")}
       >
         <textarea
-          className="min-h-[72px] w-full resize-y rounded-md border border-border-strong bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-soft-2"
+          className={cn(studioTextarea.success, studioTextarea.box, studioTextarea.text, studioTextarea.web)}
           value={game.successDefinition}
           placeholder={t("successPlaceholder")}
           onChange={(e) => setField("successDefinition", e.target.value)}
@@ -3063,12 +2786,12 @@ function SettingsForm({
           maxLabel={t("ageMaxLabel")}
         />
         {invalid.age && (
-          <p className="text-[11px] font-medium text-danger">{t("ageRangeInvalid")}</p>
+          <p className={studioSettings.error}>{t("ageRangeInvalid")}</p>
         )}
       </Field>
 
       <Field label={t("perspectiveLabel")} hint={t("perspectiveHint")}>
-        <div className="flex flex-wrap gap-2" role="radiogroup" aria-label={t("perspectiveLabel")}>
+        <div className={cn(studioSettings.webChips, studioSettings.chips)} role="radiogroup" aria-label={t("perspectiveLabel")}>
           {(
             [
               [null, t("perspectiveUnspecified")],
@@ -3086,10 +2809,12 @@ function SettingsForm({
                 aria-checked={selected}
                 onClick={() => setField("perspective", value)}
                 className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-semibold transition-colors",
+                  optionChip.box,
+                  optionChip.text,
+                  optionChip.web,
                   selected
-                    ? "border-primary bg-primary-soft text-primary"
-                    : "border-border-strong bg-card text-ink-2 hover:border-faint",
+                    ? cn(optionChip.selected, optionChip.selectedText)
+                    : cn(optionChip.idle, optionChip.idleText, optionChip.webIdle),
                 )}
               >
                 {label}
@@ -3104,8 +2829,8 @@ function SettingsForm({
         label={t("backgroundImageLabel")}
         hint={hasImageProvider === false ? undefined : t("backgroundImageHint")}
       >
-        <div className="flex flex-col gap-2">
-          <label className="flex w-fit cursor-pointer items-center gap-2.5 text-sm font-medium text-ink-2">
+        <div className={cn(studioSettings.webStack, studioSettings.stack)}>
+          <label className={cn(studioSettings.webSwitchRow, studioSettings.switchRow, studioSettings.switchText)}>
             <Switch
               checked={game.generateBackgroundImage}
               disabled={!hasImageProvider}
@@ -3114,11 +2839,11 @@ function SettingsForm({
             {t("backgroundImageToggle")}
           </label>
           {hasImageProvider === false && (
-            <p className="text-xs text-muted-foreground">
+            <p className={studioSettings.note}>
               {t("backgroundImageNeedsProvider")}{" "}
               <Link
                 href="/parent/settings/ai-providers"
-                className="font-semibold underline underline-offset-2 hover:opacity-80"
+                className={cn(studioSettings.link, studioSettings.webLink)}
               >
                 {t("openSettings")}
               </Link>
@@ -3131,7 +2856,7 @@ function SettingsForm({
         label={t("previewImageLabel")}
         hint={hasImageProvider === false ? undefined : t("previewImageHint")}
       >
-        <label className="flex w-fit cursor-pointer items-center gap-2.5 text-sm font-medium text-ink-2">
+        <label className={cn(studioSettings.webSwitchRow, studioSettings.switchRow, studioSettings.switchText)}>
           <Switch
             checked={game.generatePreviewImage}
             disabled={!hasImageProvider}
@@ -3153,14 +2878,14 @@ function SettingsForm({
           an existing game shows "Save changes". A planning draft's save failures
           surface here since its composer is hidden; an existing game keeps its
           visible Dodi-panel error. */}
-      <div className="mt-2 flex flex-col gap-3 border-t border-border pt-6">
+      <div className={cn(studioSettings.webSave, studioSettings.save)}>
         {isPlanning && error && (
-          <div className="rounded-lg bg-danger-soft px-3 py-2 text-xs font-medium text-danger">
+          <div className={cn(studioSettings.saveError, studioSettings.saveErrorText)}>
             {error}
           </div>
         )}
         {isPlanning && hasAcceptedPlan && (
-          <p className="text-xs text-muted-foreground">{t("planBuildHint")}</p>
+          <p className={studioSettings.note}>{t("planBuildHint")}</p>
         )}
         <Button
           size="lg"
@@ -3199,15 +2924,15 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex items-center gap-2">
-        <label className="text-xs font-semibold text-ink-2">
+    <div className={cn(studioSettings.webField, studioSettings.field)}>
+      <div className={cn(studioSettings.webLabelRow, studioSettings.labelRow)}>
+        <label className={studioSettings.label}>
           {label}
           {required ? <RequiredMark /> : null}
         </label>
       </div>
       {children}
-      {hint && <p className="text-[11px] text-faint">{hint}</p>}
+      {hint && <p className={studioSettings.hint}>{hint}</p>}
     </div>
   );
 }

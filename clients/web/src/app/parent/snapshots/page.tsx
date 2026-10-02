@@ -39,6 +39,8 @@ import {
   type SnapshotUsageFilter,
   matchesSnapshotFilters,
 } from "@/lib/snapshot-filters";
+import { cn } from "@/lib/utils";
+import { parentSnapshotRow } from "@dodi/ui-recipes";
 
 const TYPE_FILTERS: SnapshotTypeFilter[] = ["manual", "autosave"];
 const USAGE_FILTERS: SnapshotUsageFilter[] = ["stored", "sent", "received"];
@@ -143,9 +145,9 @@ export default function ParentSnapshotsPage() {
         onClose={() => setExportOpen(false)}
       />
 
-      <div className="mb-6 flex flex-wrap gap-3">
+      <div className={cn(parentSnapshotRow.webFilters, parentSnapshotRow.filters)}>
         <Select value={filterKid} onValueChange={setFilterKid}>
-          <SelectTrigger className="w-[180px]">
+          <SelectTrigger className={parentSnapshotRow.filter}>
             <SelectValue placeholder={t("filterKid")} />
           </SelectTrigger>
           <SelectContent>
@@ -178,7 +180,7 @@ export default function ParentSnapshotsPage() {
           value={filterType}
           onValueChange={(v) => setFilterType(v as SnapshotTypeFilter)}
         >
-          <SelectTrigger className="w-[180px]">
+          <SelectTrigger className={parentSnapshotRow.filter}>
             <SelectValue placeholder={t("filterType")} />
           </SelectTrigger>
           <SelectContent>
@@ -195,7 +197,7 @@ export default function ParentSnapshotsPage() {
           value={filterUsage}
           onValueChange={(v) => setFilterUsage(v as SnapshotUsageFilter)}
         >
-          <SelectTrigger className="w-[180px]">
+          <SelectTrigger className={parentSnapshotRow.filter}>
             <SelectValue placeholder={t("filterUsage")} />
           </SelectTrigger>
           <SelectContent>
@@ -210,11 +212,23 @@ export default function ParentSnapshotsPage() {
       </div>
 
       {error ? (
-        <div className="rounded-lg border border-dashed border-border-strong px-5 py-8 text-center text-sm text-muted-foreground">
+        <div
+          className={cn(
+            parentSnapshotRow.empty,
+            parentSnapshotRow.emptyText,
+            parentSnapshotRow.textAlign,
+          )}
+        >
           {error === "locked" ? t("locked") : t("loadFailed")}
         </div>
       ) : filtered.length === 0 && !loading ? (
-        <div className="rounded-lg border border-dashed border-border-strong px-5 py-8 text-center text-sm text-muted-foreground">
+        <div
+          className={cn(
+            parentSnapshotRow.empty,
+            parentSnapshotRow.emptyText,
+            parentSnapshotRow.textAlign,
+          )}
+        >
           {hasFilters ? t("noResults") : t("noSnapshots")}
         </div>
       ) : (
@@ -228,10 +242,16 @@ export default function ParentSnapshotsPage() {
                   width={48}
                   height={48}
                   unoptimized
-                  className="size-12 shrink-0 rounded-md border border-border object-cover"
+                  className={cn(parentSnapshotRow.thumb, parentSnapshotRow.webThumb)}
                 />
               ) : (
-                <div className="flex size-12 shrink-0 items-center justify-center rounded-md bg-primary-soft text-primary">
+                <div
+                  className={cn(
+                    parentSnapshotRow.webTile,
+                    parentSnapshotRow.tile,
+                    parentSnapshotRow.tileText,
+                  )}
+                >
                   <Icon name="camera" size={22} stroke={1.6} />
                 </div>
               )}

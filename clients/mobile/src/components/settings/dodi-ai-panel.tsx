@@ -4,8 +4,9 @@
  * recommended) and needs-credits. "On" is derived: any category on dodi AI.
  */
 import { useEffect, useState } from "react";
-import { Switch, View } from "react-native";
+import { ActivityIndicator, View } from "react-native";
 import { useTranslations } from "use-intl";
+import { COLORS } from "@dodi/design-tokens";
 import {
   type ApplyModelConfig,
   disableDodiAI,
@@ -16,15 +17,15 @@ import {
 } from "@dodi/client-state/dodi-ai-settings";
 import { type DraftModelConfig, formatEurCents, usesDodiAI } from "@dodi/client-state/model-config";
 
-import { Button, Card, Notice, Text } from "@/components/ui";
-import { Badge } from "@/components/ui/badge";
-import { IconSparkles } from "@/components/ui/icons";
+import { Section } from "@/components/parent/section";
+import { Badge, Button, Icon, Switch, Text } from "@/components/ui";
 import {
   clientState,
   useDodiAIBillingStore,
   useDodiAIDefaultsStore,
   useDodiAIKeyStore,
 } from "@/lib/client-state";
+import { cn } from "@/lib/cn";
 import { useAccountDateFormat } from "@/lib/date-format";
 import { useLocaleSetting } from "@/lib/intl";
 
@@ -91,58 +92,87 @@ export function DodiAIPanel({
       : null;
 
   return (
-    <View className="gap-3">
-      <Text variant="muted">{t("managedIntro")}</Text>
-      <Card>
-        <View className="flex-row items-center gap-3">
+    <View>
+      <Text className="mb-4 text-[13px] text-muted-foreground">{t("managedIntro")}</Text>
+
+      <Section>
+        <View className="flex-row items-center gap-4 px-5 py-4">
           <View
-            className={
-              isEnabled
-                ? "h-10 w-10 items-center justify-center rounded-lg bg-primary"
-                : "h-10 w-10 items-center justify-center rounded-lg bg-primary-soft"
-            }
+            className={cn(
+              "size-10 shrink-0 items-center justify-center rounded-lg",
+              isEnabled ? "bg-primary" : "bg-primary-soft",
+            )}
           >
-            <IconSparkles size={20} color={isEnabled ? "#FFFFFF" : "#2F6BD8"} />
+            <Icon name="sparkles" size={20} color={isEnabled ? "primary-foreground" : "primary"} />
           </View>
-          <View className="flex-1 gap-1">
-            <Text className="font-semibold">{t("managedTitle")}</Text>
-            {isEnabled ? <Badge tone="success" label={t("managedActive")} /> : null}
+          <View className="min-w-0 flex-1">
+            <View className="flex-row flex-wrap items-center gap-2.5">
+              <Text className="text-sm font-semibold">{t("managedTitle")}</Text>
+              {isEnabled ? <Badge variant="success">{t("managedActive")}</Badge> : null}
+            </View>
+            <Text className="mt-0.5 text-[13px] text-muted-foreground">
+              {isEnabled ? t("managedActiveDescription") : t("managedEnableDescription")}
+            </Text>
+            {isEnabled && balanceLine ? (
+              <Text className="mt-0.5 text-[12.5px] text-muted-foreground">{balanceLine}</Text>
+            ) : null}
           </View>
           {isEnabled ? (
             <Switch
+              checked
+              onCheckedChange={() => void disableDodiAI(settingsDeps(), config, applyConfig, clearConfig)}
               accessibilityLabel={t("managedDisable")}
-              value
-              onValueChange={() => void disableDodiAI(settingsDeps(), config, applyConfig, clearConfig)}
-              trackColor={{ true: "#2F6BD8", false: "#D3DDE8" }}
             />
-          ) : null}
+          ) : isEnabling ? (
+            <View className="flex-row items-center gap-2" accessibilityState={{ busy: true }}>
+              <ActivityIndicator size="small" color={COLORS["muted-foreground"]} />
+              <Text className="text-sm text-muted-foreground">{t("managedEnabling")}</Text>
+            </View>
+          ) : (
+            <Button onPress={() => void enable()}>{t("managedEnable")}</Button>
+          )}
         </View>
-        <Text variant="muted">{isEnabled ? t("managedActiveDescription") : t("managedEnableDescription")}</Text>
-        {isEnabled && balanceLine ? <Text variant="muted">{balanceLine}</Text> : null}
-        {!isEnabled ? (
-          <Button
-            label={isEnabling ? t("managedEnabling") : t("managedEnable")}
-            isLoading={isEnabling}
-            onPress={() => void enable()}
-          />
-        ) : null}
+
         {needsCredits ? (
-          <Notice tone="danger">{`${t("managedNeedsCredits")} ${t("managedNeedsCreditsHint")}`}</Notice>
-        ) : null}
-        {enableError ? <Notice tone="danger">{enableError}</Notice> : null}
-        {isJustEnabled ? <Notice tone="success">{t("managedJustEnabled")}</Notice> : null}
-        {isCustomized && !isJustEnabled ? (
-          <View className="gap-1">
-            <Text variant="muted">{t("managedCustomized")}</Text>
-            <Button
-              variant="ghost"
-              className="self-start px-0"
-              label={t("managedResetRecommended")}
-              onPress={() => void applyConfig(recommendedDodiConfig(defaults?.voice.voice))}
-            />
+          <View className="flex-row items-start gap-2 px-5 py-3">
+            <View className="mt-0.5">
+              <Icon name="alert" size={16} color="danger" />
+            </View>
+            <Text className="min-w-0 flex-1 text-[13px]">
+              <Text className="text-[13px] font-medium">{t("managedNeedsCredits")}</Text>{" "}
+              <Text className="text-[13px] text-muted-foreground">{t("managedNeedsCreditsHint")}</Text>
+            </Text>
           </View>
         ) : null}
-      </Card>
+
+        {enableError ? (
+          <View className="flex-row items-center gap-2 px-5 py-3" accessibilityRole="alert">
+            <Icon name="alert" size={16} color="danger" />
+            <Text className="min-w-0 flex-1 text-[13px] text-danger">{enableError}</Text>
+          </View>
+        ) : null}
+
+        {isJustEnabled ? (
+          <View className="flex-row items-center gap-2 px-5 py-3">
+            <Icon name="success" size={16} color="success" />
+            <Text className="min-w-0 flex-1 text-[13px] text-success">{t("managedJustEnabled")}</Text>
+          </View>
+        ) : null}
+
+        {isCustomized && !isJustEnabled ? (
+          <View className="flex-row items-center justify-between gap-3 px-5 py-3">
+            <Text className="min-w-0 flex-1 text-[13px] text-muted-foreground">{t("managedCustomized")}</Text>
+            <Button
+              variant="link"
+              size="sm"
+              className="px-0"
+              onPress={() => void applyConfig(recommendedDodiConfig(defaults?.voice.voice))}
+            >
+              {t("managedResetRecommended")}
+            </Button>
+          </View>
+        ) : null}
+      </Section>
     </View>
   );
 }

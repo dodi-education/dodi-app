@@ -2,9 +2,12 @@
 
 import { useLocale, useTranslations } from "next-intl";
 
+import type { ListingText } from "@dodi/client-state/game-publication";
+import { findSameDescriptionGroups, languageDisplayName } from "@dodi/client-state/listing-checks";
+import { publishCallout } from "@dodi/ui-recipes";
+
 import { Icon } from "@/components/shared/icon";
-import type { ListingText } from "@/lib/ai/client-translate-game";
-import { findSameDescriptionGroups, languageDisplayName } from "@/lib/games/listing-checks";
+import { cn } from "@/lib/utils";
 
 interface ListingSameTextWarningProps {
   translations: Record<string, ListingText>;
@@ -22,9 +25,18 @@ export function ListingSameTextWarning({ translations }: ListingSameTextWarningP
 
   const list = new Intl.ListFormat(uiLocale, { type: "conjunction" });
   return (
-    <div role="status" className="flex gap-2 rounded-lg bg-warning-soft px-3 py-2 text-xs text-ink-2">
+    <div
+      role="status"
+      className={cn(
+        publishCallout.web,
+        publishCallout.compact,
+        publishCallout.warning,
+        publishCallout.text,
+        publishCallout.bodyText,
+      )}
+    >
       <Icon name="alert" size={16} className="shrink-0 text-warning" />
-      <div className="flex flex-col gap-1">
+      <div className={cn(publishCallout.webBody, publishCallout.bodyTight)}>
         {groups.map((group) => (
           <p key={group.join(",")}>
             {t("listingSameDescription", {

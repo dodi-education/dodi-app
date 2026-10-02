@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // DOM only for three's own typings (HTMLCanvasElement, ...), node for the tests;
+    // the code itself uses neither: callers hand in the renderer, sizes, time and input.
+    "lib": ["ES2022", "DOM"],
+    "types": ["node"]
+  },
+  "include": ["src"]
+}

@@ -2,7 +2,11 @@
 
 import { useTranslations } from "next-intl";
 
+import { friendDisplayParts } from "@dodi/client-state/friends";
+import { friendRow } from "@dodi/ui-recipes";
+
 import { Icon } from "@/components/shared/icon";
+import { cn } from "@/lib/utils";
 import type { DecodedFriend } from "@/lib/friends";
 
 import { FriendAvatar } from "./friend-avatar";
@@ -17,31 +21,16 @@ interface FriendRowProps {
   disabled?: boolean;
 }
 
-const ROW_BASE =
-  "flex w-full items-center gap-3.5 rounded-[18px] bg-white px-4 py-3 text-left shadow-[0_2px_10px_rgba(34,56,78,0.05)]";
-
-/**
- * The real name wins; the requester's private nickname stands in for an outgoing
- * request until the friend accepts, and once both are known it's shown muted in
- * brackets after the name. The friend code (handle) is never displayed.
- */
-function displayParts(friend: DecodedFriend): {
-  primary: string;
-  suffix: string | null;
-} {
-  const name = friend.name?.trim();
-  const nick = friend.nickname?.trim();
-  return {
-    primary: name || nick || "—",
-    suffix: name && nick ? nick : null,
-  };
-}
+const ROW_BASE = cn(friendRow.box, friendRow.web);
+const DECLINE = cn(friendRow.decline, friendRow.declineText, friendRow.webDecline);
+const WAITING = cn(friendRow.waiting, friendRow.waitingText, friendRow.webWaiting);
+const STATUS_MUTED = cn(friendRow.status, friendRow.statusMuted, friendRow.webStatus);
 
 function NameLabel({ primary, suffix }: { primary: string; suffix: string | null }) {
   return (
-    <div className="text-[16.5px] font-extrabold text-ink">
+    <div className={friendRow.name}>
       {primary}
-      {suffix ? <span className="font-bold text-faint"> ({suffix})</span> : null}
+      {suffix ? <span className={friendRow.nameSuffix}> ({suffix})</span> : null}
     </div>
   );
 }
@@ -56,7 +45,7 @@ export function FriendRow({
   disabled,
 }: FriendRowProps) {
   const t = useTranslations("friends");
-  const { primary, suffix } = displayParts(friend);
+  const { primary, suffix } = friendDisplayParts(friend);
   // Which parent is still holding things up, from this kid's perspective.
   const awaitingLabel = friend.myParentPending
     ? t("awaitingYourParent")
@@ -67,10 +56,10 @@ export function FriendRow({
       <button
         type="button"
         onClick={onOpen}
-        className={`${ROW_BASE} transition-all duration-150 ease-[cubic-bezier(0.34,1.56,0.64,1)] hover:-translate-y-0.5 hover:shadow-[0_8px_20px_rgba(34,56,78,0.1)] active:scale-[0.985]`}
+        className={cn(ROW_BASE, friendRow.webOpen)}
       >
         <FriendAvatar label={primary} avatarConfig={friend.avatarConfig} />
-        <div className="min-w-0 flex-1">
+        <div className={friendRow.main}>
           <NameLabel primary={primary} suffix={suffix} />
         </div>
         <Icon name="chevron_right" size={20} className="text-border-strong" />
@@ -80,21 +69,21 @@ export function FriendRow({
 
   if (friend.status === "pending" && friend.role === "addressee") {
     return (
-      <div className={`${ROW_BASE} outline outline-[1.5px] outline-primary-soft-2`}>
+      <div className={cn(ROW_BASE, friendRow.webIncoming)}>
         <FriendAvatar label={primary} avatarConfig={friend.avatarConfig} />
-        <div className="min-w-0 flex-1">
+        <div className={friendRow.main}>
           <NameLabel primary={primary} suffix={suffix} />
-          <div className="truncate text-[13px] font-bold text-primary">
+          <div className={cn(friendRow.status, friendRow.statusRequest, friendRow.webStatus)}>
             {t("wantsToBeFriends")}
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className={cn(friendRow.actions, friendRow.webActions)}>
           <button
             type="button"
             onClick={onDecline}
             disabled={disabled}
             aria-label={t("reject")}
-            className="flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground transition-colors hover:bg-danger-soft hover:text-danger disabled:opacity-50"
+            className={DECLINE}
           >
             <Icon name="close" size={16} stroke={2.4} />
           </button>
@@ -102,7 +91,7 @@ export function FriendRow({
             type="button"
             onClick={onAccept}
             disabled={disabled}
-            className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2.5 text-sm font-extrabold text-white shadow-[0_3px_9px_rgba(47,107,216,0.26)] transition-colors hover:bg-primary-hover active:scale-95 disabled:opacity-50"
+            className={cn(friendRow.accept, friendRow.acceptText, friendRow.webAccept)}
           >
             <Icon name="check" size={15} stroke={2.6} />
             {t("accept")}
@@ -117,14 +106,14 @@ export function FriendRow({
     return (
       <div className={ROW_BASE}>
         <FriendAvatar label={primary} avatarConfig={friend.avatarConfig} />
-        <div className="min-w-0 flex-1">
+        <div className={friendRow.main}>
           <NameLabel primary={primary} suffix={suffix} />
-          <div className="truncate text-[13px] font-bold text-faint">
+          <div className={STATUS_MUTED}>
             {t("youAccepted")}
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-[7px] text-[13px] font-extrabold text-muted-foreground">
+        <div className={cn(friendRow.actions, friendRow.webActions)}>
+          <span className={WAITING}>
             <Icon name="clock" size={13} stroke={2.2} />
             {awaitingLabel}
           </span>
@@ -133,7 +122,7 @@ export function FriendRow({
             onClick={onCancel}
             disabled={disabled}
             aria-label={t("reject")}
-            className="flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground transition-colors hover:bg-danger-soft hover:text-danger disabled:opacity-50"
+            className={DECLINE}
           >
             <Icon name="close" size={16} stroke={2.4} />
           </button>
@@ -149,14 +138,14 @@ export function FriendRow({
     return (
       <div className={ROW_BASE}>
         <FriendAvatar label={primary} avatarConfig={friend.avatarConfig} />
-        <div className="min-w-0 flex-1">
+        <div className={friendRow.main}>
           <NameLabel primary={primary} suffix={suffix} />
-          <div className="truncate text-[13px] font-bold text-faint">
+          <div className={STATUS_MUTED}>
             {t("requestSent")}
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-[7px] text-[13px] font-extrabold text-muted-foreground">
+        <div className={cn(friendRow.actions, friendRow.webActions)}>
+          <span className={WAITING}>
             <Icon name="clock" size={13} stroke={2.2} />
             {pendingLabel}
           </span>
@@ -165,7 +154,7 @@ export function FriendRow({
             onClick={onCancel}
             disabled={disabled}
             aria-label={t("reject")}
-            className="flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground transition-colors hover:bg-danger-soft hover:text-danger disabled:opacity-50"
+            className={DECLINE}
           >
             <Icon name="close" size={16} stroke={2.4} />
           </button>
@@ -176,11 +165,11 @@ export function FriendRow({
 
   // blocked
   return (
-    <div className={`${ROW_BASE} opacity-90`}>
+    <div className={cn(ROW_BASE, friendRow.blocked)}>
       <FriendAvatar label={primary} avatarConfig={friend.avatarConfig} grayscale />
-      <div className="min-w-0 flex-1">
+      <div className={friendRow.main}>
         <NameLabel primary={primary} suffix={suffix} />
-        <div className="truncate text-[13px] font-bold text-faint">
+        <div className={STATUS_MUTED}>
           {t("blocked")}
         </div>
       </div>
@@ -188,7 +177,7 @@ export function FriendRow({
         type="button"
         onClick={onUnblock}
         disabled={disabled}
-        className="rounded-full bg-muted px-[18px] py-2.5 text-sm font-extrabold text-ink-2 transition-colors hover:bg-primary-soft hover:text-primary disabled:opacity-50"
+        className={cn(friendRow.unblock, friendRow.unblockText, friendRow.webUnblock)}
       >
         {t("unblock")}
       </button>

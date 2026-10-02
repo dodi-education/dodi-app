@@ -4,7 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import jsQR from "jsqr";
 import { useTranslations } from "next-intl";
 
+import { qrScanner } from "@dodi/ui-recipes";
+
 import { Icon } from "@/components/shared/icon";
+import { cn } from "@/lib/utils";
 
 type ScanError = "denied" | "nocamera" | "unsupported";
 
@@ -114,9 +117,9 @@ export function QrScanner({ onDetected }: QrScannerProps) {
           ? t("scanNoCamera")
           : t("scanUnsupported");
     return (
-      <div className="flex aspect-square w-full max-w-[260px] flex-col items-center justify-center gap-3 rounded-[22px] bg-muted px-6 text-center">
+      <div className={cn(qrScanner.error, qrScanner.webError)}>
         <Icon name="camera" size={30} stroke={1.7} className="text-faint" />
-        <div className="text-[13.5px] font-bold leading-relaxed text-muted-foreground">
+        <div className={qrScanner.errorText}>
           {message}
         </div>
       </div>
@@ -124,7 +127,7 @@ export function QrScanner({ onDetected }: QrScannerProps) {
   }
 
   return (
-    <div className="relative flex aspect-square w-full max-w-[260px] items-center justify-center overflow-hidden rounded-[22px] bg-[radial-gradient(circle_at_50%_40%,#2c3f54,#1b2735)]">
+    <div className={cn(qrScanner.frame, qrScanner.webFrame)}>
       <video
         ref={videoRef}
         playsInline
@@ -132,11 +135,11 @@ export function QrScanner({ onDetected }: QrScannerProps) {
         autoPlay
         className="absolute inset-0 h-full w-full object-cover"
       />
-      <span className="absolute left-[18px] top-[18px] size-[30px] rounded-tl-[10px] border-l-[3.5px] border-t-[3.5px] border-white/90" />
-      <span className="absolute right-[18px] top-[18px] size-[30px] rounded-tr-[10px] border-r-[3.5px] border-t-[3.5px] border-white/90" />
-      <span className="absolute bottom-[18px] left-[18px] size-[30px] rounded-bl-[10px] border-b-[3.5px] border-l-[3.5px] border-white/90" />
-      <span className="absolute bottom-[18px] right-[18px] size-[30px] rounded-br-[10px] border-b-[3.5px] border-r-[3.5px] border-white/90" />
-      <div className="absolute bottom-3 left-0 right-0 px-6 text-center text-[13px] font-bold text-white/90 [text-shadow:0_1px_3px_rgba(0,0,0,0.5)]">
+      <span className={cn(qrScanner.corner, qrScanner.cornerTopLeft)} />
+      <span className={cn(qrScanner.corner, qrScanner.cornerTopRight)} />
+      <span className={cn(qrScanner.corner, qrScanner.cornerBottomLeft)} />
+      <span className={cn(qrScanner.corner, qrScanner.cornerBottomRight)} />
+      <div className={cn(qrScanner.hint, qrScanner.hintText, qrScanner.webHint)}>
         {t("scanHint")}
       </div>
     </div>

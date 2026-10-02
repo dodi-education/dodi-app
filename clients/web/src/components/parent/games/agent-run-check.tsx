@@ -6,6 +6,7 @@ import { AgentRunFrames } from "@/components/parent/games/agent-run-frames";
 import { Icon } from "@/components/shared/icon";
 import type { AgentRunCheck } from "@dodi/studio/agent-run-log";
 import { cn } from "@/lib/utils";
+import { agentRunCheck } from "@dodi/ui-recipes";
 
 interface AgentRunCheckItemProps {
   check: AgentRunCheck;
@@ -20,20 +21,20 @@ interface IssueListProps {
 function IssueList({ title, items, tone }: IssueListProps) {
   if (items.length === 0) return null;
   return (
-    <div className="mt-1.5">
+    <div className={agentRunCheck.issues}>
       <p
         className={cn(
-          "text-[11.5px] font-semibold",
-          tone === "danger" && "text-destructive",
-          tone === "warning" && "text-warning",
-          tone === "muted" && "text-muted-foreground",
+          agentRunCheck.issuesTitle,
+          tone === "danger" && agentRunCheck.issuesDanger,
+          tone === "warning" && agentRunCheck.issuesWarning,
+          tone === "muted" && agentRunCheck.issuesMuted,
         )}
       >
         {title}
       </p>
-      <ul className="text-muted-foreground mt-0.5 list-disc space-y-0.5 pl-4 text-[11.5px] leading-snug">
+      <ul className={cn(agentRunCheck.issueList, agentRunCheck.issueText, agentRunCheck.webIssueList)}>
         {items.map((item, i) => (
-          <li key={i} className="break-words">
+          <li key={i} className={agentRunCheck.webIssue}>
             {item}
           </li>
         ))}
@@ -50,14 +51,14 @@ export function AgentRunCheckItem({ check }: AgentRunCheckItemProps) {
 
   return (
     <div>
-      <p className="text-ink-2 flex items-center gap-1.5 text-[12.5px] font-semibold">
+      <p className={cn(agentRunCheck.webTitle, agentRunCheck.title, agentRunCheck.titleText)}>
         <Icon name="camera" size={14} className="text-primary shrink-0" />
         {t("runLogCheckTitle")}
         {!check.hasFailed && (
           <span
             className={cn(
-              "text-[11.5px] font-medium",
-              hasProblems ? "text-destructive" : "text-success",
+              agentRunCheck.status,
+              hasProblems ? agentRunCheck.statusBad : agentRunCheck.statusGood,
             )}
           >
             {check.isReady ? t("runLogCheckReady") : t("runLogCheckNotReady")}
@@ -65,27 +66,27 @@ export function AgentRunCheckItem({ check }: AgentRunCheckItemProps) {
         )}
       </p>
       {check.requestedSteps.length > 0 && (
-        <p className="text-faint mt-0.5 text-[11.5px]">
+        <p className={agentRunCheck.requested}>
           {t("runLogCheckRequested", {
             steps: check.requestedSteps.join(", "),
           })}
         </p>
       )}
       {check.hasFailed ? (
-        <p className="text-muted-foreground mt-0.5 text-[11.5px]">
+        <p className={agentRunCheck.failed}>
           {t("runLogCheckFailed")}
         </p>
       ) : check.frames.length > 0 ? (
         <AgentRunFrames frames={check.frames} />
       ) : (
-        <p className="text-faint mt-0.5 text-[11.5px] italic">
+        <p className={agentRunCheck.noFrames}>
           {check.hasDroppedFrames
             ? t("runLogFramesDropped")
             : t("runLogNoFrames")}
         </p>
       )}
       {check.frames.length > 0 && check.hasDroppedFrames && (
-        <p className="text-faint mt-0.5 text-[11.5px] italic">
+        <p className={agentRunCheck.noFrames}>
           {t("runLogFramesPartlyDropped")}
         </p>
       )}

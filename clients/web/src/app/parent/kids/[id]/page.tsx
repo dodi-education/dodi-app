@@ -1,6 +1,5 @@
 "use client";
 
-import { dodi } from "@/lib/api";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
@@ -9,6 +8,7 @@ import { DateField } from "@/components/parent/date-field";
 import { DateTimeFields } from "@/components/parent/date-time-fields";
 import {
   FieldRow,
+  fieldSelectClass,
   Row,
   RowMain,
   RowMeta,
@@ -22,47 +22,45 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { PersonaSelector } from "@/components/parent/persona-selector";
 import { AvatarPinPuzzle } from "@/components/kid/avatar-pin-puzzle";
-import { PIN_LENGTH } from "@/lib/avatars";
-import { locales, type Locale } from "@/i18n/config";
 import { readStoredDatePref } from "@/lib/date-prefs";
 import { generateSocialId } from "@dodi/crypto/social-id";
-import { encryptKidFields } from "@dodi/vault";
 import {
   resolvePref,
   type DateStyleId,
   type StoredDatePreferences,
   type TimeStyleId,
 } from "@dodi/intl";
-import { refreshFriendCards } from "@/lib/friends";
 import { useAccountStore } from "@/stores/account-store";
 import { useKidStore } from "@/stores/kid-store";
 import { useVaultStore } from "@/stores/vault-store";
+import { parentFlowDeps } from "@/lib/parent-flow-deps";
+import { cn } from "@/lib/utils";
+import {
+  pageMessage,
+  pinPuzzleBlock,
+  sectionFormError,
+  socialIdRow,
+} from "@dodi/ui-recipes";
+import { flowErrorText } from "@dodi/client-state/flow-error";
+import {
+  KID_LANGUAGE_OPTIONS,
+  KID_NAME_MAX_LENGTH,
+  SOCIAL_ID_MAX_LENGTH,
+  canonicalSocialId,
+  deleteKid,
+  emptyPinSlots,
+  invalidKidFields,
+  isPinIncomplete,
+  kidDatePrefsFormOf,
+  kidProfileFormOf,
+  parseStoredPin,
+  saveKidDatePreferences,
+  saveKidPin,
+  updateKidProfile,
+  type PinSlots,
+} from "@dodi/client-state/kid-profile";
 
 import type { Kid } from "@dodi/types/database";
-
-const localeNames: Record<Locale, string> = {
-  en: "English",
-  de: "Deutsch",
-};
-
-type PinSlots = (string | null)[];
-const emptyPin = (): PinSlots => Array<string | null>(PIN_LENGTH).fill(null);
-
-/** Parse a decrypted `avatar_pin` (JSON array of 3 ids) into slots, or null. */
-function parseStoredPin(raw: string | null): PinSlots | null {
-  if (!raw) return null;
-  try {
-    const arr: unknown = JSON.parse(raw);
-    return Array.isArray(arr) && arr.length === PIN_LENGTH
-      ? (arr as PinSlots)
-      : null;
-  } catch {
-    return null;
-  }
-}
-
-const selectClassName =
-  "h-9 w-full rounded-md border border-input bg-card px-3 text-sm outline-none transition-[color,box-shadow,border-color] hover:border-faint focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary-soft-2 sm:w-[250px]";
 
 export default function EditKidPage() {
   const t = useTranslations("kids");
@@ -91,7 +89,7 @@ export default function EditKidPage() {
   const [incomingApproval, setIncomingApproval] = useState(true);
   const [outgoingApproval, setOutgoingApproval] = useState(false);
   const [pinEnabled, setPinEnabled] = useState(false);
-  const [pinSlots, setPinSlots] = useState<PinSlots>(emptyPin);
+  const [pinSlots, setPinSlots] = useState<PinSlots>(emptyPinSlots);
   const [pinSaving, setPinSaving] = useState(false);
   const [pinSaved, setPinSaved] = useState(false);
   const [pinError, setPinError] = useState<string | null>(null);
@@ -129,38 +127,23 @@ export default function EditKidPage() {
           return;
         }
         setKid(data);
-        setDisplayName(data.display_name);
-        setSocialId(data.social_id);
-        setBirthdate(data.birthdate ?? "");
-        setLanguage(data.language ?? "en");
+        const form = kidProfileFormOf(data);
+        setDisplayName(form.displayName);
+        setSocialId(form.socialId);
+        setBirthdate(form.birthdate);
+        setLanguage(form.language);
         setActivePersonaId(data.active_persona?.id ?? null);
-        setCanInitiate(data.can_add_friends ?? true);
-        setCanBeAdded(data.can_be_added_as_friend ?? true);
-        setIncomingApproval(
-          data.incoming_friend_requests_require_parent_approval ?? true,
-        );
-        setOutgoingApproval(
-          data.outgoing_friend_requests_require_parent_approval ?? false,
-        );
+        setCanInitiate(form.canAddFriends);
+        setCanBeAdded(form.canBeAddedAsFriend);
+        setIncomingApproval(form.incomingApproval);
+        setOutgoingApproval(form.outgoingApproval);
         const storedPin = parseStoredPin(data.avatar_pin);
         setPinEnabled(storedPin != null);
-        setPinSlots(storedPin ?? emptyPin());
-        const dp = data.date_preferences as
-          | StoredDatePreferences
-          | null
-          | undefined;
-        setDpDateStyle(dp?.dateStyle ?? "");
-        setDpTimeStyle(dp?.timeStyle ?? "");
-        const sess = useVaultStore.getState().session;
-        if (dp?.timeZoneEnc && sess) {
-          try {
-            setDpTimeZone(sess.decryptField(dp.timeZoneEnc) ?? "");
-          } catch {
-            setDpTimeZone("");
-          }
-        } else {
-          setDpTimeZone("");
-        }
+        setPinSlots(storedPin ?? emptyPinSlots());
+        const dp = kidDatePrefsFormOf(data, useVaultStore.getState().session);
+        setDpDateStyle(dp.dateStyle);
+        setDpTimeStyle(dp.timeStyle);
+        setDpTimeZone(dp.timeZone);
         setFetching(false);
       } catch {
         if (!cancelled) {
@@ -177,95 +160,53 @@ export default function EditKidPage() {
     e.preventDefault();
     setError(null);
 
-    const nextInvalid = {
-      name: !displayName.trim(),
-      socialId: !socialId.trim(),
-    };
+    const nextInvalid = invalidKidFields({ displayName, socialId });
     if (nextInvalid.name || nextInvalid.socialId) {
       setInvalidName(nextInvalid.name);
       setInvalidSocialId(nextInvalid.socialId);
       return;
     }
+    if (!kid) return;
     setLoading(true);
 
-    const session = useVaultStore.getState().session;
-    if (!session) {
-      setError("Your secure vault is locked. Please reload and try again.");
-      setLoading(false);
-      return;
-    }
-
-    const enc = encryptKidFields(session, {
-      display_name: displayName,
-      birthdate: birthdate || null,
-    });
-
-    const response = await dodi.request(`/api/kids/${params.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        display_name: enc.display_name,
-        social_id: socialId,
-        birthdate: enc.birthdate,
+    // Sealed on the device; afterwards the kid's friend cards are re-sealed
+    // so friends see the new name/birthdate (best-effort, never blocks).
+    try {
+      await updateKidProfile(parentFlowDeps(), kid, {
+        displayName,
+        socialId,
+        birthdate,
         language,
-        can_add_friends: canInitiate,
-        can_be_added_as_friend: canBeAdded,
-        incoming_friend_requests_require_parent_approval: incomingApproval,
-        outgoing_friend_requests_require_parent_approval: outgoingApproval,
-      }),
-    });
-
-    if (!response.ok) {
-      const data = await response.json();
-      setError(data.error || t("failedToUpdate"));
+        canAddFriends: canInitiate,
+        canBeAddedAsFriend: canBeAdded,
+        incomingApproval,
+        outgoingApproval,
+      });
+    } catch (err) {
+      setError(flowErrorText(err, t("failedToUpdate")));
       setLoading(false);
       return;
     }
 
-    // Re-seal this kid's friend cards so friends see the new name/birthdate.
-    // Best-effort: the kid already saved; never block navigation on it.
-    if (kid) {
-      try {
-        await refreshFriendCards(
-          { ...kid, display_name: displayName, birthdate: birthdate || null },
-          session,
-        );
-      } catch {
-        // ignored — friends pick up the change on the next refresh
-      }
-    }
-
-    useKidStore.getState().invalidate();
     router.push("/parent/kids");
     router.refresh();
   }
 
   async function handleSavePin() {
     setPinError(null);
-    if (pinEnabled && pinSlots.some((s) => s == null)) {
+    if (isPinIncomplete(pinEnabled, pinSlots)) {
       setPinError(t("pinPuzzleIncomplete"));
       return;
     }
-    const session = useVaultStore.getState().session;
-    if (!session) {
-      setPinError("Your secure vault is locked. Please reload and try again.");
-      return;
-    }
     setPinSaving(true);
-    const enc = encryptKidFields(session, {
-      avatar_pin: pinEnabled ? JSON.stringify(pinSlots) : null,
-    });
-    const response = await dodi.request(`/api/kids/${params.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ avatar_pin: enc.avatar_pin }),
-    });
-    setPinSaving(false);
-    if (!response.ok) {
-      setPinError(t("failedToUpdate"));
+    try {
+      await saveKidPin(parentFlowDeps(), params.id, pinEnabled, pinSlots);
+    } catch (err) {
+      setPinSaving(false);
+      setPinError(flowErrorText(err, t("failedToUpdate")));
       return;
     }
-    useKidStore.getState().invalidate();
+    setPinSaving(false);
     setPinSaved(true);
     setTimeout(() => setPinSaved(false), 2500);
   }
@@ -273,33 +214,19 @@ export default function EditKidPage() {
   async function handleSaveDatePrefs() {
     setDpError(null);
     setDpSaving(true);
-
-    // Only fields with an explicit value are stored; "" inherits the account.
-    const datePreferences: StoredDatePreferences = {};
-    if (dpDateStyle) datePreferences.dateStyle = dpDateStyle;
-    if (dpTimeStyle) datePreferences.timeStyle = dpTimeStyle;
-    if (dpTimeZone) {
-      const session = useVaultStore.getState().session;
-      if (!session) {
-        setDpError("Your secure vault is locked. Please reload and try again.");
-        setDpSaving(false);
-        return;
-      }
-      datePreferences.timeZoneEnc = session.encryptField(dpTimeZone);
-    }
-
-    const response = await dodi.request(`/api/kids/${params.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ date_preferences: datePreferences }),
-    });
-    setDpSaving(false);
-    if (!response.ok) {
-      const data = await response.json().catch(() => null);
-      setDpError(data?.error || t("failedToUpdate"));
+    try {
+      // Only fields with an explicit value are stored; "" inherits the account.
+      await saveKidDatePreferences(parentFlowDeps(), params.id, {
+        dateStyle: dpDateStyle,
+        timeStyle: dpTimeStyle,
+        timeZone: dpTimeZone,
+      });
+    } catch (err) {
+      setDpSaving(false);
+      setDpError(flowErrorText(err, t("failedToUpdate")));
       return;
     }
-    useKidStore.getState().invalidate();
+    setDpSaving(false);
     setDpSaved(true);
     setTimeout(() => setDpSaved(false), 2500);
   }
@@ -309,11 +236,9 @@ export default function EditKidPage() {
       return;
     }
 
-    const response = await dodi.request(`/api/kids/${params.id}`, {
-      method: "DELETE",
-    });
-
-    if (!response.ok) {
+    try {
+      await deleteKid(parentFlowDeps(), params.id);
+    } catch {
       setError(t("failedToDelete"));
       return;
     }
@@ -324,16 +249,16 @@ export default function EditKidPage() {
 
   if (fetching) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <p className="text-muted-foreground">{t("loadingKid")}</p>
+      <div className={cn(pageMessage.web, pageMessage.box)}>
+        <p className={pageMessage.text}>{t("loadingKid")}</p>
       </div>
     );
   }
 
   if (!kid) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <p className="text-muted-foreground">{t("kidNotFound")}</p>
+      <div className={cn(pageMessage.web, pageMessage.box)}>
+        <p className={pageMessage.text}>{t("kidNotFound")}</p>
       </div>
     );
   }
@@ -353,7 +278,7 @@ export default function EditKidPage() {
               }}
               aria-invalid={invalidName || undefined}
               aria-required
-              maxLength={50}
+              maxLength={KID_NAME_MAX_LENGTH}
             />
           </FieldRow>
           <FieldRow
@@ -362,7 +287,7 @@ export default function EditKidPage() {
             htmlFor="social-id"
             required
           >
-            <div className="flex items-center gap-2">
+            <div className={cn(socialIdRow.web, socialIdRow.box)}>
               <Input
                 id="social-id"
                 className="sm:w-[250px]"
@@ -371,12 +296,12 @@ export default function EditKidPage() {
                   // Codes are canonically uppercase (see generateSocialId); the
                   // kid-side lookup uppercases too, so a lowercase value saved here
                   // would never resolve. Canonicalize as the parent types.
-                  setSocialId(e.target.value.toUpperCase());
+                  setSocialId(canonicalSocialId(e.target.value));
                   if (invalidSocialId) setInvalidSocialId(false);
                 }}
                 aria-invalid={invalidSocialId || undefined}
                 aria-required
-                maxLength={30}
+                maxLength={SOCIAL_ID_MAX_LENGTH}
                 pattern="[A-Z0-9\-]+"
               />
               <Button
@@ -408,11 +333,11 @@ export default function EditKidPage() {
               id="language"
               value={language}
               onChange={(e) => setLanguage(e.target.value)}
-              className={selectClassName}
+              className={fieldSelectClass}
             >
-              {locales.map((l) => (
-                <option key={l} value={l}>
-                  {localeNames[l]}
+              {KID_LANGUAGE_OPTIONS.map((l) => (
+                <option key={l.value} value={l.value}>
+                  {l.label}
                 </option>
               ))}
             </select>
@@ -453,7 +378,7 @@ export default function EditKidPage() {
             />
           </FieldRow>
           {error && (
-            <div className="px-5 py-3 text-sm text-danger">{error}</div>
+            <div className={cn(sectionFormError.box, sectionFormError.text)}>{error}</div>
           )}
           <SaveRow>
             <Button
@@ -478,20 +403,20 @@ export default function EditKidPage() {
           <Switch checked={pinEnabled} onCheckedChange={setPinEnabled} />
         </FieldRow>
         {pinEnabled && (
-          <div className="px-5 py-4">
-            <div className="mb-3 text-[13px] text-muted-foreground">
+          <div className={pinPuzzleBlock.box}>
+            <div className={pinPuzzleBlock.hint}>
               {t("pinPuzzleSetHint", { name: kid.display_name })}
             </div>
             <AvatarPinPuzzle
               mode="set"
               value={pinSlots}
               onChange={setPinSlots}
-              className="max-w-[320px]"
+              className={pinPuzzleBlock.puzzle}
             />
           </div>
         )}
         {pinError && (
-          <div className="px-5 py-3 text-sm text-danger">{pinError}</div>
+          <div className={cn(sectionFormError.box, sectionFormError.text)}>{pinError}</div>
         )}
         <SaveRow note={pinSaved ? tc("saved") : undefined}>
           <Button type="button" onClick={handleSavePin} disabled={pinSaving}>
@@ -513,7 +438,7 @@ export default function EditKidPage() {
           basePref={dateBasePref}
         />
         {dpError && (
-          <div className="px-5 py-3 text-sm text-danger">{dpError}</div>
+          <div className={cn(sectionFormError.box, sectionFormError.text)}>{dpError}</div>
         )}
         <SaveRow note={dpSaved ? tc("saved") : undefined}>
           <Button

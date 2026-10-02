@@ -9,21 +9,18 @@ import { Section } from "@/components/parent/section";
 import { Button } from "@/components/ui/button";
 import { useKids } from "@/hooks/use-kids";
 import {
+  type DecodedApproval,
   type PendingApproval,
+  approvalKey,
+  decodeApprovals,
   fetchApprovals,
-  formatHandle,
-  readApprovalCounterpart,
   setApproval,
-} from "@/lib/friends";
+  splitApprovals,
+} from "@dodi/client-state/friend-approvals";
+import { dodi } from "@/lib/api";
+import { cn } from "@/lib/utils";
+import { approvalActions, approvalAvatar } from "@dodi/ui-recipes";
 import { useVaultStore } from "@/stores/vault-store";
-
-interface DecodedApproval extends PendingApproval {
-  /** This parent's own child (always decryptable). */
-  child: string;
-  /** "<requester> wants to add <target>" parts. */
-  requester: string;
-  target: string;
-}
 
 /**
  * Friendships across the parent's kids awaiting this parent's final approval,
@@ -44,7 +41,7 @@ export function FriendApprovals() {
 
   const load = useCallback(async () => {
     try {
-      setItems(await fetchApprovals());
+      setItems(await fetchApprovals(dodi));
     } catch {
       setItems([]);
     }
@@ -56,43 +53,30 @@ export function FriendApprovals() {
     void load();
   }, [load]);
 
-  const decoded = useMemo<DecodedApproval[]>(() => {
-    if (!items) return [];
-    return items.map((a) => {
-      const kid = kids?.find((p) => p.id === a.kidId) ?? null;
-      const child = kid?.display_name ?? "—";
-      const other =
-        (session
-          ? readApprovalCounterpart(session, a, kid?.friend_secret_keys ?? null)
-          : null) ?? formatHandle(a.counterpartSocialId);
-      return {
-        ...a,
-        child,
-        requester: a.side === "requester" ? child : other,
-        target: a.side === "requester" ? other : child,
-      };
-    });
-  }, [items, kids, session]);
+  const decoded = useMemo<DecodedApproval[]>(
+    () => decodeApprovals(items, kids, session),
+    [items, kids, session],
+  );
 
   if (!items || items.length === 0) return null;
 
   async function act(approval: PendingApproval, approve: boolean) {
-    const key = approval.friendshipId + approval.side;
-    setBusy(key);
+    setBusy(approvalKey(approval));
     try {
-      await setApproval(approval.friendshipId, approval.side, approve);
+      await setApproval(dodi, approval.friendshipId, approval.side, approve);
       await load();
     } finally {
       setBusy(null);
     }
   }
 
-  const incoming = decoded.filter((a) => a.side === "addressee");
-  const outgoing = decoded.filter((a) => a.side === "requester");
+  const { incoming, outgoing } = splitApprovals(decoded);
 
   const renderRow = (a: DecodedApproval) => (
-    <Row key={a.friendshipId + a.side}>
-      <div className="flex size-[34px] shrink-0 items-center justify-center rounded-full bg-primary-soft text-[13px] font-bold text-primary">
+    <Row key={approvalKey(a)}>
+      <div
+        className={cn(approvalAvatar.web, approvalAvatar.box, approvalAvatar.text)}
+      >
         {a.child[0]?.toUpperCase()}
       </div>
       <RowMain>
@@ -101,7 +85,7 @@ export function FriendApprovals() {
         </RowTitle>
         <RowMeta>{t("sentOn", { date: formatDate(a.createdAt) })}</RowMeta>
       </RowMain>
-      <div className="flex shrink-0 gap-2">
+      <div className={cn(approvalActions.web, approvalActions.box)}>
         <Button
           variant="outline"
           size="sm"

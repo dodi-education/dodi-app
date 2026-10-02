@@ -1,6 +1,5 @@
 "use client";
 
-import { dodi } from "@/lib/api";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
@@ -10,11 +9,16 @@ import { SaveRow } from "@/components/parent/save-row";
 import { Section } from "@/components/parent/section";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { encryptPersonaFields } from "@dodi/vault";
-import { useVaultStore } from "@/stores/vault-store";
-
-/** Plaintext soul cap (enforced client-side; the server only sees ciphertext). */
-const MAX_SOUL_LENGTH = 50000;
+import { flowErrorText } from "@dodi/client-state/flow-error";
+import {
+  PERSONA_NAME_MAX_LENGTH,
+  createPersona,
+  invalidPersonaFields,
+  personaNameFromFileName,
+} from "@dodi/client-state/personas";
+import { parentFlowDeps } from "@/lib/parent-flow-deps";
+import { cn } from "@/lib/utils";
+import { sectionFormError, soulPreview, soulTextarea } from "@dodi/ui-recipes";
 
 export default function NewPersonaPage() {
   const t = useTranslations("personas");
@@ -40,10 +44,7 @@ export default function NewPersonaPage() {
     setSoul(text);
     setInvalidFile(false);
 
-    if (!name) {
-      const baseName = file.name.replace(/\.soul\.md$|\.md$/, "");
-      setName(baseName.charAt(0).toUpperCase() + baseName.slice(1));
-    }
+    if (!name) setName(personaNameFromFileName(file.name));
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -53,9 +54,8 @@ export default function NewPersonaPage() {
     // Import reads the file into `soul` (handleFileSelect), so both modes now
     // submit the same encrypted create — the soul never reaches the server raw.
     const nextInvalid = {
-      name: !name.trim(),
+      ...invalidPersonaFields({ name, soul }),
       file: isImport && !fileInputRef.current?.files?.[0],
-      soul: !soul.trim(),
     };
     if (nextInvalid.name || nextInvalid.file || nextInvalid.soul) {
       setInvalidName(nextInvalid.name);
@@ -63,39 +63,22 @@ export default function NewPersonaPage() {
       setInvalidSoul(nextInvalid.soul);
       return;
     }
-    if (soul.length > MAX_SOUL_LENGTH) {
-      setError(t("soulTooLong"));
-      return;
-    }
-
-    const session = useVaultStore.getState().session;
-    if (!session) {
-      setError(t("failedToCreate"));
-      return;
-    }
     setLoading(true);
-
     try {
-      // Seal `name` and `soul` under the account VMK before they leave the browser.
-      const response = await dodi.request("/api/personas", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(encryptPersonaFields(session, { name, soul })),
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        setError(data.error || t("failedToCreate"));
-        setLoading(false);
-        return;
-      }
-
-      router.push("/parent/personas");
-      router.refresh();
-    } catch {
-      setError(t("failedToCreate"));
+      // Seals `name` and `soul` under the account VMK before they leave the browser.
+      await createPersona(parentFlowDeps(), { name, soul });
+    } catch (err) {
+      setError(
+        flowErrorText(err, t("failedToCreate"), {
+          tooLong: t("soulTooLong"),
+          vaultLocked: t("failedToCreate"),
+        }),
+      );
       setLoading(false);
+      return;
     }
+    router.push("/parent/personas");
+    router.refresh();
   }
 
   return (
@@ -113,7 +96,7 @@ export default function NewPersonaPage() {
               placeholder={t("namePlaceholder")}
               aria-invalid={invalidName || undefined}
               aria-required
-              maxLength={100}
+              maxLength={PERSONA_NAME_MAX_LENGTH}
               className="sm:w-[260px]"
             />
           </FieldRow>
@@ -137,7 +120,14 @@ export default function NewPersonaPage() {
           {isImport ? (
             soul ? (
               <StackField>
-                <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-md bg-background p-3.5 font-mono text-xs leading-relaxed text-ink-2">
+                <pre
+                  className={cn(
+                    soulPreview.web,
+                    soulPreview.box,
+                    soulPreview.short,
+                    soulPreview.text,
+                  )}
+                >
                   {soul}
                 </pre>
               </StackField>
@@ -155,14 +145,14 @@ export default function NewPersonaPage() {
                 aria-invalid={invalidSoul || undefined}
                 aria-required
                 rows={20}
-                className="min-h-[320px] w-full resize-y rounded-md border border-border-strong bg-card px-3 py-2.5 font-mono text-xs leading-relaxed transition-colors placeholder:text-muted-foreground focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-soft-2 aria-invalid:border-destructive aria-invalid:ring-destructive/20"
+                className={cn(soulTextarea.web, soulTextarea.box, soulTextarea.text)}
               />
             </StackField>
           )}
 
           {error ? (
             <StackField>
-              <p className="text-sm text-danger">{error}</p>
+              <p className={sectionFormError.text}>{error}</p>
             </StackField>
           ) : null}
 

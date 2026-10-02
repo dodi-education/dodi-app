@@ -1,18 +1,21 @@
 import { useState } from "react";
-import { Image } from "react-native";
+import { Image, Pressable, View } from "react-native";
 import { useTranslations } from "use-intl";
 
 import { authClient } from "@/adapters/auth";
 import { mobilePlatform } from "@/adapters/platform";
-import { Button, Notice, Screen, Text, TextField } from "@/components/ui";
+import { CenteredPage } from "@/components/auth/centered-page";
+import { Button, Input, Label, PinInput, Text } from "@/components/ui";
 import { useAccountStore, useVaultStore } from "@/lib/client-state";
 
-const PIN_LENGTH = 4;
+/** The dodi head above the prompt (web: 48×48). */
+const HEAD_SIZE = 48;
 
 /**
- * The parent PIN check: decrypt the stored PIN with the unlocked vault and
- * compare on the device; the server is never involved. "Forgot PIN" proves
- * the account password server-side instead (no new session).
+ * The parent PIN check (web: components/parent/parent-pin-prompt): decrypt
+ * the stored PIN with the unlocked vault and compare on the device; the
+ * server is never involved. "Forgot PIN" proves the account password
+ * server-side instead (no new session).
  */
 export function ParentPinPrompt() {
   const t = useTranslations("parentPin");
@@ -52,49 +55,65 @@ export function ParentPinPrompt() {
   }
 
   return (
-    <Screen isCentered className="items-center">
-      <Image source={require("../../../assets/images/splash.png")} className="h-12 w-12" accessibilityIgnoresInvertColors />
-      <Text variant="title" className="text-center">{t("promptTitle")}</Text>
-      <Text variant="muted" className="text-center">{t("promptSubtitle")}</Text>
-      <TextField
-        label={t("promptTitle")}
-        value={value}
-        onChangeText={(next) => {
-          const digits = next.replace(/\D/g, "").slice(0, PIN_LENGTH);
-          setIsWrong(false);
-          setValue(digits);
-          if (digits.length === PIN_LENGTH) verify(digits);
-        }}
-        keyboardType="number-pad"
-        maxLength={PIN_LENGTH}
-        autoFocus
-        secureTextEntry
-        error={isWrong ? t("wrong") : null}
-        className="text-center tracking-[1em]"
+    <CenteredPage className="max-w-xs items-center" pageClassName="px-4">
+      <Image
+        source={require("../../../assets/images/splash.png")}
+        style={{ width: HEAD_SIZE, height: HEAD_SIZE }}
+        accessibilityIgnoresInvertColors
       />
+      <Text className="mt-4 text-center text-xl font-bold tracking-tight" accessibilityRole="header">
+        {t("promptTitle")}
+      </Text>
+      <Text className="mt-1 text-center text-sm text-muted-foreground">{t("promptSubtitle")}</Text>
+
+      <View className="mt-6 w-full">
+        <PinInput
+          value={value}
+          onChange={(next) => {
+            setIsWrong(false);
+            setValue(next);
+          }}
+          onComplete={verify}
+          isError={isWrong}
+          autoFocus
+          accessibilityLabel={t("promptTitle")}
+        />
+        {isWrong ? <Text className="mt-3 text-center text-sm text-destructive">{t("wrong")}</Text> : null}
+      </View>
+
       {isPasswordMode ? (
-        <>
-          <TextField
-            label={t("passwordLabel")}
-            value={password}
-            onChangeText={(next) => {
-              setPasswordError(null);
-              setPassword(next);
-            }}
-            textContentType="password"
-            secure={{ showLabel: t("passwordLabel"), hideLabel: t("passwordLabel") }}
-          />
-          {passwordError ? <Notice tone="danger">{passwordError}</Notice> : null}
-          <Button
-            label={isBusy ? t("checking") : t("unlock")}
-            isLoading={isBusy}
-            disabled={!password}
-            onPress={() => void verifyPassword()}
-          />
-        </>
+        <View className="mt-6 w-full flex-col gap-3">
+          <View className="flex flex-col gap-2">
+            <Label>{t("passwordLabel")}</Label>
+            <Input
+              value={password}
+              onChangeText={(next) => {
+                setPasswordError(null);
+                setPassword(next);
+              }}
+              secureTextEntry
+              autoCapitalize="none"
+              autoComplete="current-password"
+              textContentType="password"
+              accessibilityLabel={t("passwordLabel")}
+              onSubmitEditing={() => void verifyPassword()}
+            />
+          </View>
+          {passwordError ? <Text className="text-sm text-destructive">{passwordError}</Text> : null}
+          <Button onPress={() => void verifyPassword()} disabled={isBusy || !password}>
+            {isBusy ? t("checking") : t("unlock")}
+          </Button>
+        </View>
       ) : (
-        <Button variant="ghost" label={t("forgot")} onPress={() => setIsPasswordMode(true)} />
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => setIsPasswordMode(true)}
+          hitSlop={12}
+          className="mt-6"
+        >
+          <Text className="text-[13px] font-semibold text-muted-foreground">{t("forgot")}</Text>
+        </Pressable>
       )}
-    </Screen>
+    </CenteredPage>
   );
 }

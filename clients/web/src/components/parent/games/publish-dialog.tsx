@@ -41,58 +41,46 @@ import { PublishRejectionReasons } from "@/components/parent/games/publish-rejec
 import { PublishStatusStepper } from "@/components/parent/games/publish-status-stepper";
 import { PublishStatusView } from "@/components/parent/games/publish-status-view";
 import { PublishTranslationsReview } from "@/components/parent/games/publish-translations-review";
-import { dodi } from "@/lib/api";
 import { type NotificationPreferences, useAccountStore } from "@/stores/account-store";
-import {
-  decryptGameResponse,
-  sealGameFields,
-  useGameStore,
-} from "@/stores/game-store";
 import {
   PUBLICATION_HANDLE_MAX_LENGTH,
   normalizePublicationHandle,
   publicationHandleError,
 } from "@dodi/protocol/publication-handle";
 import { parseRejectionReasons } from "@dodi/protocol/publication-review";
-import { hasTranslationsBlock } from "@dodi/games/translations";
-import { toPublicationContent } from "@dodi/vault/game-crypto";
+import {
+  type ListingText,
+  type PublicationTranslationResult,
+  MissingTranslationsError,
+  PublicationRequestError,
+  canResubmitPublication,
+  canSubmitPublication,
+  isEditedSinceSubmit as isEditedSince,
+  isPublishFormMode,
+  loadPublicationStatus,
+  publicationErrorKey,
+  publicationStateOf,
+  publishBadgeKey,
+  publishDescriptionKey,
+  publishSubmitLabelKey,
+  submitPublication,
+  withdrawPublication,
+} from "@dodi/client-state/game-publication";
 import { NoThinkingModelError } from "@/lib/ai/client-generate-text";
 import {
   BundleTooLargeError,
-  MissingTranslationsError,
   translateGameForPublication,
-  type ListingText,
-  type PublicationTranslationResult,
 } from "@/lib/ai/client-translate-game";
+import { gameFlowDeps } from "@/lib/games/game-flow-deps";
+import { cn } from "@/lib/utils";
 import {
-  knownListingsFrom,
-  saveListingDraft,
-  type PublicationListingsResponse,
-} from "@/lib/games/publication-listings";
+  dialogField,
+  formAlert,
+  publishBadge,
+  publishCallout,
+  publishWithdraw,
+} from "@dodi/ui-recipes";
 import type { Game } from "@dodi/types/database";
-
-type PublicationState =
-  | "none"
-  | "in-review"
-  | "changes-requested"
-  | "rejected"
-  | "published";
-
-function stateOf(publication: Game | null): PublicationState {
-  if (!publication) return "none";
-  if (publication.published_at) return "published";
-  if (publication.rejected_at) {
-    return publication.rejection_kind === "hard" ? "rejected" : "changes-requested";
-  }
-  return "in-review";
-}
-
-/** Submit-error codes the platform returns that have parent-facing copy. */
-const SUBMIT_ERROR_KEYS: Record<string, string> = {
-  publication_limit_reached: "publishLimitReached",
-  publication_hard_rejected: "publishHardBlocked",
-  publication_translations_incomplete: "publishTranslationsIncomplete",
-};
 
 interface PublishDialogProps {
   open: boolean;
@@ -145,41 +133,26 @@ export function PublishDialog({ open, gameId, built, onClose }: PublishDialogPro
   useEffect(() => {
     if (!open || !gameId) return;
     let cancelled = false;
-    Promise.all([
-      dodi
-        .request(`/api/games/${gameId}/publication`)
-        .then((r) => (r.ok ? r.json() : { publication: null }))
-        .catch(() => ({ publication: null as Game | null })),
-      // target_age_* are plaintext columns, so the raw row suffices to pre-fill
-      // the range — no vault decrypt needed.
-      dodi
-        .request(`/api/games/${gameId}`)
-        .then((r) => (r.ok ? (r.json() as Promise<Game>) : null))
-        .catch(() => null),
-    ])
-      .then(
-        ([pub, game]: [
-          { publication: Game | null } & PublicationListingsResponse,
-          Game | null,
-        ]) => {
-          if (cancelled) return;
-          setPublication(pub.publication ?? null);
-          // Paid listing translations to reuse: the live copy's rows, overlaid
-          // by the sealed draft (a translate-then-leave round trip, or edits
-          // made in the studio settings).
-          setKnownListings(knownListingsFrom(pub));
-          if (typeof game?.target_age_min === "number") setAgeMin(game.target_age_min);
-          if (typeof game?.target_age_max === "number") setAgeMax(game.target_age_max);
-          setSourceVersionId(game?.current_game_version_id ?? null);
-          setIsResubmitting(false);
-          setIsConfirmingWithdraw(false);
-          setError(null);
-          setHandle("");
-          setReview(null);
-          setSourceGame(null);
-          setLoadedFor(gameId);
-        },
-      )
+    // The age pre-fill reads plaintext columns of the raw row (no vault decrypt).
+    loadPublicationStatus(gameFlowDeps(), gameId)
+      .then((status) => {
+        if (cancelled) return;
+        setPublication(status.publication);
+        // Paid listing translations to reuse: the live copy's rows, overlaid
+        // by the sealed draft (a translate-then-leave round trip, or edits
+        // made in the studio settings).
+        setKnownListings(status.knownListings);
+        if (status.targetAgeMin !== null) setAgeMin(status.targetAgeMin);
+        if (status.targetAgeMax !== null) setAgeMax(status.targetAgeMax);
+        setSourceVersionId(status.sourceVersionId);
+        setIsResubmitting(false);
+        setIsConfirmingWithdraw(false);
+        setError(null);
+        setHandle("");
+        setReview(null);
+        setSourceGame(null);
+        setLoadedFor(gameId);
+      })
       .catch(() => {
         if (!cancelled) setLoadedFor(gameId);
       });
@@ -192,7 +165,7 @@ export function PublishDialog({ open, gameId, built, onClose }: PublishDialogPro
 
   // Until this game's status has loaded, show the neutral "not submitted" copy
   // rather than the previous game's badge.
-  const state = loaded ? stateOf(publication) : "none";
+  const state = loaded ? publicationStateOf(publication) : "none";
   const storedHandle = account?.publication_handle ?? null;
   const normalized = normalizePublicationHandle(handle);
   const handleProblem = handle ? publicationHandleError(normalized) : null;
@@ -202,113 +175,26 @@ export function PublishDialog({ open, gameId, built, onClose }: PublishDialogPro
     setBusy(true);
     setError(null);
     try {
-      // Claim the public byline first — the platform refuses a submission from
-      // an account without one.
-      if (!storedHandle) {
-        const res = await dodi.request("/api/account/publication-handle", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ handle: normalized }),
-        });
-        if (!res.ok) {
-          const data = (await res.json().catch(() => null)) as {
-            reason?: string;
-          } | null;
-          // Only 409/400 mean the name itself was rejected. Anything else is a
-          // failed request — saying "that name can't be used" would blame the
-          // parent for a server problem and send them renaming in circles.
-          if (res.status === 409 || data?.reason === "taken") {
-            throw new Error(t("publishHandleTaken"));
-          }
-          if (res.status === 400) throw new Error(t("publishHandleInvalid"));
-          throw new Error(t("publishFailedGeneric"));
-        }
-        useAccountStore.getState().patchLocal({ publication_handle: normalized });
-      }
-
-      // Persist the (possibly edited) recommended age onto the source game
-      // first. The public copy inherits plaintext facets from the source row
-      // server-side (like tags and duration), so this is how the values travel
-      // with the submission — and it keeps the game's own settings in step.
-      const ageRes = await dodi.request(`/api/games/${gameId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ target_age_min: ageMin, target_age_max: ageMax }),
+      // Handle claim (first publish), recommended age onto the source game,
+      // then stage 1 (translate + review) or stage 2 (post the reviewed copy).
+      const result = await submitPublication(gameFlowDeps(), {
+        gameId,
+        storedHandle,
+        normalizedHandle: normalized,
+        ageMin,
+        ageMax,
+        review,
+        sourceGame,
+        knownListings,
+        translate: translateGameForPublication,
       });
-      if (!ageRes.ok) throw new Error(t("publishFailedGeneric"));
-      useGameStore
-        .getState()
-        .patchLocal(gameId, { target_age_min: ageMin, target_age_max: ageMax });
-
-      // Decrypt here and send plaintext: this is the disclosure the parent just
-      // consented to. `loadOne` returns the decrypted row from the vault cache.
-      const game =
-        sourceGame ?? (await useGameStore.getState().loadOne(gameId, undefined, true));
-      if (!game) throw new Error(t("publishFailedGeneric"));
-
-      // Stage 1 — translate into every platform locale (client-side, BYOK) and
-      // switch to the review stage. Pre-i18n games are stopped before any AI
-      // spend or network call: a studio update rebuilds them with the block.
-      if (!review) {
-        if (!hasTranslationsBlock(game.code_bundle)) {
-          throw new MissingTranslationsError();
-        }
-        const result = await translateGameForPublication(game, { knownListings });
-
-        // The parent paid for these translations, so they belong to THEIR
-        // game: persist the translated bundle into the sealed source (head
-        // version overwritten — same build, more languages) BEFORE any copy
-        // is made. Re-publishing an unedited game then costs nothing, and
-        // the studio preview's language picker can show every locale.
-        let owned = game;
-        if (result.codeBundle !== game.code_bundle) {
-          const sealed = await sealGameFields({ code_bundle: result.codeBundle });
-          const res = await dodi.request(`/api/games/${gameId}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ ...sealed, create_version: false }),
-          });
-          if (!res.ok) throw new Error(t("publishFailedGeneric"));
-          owned = await decryptGameResponse((await res.json()) as Game);
-          useGameStore.getState().put(owned);
-        }
-        setSourceGame(owned);
-        setReview({ ...result, codeBundle: owned.code_bundle });
-
-        // Park the paid listing translations in a DRAFT publication request
-        // (sealed — the game is still private) so closing the dialog for a
-        // studio review loses nothing. Best-effort: publishing works without.
-        try {
-          await saveListingDraft(gameId, result.translations);
-        } catch {
-          /* the draft is an optimization, never a blocker */
-        }
+      if (result.stage === "review") {
+        setSourceGame(result.sourceGame);
+        setReview(result.review);
         return;
       }
-
-      // Stage 2 — post the translated bundle + the (possibly edited) listings.
-      const res = await dodi.request(`/api/games/${gameId}/publication`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...toPublicationContent(game),
-          codeBundle: review.codeBundle,
-          translations: review.translations,
-        }),
-      });
-      if (!res.ok) {
-        const data = (await res.json().catch(() => null)) as {
-          error?: string;
-        } | null;
-        const errorKey = data?.error ? SUBMIT_ERROR_KEYS[data.error] : undefined;
-        if (errorKey) throw new Error(t(errorKey));
-        throw new Error(data?.error || t("publishFailedGeneric"));
-      }
-      const { publication: created } = (await res.json()) as {
-        publication: Game;
-      };
-      setPublication(created);
-      setSourceVersionId(created.source_game_version_id);
+      setPublication(result.publication);
+      setSourceVersionId(result.publication.source_game_version_id);
       setIsResubmitting(false);
       setReview(null);
       setSourceGame(null);
@@ -319,6 +205,9 @@ export function PublishDialog({ open, gameId, built, onClose }: PublishDialogPro
         setError(t("publishNeedsAiKey"));
       } else if (e instanceof BundleTooLargeError) {
         setError(t("publishTooLargeForTranslation"));
+      } else if (e instanceof PublicationRequestError) {
+        const key = publicationErrorKey(e);
+        setError(key ? t(key) : (e.serverError ?? t("publishFailedGeneric")));
       } else {
         setError(e instanceof Error && e.message ? e.message : t("publishFailedGeneric"));
       }
@@ -332,83 +221,57 @@ export function PublishDialog({ open, gameId, built, onClose }: PublishDialogPro
     setBusy(true);
     setError(null);
     try {
-      const res = await dodi.request(`/api/games/${gameId}/publication`, {
-        method: "DELETE",
-      });
-      if (!res.ok) throw new Error(t("publishFailedGeneric"));
+      await withdrawPublication(gameFlowDeps(), gameId);
       setPublication(null);
       setIsConfirmingWithdraw(false);
       setIsResubmitting(false);
     } catch (e) {
-      setError(e instanceof Error && e.message ? e.message : t("publishFailedGeneric"));
+      setError(
+        !(e instanceof PublicationRequestError) && e instanceof Error && e.message
+          ? e.message
+          : t("publishFailedGeneric"),
+      );
     } finally {
       setBusy(false);
     }
   }, [gameId, t]);
 
-  const canSubmit =
-    built &&
-    !busy &&
-    isValidAgeRange(ageMin, ageMax) &&
-    (storedHandle !== null || (!!normalized && !handleProblem)) &&
-    // In the review stage every locale needs a non-empty title.
-    (!review ||
-      Object.values(review.translations).every((entry) => entry.title.trim().length > 0));
+  const canSubmit = canSubmitPublication({
+    built,
+    busy,
+    isAgeRangeValid: isValidAgeRange(ageMin, ageMax),
+    storedHandle,
+    normalizedHandle: normalized,
+    hasHandleProblem: Boolean(handleProblem),
+    review,
+  });
   // A hard rejection is permanent — the platform refuses a resubmit anyway, so
   // don't offer one.
-  const canResubmit = state !== "rejected";
-  const isFormMode =
-    review !== null || state === "none" || state === "changes-requested" || isResubmitting;
+  const canResubmit = canResubmitPublication(state);
+  const isFormMode = isPublishFormMode({ state, hasReview: review !== null, isResubmitting });
   const rejectionReasons =
     state === "changes-requested" || state === "rejected"
       ? parseRejectionReasons(publication?.rejection_reasons ?? null)
       : [];
-  // Only a code change counts: the copy's stamp and the source's head build
-  // are both known and differ. Copies submitted before the stamp existed
-  // (NULL) never show the hint rather than a wrong one.
-  const isEditedSinceSubmit =
-    publication?.source_game_version_id != null &&
-    sourceVersionId !== null &&
-    publication.source_game_version_id !== sourceVersionId;
+  const isEditedSinceSubmit = isEditedSince(publication, sourceVersionId);
   const prefs = (account?.notification_preferences ?? null) as NotificationPreferences | null;
   const isOutcomeEmailOn = prefs?.publication_outcome_email !== false;
   const monthlyLimit = account?.monthly_game_publication_limit ?? 0;
 
-  const badgeClass =
+  const badgeClass = cn(
+    publishBadge.box,
+    publishBadge.text,
     state === "published"
-      ? "rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-semibold text-primary"
+      ? cn(publishBadge.published, publishBadge.publishedText)
       : state === "rejected"
-        ? "rounded-full bg-danger-soft px-2 py-0.5 text-[11px] font-semibold text-danger"
-        : "rounded-full bg-warning-soft px-2 py-0.5 text-[11px] font-semibold text-warning";
-  const badgeLabel =
-    state === "published"
-      ? t("publishLive")
-      : state === "rejected"
-        ? t("publishRejected")
-        : state === "changes-requested"
-          ? t("publishChangesRequested")
-          : t("publishInReview");
-  const description = review
-    ? t("publishReviewTranslations")
-    : isResubmitting
-      ? t("publishResubmitDescription")
-      : state === "none"
-        ? t("publishDescription")
-        : state === "changes-requested"
-          ? t("publishReasonsIntro")
-          : state === "rejected"
-            ? t("publishRejectedHardNotice")
-            : state === "published"
-              ? t("publishLiveDescription")
-              : t("publishSubmitted");
-  const submitLabel =
-    busy && !review
-      ? t("publishTranslating")
-      : review
-        ? t("publishConfirm")
-        : state === "none"
-          ? t("publishSubmit")
-          : t("publishResubmit");
+        ? cn(publishBadge.rejected, publishBadge.rejectedText)
+        : cn(publishBadge.pending, publishBadge.pendingText),
+  );
+  const badgeLabel = t(publishBadgeKey(state));
+  const description = t(
+    publishDescriptionKey({ state, hasReview: review !== null, isResubmitting }),
+  );
+  const submitLabel = t(publishSubmitLabelKey({ state, hasReview: review !== null, busy }));
 
   const openStudio = () => {
     if (!gameId) return;
@@ -419,7 +282,7 @@ export function PublishDialog({ open, gameId, built, onClose }: PublishDialogPro
   const withdrawButton = (
     <Button
       variant="ghost"
-      className="text-danger hover:bg-danger-soft hover:text-danger sm:mr-auto"
+      className={cn(publishWithdraw.text, publishWithdraw.web)}
       onClick={() => setIsConfirmingWithdraw(true)}
       disabled={busy}
     >
@@ -486,15 +349,23 @@ export function PublishDialog({ open, gameId, built, onClose }: PublishDialogPro
         )}
 
         {isResubmitting && !review && state === "published" && (
-          <div className="flex gap-2 rounded-lg bg-warning-soft px-3 py-2 text-xs text-ink-2">
+          <div
+            className={cn(
+              publishCallout.web,
+              publishCallout.compact,
+              publishCallout.warning,
+              publishCallout.text,
+              publishCallout.bodyText,
+            )}
+          >
             <Icon name="alert" size={16} className="shrink-0 text-warning" />
             <p>{t("publishResubmitLiveWarning")}</p>
           </div>
         )}
 
         {isFormMode && !review && loaded && built && canResubmit && (
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-ink-2">
+          <div className={cn(dialogField.web, dialogField.box)}>
+            <label className={dialogField.label}>
               {t("recommendedAge")}
             </label>
             <AgeRange
@@ -506,7 +377,7 @@ export function PublishDialog({ open, gameId, built, onClose }: PublishDialogPro
               maxLabel={t("ageMaxLabel")}
               disabled={busy}
             />
-            <p className="text-[11px] text-faint">
+            <p className={dialogField.hint}>
               {isValidAgeRange(ageMin, ageMax) ? (
                 t("publishRecommendedAgeHint")
               ) : (
@@ -517,8 +388,8 @@ export function PublishDialog({ open, gameId, built, onClose }: PublishDialogPro
         )}
 
         {isFormMode && !review && loaded && !storedHandle && (
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-ink-2">
+          <div className={cn(dialogField.web, dialogField.box)}>
+            <label className={dialogField.label}>
               {t("publishHandleLabel")}
             </label>
             <Input
@@ -530,7 +401,7 @@ export function PublishDialog({ open, gameId, built, onClose }: PublishDialogPro
               aria-invalid={handleProblem !== null || undefined}
               onChange={(e) => setHandle(e.target.value)}
             />
-            <p className="text-[11px] text-faint">
+            <p className={dialogField.hint}>
               {handleProblem === "reserved"
                 ? t("publishHandleReserved")
                 : handleProblem === "format"
@@ -541,17 +412,17 @@ export function PublishDialog({ open, gameId, built, onClose }: PublishDialogPro
         )}
 
         {isFormMode && !built && (
-          <p className="text-xs text-muted-foreground">{t("publishNeedsBuild")}</p>
+          <p className={dialogField.note}>{t("publishNeedsBuild")}</p>
         )}
 
         {error && (
-          <div className="rounded-lg bg-danger-soft px-3 py-2 text-xs font-medium text-danger">
+          <div className={cn(formAlert.box, formAlert.text)}>
             {error}
           </div>
         )}
 
         {isConfirmingWithdraw && (
-          <p role="alert" className="rounded-lg bg-danger-soft px-3 py-2 text-xs text-ink-2">
+          <p role="alert" className={cn(formAlert.box, formAlert.confirmText)}>
             {state === "published" ? t("publishUnpublishConfirm") : t("publishWithdrawConfirm")}
           </p>
         )}

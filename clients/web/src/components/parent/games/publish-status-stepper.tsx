@@ -2,33 +2,25 @@
 
 import { useTranslations } from "next-intl";
 
+import {
+  type PublishStepStatus,
+  type PublishStepperState,
+  publishStepStatuses,
+} from "@dodi/client-state/game-publication";
+
 import { Icon, type IconName } from "@/components/shared/icon";
 import { cn } from "@/lib/utils";
+import { publishStepper } from "@dodi/ui-recipes";
 
-/** Where a submission stands, as the three-step track shows it. */
-export type PublishStepperState = "in-review" | "changes-requested" | "rejected" | "published";
+type StepStatus = PublishStepStatus;
 
-type StepStatus = "done" | "current" | "warning" | "danger" | "upcoming";
-
-function stepStatuses(state: PublishStepperState): [StepStatus, StepStatus, StepStatus] {
-  switch (state) {
-    case "in-review":
-      return ["done", "current", "upcoming"];
-    case "changes-requested":
-      return ["done", "warning", "upcoming"];
-    case "rejected":
-      return ["done", "danger", "upcoming"];
-    case "published":
-      return ["done", "done", "done"];
-  }
-}
-
+const s = publishStepper;
 const DOT_CLASS: Record<StepStatus, string> = {
-  done: "bg-primary text-primary-foreground",
-  current: "bg-warning-soft text-warning ring-2 ring-warning",
-  warning: "bg-warning-soft text-warning ring-2 ring-warning",
-  danger: "bg-danger-soft text-danger ring-2 ring-danger",
-  upcoming: "bg-muted text-faint",
+  done: cn(s.done, s.doneText),
+  current: cn(s.current, s.currentText, s.webCurrentRing),
+  warning: cn(s.current, s.currentText, s.webCurrentRing),
+  danger: cn(s.danger, s.dangerText, s.webDangerRing),
+  upcoming: cn(s.upcoming, s.upcomingText),
 };
 
 const DOT_ICON: Partial<Record<StepStatus, IconName>> = {
@@ -44,11 +36,11 @@ const DOT_ICON: Partial<Record<StepStatus, IconName>> = {
  */
 export function PublishStatusStepper({ state }: { state: PublishStepperState }) {
   const t = useTranslations("gameStudio");
-  const statuses = stepStatuses(state);
+  const statuses = publishStepStatuses(state);
   const labels = [t("publishStepSubmitted"), t("publishStepReview"), t("publishStepLive")];
 
   return (
-    <ol aria-label={t("publishProgressLabel")} className="flex items-start">
+    <ol aria-label={t("publishProgressLabel")} className={cn(s.webList, s.list)}>
       {labels.map((label, i) => {
         const status = statuses[i];
         const icon = DOT_ICON[status];
@@ -56,21 +48,24 @@ export function PublishStatusStepper({ state }: { state: PublishStepperState }) 
           <li
             key={label}
             aria-current={status === "current" ? "step" : undefined}
-            className="relative flex flex-1 flex-col items-center gap-1.5 text-center"
+            className={cn(s.webItem, s.item)}
           >
             {i > 0 && (
               <span
                 aria-hidden
                 className={cn(
-                  "absolute top-3.5 right-1/2 h-0.5 w-full -translate-y-1/2",
-                  status === "upcoming" ? "bg-muted" : "bg-primary",
+                  s.line,
+                  s.webLine,
+                  status === "upcoming" ? s.lineUpcoming : s.lineDone,
                 )}
               />
             )}
             <span
               aria-hidden
               className={cn(
-                "relative z-10 flex size-7 items-center justify-center rounded-full text-xs font-bold",
+                s.webDot,
+                s.dot,
+                s.dotText,
                 DOT_CLASS[status],
               )}
             >
@@ -78,8 +73,8 @@ export function PublishStatusStepper({ state }: { state: PublishStepperState }) 
             </span>
             <span
               className={cn(
-                "text-[11px] font-semibold",
-                status === "upcoming" ? "text-faint" : "text-ink-2",
+                s.label,
+                status === "upcoming" ? s.labelUpcoming : s.labelDone,
               )}
             >
               {label}

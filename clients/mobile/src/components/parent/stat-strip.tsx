@@ -1,24 +1,28 @@
-import type { ReactNode } from "react";
+import { Children, isValidElement, type ReactNode } from "react";
 import { View } from "react-native";
 
 import { Text } from "@/components/ui";
+import { cn } from "@/lib/cn";
 
-/** A row of equal-width figures with dividers (web: parent/stat-strip). */
-export function StatStrip({ children }: { children: ReactNode }) {
-  return <View className="flex-row">{children}</View>;
+/** Three equal columns with hairline dividers (web: grid grid-cols-3 divide-x divide-border). */
+export function StatStrip({ className, children }: { className?: string; children: ReactNode }) {
+  const cells = Children.toArray(children).filter(isValidElement);
+  return (
+    <View className={cn("flex-row", className)}>
+      {cells.map((cell, i) => (
+        <View key={cell.key ?? i} className={cn("flex-1", i > 0 && "border-l border-border")}>
+          {cell}
+        </View>
+      ))}
+    </View>
+  );
 }
 
-export function StatCell({ num, label, isFirst = false }: { num: ReactNode; label: string; isFirst?: boolean }) {
+export function StatCell({ num, label }: { num: ReactNode; label: string }) {
   return (
-    <View
-      className={isFirst ? "flex-1 px-3 py-2" : "flex-1 border-l border-border px-3 py-2"}
-      accessible
-      accessibilityLabel={`${String(num)} ${label}`}
-    >
-      <Text className="text-2xl font-bold">{num}</Text>
-      <Text variant="muted" className="mt-1 text-xs">
-        {label}
-      </Text>
+    <View className="p-5" accessible accessibilityLabel={`${String(num)} ${label}`}>
+      <Text className="text-2xl font-bold tracking-tight">{num}</Text>
+      <Text className="mt-1 text-[12.5px] text-muted-foreground">{label}</Text>
     </View>
   );
 }

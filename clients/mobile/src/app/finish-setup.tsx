@@ -6,7 +6,18 @@ import { finishSetup, validateFinishSetup } from "@dodi/client-state/finish-setu
 
 import { mobileAuthApi } from "@/adapters/auth";
 import { Captcha, type CaptchaHandle, requestCaptchaToken } from "@/components/auth/captcha";
-import { Button, Notice, Screen, Text, TextField } from "@/components/ui";
+import { AuthLayout } from "@/components/shared/auth-layout";
+import {
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Input,
+  Label,
+  Text,
+} from "@/components/ui";
 import { clientState } from "@/lib/client-state";
 import { markSignedIn, signOut } from "@/lib/session";
 
@@ -70,38 +81,51 @@ export default function FinishSetupScreen() {
 
   if (isChecking) {
     return (
-      <Screen isCentered>
-        <Text variant="title">{t("finishSetupTitle")}</Text>
-        <Text variant="muted">{tc("loading")}</Text>
-      </Screen>
+      <AuthLayout>
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("finishSetupTitle")}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Text className="text-sm text-muted-foreground">{tc("loading")}</Text>
+          </CardContent>
+        </Card>
+      </AuthLayout>
     );
   }
 
   return (
-    <Screen isCentered>
-      <View className="gap-1">
-        <Text variant="title">{t("finishSetupTitle")}</Text>
-        <Text variant="muted">{t("finishSetupDescription")}</Text>
-      </View>
-      <TextField
-        label={t("password")}
-        placeholder={t("passwordPlaceholder")}
-        value={password}
-        onChangeText={setPassword}
-        autoComplete="current-password"
-        textContentType="password"
-        secure={{ showLabel: t("showPassword"), hideLabel: t("hidePassword") }}
-        autoFocus
-        onSubmitEditing={() => void submit()}
-      />
-      {error ? <Notice tone="danger">{error}</Notice> : null}
-      <Captcha ref={captchaRef} action="sign-in" />
-      <Button
-        label={isLoading ? tc("loading") : t("finishSetupSubmit")}
-        isLoading={isLoading}
-        disabled={!password}
-        onPress={() => void submit()}
-      />
-    </Screen>
+    <AuthLayout>
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("finishSetupTitle")}</CardTitle>
+          <CardDescription>{t("finishSetupDescription")}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <View className="flex flex-col gap-4">
+            <View className="flex flex-col gap-2">
+              <Label>{t("password")}</Label>
+              <Input
+                placeholder={t("passwordPlaceholder")}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+                autoCapitalize="none"
+                autoComplete="current-password"
+                textContentType="password"
+                accessibilityLabel={t("password")}
+                autoFocus
+                onSubmitEditing={() => void submit()}
+              />
+            </View>
+            {error ? <Text className="text-sm text-destructive">{error}</Text> : null}
+            <Captcha ref={captchaRef} action="sign-in" />
+            <Button onPress={() => void submit()} disabled={isLoading || !password} className="w-full">
+              {isLoading ? tc("loading") : t("finishSetupSubmit")}
+            </Button>
+          </View>
+        </CardContent>
+      </Card>
+    </AuthLayout>
   );
 }

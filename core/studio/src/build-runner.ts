@@ -43,6 +43,7 @@ import {
   STUDIO_CHECKPOINT_VERSION,
   type StudioBuildCheckpoint,
 } from "./build-checkpoint";
+import { readError } from "./http";
 import type { BuildRenderer, ImageOps, ResolvedExecution, StudioPorts } from "./ports";
 import { sealTranscript, type StudioChatMessage, toPriorTurns } from "./transcript";
 
@@ -196,16 +197,6 @@ const PREVIEW_IMAGE_SIZE = 100;
 export const SCREENSHOT_BOUND = { maxWidth: 768, maxHeight: 960, quality: 0.8 } as const;
 /** Background images heavier than this (~120KB binary) are recompressed once. */
 const MAX_BACKGROUND_CHARS = 160_000;
-
-/** Pull the server's error message from a failed JSON response. */
-async function readError(res: Response): Promise<string> {
-  try {
-    const data = (await res.json()) as { error?: string };
-    return data.error || `HTTP ${res.status}`;
-  } catch {
-    return `HTTP ${res.status}`;
-  }
-}
 
 /**
  * Bound an image for the bundle: downscale to the stage size, recompress once

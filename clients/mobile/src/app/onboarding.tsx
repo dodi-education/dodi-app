@@ -14,8 +14,10 @@ import { defaultPref, type DateStyleId, type TimeStyleId } from "@dodi/intl/pref
 
 import { api } from "@/adapters/platform";
 import { DateTimeFields } from "@/components/parent/date-time-fields";
-import { Button, Card, Notice, Screen, Text } from "@/components/ui";
-import { ChoiceList } from "@/components/ui/choice-list";
+import { CenteredPage } from "@/components/auth/centered-page";
+import { FieldRow } from "@/components/parent/rows";
+import { Section } from "@/components/parent/section";
+import { Button, Select, Text } from "@/components/ui";
 import { VaultGate } from "@/components/vault/vault-gate";
 import { clientState, useAccountStore } from "@/lib/client-state";
 import { useLocaleSetting } from "@/lib/intl";
@@ -81,18 +83,24 @@ function PreferencesStep() {
   }
 
   return (
-    <Screen isCentered>
-      <View className="gap-1">
-        <Text variant="title">{t("prefsTitle")}</Text>
-        <Text variant="muted">{t("prefsDescription")}</Text>
+    <CenteredPage className="max-w-2xl px-4 py-10">
+      <View className="mb-5">
+        <Text className="text-xl font-semibold tracking-tight" accessibilityRole="header">
+          {t("prefsTitle")}
+        </Text>
+        <Text className="mt-1 text-sm text-muted-foreground">{t("prefsDescription")}</Text>
       </View>
-      <Card>
-        <ChoiceList
-          label={ts("language")}
-          choices={SUPPORTED_LOCALES.map((l) => ({ value: l, label: LOCALE_NAMES[l] }))}
-          value={locale}
-          onChange={changeLocale}
-        />
+
+      <Section>
+        <FieldRow label={ts("language")}>
+          <Select
+            label={ts("language")}
+            value={locale}
+            options={SUPPORTED_LOCALES.map((l) => ({ value: l, label: LOCALE_NAMES[l] }))}
+            onValueChange={changeLocale}
+          />
+        </FieldRow>
+
         <DateTimeFields
           dateStyle={dateStyle}
           timeStyle={timeStyle}
@@ -102,14 +110,18 @@ function PreferencesStep() {
           onTimeZone={setTimeZone}
           basePref={base}
         />
-      </Card>
-      {error ? <Notice tone="danger">{error}</Notice> : null}
-      <Button
-        label={isSaving ? t("saving") : t("continue")}
-        isLoading={isSaving}
-        onPress={() => void save()}
-      />
-      <Button variant="ghost" label={t("skip")} disabled={isSaving} onPress={finish} />
-    </Screen>
+      </Section>
+
+      {error ? <Text className="mb-3 text-sm text-danger">{error}</Text> : null}
+
+      <View className="flex-row items-center justify-between gap-3">
+        <Button variant="ghost" onPress={finish} disabled={isSaving}>
+          {t("skip")}
+        </Button>
+        <Button onPress={() => void save()} disabled={isSaving}>
+          {isSaving ? t("saving") : t("continue")}
+        </Button>
+      </View>
+    </CenteredPage>
   );
 }

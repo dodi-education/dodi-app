@@ -4,16 +4,17 @@
  * password is asked.
  */
 import { useState } from "react";
+import { View } from "react-native";
 import { useTranslations } from "use-intl";
 import { changePassword } from "@dodi/client-state/change-password";
 
 import { mobileAuthApi } from "@/adapters/auth";
-import { Button, Card, Notice, TextField } from "@/components/ui";
+import { Section } from "@/components/parent/section";
+import { Button, Input, Label, Text } from "@/components/ui";
 import { clientState } from "@/lib/client-state";
 
 export function ChangePassword() {
   const t = useTranslations("settings");
-  const ta = useTranslations("auth");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [isBusy, setIsBusy] = useState(false);
@@ -32,6 +33,7 @@ export function ChangePassword() {
     setError(null);
     setIsDone(false);
     setIsBusy(true);
+    // Auth first; the vault is re-wrapped only once that succeeds.
     const outcome = await changePassword(
       { auth: mobileAuthApi, vault: clientState.vault },
       { password, confirm },
@@ -46,34 +48,48 @@ export function ChangePassword() {
     setIsBusy(false);
   }
 
-  const secure = { showLabel: ta("showPassword"), hideLabel: ta("hidePassword") };
   return (
-    <Card title={t("changePasswordTitle")} description={t("changePasswordDescription")}>
-      <TextField
-        label={t("newPassword")}
-        value={password}
-        onChangeText={edit(setPassword)}
-        autoComplete="new-password"
-        textContentType="newPassword"
-        secure={secure}
-      />
-      <TextField
-        label={t("confirmNewPassword")}
-        value={confirm}
-        onChangeText={edit(setConfirm)}
-        autoComplete="new-password"
-        textContentType="newPassword"
-        secure={secure}
-        onSubmitEditing={() => void submit()}
-      />
-      {error ? <Notice tone="danger">{error}</Notice> : null}
-      {isDone ? <Notice tone="success">{t("passwordChanged")}</Notice> : null}
-      <Button
-        label={isBusy ? t("updatingPassword") : t("updatePassword")}
-        isLoading={isBusy}
-        disabled={!password || !confirm}
-        onPress={() => void submit()}
-      />
-    </Card>
+    <Section title={t("changePasswordTitle")} desc={t("changePasswordDescription")}>
+      <View className="flex-col gap-4 px-5 py-4">
+        <View className="flex-col gap-2">
+          <Label>{t("newPassword")}</Label>
+          <Input
+            secureTextEntry
+            autoCapitalize="none"
+            autoCorrect={false}
+            accessibilityLabel={t("newPassword")}
+            value={password}
+            onChangeText={edit(setPassword)}
+            autoComplete="new-password"
+            textContentType="newPassword"
+          />
+        </View>
+        <View className="flex-col gap-2">
+          <Label>{t("confirmNewPassword")}</Label>
+          <Input
+            secureTextEntry
+            autoCapitalize="none"
+            autoCorrect={false}
+            accessibilityLabel={t("confirmNewPassword")}
+            value={confirm}
+            onChangeText={edit(setConfirm)}
+            autoComplete="new-password"
+            textContentType="newPassword"
+            onSubmitEditing={() => void submit()}
+          />
+        </View>
+        {error ? (
+          <Text className="text-sm text-destructive" accessibilityRole="alert">
+            {error}
+          </Text>
+        ) : null}
+        {isDone ? <Text className="text-sm text-success">{t("passwordChanged")}</Text> : null}
+        <View className="flex-row">
+          <Button disabled={isBusy || !password || !confirm} onPress={() => void submit()}>
+            {isBusy ? t("updatingPassword") : t("updatePassword")}
+          </Button>
+        </View>
+      </View>
+    </Section>
   );
 }

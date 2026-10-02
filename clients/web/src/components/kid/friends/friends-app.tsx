@@ -4,7 +4,11 @@ import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 
+import { resolveFriendName } from "@dodi/client-state/friends";
+import { friendsCentered } from "@dodi/ui-recipes";
+
 import { Icon } from "@/components/shared/icon";
+import { cn } from "@/lib/utils";
 import { useFriends } from "@/hooks/use-friends";
 import { useOnline } from "@/hooks/use-online";
 import type { DecodedFriend } from "@/lib/friends";
@@ -17,7 +21,14 @@ type View = { mode: "list" } | { mode: "add" } | { mode: "kid"; id: string };
 
 function Centered({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-3 py-16 text-center text-sm font-semibold text-muted-foreground">
+    <div
+      className={cn(
+        friendsCentered.box,
+        friendsCentered.text,
+        friendsCentered.textAlign,
+        friendsCentered.web,
+      )}
+    >
       {children}
     </div>
   );
@@ -91,15 +102,8 @@ export function FriendsApp({ kidId }: { kidId: string }) {
   if (view.mode === "add") {
     // Best-known display name for someone we already have a relationship with —
     // used to make "already friends / request exists" errors name the right kid.
-    const resolveName = (handle: string): string | null => {
-      const match = [
-        ...f.friends,
-        ...f.incoming,
-        ...f.outgoing,
-        ...f.blocked,
-      ].find((x) => (x.handle ?? "").toLowerCase() === handle.toLowerCase());
-      return match ? match.name?.trim() || match.nickname?.trim() || null : null;
-    };
+    const resolveName = (handle: string): string | null =>
+      resolveFriendName(f, handle);
     return (
       <AddFriend
         myHandle={f.myHandle}

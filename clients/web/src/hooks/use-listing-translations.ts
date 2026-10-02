@@ -2,8 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import type { ListingText } from "@/lib/ai/client-translate-game";
-import { fetchKnownListings, saveListingDraft } from "@/lib/games/publication-listings";
+import {
+  type ListingText,
+  fetchKnownListings,
+  saveListingDraft,
+} from "@dodi/client-state/game-publication";
+
+import { gameFlowDeps } from "@/lib/games/game-flow-deps";
 
 export interface ListingTranslations {
   /** Known listing texts per locale, with unsaved edits. Empty until loaded or when none exist. */
@@ -33,7 +38,7 @@ export function useListingTranslations(
     loadedForRef.current = gameId;
     let cancelled = false;
     let isSettled = false;
-    fetchKnownListings(gameId)
+    fetchKnownListings(gameFlowDeps(), gameId)
       .then((known) => {
         if (cancelled) return;
         setEntries(known);
@@ -61,7 +66,7 @@ export function useListingTranslations(
 
   const save = useCallback(async () => {
     if (!gameId || !isDirty) return;
-    await saveListingDraft(gameId, entries);
+    await saveListingDraft(gameFlowDeps(), gameId, entries);
     setSaved(entries);
   }, [gameId, isDirty, entries]);
 

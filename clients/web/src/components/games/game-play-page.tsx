@@ -8,14 +8,14 @@ import { GamePlayView } from "@/components/games/game-play-view";
 import { Icon } from "@/components/shared/icon";
 import { getCookie } from "@/lib/cookies";
 import { logGameEvent } from "@/lib/games/play-sync";
-import { isCurrentlyOnline } from "@/stores/connectivity-store";
-import { useGameStore } from "@/stores/game-store";
+import { clientState } from "@/lib/client-state";
+import { cn } from "@/lib/utils";
+import { gamePlayNotice } from "@dodi/ui-recipes";
 import {
-  coerceProgressKind,
-  coerceSuccessCriteria,
-} from "@dodi/games/game-spec";
+  gamePlayPropsFromGame,
+  openKidGame,
+} from "@dodi/client-state/game-play";
 import type { Game } from "@dodi/types/database";
-import type { GameMetadata } from "@dodi/types/games";
 
 /**
  * The signed-in /games/[id] experience. Extracted from the route file so the
@@ -59,36 +59,28 @@ export function GamePlayPage() {
       // `kidId` makes the platform derive the locale and enforce visibility
       // (inactive/unshared games 404 even via a direct URL). The store decrypts
       // the row — everything below this point is plaintext.
-      useGameStore
-        .getState()
-        .loadOne(id, pid)
-        .then((g) => {
-          if (cancelled) return;
-          if (!g) {
-            if (!isCurrentlyOnline()) setOfflineUnavailable(true);
-            else setMissing(true);
-            return;
-          }
-          setGame(g);
-          // Activity log via the offline-capable outbox; the route derives the
-          // persona and references the game by id (its title is E2EE).
-          if (!loggedRef.current) {
-            loggedRef.current = true;
-            logGameEvent({
-              gameId: id,
-              kidId: pid,
-              event: "game_started",
-              message: "Started game",
-            });
-          }
-        })
-        .catch(() => {
-          if (cancelled) return;
-          // Offline with no cached copy is not a 404 — the game exists, it
-          // just isn't saved for offline.
-          if (!isCurrentlyOnline()) setOfflineUnavailable(true);
+      // Offline with no cached copy is not a 404: the game exists, it just
+      // isn't saved for offline.
+      void openKidGame(clientState, id, pid).then((opened) => {
+        if (cancelled) return;
+        if (opened.kind !== "ok") {
+          if (opened.kind === "offline-unavailable") setOfflineUnavailable(true);
           else setMissing(true);
-        });
+          return;
+        }
+        setGame(opened.game);
+        // Activity log via the offline-capable outbox; the route derives the
+        // persona and references the game by id (its title is E2EE).
+        if (!loggedRef.current) {
+          loggedRef.current = true;
+          logGameEvent({
+            gameId: id,
+            kidId: pid,
+            event: "game_started",
+            message: "Started game",
+          });
+        }
+      });
     }
     return () => {
       cancelled = true;
@@ -99,13 +91,13 @@ export function GamePlayPage() {
 
   if (offlineUnavailable) {
     return (
-      <div className="w-full max-w-xl rounded-2xl border bg-white p-6 text-center shadow-sm">
+      <div className={cn(gamePlayNotice.box, gamePlayNotice.web)}>
         <Icon
           name="wifi_off"
           size={28}
-          className="mx-auto text-muted-foreground"
+          className={gamePlayNotice.webIcon}
         />
-        <p className="mt-3 text-sm font-semibold text-muted-foreground">
+        <p className={gamePlayNotice.text}>
           {t("offlineNotAvailable")}
         </p>
       </div>
@@ -114,9 +106,9 @@ export function GamePlayPage() {
 
   if (ready && !kidId) {
     return (
-      <div className="w-full max-w-xl rounded-2xl border bg-white p-6 text-center shadow-sm">
-        <h1 className="text-xl font-bold text-dodi-800">{t("title")}</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
+      <div className={cn(gamePlayNotice.box, gamePlayNotice.web)}>
+        <h1 className={gamePlayNotice.title}>{t("title")}</h1>
+        <p className={gamePlayNotice.body}>
           {t("kidRequired")}
         </p>
       </div>
@@ -125,22 +117,5 @@ export function GamePlayPage() {
 
   if (!game || !kidId) return null;
 
-  const metadata = game.metadata as unknown as GameMetadata | null;
-
-  return (
-    <GamePlayView
-      gameId={game.id}
-      kidId={kidId}
-      title={game.title}
-      description={game.description}
-      codeBundle={game.code_bundle}
-      markdown={game.markdown}
-      learningGoal={game.learning_goal}
-      successDefinition={game.success_definition}
-      successCriteria={coerceSuccessCriteria(game.success_criteria)}
-      progressKind={coerceProgressKind(game.progress_kind)}
-      capabilities={metadata?.capabilities ?? []}
-      drawingStyle={metadata?.drawingStyle ?? "picture"}
-    />
-  );
+  return <GamePlayView kidId={kidId} {...gamePlayPropsFromGame(game)} />;
 }

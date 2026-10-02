@@ -7,14 +7,10 @@ import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/shared/icon";
 import { useDateFormat } from "@/components/providers/date-format-provider";
+import { cn } from "@/lib/utils";
+import { isPublicationReviewSlow } from "@dodi/client-state/game-publication";
+import { dialogField, publishCallout, publishDisclosure } from "@dodi/ui-recipes";
 import type { Game } from "@dodi/types/database";
-
-/**
- * The review worker runs every 10 minutes and gives up on an item after three
- * failed agent attempts, which then waits for a person. Past this age a
- * submission is stuck rather than queued, and the copy says so.
- */
-const REVIEW_SLOW_AFTER_MS = 60 * 60 * 1000;
 
 interface PublishStatusViewProps {
   state: "in-review" | "published";
@@ -45,22 +41,19 @@ export function PublishStatusView({
   const [openedAt] = useState(() => Date.now());
 
   const requestedAt = publication.publication_requested_at;
-  const isSlow =
-    state === "in-review" &&
-    requestedAt !== null &&
-    openedAt - new Date(requestedAt).getTime() > REVIEW_SLOW_AFTER_MS;
+  const isSlow = isPublicationReviewSlow(state, requestedAt, openedAt);
   const isLive = state === "published";
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className={cn(publishCallout.webStack, publishCallout.stack)}>
       {isLive ? (
-        <div className="flex gap-2.5 rounded-lg bg-success-soft px-3 py-2.5 text-xs">
+        <div className={cn(publishCallout.web, publishCallout.box, publishCallout.success, publishCallout.text)}>
           <Icon name="success" size={18} className="shrink-0 text-success" />
-          <div className="flex flex-col gap-2">
-            <p className="text-ink-2">{t("publishLiveBody")}</p>
+          <div className={cn(publishCallout.webBody, publishCallout.body)}>
+            <p className={publishCallout.bodyText}>{t("publishLiveBody")}</p>
             <Link
               href={`/parent/games/${publication.id}`}
-              className="inline-flex items-center gap-1 font-semibold text-primary hover:underline"
+              className={cn(publishCallout.webLink, publishCallout.link, publishCallout.linkText)}
             >
               {t("publishViewOnDiscover")}
               <Icon name="chevron_right" size={14} />
@@ -68,16 +61,16 @@ export function PublishStatusView({
           </div>
         </div>
       ) : (
-        <div className="flex gap-2.5 rounded-lg bg-warning-soft px-3 py-2.5 text-xs">
+        <div className={cn(publishCallout.web, publishCallout.box, publishCallout.warning, publishCallout.text)}>
           <Icon name="clock" size={18} className="shrink-0 text-warning" />
-          <div className="flex flex-col gap-1 text-ink-2">
+          <div className={cn(publishCallout.webBody, publishCallout.bodyTight, publishCallout.bodyText)}>
             <p>{isSlow ? t("publishReviewSlow") : t("publishReviewEta")}</p>
             <p>{isOutcomeEmailOn ? t("publishNotifyEmail") : t("publishNotifyHere")}</p>
           </div>
         </div>
       )}
 
-      <p className="text-[11px] text-faint">
+      <p className={dialogField.hint}>
         {t(isLive ? "publishLiveMeta" : "publishSubmittedMeta", {
           date: requestedAt ? formatDateTime(requestedAt) : "",
           min: publication.target_age_min ?? "?",
@@ -86,14 +79,14 @@ export function PublishStatusView({
       </p>
 
       {isEditedSinceSubmit && (
-        <div className="flex gap-2 rounded-lg bg-muted px-3 py-2 text-xs text-ink-2">
+        <div className={cn(publishCallout.web, publishCallout.compact, publishCallout.info, publishCallout.text, publishCallout.bodyText)}>
           <Icon name="info" size={16} className="shrink-0 text-muted-foreground" />
           <p>{isLive ? t("publishEditedSinceLive") : t("publishEditedSinceSubmit")}</p>
         </div>
       )}
 
-      <details className="group rounded-lg border border-border px-3" open={isEditedSinceSubmit}>
-        <summary className="flex min-h-11 cursor-pointer list-none items-center gap-1.5 text-xs font-semibold text-ink-2 [&::-webkit-details-marker]:hidden">
+      <details className={cn(publishDisclosure.webRoot, publishDisclosure.root)} open={isEditedSinceSubmit}>
+        <summary className={cn(publishDisclosure.webSummary, publishDisclosure.summary, publishDisclosure.summaryText)}>
           <Icon
             name="chevron_right"
             size={14}
@@ -101,8 +94,8 @@ export function PublishStatusView({
           />
           {isLive ? t("publishUpdateToggleLive") : t("publishUpdateToggle")}
         </summary>
-        <div className="flex flex-col items-start gap-2.5 pb-3">
-          <p className="text-xs text-muted-foreground">
+        <div className={cn(publishDisclosure.webBody, publishDisclosure.body)}>
+          <p className={dialogField.note}>
             {t(isLive ? "publishUpdateLiveHint" : "publishUpdateInReviewHint", {
               limit: monthlyLimit,
             })}

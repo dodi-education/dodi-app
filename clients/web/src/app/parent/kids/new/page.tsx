@@ -1,29 +1,25 @@
 "use client";
 
-import { dodi } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 
+import { flowErrorText } from "@dodi/client-state/flow-error";
+import {
+  KID_LANGUAGE_OPTIONS,
+  KID_NAME_MAX_LENGTH,
+  createKid,
+  invalidKidFields,
+} from "@dodi/client-state/kid-profile";
 import { DateField } from "@/components/parent/date-field";
-import { FieldRow } from "@/components/parent/rows";
+import { FieldRow, fieldSelectClass } from "@/components/parent/rows";
 import { SaveRow } from "@/components/parent/save-row";
 import { Section } from "@/components/parent/section";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { locales, type Locale } from "@/i18n/config";
-import { encryptKidFields } from "@dodi/vault";
-import { useGameStore } from "@/stores/game-store";
-import { useKidStore } from "@/stores/kid-store";
-import { useVaultStore } from "@/stores/vault-store";
-
-const localeNames: Record<Locale, string> = {
-  en: "English",
-  de: "Deutsch",
-};
-
-const selectClassName =
-  "h-9 w-full rounded-md border border-input bg-card px-3 text-sm outline-none transition-[color,box-shadow,border-color] hover:border-faint focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary-soft-2 sm:w-[250px]";
+import { parentFlowDeps } from "@/lib/parent-flow-deps";
+import { cn } from "@/lib/utils";
+import { sectionFormError } from "@dodi/ui-recipes";
 
 export default function NewKidPage() {
   const t = useTranslations("kids");
@@ -39,47 +35,22 @@ export default function NewKidPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!displayName.trim()) {
+    if (invalidKidFields({ displayName }).name) {
       setInvalidName(true);
       return;
     }
     setLoading(true);
 
-    const session = useVaultStore.getState().session;
-    if (!session) {
-      setError("Your secure vault is locked. Please reload and try again.");
+    // Personal fields are sealed on the device. social_id (the public friend
+    // handle) is assigned randomly server-side and the parent manages it on the kid.
+    try {
+      await createKid(parentFlowDeps(), { displayName, birthdate, language });
+    } catch (err) {
+      setError(flowErrorText(err, t("failedToCreate")));
       setLoading(false);
       return;
     }
 
-    // Encrypt personal fields client-side. social_id (the public friend handle)
-    // is assigned randomly server-side and the parent manages it on the kid.
-    const enc = encryptKidFields(session, {
-      display_name: displayName,
-      ...(birthdate ? { birthdate } : {}),
-    });
-
-    const response = await dodi.request("/api/kids", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        display_name: enc.display_name,
-        birthdate: enc.birthdate,
-        language,
-      }),
-    });
-
-    if (!response.ok) {
-      const data = await response.json();
-      setError(data.error || t("failedToCreate"));
-      setLoading(false);
-      return;
-    }
-
-    useKidStore.getState().invalidate();
-    // The server auto-shared the system games with the new kid — drop the game
-    // caches so Discover's "Added" badges and the kid libraries refetch.
-    useGameStore.getState().invalidate();
     router.push("/parent/kids");
     router.refresh();
   }
@@ -100,7 +71,7 @@ export default function NewKidPage() {
               }}
               aria-invalid={invalidName || undefined}
               aria-required
-              maxLength={50}
+              maxLength={KID_NAME_MAX_LENGTH}
             />
           </FieldRow>
           <FieldRow
@@ -124,17 +95,17 @@ export default function NewKidPage() {
               id="language"
               value={language}
               onChange={(e) => setLanguage(e.target.value)}
-              className={selectClassName}
+              className={fieldSelectClass}
             >
-              {locales.map((l) => (
-                <option key={l} value={l}>
-                  {localeNames[l]}
+              {KID_LANGUAGE_OPTIONS.map((l) => (
+                <option key={l.value} value={l.value}>
+                  {l.label}
                 </option>
               ))}
             </select>
           </FieldRow>
           {error && (
-            <div className="px-5 py-3 text-sm text-danger">{error}</div>
+            <div className={cn(sectionFormError.box, sectionFormError.text)}>{error}</div>
           )}
           <SaveRow>
             <Button

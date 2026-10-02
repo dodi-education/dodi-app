@@ -2,6 +2,8 @@
 
 import { useTranslations } from "next-intl";
 
+import { companionCompact as c } from "@dodi/ui-recipes";
+
 import { DodiFigure } from "@/components/dodi/dodi-figure";
 import { Icon } from "@/components/shared/icon";
 import {
@@ -59,12 +61,12 @@ export function DodiCompact() {
               : null;
 
   return (
-    <div className="flex min-w-0 items-center gap-2.5">
+    <div className={cn(c.webRoot, c.root)}>
       <button
         type="button"
         onClick={handleClick}
         disabled={isConnecting}
-        className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-dodi-200 bg-white shadow-sm transition-shadow hover:shadow-md disabled:opacity-60"
+        className={cn(c.button, c.webButton)}
         aria-label={ariaLabel}
       >
         <DodiFigure
@@ -72,19 +74,19 @@ export function DodiCompact() {
           isThinking={isThinking}
           isHead
           alt={isThinking ? t("voiceThinkingAlt") : "dodi"}
-          className={cn("rounded-full", isThinking && "animate-kspin")}
+          className={cn("rounded-full", isThinking && c.webThinking)}
         />
         {/* Speaking indicator ring */}
         {dodiSpeaking && (
-          <span className="absolute inset-0 animate-ping rounded-full border-2 border-dodi-400 opacity-40" />
+          <span className={cn(c.speakingRing, c.webSpeakingRing)} />
         )}
         {/* Connecting spinner */}
         {isConnecting && (
-          <span className="absolute inset-0 animate-spin rounded-full border-2 border-dodi-400 border-t-transparent" />
+          <span className={cn(c.connectingRing, c.webConnectingRing)} />
         )}
         {/* Status dot / offline badge */}
         {!isOnline ? (
-          <span className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full border border-dodi-200 bg-white">
+          <span className={cn(c.offlineBadge, c.webOfflineBadge)}>
             <Icon
               name="wifi_off"
               className="h-2.5 w-2.5 text-muted-foreground"
@@ -93,10 +95,10 @@ export function DodiCompact() {
         ) : (
           <>
             {isConnected && (
-              <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white bg-success" />
+              <span className={cn(c.statusDot, c.connectedDot)} />
             )}
             {dodiState === "disconnected" && error && (
-              <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white bg-danger" />
+              <span className={cn(c.statusDot, c.errorDot)} />
             )}
           </>
         )}
@@ -104,12 +106,12 @@ export function DodiCompact() {
 
       {/* Status bubble — persistent live region so screen readers announce
           status changes; visually only present while dodi is doing something. */}
-      <div aria-live="polite" className="min-w-0">
+      <div aria-live="polite" className={c.liveRegion}>
         {statusLine ? (
-          <div className="relative flex h-10 min-w-0 items-center rounded-full bg-white px-3.5 shadow-sm animate-in fade-in slide-in-from-left-2 duration-200">
+          <div className={cn(c.bubble, c.webBubble)}>
             {/* Tail pointing left toward the dodi avatar */}
-            <span className="absolute -left-1 top-1/2 size-2.5 -translate-y-1/2 rotate-45 rounded-[2px] bg-white" />
-            <span className="relative min-w-0 truncate text-[13px] font-bold text-ink-2">
+            <span className={cn(c.bubbleTail, c.webBubbleTail)} />
+            <span className={cn(c.bubbleText, c.webBubbleText)}>
               {statusLine}
             </span>
           </div>

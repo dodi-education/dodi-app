@@ -10,7 +10,9 @@ import { Icon } from "@/components/shared/icon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { dodi } from "@/lib/api";
-import { decryptPersona } from "@dodi/vault";
+import { cn } from "@/lib/utils";
+import { personaAvatar } from "@dodi/ui-recipes";
+import { loadPersonas, personaSummary } from "@dodi/client-state/personas";
 import { useVaultStore } from "@/stores/vault-store";
 import type { Persona } from "@dodi/types/database";
 
@@ -22,16 +24,10 @@ export default function PersonasPage() {
   useEffect(() => {
     if (!session) return;
     let cancelled = false;
-    dodi
-      .request("/api/personas")
-      .then((r) => (r.ok ? r.json() : []))
-      // Account personas arrive as ciphertext; decrypt name + soul for display.
-      .then((d: Persona[]) => {
-        if (!cancelled) setPersonas(d.map((p) => decryptPersona(session, p)));
-      })
-      .catch(() => {
-        if (!cancelled) setPersonas([]);
-      });
+    // Account personas arrive as ciphertext; decrypted for display ([] on failure).
+    void loadPersonas(dodi, session).then((list) => {
+      if (!cancelled) setPersonas(list);
+    });
     return () => {
       cancelled = true;
     };
@@ -59,7 +55,7 @@ export default function PersonasPage() {
             className="block"
           >
             <Row clickable>
-              <div className="flex size-[34px] shrink-0 items-center justify-center rounded-full bg-primary-soft text-primary">
+              <div className={cn(personaAvatar.web, personaAvatar.box)}>
                 <Icon name="sparkles" size={16} />
               </div>
               <RowMain>
@@ -72,11 +68,7 @@ export default function PersonasPage() {
                   )}
                 </RowTitle>
                 <RowMeta className="truncate">
-                  {persona.soul
-                    .split("\n")
-                    .find((l) => l.startsWith("- "))
-                    ?.replace(/^- /, "")
-                    .replace(/\*\*/g, "") ?? t("noDescription")}
+                  {personaSummary(persona.soul) ?? t("noDescription")}
                 </RowMeta>
               </RowMain>
               <Icon name="chevron_right" size={16} className="text-faint" />

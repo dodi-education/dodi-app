@@ -1,5 +1,12 @@
 "use client";
 
+import {
+  kidAvatar,
+  kidAvatarPalette,
+  kidRowLink,
+  sectionEmpty,
+  sectionMessage,
+} from "@dodi/ui-recipes";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 
@@ -18,14 +25,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useDateFormat } from "@/components/providers/date-format-provider";
 import { useKids } from "@/hooks/use-kids";
+import { cn } from "@/lib/utils";
 import { ageFromBirthdate } from "@dodi/intl";
 
-const AVATAR_PALETTE = [
-  { bg: "bg-primary-soft-2", fg: "text-primary" },
-  { bg: "bg-success-soft", fg: "text-success" },
-  { bg: "bg-[#EFE9FA]", fg: "text-[#7456C4]" },
-  { bg: "bg-[#FDF1DC]", fg: "text-[#B0782A]" },
-];
+/** Shared with the app (@dodi/ui-recipes). */
+const AVATAR_PALETTE = kidAvatarPalette;
 
 function avatarColor(index: number) {
   return AVATAR_PALETTE[index % AVATAR_PALETTE.length];
@@ -50,21 +54,27 @@ export default function KidsPage() {
 
       {loading ? (
         <Section title={t("yourKids")}>
-          <div className="px-5 py-12 text-center text-sm text-muted-foreground">
+          <div className={cn(sectionMessage.box, sectionMessage.text)}>
             {tc("loading")}
           </div>
         </Section>
       ) : error ? (
         <Section title={t("yourKids")}>
-          <div className="px-5 py-12 text-center text-sm text-danger">
+          <div
+            className={cn(
+              sectionMessage.box,
+              sectionMessage.text,
+              sectionMessage.danger,
+            )}
+          >
             {error}
           </div>
         </Section>
       ) : !kids || kids.length === 0 ? (
         <Section title={t("yourKids")}>
-          <div className="flex flex-col items-center gap-4 px-5 py-12">
-            <Icon name="kids" className="h-10 w-10 text-primary" />
-            <p className="text-sm text-muted-foreground">{t("noKids")}</p>
+          <div className={cn(sectionEmpty.web, sectionEmpty.box)}>
+            <Icon name="kids" className={sectionEmpty.webIcon} />
+            <p className={sectionEmpty.text}>{t("noKids")}</p>
             <Button asChild>
               <Link href="/parent/kids/new">{t("addKid")}</Link>
             </Button>
@@ -79,10 +89,16 @@ export default function KidsPage() {
               <Row key={kid.id} clickable>
                 <Link
                   href={`/parent/kids/${kid.id}`}
-                  className="flex min-w-0 flex-1 items-center gap-3.5"
+                  className={cn(kidRowLink.web, kidRowLink.box)}
                 >
                   <div
-                    className={`flex size-[34px] shrink-0 items-center justify-center rounded-full text-[13px] font-bold ${color.bg} ${color.fg}`}
+                    className={cn(
+                      kidAvatar.web,
+                      kidAvatar.box,
+                      kidAvatar.text,
+                      color.bg,
+                      color.fg,
+                    )}
                   >
                     {kid.display_name[0]?.toUpperCase()}
                   </div>

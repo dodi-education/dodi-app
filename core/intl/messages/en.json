@@ -9,7 +9,9 @@
     "loading": "Loading...",
     "saved": "Changes saved",
     "openCalendar": "Open calendar",
-    "details": "Details"
+    "details": "Details",
+    "done": "Done",
+    "chooseFile": "Choose file"
   },
   "auth": {
     "welcomeBack": "Welcome back",
@@ -102,7 +104,8 @@
     "unlocking": "Unlocking…",
     "unlockFailed": "Couldn't unlock the vault",
     "forgotPasswordUseKey": "Forgot password? Use your account key",
-    "usePasswordInstead": "Use password instead"
+    "usePasswordInstead": "Use password instead",
+    "unlockingVault": "Unlocking your secure vault…"
   },
   "onboarding": {
     "prefsTitle": "A few basics",
@@ -437,7 +440,7 @@
     "kidNotFound": "Kid not found"
   },
   "games": {
-    "title": "Games Library",
+    "title": "Games",
     "subtitle": "Play games picked just for you.",
     "kidRequired": "Choose a kid first to use games.",
     "backToLibrary": "Back to library",
@@ -549,12 +552,9 @@
     "tapToStart": "Tap to start",
     "tapToTalk": "Tap to talk to me!",
     "sessionEnded": "Session ended",
-    "chatPlaceholder": "Chat and voice interaction coming soon.",
-    "dodiChatPlaceholder": "dodi chat will appear here",
     "gamesTitle": "Games",
-    "gamesPlaceholder": "Game library coming in Phase 3.",
     "friendsTitle": "Friends",
-    "friendsPlaceholder": "Friend system coming in Phase 4."
+    "noKidSelected": "No kid selected"
   },
   "activities": {
     "title": "Activities",
@@ -972,6 +972,7 @@
     "importErrUnsafeCode": "The game code failed the safety check.",
     "importErrBackground": "The background image is missing from the archive.",
     "buildRunningHint": "You can keep using the app while dodi builds. If you close or reload this tab, the build pauses and you can continue it here.",
+    "buildRunningHintApp": "You can switch to other apps while dodi builds. The build keeps running in the background.",
     "buildPaused": "Paused. dodi can continue this build where it stopped.",
     "otherBuildRunning": "dodi is already building another game. Wait until it is done, then try again.",
     "resumeBuildNotice": "dodi's last build of this game was interrupted. Continue where it stopped?",
@@ -1090,7 +1091,8 @@
     "openMenu": "Open menu",
     "closeMenu": "Close menu",
     "snapshots": "Snapshots",
-    "parentSnapshots": "Snapshots"
+    "parentSnapshots": "Snapshots",
+    "switchToParentView": "Switch to parent view"
   },
   "usage": {
     "title": "Usage",
@@ -1115,6 +1117,7 @@
     "look": "{name}'s look",
     "lookHint": "Pick a color & a character",
     "colorLabel": "Color {n}",
+    "slotLabel": "Slot {n}",
     "group": {
       "animals": "Animals",
       "dinos": "Dinos",
@@ -1234,5 +1237,16 @@
   "buildActivity": {
     "building": "dodi is building a game",
     "open": "View"
+  },
+  "backgroundBuild": {
+    "title": "Building your game",
+    "planTitle": "Planning your game",
+    "channelName": "Game builds",
+    "readyTitle": "Your game is ready",
+    "readyBody": "Tap to open it in the Game Studio.",
+    "pausedTitle": "Build paused",
+    "pausedBody": "Open the app and the build continues where it stopped.",
+    "failedTitle": "Build failed",
+    "failedBody": "Open the Game Studio to try again."
   }
 }

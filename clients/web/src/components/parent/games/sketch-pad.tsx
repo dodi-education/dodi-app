@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/shared/icon";
 import { STAGE_ASPECT_CSS } from "@dodi/games/stage";
 import { cn } from "@/lib/utils";
+import { sketchPad } from "@dodi/ui-recipes";
 
 import {
   appendPoint,
@@ -14,7 +15,7 @@ import {
   SKETCH_WIDTHS,
   type SketchStroke,
   undoStroke,
-} from "./sketch-strokes";
+} from "@dodi/studio/sketch-strokes";
 
 export interface SketchPadLabels {
   color: string;
@@ -28,7 +29,7 @@ export interface SketchPadLabels {
 
 /** Height of the toolbar row above the canvas, in px. Callers that size the pad
  *  to a height budget subtract it so the 4:5 canvas still fits. */
-export const SKETCH_TOOLBAR_HEIGHT = 56;
+export const SKETCH_TOOLBAR_HEIGHT = sketchPad.toolbarHeight;
 
 interface SketchPadProps {
   /** The committed strokes. Held by the caller so a drawing survives the pad
@@ -162,26 +163,28 @@ export function SketchPad({
 
   const toolClass = (active: boolean): string =>
     cn(
-      "flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border transition-colors disabled:cursor-not-allowed disabled:opacity-40",
+      sketchPad.tool,
+      sketchPad.webTool,
       active
-        ? "border-primary bg-primary-soft text-primary"
-        : "border-border bg-card text-muted-foreground hover:border-faint hover:text-ink",
+        ? cn(sketchPad.toolOn, sketchPad.webToolOn)
+        : cn(sketchPad.toolOff, sketchPad.webToolOff),
     );
 
   return (
     <div
       style={style}
       className={cn(
-        "flex flex-col overflow-hidden rounded-[18px] border border-border bg-white shadow-[0_8px_28px_rgba(34,56,78,0.10)]",
+        sketchPad.webCard,
+        sketchPad.card,
         className,
       )}
     >
       {/* Tool row — colors, pen sizes, then eraser / undo / clear at the end. */}
       <div
         style={{ height: SKETCH_TOOLBAR_HEIGHT }}
-        className="flex shrink-0 items-center gap-3 overflow-x-auto border-b border-border px-3"
+        className={cn(sketchPad.webToolbar, sketchPad.toolbar, sketchPad.toolbarContent)}
       >
-        <div role="group" aria-label={labels.color} className="flex items-center gap-1">
+        <div role="group" aria-label={labels.color} className={cn(sketchPad.webGroup, sketchPad.group)}>
           {SKETCH_COLORS.map((swatch) => {
             const selected = !isErasing && color === swatch;
             return (
@@ -194,12 +197,13 @@ export function SketchPad({
                   setColor(swatch);
                   setIsErasing(false);
                 }}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
+                className={cn(sketchPad.webSwatchButton, sketchPad.swatchButton)}
               >
                 <span
                   className={cn(
-                    "h-6 w-6 rounded-full border border-black/10 transition-transform",
-                    selected && "scale-110 ring-2 ring-primary ring-offset-2 ring-offset-white",
+                    sketchPad.swatch,
+                    sketchPad.webSwatch,
+                    selected && cn(sketchPad.swatchSelected, sketchPad.webSwatchSelected),
                   )}
                   style={{ backgroundColor: swatch }}
                 />
@@ -208,7 +212,7 @@ export function SketchPad({
           })}
         </div>
 
-        <div role="group" aria-label={labels.thin} className="flex items-center gap-1">
+        <div role="group" aria-label={labels.thin} className={cn(sketchPad.webGroup, sketchPad.group)}>
           {[
             { value: SKETCH_WIDTHS.thin, label: labels.thin, dot: 5 },
             { value: SKETCH_WIDTHS.thick, label: labels.thick, dot: 11 },
@@ -223,14 +227,14 @@ export function SketchPad({
               className={toolClass(width === pen.value)}
             >
               <span
-                className="rounded-full"
+                className={sketchPad.penDot}
                 style={{ width: pen.dot, height: pen.dot, backgroundColor: isErasing ? "#94a3b8" : color }}
               />
             </button>
           ))}
         </div>
 
-        <div className="ml-auto flex items-center gap-1">
+        <div className={cn(sketchPad.webGroup, sketchPad.groupEnd)}>
           <button
             type="button"
             onClick={() => setIsErasing((v) => !v)}
@@ -239,7 +243,7 @@ export function SketchPad({
             title={labels.eraser}
             className={toolClass(isErasing)}
           >
-            <Icon name="eraser" size={17} />
+            <Icon name="eraser" size={sketchPad.toolIcon.size} />
           </button>
           <button
             type="button"
@@ -249,7 +253,7 @@ export function SketchPad({
             title={labels.undo}
             className={toolClass(false)}
           >
-            <Icon name="undo" size={17} />
+            <Icon name="undo" size={sketchPad.toolIcon.size} />
           </button>
           <button
             type="button"
@@ -257,9 +261,9 @@ export function SketchPad({
             disabled={strokes.length === 0}
             aria-label={labels.clear}
             title={labels.clear}
-            className={cn(toolClass(false), "hover:border-danger hover:text-danger")}
+            className={cn(toolClass(false), sketchPad.webToolDanger)}
           >
-            <Icon name="delete" size={17} />
+            <Icon name="delete" size={sketchPad.toolIcon.size} />
           </button>
         </div>
       </div>
@@ -273,7 +277,7 @@ export function SketchPad({
         onPointerCancel={endStroke}
         onPointerLeave={endStroke}
         style={{ aspectRatio: STAGE_ASPECT_CSS, touchAction: "none" }}
-        className="block w-full cursor-crosshair bg-white"
+        className={cn(sketchPad.canvas, sketchPad.webCanvas)}
       />
     </div>
   );

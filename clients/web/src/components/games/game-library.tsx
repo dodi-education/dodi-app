@@ -1,6 +1,5 @@
 "use client";
 
-import { dodi } from "@/lib/api";
 import { useCallback, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -10,9 +9,18 @@ import { KidButton } from "@/components/kid/kid-button";
 import { GameCard } from "@/components/games/game-card";
 import { tagStyle } from "@/components/parent/games/tag-style";
 import { useTagLabel } from "@/lib/games/tag-label";
+import { cn } from "@/lib/utils";
 import { useKidGames } from "@/hooks/use-games";
-import { useGameStore } from "@/stores/game-store";
-import { GAME_TAG_IDS } from "@dodi/games/tags";
+import { dodi } from "@/lib/api";
+import { clientState } from "@/lib/client-state";
+import {
+  ALL_TAGS_FILTER,
+  filterKidGames,
+  kidGameTagOptions,
+  splitFavoriteGames,
+  toggleFavoriteGame,
+} from "@dodi/client-state/kid-game-library";
+import { gameFilters, kidLibrary, kidLibraryState } from "@dodi/ui-recipes";
 
 interface GameLibraryProps {
   kidId: string;
@@ -29,81 +37,59 @@ export function GameLibrary({ kidId }: GameLibraryProps) {
   const { games: loaded, loading, error } = useKidGames(kidId);
   const games = useMemo(() => loaded ?? [], [loaded]);
   const [search, setSearch] = useState(searchParams.get("search") ?? "");
-  const [tagFilter, setTagFilter] = useState<string>(searchParams.get("tag") ?? "all");
+  const [tagFilter, setTagFilter] = useState<string>(
+    searchParams.get("tag") ?? ALL_TAGS_FILTER,
+  );
 
-  // Toggle a favorite with an optimistic flip; revert if the request fails.
+  // Toggle a favorite with an optimistic flip; reverts if the request fails.
   const toggleFavorite = useCallback(
-    async (gameId: string, next: boolean) => {
-      const { patchLocal } = useGameStore.getState();
-      patchLocal(gameId, { is_favorite: next });
-      try {
-        const response = await dodi.request(
-          `/api/games/${gameId}/favorite?kidId=${kidId}`,
-          { method: next ? "PUT" : "DELETE" },
-        );
-        if (!response.ok) throw new Error("Failed to update favorite");
-      } catch {
-        patchLocal(gameId, { is_favorite: !next });
-      }
-    },
+    (gameId: string, next: boolean) =>
+      toggleFavoriteGame({ api: dodi, games: clientState.games }, kidId, gameId, next),
     [kidId],
   );
 
   // Only catalog tags that are actually in use become filter pills.
-  const tagOptions = useMemo(
-    () => GAME_TAG_IDS.filter((tag) => games.some((game) => game.tags.includes(tag))),
-    [games],
+  const tagOptions = useMemo(() => kidGameTagOptions(games), [games]);
+
+  const filteredGames = useMemo(
+    () => filterKidGames(games, search, tagFilter),
+    [games, search, tagFilter],
   );
 
-  const filteredGames = useMemo(() => {
-    const normalizedSearch = search.trim().toLowerCase();
-
-    return games.filter((game) => {
-      if (tagFilter !== "all" && !game.tags.includes(tagFilter)) {
-        return false;
-      }
-
-      if (!normalizedSearch) {
-        return true;
-      }
-
-      const target = `${game.title} ${game.description} ${game.tags.join(" ")}`.toLowerCase();
-      return target.includes(normalizedSearch);
-    });
-  }, [games, search, tagFilter]);
-
-  const favoriteGames = filteredGames.filter((game) => game.is_favorite);
-  const otherGames = filteredGames.filter((game) => !game.is_favorite);
+  const { favorites: favoriteGames, others: otherGames } =
+    splitFavoriteGames(filteredGames);
 
   return (
-    <div className="w-full max-w-5xl">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className={kidLibrary.root}>
+      <div className={cn(kidLibrary.webHead, kidLibrary.head)}>
         <div>
-          <h1 className="text-[27px] font-extrabold tracking-tight text-ink">
+          <h1 className={kidLibrary.title}>
             {t("title")}
           </h1>
-          <p className="mt-0.5 text-sm font-semibold text-muted-foreground">
+          <p className={kidLibrary.subtitle}>
             {t("subtitle")}
           </p>
         </div>
       </div>
 
-      <div className="mt-4 mb-6 flex flex-wrap items-center gap-2">
-        <label className="flex w-[280px] items-center gap-2 rounded-full bg-white px-4 py-2 text-faint shadow-[inset_0_0_0_1.5px_var(--border)] focus-within:shadow-[inset_0_0_0_2px_var(--color-primary-soft-2)]">
+      <div className={cn(gameFilters.webRow, gameFilters.row)}>
+        <label
+          className={cn(gameFilters.webSearch, gameFilters.search, gameFilters.searchText)}
+        >
           <Icon name="search" size={16} stroke={2.2} />
           <input
             type="text"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder={t("searchPlaceholder")}
-            className="min-w-0 flex-1 border-0 bg-transparent text-sm font-bold text-ink outline-none placeholder:font-semibold placeholder:text-faint"
+            className={cn(gameFilters.input, gameFilters.webInput)}
           />
         </label>
         <KidButton
           variant="chip"
           size="sm"
-          active={tagFilter === "all"}
-          onClick={() => setTagFilter("all")}
+          active={tagFilter === ALL_TAGS_FILTER}
+          onClick={() => setTagFilter(ALL_TAGS_FILTER)}
         >
           {t("allGamesFilter")}
         </KidButton>
@@ -121,33 +107,39 @@ export function GameLibrary({ kidId }: GameLibraryProps) {
               onClick={() => setTagFilter(tag)}
               aria-label={label}
               title={label}
-              className="px-2"
+              className={gameFilters.tagChip}
               style={
                 active
                   ? { background: ts.fg, color: "#fff" }
                   : { background: ts.bg, color: ts.fg }
               }
             >
-              <Icon name={ts.icon} size={20} stroke={2} className="size-5" />
+              <Icon name={ts.icon} size={20} stroke={2} className={gameFilters.tagIcon} />
             </KidButton>
           );
         })}
       </div>
 
       {loading && (
-        <div className="rounded-[20px] bg-white p-6 text-sm font-semibold text-muted-foreground shadow-[0_2px_10px_rgba(34,56,78,0.05)]">
+        <div
+          className={cn(
+            kidLibraryState.loading,
+            kidLibraryState.loadingText,
+            kidLibraryState.webLoading,
+          )}
+        >
           {t("loading")}
         </div>
       )}
 
       {!loading && error && (
-        <div className="rounded-[20px] bg-danger-soft p-6 text-sm font-semibold text-danger">
+        <div className={cn(kidLibraryState.error, kidLibraryState.errorText)}>
           {error}
         </div>
       )}
 
       {!loading && !error && filteredGames.length === 0 && (
-        <div className="rounded-[20px] bg-white/70 p-5 text-sm font-semibold text-muted-foreground">
+        <div className={cn(kidLibraryState.empty, kidLibraryState.emptyText)}>
           {t("noGames")}
         </div>
       )}
@@ -156,10 +148,10 @@ export function GameLibrary({ kidId }: GameLibraryProps) {
         <>
           {favoriteGames.length > 0 && (
             <section>
-              <h2 className="mb-3 mt-5 text-[13px] font-extrabold tracking-[0.07em] text-faint uppercase">
+              <h2 className={cn(kidLibrary.section, kidLibrary.sectionFirst)}>
                 {t("favoriteGames")}
               </h2>
-              <div className="grid gap-3.5 sm:grid-cols-[repeat(auto-fill,minmax(310px,1fr))]">
+              <div className={cn(kidLibrary.webGrid, kidLibrary.grid)}>
                 {favoriteGames.map((game) => (
                   <GameCard
                     key={game.id}
@@ -174,10 +166,10 @@ export function GameLibrary({ kidId }: GameLibraryProps) {
 
           {otherGames.length > 0 && (
             <section>
-              <h2 className="mb-3 mt-6 text-[13px] font-extrabold tracking-[0.07em] text-faint uppercase">
+              <h2 className={cn(kidLibrary.section, kidLibrary.sectionNext)}>
                 {t("allGames")}
               </h2>
-              <div className="grid gap-3.5 sm:grid-cols-[repeat(auto-fill,minmax(310px,1fr))]">
+              <div className={cn(kidLibrary.webGrid, kidLibrary.grid)}>
                 {otherGames.map((game) => (
                   <GameCard
                     key={game.id}

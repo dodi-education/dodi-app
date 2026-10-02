@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { useTranslations } from "next-intl";
 
 import { useVaultStore } from "@/stores/vault-store";
 
@@ -17,6 +18,7 @@ import { VaultUnlockPrompt } from "./vault-unlock-prompt";
  */
 export function VaultGate({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const t = useTranslations("vault");
   const status = useVaultStore((s) => s.status);
 
   useEffect(() => {
@@ -43,7 +45,7 @@ export function VaultGate({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-[60vh] items-center justify-center">
       <p className="text-sm text-muted-foreground">
-        Unlocking your secure vault…
+        {t("unlockingVault")}
       </p>
     </div>
   );

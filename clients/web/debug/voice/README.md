@@ -2,7 +2,7 @@
 
 Offline reproduction / measurement rig for the Gemini Live voice companion. It
 connects to the Live API over WebSocket exactly like
-`clients/web/src/lib/ai/gemini-live-client.ts`, using the real game-voice system
+`core/ai/src/voice/gemini-live-client.ts`, using the real game-voice system
 instruction + tool declarations (mirrored from `core/ai/src/dodi-context.ts` and
 the Drawing briefing in the system-game rows of the schema baseline), and
 drives the "draw a dog" scenario. No browser / vault / database needed.

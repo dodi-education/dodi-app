@@ -10,6 +10,7 @@ import {
 import { STAGE, stageSizeStyle } from "@/lib/games/stage";
 import { cn } from "@/lib/utils";
 import type { GameGoal, GameSaveState, GameToParentMessage } from "@dodi/types/games";
+import { gameStage } from "@dodi/ui-recipes";
 
 interface GameStageProps {
   gameId: string;
@@ -80,11 +81,9 @@ export function GameStage({
       className={cn(
         // Portrait-mobile fills the column width (the page may scroll a little);
         // everywhere else the height budget caps the width so no scrolling occurs.
-        "w-[var(--stage-w)] overflow-hidden max-lg:portrait:w-full",
+        gameStage.web,
         align === "start" ? "mr-auto" : "mx-auto",
-        framed
-          ? "rounded-[18px] border border-border bg-white shadow-[0_8px_28px_rgba(34,56,78,0.10)]"
-          : "rounded-xl bg-white",
+        framed ? cn(gameStage.framed, gameStage.webFramed) : gameStage.bleed,
       )}
     >
       <GameSandbox
@@ -111,10 +110,7 @@ export function GameStage({
 
   return (
     <div
-      className={cn(
-        "flex h-full w-full items-center justify-center",
-        className,
-      )}
+      className={cn(gameStage.webBleedWrap, gameStage.bleedWrap, className)}
     >
       {card}
     </div>

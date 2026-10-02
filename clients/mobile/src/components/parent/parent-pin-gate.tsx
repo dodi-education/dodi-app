@@ -2,6 +2,7 @@ import { type ReactNode, useEffect, useSyncExternalStore } from "react";
 import { View } from "react-native";
 
 import { getIsParentUnlocked, subscribeParentLock } from "@/adapters/platform";
+import { PageBackground } from "@/components/shared/page-background";
 import { useAccountStore, useVaultStore } from "@/lib/client-state";
 
 import { ParentPinPrompt } from "./parent-pin-prompt";
@@ -26,7 +27,13 @@ export function ParentPinGate({ children }: { children: ReactNode }) {
 
   if (isUnlocked) return <>{children}</>;
   // Still resolving whether a PIN exists: never flash protected content.
-  if (!isLoaded) return <View className="flex-1 bg-background" accessibilityState={{ busy: true }} />;
+  if (!isLoaded) {
+    return (
+      <PageBackground>
+        <View className="flex-1" accessibilityState={{ busy: true }} />
+      </PageBackground>
+    );
+  }
   if (hasLoadFailed || pinEnc === null || !session) return <>{children}</>;
   return <ParentPinPrompt />;
 }

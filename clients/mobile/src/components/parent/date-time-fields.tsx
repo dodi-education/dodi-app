@@ -1,11 +1,13 @@
 /**
  * Date/time preference controls (date format, time format, timezone) with a
  * live preview (web: components/parent/date-time-fields). Pure UI: state and
- * persistence live in the caller.
+ * persistence live in the caller. Renders FieldRows for a parent `Section`;
+ * the rows after the first carry the Section's divider themselves, since the
+ * Section sees this component as a single child.
  */
-import { useMemo, useState } from "react";
-import { View } from "react-native";
 import { useLocale, useTranslations } from "use-intl";
+import { section } from "@dodi/ui-recipes";
+import { listTimeZones } from "@dodi/client-state/date-preferences";
 import {
   type DateFormatPref,
   type DateStyleId,
@@ -13,25 +15,26 @@ import {
 } from "@dodi/intl/prefs";
 import { formatDate, formatDateTime, formatTime } from "@dodi/intl/format";
 
-import { ChoiceList, type Choice } from "@/components/ui/choice-list";
-import { Text, TextField } from "@/components/ui";
+import { FieldRow } from "@/components/parent/rows";
+import { Select, type SelectOption, Text } from "@/components/ui";
 
 // Fixed sample instant (24 Jun 2026, 15:30 UTC) for the examples and preview.
 const SAMPLE = new Date("2026-06-24T15:30:00Z");
-/** Timezone matches shown at once; typing narrows the list. */
-const MAX_ZONE_MATCHES = 8;
 
-/** Every IANA zone the runtime knows; the device zone at least. */
-function listTimeZones(): string[] {
-  const intl = Intl as typeof Intl & { supportedValuesOf?: (key: "timeZone") => string[] };
-  try {
-    const zones = intl.supportedValuesOf?.("timeZone") ?? [];
-    if (zones.length > 0) return zones;
-  } catch {
-    // Older engines: fall through to the device zone.
-  }
+let cachedTimeZones: string[] | null = null;
+
+/**
+ * Every IANA zone the runtime knows; the device zone at least (older engines).
+ * Computed on first use, not at module load: on Hermes `supportedValuesOf` is
+ * the intl-polyfills one, which probes each zone with a DateTimeFormat, and
+ * Expo Router loads this module at app start.
+ */
+function timeZones(): string[] {
+  if (cachedTimeZones) return cachedTimeZones;
+  const zones = listTimeZones();
   const device = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  return device ? [device] : [];
+  cachedTimeZones = zones.length > 0 ? zones : device ? [device] : [];
+  return cachedTimeZones;
 }
 
 export interface DateTimeFieldsProps {
@@ -64,17 +67,15 @@ export function DateTimeFields({
 }: DateTimeFieldsProps) {
   const t = useTranslations("settings");
   const locale = useLocale();
-  const [zoneQuery, setZoneQuery] = useState("");
-  const allZones = useMemo(listTimeZones, []);
 
   const zone = timeZone || basePref.timeZone;
   const ex = (style: DateStyleId): string =>
     ` (${formatDate(SAMPLE, { locale, pref: { dateStyle: style, timeStyle: "none", timeZone: zone } })})`;
   const exTime = (style: TimeStyleId): string =>
     ` (${formatTime(SAMPLE, { locale, pref: { dateStyle: "numeric", timeStyle: style, timeZone: zone } })})`;
-  const inherit: Choice<"">[] = allowInherit ? [{ value: "", label: t("dateInherit") }] : [];
+  const inherit: SelectOption<"">[] = allowInherit ? [{ value: "", label: t("dateInherit") }] : [];
 
-  const dateChoices: Choice<DateStyleId | "">[] = [
+  const dateOptions: SelectOption<DateStyleId | "">[] = [
     ...inherit,
     { value: "numeric", label: `${t("dateFormatLocale")}${ex("numeric")}` },
     { value: "dmy_slash", label: `DD/MM/YYYY${ex("dmy_slash")}` },
@@ -83,24 +84,20 @@ export function DateTimeFields({
     { value: "ymd_dash", label: `YYYY-MM-DD${ex("ymd_dash")}` },
     { value: "long", label: `${t("dateFormatLong")}${ex("long")}` },
   ];
-  const timeChoices: Choice<TimeStyleId | "">[] = [
+  const timeOptions: SelectOption<TimeStyleId | "">[] = [
     ...inherit,
     { value: "24h", label: `${t("timeFormat24h")}${exTime("24h")}` },
     { value: "12h", label: `${t("timeFormat12h")}${exTime("12h")}` },
     { value: "none", label: t("timeFormatNone") },
   ];
-
-  const query = zoneQuery.trim().toLowerCase().replace(/\s+/g, "_");
-  const matches = query
-    ? allZones.filter((tz) => tz.toLowerCase().includes(query)).slice(0, MAX_ZONE_MATCHES)
-    : [];
-  const isExplicitZone = timeZone !== "" && timeZone !== "auto";
-  const zoneChoices: Choice<string>[] = [
+  const zones = timeZones();
+  // A stored zone this runtime doesn't list still shows as selected.
+  const isUnlistedZone = timeZone !== "" && timeZone !== "auto" && !zones.includes(timeZone);
+  const zoneOptions: SelectOption<string>[] = [
     ...inherit,
     ...(allowAuto ? [{ value: "auto", label: t("timezoneAuto") }] : []),
-    // Keep the chosen zone visible whatever the search shows.
-    ...(isExplicitZone && !matches.includes(timeZone) ? [{ value: timeZone, label: timeZone }] : []),
-    ...matches.map((tz) => ({ value: tz, label: tz })),
+    ...(isUnlistedZone ? [{ value: timeZone, label: timeZone }] : []),
+    ...zones.map((tz) => ({ value: tz, label: tz })),
   ];
 
   const previewPref: DateFormatPref = {
@@ -110,31 +107,24 @@ export function DateTimeFields({
   };
 
   return (
-    <View className="gap-4">
-      <ChoiceList label={t("dateFormat")} choices={dateChoices} value={dateStyle} onChange={onDateStyle} />
-      <ChoiceList label={t("timeFormat")} choices={timeChoices} value={timeStyle} onChange={onTimeStyle} />
-      <View className="gap-2">
-        <TextField
-          label={t("timezone")}
-          value={zoneQuery}
-          onChangeText={setZoneQuery}
-          autoCapitalize="none"
-          autoCorrect={false}
-          placeholder="Europe/Vienna"
-        />
-        <ChoiceList
-          label={t("timezone")}
-          isLabelHidden
-          hint={t("timezoneHint")}
-          choices={zoneChoices}
-          value={timeZone}
-          onChange={onTimeZone}
-        />
-      </View>
-      <View className="gap-1">
-        <Text variant="label">{t("datePreviewLabel")}</Text>
-        <Text className="font-semibold">{formatDateTime(SAMPLE, { locale, pref: previewPref })}</Text>
-      </View>
-    </View>
+    <>
+      <FieldRow label={t("dateFormat")}>
+        <Select label={t("dateFormat")} value={dateStyle} options={dateOptions} onValueChange={onDateStyle} />
+      </FieldRow>
+
+      <FieldRow label={t("timeFormat")} className={section.divider}>
+        <Select label={t("timeFormat")} value={timeStyle} options={timeOptions} onValueChange={onTimeStyle} />
+      </FieldRow>
+
+      <FieldRow label={t("timezone")} hint={t("timezoneHint")} className={section.divider}>
+        <Select label={t("timezone")} value={timeZone} options={zoneOptions} onValueChange={onTimeZone} />
+      </FieldRow>
+
+      <FieldRow label={t("datePreviewLabel")} className={section.divider}>
+        <Text className="text-sm font-semibold text-ink">
+          {formatDateTime(SAMPLE, { locale, pref: previewPref })}
+        </Text>
+      </FieldRow>
+    </>
   );
 }

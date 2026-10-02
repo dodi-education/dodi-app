@@ -23,6 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { codeViewer as codeViewerStyles } from "@dodi/ui-recipes";
 
 // CodeMirror is edit-only: lazy-load it so the read view ships none of it.
 const CodeEditor = dynamic(
@@ -233,18 +234,21 @@ export function CodeViewer({
     disabled: boolean,
   ): string =>
     cn(
-      "inline-flex items-center gap-1.5 rounded-md px-2 py-1 font-sans text-[12px] font-semibold transition-colors",
+      codeViewerStyles.button,
+      codeViewerStyles.buttonText,
+      codeViewerStyles.webButton,
       active
-        ? "bg-primary-soft text-primary"
-        : "text-muted-foreground hover:bg-primary-soft hover:text-primary",
-      disabled &&
-        "cursor-not-allowed opacity-40 hover:bg-transparent hover:text-muted-foreground",
+        ? cn(codeViewerStyles.buttonActive, codeViewerStyles.buttonActiveText)
+        : cn(codeViewerStyles.buttonIdleText, codeViewerStyles.webButtonIdle),
+      disabled && cn(codeViewerStyles.buttonDisabled, codeViewerStyles.webButtonDisabled),
     );
 
   return (
     <div
       className={cn(
-        "dodi-code flex min-h-full flex-col bg-card font-mono text-[12.5px] leading-[1.75] text-ink-2",
+        codeViewerStyles.web,
+        codeViewerStyles.box,
+        codeViewerStyles.text,
         // Edit mode locks the viewer to the pane's height so CodeMirror is
         // bounded and scrolls internally. Left unbounded (the read view's
         // pane-scrolling layout), the editor grows to document height and a
@@ -254,12 +258,12 @@ export function CodeViewer({
       )}
     >
       {/* Editor chrome — filename tab + version/edit/diff/copy actions */}
-      <div className="sticky top-0 z-10 flex flex-shrink-0 items-center justify-between gap-2 border-b border-border bg-background px-3 py-2">
-        <div className="flex min-w-0 items-center gap-2 font-sans text-[12px] font-medium text-muted-foreground">
+      <div className={cn(codeViewerStyles.webHeader, codeViewerStyles.header)}>
+        <div className={cn(codeViewerStyles.webFilename, codeViewerStyles.filename, codeViewerStyles.filenameText)}>
           <Icon name="code" size={14} className="text-faint" />
           <span className="truncate">{filename}</span>
         </div>
-        <div className="flex flex-shrink-0 items-center gap-1">
+        <div className={cn(codeViewerStyles.webActions, codeViewerStyles.actions)}>
           <button
             type="button"
             onClick={() => void copy()}
@@ -379,16 +383,16 @@ export function CodeViewer({
           unchangedLabel={unchangedLabel ?? ((count) => `${count}`)}
         />
       ) : (
-        <div className="flex min-h-0 min-w-0 flex-1 overflow-auto">
+        <div className={cn(codeViewerStyles.webBody, codeViewerStyles.body)}>
           <div
             aria-hidden
-            className="sticky left-0 z-[1] flex-shrink-0 select-none border-r border-border bg-card py-4 pl-4 pr-3 text-right text-faint"
+            className={cn(codeViewerStyles.gutter, codeViewerStyles.gutterText, codeViewerStyles.webGutter)}
           >
             {Array.from({ length: lineCount }, (_, i) => (
               <div key={i}>{i + 1}</div>
             ))}
           </div>
-          <pre className="w-max py-4 pl-4 pr-8">
+          <pre className={cn(codeViewerStyles.code, codeViewerStyles.webCode)}>
             <code dangerouslySetInnerHTML={{ __html: html }} />
           </pre>
         </div>

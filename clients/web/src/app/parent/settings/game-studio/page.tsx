@@ -3,13 +3,21 @@
 /**
  * Game Studio settings: which screenshot service, if any, the build agent may
  * use to look at real frames of a game. This is the one place game code
- * leaves the browser, so the choice is spelled out plainly. `mode` saves
- * plaintext (the platform enforces it); a custom URL is sealed with the
- * VaultSession so the server never learns the family's endpoint. Explicit
- * Save, since a URL needs a commit point.
+ * leaves the browser, so the choice is spelled out plainly. Loading and saving
+ * (a custom URL is sealed with the VaultSession) live in
+ * `@dodi/client-state/game-studio-settings`. Explicit Save, since a URL needs
+ * a commit point.
  */
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
+
+import {
+  initialScreenshotService,
+  isScreenshotUrlInvalid,
+  saveScreenshotService,
+} from "@dodi/client-state/game-studio-settings";
+import { radioCard } from "@dodi/ui-recipes";
+import type { GameScreenshotServiceMode } from "@dodi/types/database";
 
 import { FieldRow } from "@/components/parent/rows";
 import { SaveRow } from "@/components/parent/save-row";
@@ -18,18 +26,10 @@ import { Icon } from "@/components/shared/icon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { dodi } from "@/lib/api";
+import { clientState } from "@/lib/client-state";
 import { cn } from "@/lib/utils";
-import {
-  gameScreenshotServiceOf,
-  patchGameScreenshotService,
-  useAccountStore,
-} from "@/stores/account-store";
+import { useAccountStore } from "@/stores/account-store";
 import { useVaultStore } from "@/stores/vault-store";
-import { isAllowedCustomServiceUrl } from "@dodi/games/screenshot-contract";
-import type {
-  GameScreenshotServiceMode,
-  GameScreenshotServiceSettings,
-} from "@dodi/types/database";
 
 export default function GameStudioSettingsPage() {
   const t = useTranslations("settings");
@@ -38,7 +38,6 @@ export default function GameStudioSettingsPage() {
   const account = useAccountStore((s) => s.account);
   const loaded = useAccountStore((s) => s.loaded);
   const load = useAccountStore((s) => s.load);
-  const stored = gameScreenshotServiceOf(account);
 
   const [mode, setMode] = useState<GameScreenshotServiceMode>("dodi");
   const [customUrl, setCustomUrl] = useState("");
@@ -55,54 +54,30 @@ export default function GameStudioSettingsPage() {
   // if a sealed custom URL needs decrypting). Runs once.
   useEffect(() => {
     if (hydrated || !loaded) return;
-    if (stored.customUrlEnc && !session) return; // wait for the vault
+    const initial = initialScreenshotService(account, session);
+    if (!initial) return; // wait for the vault
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setMode(stored.mode);
-    let url = "";
-    if (stored.customUrlEnc && session) {
-      try {
-        url = session.decryptField(stored.customUrlEnc) ?? "";
-      } catch {
-        url = "";
-      }
-    }
-    setCustomUrl(url);
+    setMode(initial.mode);
+    setCustomUrl(initial.customUrl);
     setHydrated(true);
-  }, [hydrated, loaded, stored.mode, stored.customUrlEnc, session]);
+  }, [hydrated, loaded, account, session]);
 
-  const urlInvalid =
-    mode === "custom" && customUrl.trim() !== "" && !isAllowedCustomServiceUrl(customUrl);
+  const urlInvalid = isScreenshotUrlInvalid({ mode, customUrl });
 
   async function handleSave() {
     setError(null);
-    if (mode === "custom" && !isAllowedCustomServiceUrl(customUrl)) {
-      setError(t("screenshotServiceUrlInvalid"));
-      return;
-    }
     setSaving(true);
-    try {
-      const settings: GameScreenshotServiceSettings = { mode };
-      if (mode === "custom") {
-        if (!session) throw new Error(t("screenshotServiceVaultLocked"));
-        settings.customUrlEnc = session.encryptField(customUrl.trim());
-      }
-      const res = await dodi.request("/api/account", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ gameScreenshotService: settings }),
-      });
-      if (!res.ok) {
-        const data = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(data?.error || t("screenshotServiceSaveFailed"));
-      }
-      patchGameScreenshotService(settings);
+    const failure = await saveScreenshotService(
+      { api: dodi, account: clientState.account, vault: clientState.vault },
+      { mode, customUrl },
+    );
+    if (failure) {
+      setError("key" in failure ? t(failure.key) : failure.message);
+    } else {
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : t("screenshotServiceSaveFailed"));
-    } finally {
-      setSaving(false);
     }
+    setSaving(false);
   }
 
   const options: Array<{ value: GameScreenshotServiceMode; label: string; hint: string }> = [
@@ -118,7 +93,7 @@ export default function GameStudioSettingsPage() {
   return (
     <Section title={t("gameStudioVisualTitle")} desc={t("gameStudioVisualDescription")}>
       <div
-        className="flex flex-col gap-2.5 px-5 py-4"
+        className={cn(radioCard.webGroup, radioCard.group)}
         role="radiogroup"
         aria-label={t("screenshotServiceLabel")}
       >
@@ -133,27 +108,30 @@ export default function GameStudioSettingsPage() {
               disabled={!hydrated}
               onClick={() => setMode(option.value)}
               className={cn(
-                "flex items-start gap-3 rounded-lg border px-4 py-3 text-left transition-colors",
-                selected
-                  ? "border-primary bg-primary-soft"
-                  : "border-border-strong bg-card hover:border-faint",
+                radioCard.web,
+                radioCard.box,
+                selected ? radioCard.boxSelected : cn(radioCard.boxIdle, radioCard.webIdle),
               )}
             >
               <span
                 className={cn(
-                  "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border",
-                  selected ? "border-primary bg-primary text-white" : "border-border-strong",
+                  radioCard.webDot,
+                  radioCard.dot,
+                  selected ? radioCard.dotSelected : radioCard.dotIdle,
                 )}
               >
-                {selected && <Icon name="check" size={11} strokeWidth={3} />}
+                {selected && <Icon name="check" size={radioCard.dotIconSize} strokeWidth={3} />}
               </span>
-              <span className="flex flex-col gap-0.5">
+              <span className={cn(radioCard.webBody, radioCard.body)}>
                 <span
-                  className={cn("text-sm font-semibold", selected ? "text-primary" : "text-ink-2")}
+                  className={cn(
+                    radioCard.label,
+                    selected ? radioCard.labelSelected : radioCard.labelIdle,
+                  )}
                 >
                   {option.label}
                 </span>
-                <span className="text-[12.5px] text-muted-foreground">{option.hint}</span>
+                <span className={radioCard.hint}>{option.hint}</span>
               </span>
             </button>
           );

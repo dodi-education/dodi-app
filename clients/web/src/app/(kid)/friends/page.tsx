@@ -1,8 +1,10 @@
 import { cookies } from "next/headers";
 import { getTranslations } from "next-intl/server";
+import { friendsList, friendsNoKid } from "@dodi/ui-recipes";
 
 import { BrowseContext } from "@/components/kid/browse-context";
 import { FriendsApp } from "@/components/kid/friends/friends-app";
+import { cn } from "@/lib/utils";
 
 export default async function FriendsPage() {
   const t = await getTranslations("friends");
@@ -11,11 +13,11 @@ export default async function FriendsPage() {
 
   if (!kidId) {
     return (
-      <div className="my-auto flex flex-col items-center gap-3 py-8 text-center">
-        <h1 className="text-[27px] font-extrabold tracking-tight text-ink">
+      <div className={cn(friendsNoKid.root, friendsNoKid.webRoot)}>
+        <h1 className={friendsList.title}>
           {t("title")}
         </h1>
-        <p className="text-sm font-semibold text-muted-foreground">
+        <p className={friendsNoKid.text}>
           {t("emptyFriends")}
         </p>
       </div>

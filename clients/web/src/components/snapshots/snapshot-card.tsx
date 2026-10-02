@@ -7,7 +7,10 @@ import { Icon } from "@/components/shared/icon";
 import { OfflineAwareLink } from "@/components/shared/offline-aware-link";
 import { KidButton } from "@/components/kid/kid-button";
 import { useOnline } from "@/hooks/use-online";
+import { cn } from "@/lib/utils";
 import type { DecodedSnapshot } from "@/hooks/use-snapshots";
+import { isNewSnapshot } from "@dodi/client-state/snapshots";
+import { kidCard } from "@dodi/ui-recipes";
 
 interface SnapshotCardProps {
   snapshot: DecodedSnapshot;
@@ -22,14 +25,14 @@ export function SnapshotCard({ snapshot, onDelete }: SnapshotCardProps) {
   const isOnline = useOnline();
 
   const isReceived = view.origin === "received";
-  const isNew = isReceived && view.viewedAt === null;
+  const isNew = isNewSnapshot(view);
   const createdAt = new Date(info?.createdAt ?? view.createdAt);
 
   return (
-    <div className="flex flex-col gap-3 rounded-[20px] bg-white p-[18px] pb-4 shadow-[0_2px_10px_rgba(34,56,78,0.05)]">
+    <div className={cn(kidCard.web, kidCard.box)}>
       <OfflineAwareLink
         href={`/snapshots/${view.id}`}
-        className="group flex items-start gap-3.5 rounded-[16px] outline-none focus-visible:ring-2 focus-visible:ring-primary-soft-2"
+        className={cn(kidCard.webLink, kidCard.link)}
       >
         {info?.thumbnail ? (
           <Image
@@ -38,35 +41,56 @@ export function SnapshotCard({ snapshot, onDelete }: SnapshotCardProps) {
             width={100}
             height={100}
             unoptimized
-            className="size-[100px] shrink-0 rounded-[16px] border border-border object-cover"
+            className={cn(kidCard.thumb, kidCard.snapshotThumb, kidCard.webSnapshotThumb)}
           />
         ) : (
-          <div className="flex size-[100px] shrink-0 items-center justify-center rounded-[16px] bg-primary-soft text-primary">
+          <div
+            className={cn(
+              kidCard.webTile,
+              kidCard.tile,
+              kidCard.snapshotTile,
+              kidCard.snapshotTileText,
+            )}
+          >
             <Icon name="camera" size={40} stroke={1.6} />
           </div>
         )}
-        <div className="min-w-0 flex-1">
-          <h3 className="text-[16.5px] font-extrabold leading-tight text-ink group-hover:text-primary">
+        <div className={kidCard.main}>
+          <h3 className={cn(kidCard.title, kidCard.webTitle)}>
             {info?.title ?? t("openFailed")}
           </h3>
           {info?.gameTitle && (
-            <p className="mt-0.5 text-[12.5px] font-bold text-faint">
+            <p className={cn(kidCard.metaLine, kidCard.meta)}>
               {info.gameTitle}
             </p>
           )}
-          <p className="mt-1.5 text-[13.5px] font-semibold leading-snug text-muted-foreground">
+          <p className={kidCard.description}>
             {format.dateTime(createdAt, { dateStyle: "medium" })}
           </p>
-          <div className="mt-1.5 flex flex-wrap gap-1.5">
+          <div className={cn(kidCard.webBadges, kidCard.badges)}>
             {isReceived && (
-              <span className="rounded-full bg-primary-soft px-2.5 py-0.5 text-[11.5px] font-extrabold text-primary">
+              <span
+                className={cn(
+                  kidCard.badge,
+                  kidCard.badgeText,
+                  kidCard.badgeFriend,
+                  kidCard.badgeFriendText,
+                )}
+              >
                 {senderName
                   ? t("fromFriend", { name: senderName })
                   : t("fromFriendUnknown")}
               </span>
             )}
             {isNew && (
-              <span className="rounded-full bg-danger-soft px-2.5 py-0.5 text-[11.5px] font-extrabold text-danger">
+              <span
+                className={cn(
+                  kidCard.badge,
+                  kidCard.badgeText,
+                  kidCard.badgeNew,
+                  kidCard.badgeNewText,
+                )}
+              >
                 {t("newBadge")}
               </span>
             )}
@@ -74,7 +98,7 @@ export function SnapshotCard({ snapshot, onDelete }: SnapshotCardProps) {
         </div>
       </OfflineAwareLink>
 
-      <div className="mt-auto flex items-center justify-between gap-2">
+      <div className={cn(kidCard.webFooter, kidCard.footer)}>
         <button
           type="button"
           onClick={() => {
@@ -82,11 +106,11 @@ export function SnapshotCard({ snapshot, onDelete }: SnapshotCardProps) {
           }}
           disabled={!isOnline}
           aria-label={t("deleteAction")}
-          className="flex size-11 items-center justify-center rounded-full text-danger transition-colors hover:bg-danger-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger/40 disabled:opacity-40"
+          className={cn(kidCard.webIconButton, kidCard.iconButton, kidCard.iconButtonText)}
         >
           <Icon name="delete" size={20} stroke={2} />
         </button>
-        <KidButton asChild size="sm" className="px-6">
+        <KidButton asChild size="sm" className={kidCard.play}>
           <OfflineAwareLink href={`/snapshots/${view.id}`}>
             <Icon name="play" size={13} />
             {t("openAction")}

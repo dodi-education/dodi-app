@@ -9,6 +9,8 @@ import {
   formatRunClock,
 } from "@dodi/studio/agent-run-log";
 import type { AgentStep } from "@dodi/types/agent-progress";
+import { agentRun } from "@dodi/ui-recipes";
+import { cn } from "@/lib/utils";
 
 interface AgentRunTimelineProps {
   run: AgentRunLog;
@@ -51,27 +53,27 @@ export function AgentRunTimeline({
   if (entries.length === 0) return null;
 
   return (
-    <ol className="border-border mt-1.5 space-y-2 border-l pl-3">
+    <ol className={cn(agentRun.list, agentRun.webList)}>
       {entries.map((entry, i) => (
-        <li key={i} className="relative flex gap-2">
+        <li key={i} className={cn(agentRun.webItem, agentRun.item)}>
           <span
             aria-hidden
-            className="bg-border absolute top-[7px] -left-[16.5px] h-[7px] w-[7px] rounded-full"
+            className={agentRun.dot}
           />
           <time
             dateTime={`PT${Math.round(entry.atMs / 1000)}S`}
-            className="text-faint w-9 shrink-0 pt-px text-[11px] tabular-nums"
+            className={agentRun.time}
           >
             {formatRunClock(entry.atMs)}
           </time>
-          <div className="min-w-0 flex-1">
+          <div className={agentRun.content}>
             {entry.kind === "step" && (
-              <p className="text-ink-2 text-[12.5px] font-semibold">
+              <p className={agentRun.step}>
                 {stepLabel(entry.step)}
               </p>
             )}
             {entry.kind === "narration" && (
-              <p className="text-muted-foreground text-[12.5px] leading-relaxed whitespace-pre-wrap italic">
+              <p className={cn(agentRun.narration, agentRun.webNarration)}>
                 {entry.text.trim()}
               </p>
             )}

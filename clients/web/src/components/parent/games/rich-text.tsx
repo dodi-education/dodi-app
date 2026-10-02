@@ -3,6 +3,9 @@
  * card: **bold** inline; consecutive "- " lines (the agent's changeSummary and
  * plan-summary format) render as a bullet list instead of literal dashes.
  */
+import { richText } from "@dodi/ui-recipes";
+
+import { cn } from "@/lib/utils";
 
 export function RichText({ text }: { text: string }) {
   type Block = { kind: "text"; text: string } | { kind: "list"; items: string[] };
@@ -23,7 +26,7 @@ export function RichText({ text }: { text: string }) {
     <>
       {blocks.map((b, i) =>
         b.kind === "list" ? (
-          <ul key={i} className="mt-1 list-disc space-y-0.5 pl-4 first:mt-0">
+          <ul key={i} className={cn(richText.list, richText.webList)}>
             {b.items.map((it, j) => (
               <li key={j}>
                 <BoldText text={it} />
@@ -31,7 +34,7 @@ export function RichText({ text }: { text: string }) {
             ))}
           </ul>
         ) : (
-          <p key={i} className="mt-1 first:mt-0">
+          <p key={i} className={cn(richText.paragraph, richText.webParagraph)}>
             <BoldText text={b.text} />
           </p>
         ),
@@ -46,7 +49,7 @@ export function BoldText({ text }: { text: string }) {
     <>
       {parts.map((p, i) =>
         p.startsWith("**") && p.endsWith("**") ? (
-          <strong key={i} className="font-bold">
+          <strong key={i} className={richText.bold}>
             {p.slice(2, -2)}
           </strong>
         ) : (

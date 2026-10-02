@@ -16,7 +16,9 @@ import {
 
 import { api } from "@/adapters/platform";
 import { DateTimeFields } from "@/components/parent/date-time-fields";
-import { Button, Card, Notice, Text } from "@/components/ui";
+import { SaveRow } from "@/components/parent/save-row";
+import { Section } from "@/components/parent/section";
+import { Button, Text } from "@/components/ui";
 import { clientState, useAccountStore, useVaultStore } from "@/lib/client-state";
 import { useLocaleSetting } from "@/lib/intl";
 
@@ -29,6 +31,7 @@ export function DateTimeSettings() {
     (s) => (s.account?.date_preferences ?? null) as StoredDatePreferences | null,
   );
   const isLoaded = useAccountStore((s) => s.loaded);
+  const load = useAccountStore((s) => s.load);
 
   const base = defaultPref(locale, "account");
   const [dateStyle, setDateStyle] = useState<DateStyleId>(base.dateStyle);
@@ -39,6 +42,10 @@ export function DateTimeSettings() {
   const [isSaved, setIsSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    void load();
+  }, [load]);
+
   // Fill the controls once from the stored preference (after the vault opens,
   // when a sealed timezone needs it).
   useEffect(() => {
@@ -48,6 +55,8 @@ export function DateTimeSettings() {
       timeStyle: base.timeStyle,
     });
     if (!initial) return;
+    // Initialize the controls from the loaded account prefs (one-time sync, as on the web).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setDateStyle(initial.dateStyle);
     setTimeStyle(initial.timeStyle);
     setTimeZone(initial.timeZone);
@@ -73,7 +82,7 @@ export function DateTimeSettings() {
   }
 
   return (
-    <Card title={t("dateTimeTitle")} description={t("dateTimeDescription")}>
+    <Section title={t("dateTimeTitle")} desc={t("dateTimeDescription")}>
       <DateTimeFields
         dateStyle={dateStyle}
         timeStyle={timeStyle}
@@ -83,16 +92,18 @@ export function DateTimeSettings() {
         onTimeZone={setTimeZone}
         basePref={base}
       />
-      {error ? <Notice tone="danger">{error}</Notice> : null}
-      <View className="flex-row items-center gap-3">
-        <Button
-          className="flex-1"
-          label={isSaving ? tc("loading") : tc("save")}
-          isLoading={isSaving}
-          onPress={() => void save()}
-        />
-        {isSaved ? <Text variant="muted">{tc("saved")}</Text> : null}
-      </View>
-    </Card>
+      {error ? (
+        <View className="px-5 py-3">
+          <Text className="text-sm text-danger" accessibilityRole="alert">
+            {error}
+          </Text>
+        </View>
+      ) : null}
+      <SaveRow note={isSaved ? tc("saved") : undefined}>
+        <Button onPress={() => void save()} disabled={isSaving}>
+          {isSaving ? tc("loading") : tc("save")}
+        </Button>
+      </SaveRow>
+    </Section>
   );
 }

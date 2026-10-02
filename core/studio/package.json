@@ -12,7 +12,8 @@
     "./ports": "./src/ports.ts",
     "./build-runner": "./src/build-runner.ts",
     "./build-checkpoint": "./src/build-checkpoint.ts",
-    "./build-manager": "./src/build-manager.ts"
+    "./build-manager": "./src/build-manager.ts",
+    "./*": "./src/*.ts"
   },
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -23,10 +24,12 @@
   },
   "dependencies": {
     "@dodi/ai": "workspace:*",
+    "@dodi/client-state": "workspace:*",
     "@dodi/games": "workspace:*",
     "@dodi/intl": "workspace:*",
     "@dodi/types": "workspace:*",
     "@dodi/vault": "workspace:*",
+    "diff": "^9.0.0",
     "zustand": "^5.0.11"
   },
   "devDependencies": {

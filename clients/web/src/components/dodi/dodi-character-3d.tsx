@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { companionCharacter } from "@dodi/ui-recipes";
 
 import { characterPoseFor } from "@/lib/character/character-pose";
 import { useDodiSessionStore } from "@/stores/dodi-session-store";
@@ -34,7 +35,8 @@ function loadStage(): Promise<StageModule> {
 
 /**
  * dodi as the 3D character (`characters/dodi/dodi.glb`, format v1 in
- * `characters/README.md`). The renderer (three.js) is lazy-loaded from here,
+ * `characters/README.md`; scene logic in @dodi/character, shared with the
+ * app's components/dodi/character-3d). The renderer (three.js) is lazy-loaded from here,
  * so accounts with the 3D character off never download it; `fallback` shows
  * meanwhile, and stays if WebGL or the model is unavailable.
  */
@@ -77,7 +79,7 @@ export function DodiCharacter3d({ state, isThinking, alt, fallback }: DodiCharac
   if (!isReady) return fallback;
   return (
     <>
-      <div ref={hostRef} role="img" aria-label={alt} className="absolute inset-0" />
+      <div ref={hostRef} role="img" aria-label={alt} className={companionCharacter.host} />
       {pose.clip === "sleep" ? <SleepZzz /> : null}
     </>
   );

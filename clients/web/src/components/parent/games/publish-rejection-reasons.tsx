@@ -3,6 +3,9 @@
 import { useTranslations } from "next-intl";
 
 import type { PublicationRejectionReason } from "@dodi/protocol/publication-review";
+import { rejectionReason } from "@dodi/ui-recipes";
+
+import { cn } from "@/lib/utils";
 
 interface PublishRejectionReasonsProps {
   reasons: PublicationRejectionReason[];
@@ -16,24 +19,25 @@ export function PublishRejectionReasons({ reasons, isPermanent }: PublishRejecti
   if (reasons.length === 0) return null;
 
   return (
-    <ul className="flex flex-col gap-2">
+    <ul className={cn(rejectionReason.webList, rejectionReason.list)}>
       {reasons.map((reason, i) => (
         <li
           key={`${reason.code}-${i}`}
-          className={
-            isPermanent
-              ? "rounded-lg bg-danger-soft px-3 py-2 text-xs"
-              : "rounded-lg bg-warning-soft px-3 py-2 text-xs"
-          }
+          className={cn(
+            rejectionReason.box,
+            isPermanent ? rejectionReason.permanent : rejectionReason.fixable,
+            rejectionReason.text,
+          )}
         >
           <span
-            className={
-              isPermanent ? "font-semibold text-danger" : "font-semibold text-warning"
-            }
+            className={cn(
+              rejectionReason.title,
+              isPermanent ? rejectionReason.titlePermanent : rejectionReason.titleFixable,
+            )}
           >
             {t(`publishReason_${reason.code}`)}
           </span>
-          {reason.note && <p className="mt-0.5 text-muted-foreground">{reason.note}</p>}
+          {reason.note && <p className={rejectionReason.note}>{reason.note}</p>}
         </li>
       ))}
     </ul>

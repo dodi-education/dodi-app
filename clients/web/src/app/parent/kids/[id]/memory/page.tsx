@@ -1,6 +1,5 @@
 "use client";
 
-import { dodi } from "@/lib/api";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
@@ -8,35 +7,39 @@ import { useTranslations } from "next-intl";
 import { StackField } from "@/components/parent/rows";
 import { SaveRow } from "@/components/parent/save-row";
 import { Section } from "@/components/parent/section";
-import { DossierView, type CitationEntry } from "@/components/parent/dossier-view";
+import { DossierView } from "@/components/parent/dossier-view";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { useDateFormat } from "@/components/providers/date-format-provider";
 import { useKidStore } from "@/stores/kid-store";
 import { useVaultStore } from "@/stores/vault-store";
-import { removeDossierCitations } from "@dodi/ai/memory-prompt";
-import { decryptContent, encryptKidFields } from "@dodi/vault";
+import { parentFlowDeps } from "@/lib/parent-flow-deps";
+import { cn } from "@/lib/utils";
+import {
+  memoryEmpty,
+  memoryItem,
+  memoryTextarea,
+  pageMessage,
+  sectionFormError,
+} from "@dodi/ui-recipes";
+import { flowErrorText } from "@dodi/client-state/flow-error";
+import {
+  citationEntriesOf,
+  discardKidMemory,
+  loadKidMemories,
+  parseCitationIds,
+  saveKidMemory,
+  type MemoryRow,
+} from "@dodi/client-state/kid-memory";
 
-import type { Kid, Memory, MemorySourceWithEntry } from "@dodi/types/database";
+import type { Kid } from "@dodi/types/database";
 
-const textareaClassName =
-  "block w-full resize-y rounded-md border border-input bg-card px-3 py-2 font-mono text-[12.5px] leading-relaxed outline-none transition-[color,box-shadow,border-color] placeholder:text-faint hover:border-faint focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary-soft-2";
-
-interface MemoryRow extends Memory {
-  sources: MemorySourceWithEntry[];
-  content: string;
-}
-
-function parseCitationIds(dossier: string): string[] {
-  const ids: string[] = [];
-  const re = /\[source:([0-9a-f-]{36})\]/gi;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(dossier)) !== null) {
-    ids.push(m[1]);
-  }
-  return [...new Set(ids)];
-}
+const textareaClassName = cn(
+  memoryTextarea.web,
+  memoryTextarea.box,
+  memoryTextarea.text,
+);
 
 export default function KidMemoryPage() {
   const t = useTranslations("memory");
@@ -56,30 +59,10 @@ export default function KidMemoryPage() {
   const [discardingId, setDiscardingId] = useState<string | null>(null);
 
   const loadStructured = useCallback(async (kidId: string) => {
-    const session = useVaultStore.getState().session;
-    if (!session) return;
-
-    const [activeRes, discardedRes] = await Promise.all([
-      dodi.request(`/api/kids/${kidId}/memories?status=active&includeSources=1`),
-      dodi.request(
-        `/api/kids/${kidId}/memories?status=discarded&includeSources=1`,
-      ),
-    ]);
-
-    const mapRows = async (res: Response): Promise<MemoryRow[]> => {
-      if (!res.ok) return [];
-      const data = (await res.json()) as Array<
-        Memory & { sources?: MemorySourceWithEntry[] }
-      >;
-      return data.map((m) => ({
-        ...m,
-        sources: m.sources ?? [],
-        content: decryptContent(session, m.content_enc),
-      }));
-    };
-
-    setActiveMemories(await mapRows(activeRes));
-    setDiscardedMemories(await mapRows(discardedRes));
+    const lists = await loadKidMemories(parentFlowDeps(), kidId);
+    if (!lists) return;
+    setActiveMemories(lists.active);
+    setDiscardedMemories(lists.discarded);
   }, []);
 
   useEffect(() => {
@@ -115,35 +98,18 @@ export default function KidMemoryPage() {
     setError(null);
     setSaving(true);
 
-    const session = useVaultStore.getState().session;
-    if (!session) {
-      setError(t("vaultLocked"));
+    // Notes always; the dossier only when the parent edited it. Both sealed.
+    try {
+      await saveKidMemory(parentFlowDeps(), params.id, {
+        parentNotes,
+        ...(editingMemory ? { memory } : {}),
+      });
+    } catch (err) {
+      setError(flowErrorText(err, t("failedToSave"), { vaultLocked: t("vaultLocked") }));
       setSaving(false);
       return;
     }
 
-    const plain: { parent_notes: string | null; memory?: string | null } = {
-      parent_notes: parentNotes || null,
-    };
-    if (editingMemory) {
-      plain.memory = memory || null;
-    }
-    const enc = encryptKidFields(session, plain);
-
-    const response = await dodi.request(`/api/kids/${params.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(enc),
-    });
-
-    if (!response.ok) {
-      const data = (await response.json()) as { error?: string };
-      setError(data.error || t("failedToSave"));
-      setSaving(false);
-      return;
-    }
-
-    useKidStore.getState().invalidate();
     setSaving(false);
     setEditingMemory(false);
     router.refresh();
@@ -152,66 +118,31 @@ export default function KidMemoryPage() {
   // Every citation's decrypted transcript turn, keyed by memory_source_id —
   // feeds the [n] popovers in the dossier view. Sources of discarded memories
   // stay resolvable so citations in an older dossier don't go dark.
-  const citationEntries = useMemo(() => {
-    const map = new Map<string, CitationEntry>();
-    const session = useVaultStore.getState().session;
-    if (!session) return map;
-    for (const m of [...activeMemories, ...discardedMemories]) {
-      for (const s of m.sources) {
-        if (s.entry && !map.has(s.id)) {
-          map.set(s.id, {
-            role: s.entry.role,
-            text: decryptContent(session, s.entry.content_enc),
-            occurredAt: s.entry.occurred_at,
-          });
-        }
-      }
-    }
-    return map;
-  }, [activeMemories, discardedMemories]);
+  const citationEntries = useMemo(
+    () =>
+      citationEntriesOf(
+        [...activeMemories, ...discardedMemories],
+        useVaultStore.getState().session,
+      ),
+    [activeMemories, discardedMemories],
+  );
 
   async function handleParentDiscard(memoryId: string) {
     setDiscardingId(memoryId);
     setError(null);
     try {
-      // Capture the memory's citation ids BEFORE the lists reload.
-      const target = activeMemories.find((m) => m.id === memoryId);
-
-      const res = await dodi.request(`/api/kids/${params.id}/memories`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ memoryId, by: "parent" }),
+      // The memory's citations (and lines they solely supported) leave the
+      // dossier at once; mid-edit, only the textarea updates and the parent's
+      // eventual Save persists the combined result.
+      const result = await discardKidMemory(parentFlowDeps(), {
+        kidId: params.id,
+        memoryId,
+        activeMemories,
+        memory,
+        isEditingMemory: editingMemory,
       });
-      if (!res.ok) {
-        setError(t("failedToDiscard"));
-        return;
-      }
-
-      // A discarded memory's support disappears from the dossier immediately:
-      // strip its citations (and lines they solely supported) — deterministic,
-      // no model call; the next memory update smooths the narrative.
-      const sourceIds = target?.sources.map((s) => s.id) ?? [];
-      const updated = removeDossierCitations(memory, sourceIds);
-      if (updated !== memory) {
-        setMemory(updated);
-        const session = useVaultStore.getState().session;
-        // While the parent is mid-edit, only the textarea updates — their
-        // eventual Save persists the combined result instead of a partial one.
-        if (session && !editingMemory) {
-          const enc = encryptKidFields(session, { memory: updated || null });
-          const dossierRes = await dodi.request(`/api/kids/${params.id}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ memory: enc.memory }),
-          });
-          if (dossierRes.ok) {
-            useKidStore.getState().invalidate();
-          } else {
-            setError(t("failedToSave"));
-          }
-        }
-      }
-
+      if (result.memory !== memory) setMemory(result.memory);
+      if (result.isDossierSaveFailed) setError(t("failedToSave"));
       await loadStructured(params.id);
     } catch {
       setError(t("failedToDiscard"));
@@ -222,16 +153,16 @@ export default function KidMemoryPage() {
 
   if (fetching) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <p className="text-muted-foreground">{tc("loading")}</p>
+      <div className={cn(pageMessage.web, pageMessage.box)}>
+        <p className={pageMessage.text}>{tc("loading")}</p>
       </div>
     );
   }
 
   if (!kid) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <p className="text-muted-foreground">{t("kidNotFound")}</p>
+      <div className={cn(pageMessage.web, pageMessage.box)}>
+        <p className={pageMessage.text}>{t("kidNotFound")}</p>
       </div>
     );
   }
@@ -291,14 +222,20 @@ export default function KidMemoryPage() {
               entriesBySourceId={citationEntries}
             />
           ) : (
-            <div className="whitespace-pre-wrap rounded-md bg-muted p-3.5 text-sm leading-relaxed text-faint">
+            <div
+              className={cn(memoryEmpty.web, memoryEmpty.box, memoryEmpty.text)}
+            >
               {t("emptyMemory")}
             </div>
           )}
         </StackField>
       </Section>
 
-      {error && <div className="px-5 py-3 text-sm text-danger">{error}</div>}
+      {error && (
+        <div className={cn(sectionFormError.box, sectionFormError.text)}>
+          {error}
+        </div>
+      )}
       <SaveRow>
         <Button variant="outline" onClick={() => router.back()}>
           {tc("cancel")}
@@ -310,19 +247,25 @@ export default function KidMemoryPage() {
 
       <Section title={t("structuredTitle")} desc={t("structuredHint")}>
         {activeMemories.length === 0 ? (
-          <div className="px-5 py-4 text-sm text-faint">{t("noStructured")}</div>
+          <div className={cn(memoryItem.empty, memoryItem.emptyText)}>
+            {t("noStructured")}
+          </div>
         ) : (
           <ul className="divide-y divide-border">
             {activeMemories.map((m) => (
               <li
                 key={m.id}
-                className="flex items-start justify-between gap-3 px-5 py-3"
+                className={cn(
+                  memoryItem.webWithAction,
+                  memoryItem.withAction,
+                  memoryItem.box,
+                )}
               >
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm text-ink-2">{m.content}</p>
-                  <p className="mt-1 text-xs text-faint">
+                <div className={memoryItem.main}>
+                  <p className={memoryItem.content}>{m.content}</p>
+                  <p className={memoryItem.meta}>
                     {m.category ? (
-                      <span className="mr-2 font-medium">{m.category}</span>
+                      <span className={memoryItem.category}>{m.category}</span>
                     ) : null}
                     {formatDateTime(m.created_at)}
                     {m.sources.length > 0
@@ -348,11 +291,15 @@ export default function KidMemoryPage() {
         <Section title={t("discardedTitle")} desc={t("discardedHint")}>
           <ul className="divide-y divide-border">
             {discardedMemories.map((m) => (
-              <li key={m.id} className="px-5 py-3">
-                <p className="text-sm text-muted-foreground line-through">
-                  {m.content}
-                </p>
-                <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-faint">
+              <li key={m.id} className={memoryItem.box}>
+                <p className={memoryItem.discardedContent}>{m.content}</p>
+                <p
+                  className={cn(
+                    memoryItem.webDiscardedMeta,
+                    memoryItem.discardedMeta,
+                    memoryItem.meta,
+                  )}
+                >
                   <Badge variant="gray">
                     {m.discarded_by === "parent"
                       ? t("discardedByParent")
@@ -360,7 +307,7 @@ export default function KidMemoryPage() {
                   </Badge>
                   {m.discarded_at ? formatDateTime(m.discarded_at) : null}
                   {m.discard_memory_source_id ? (
-                    <span className="font-mono text-[10px]">
+                    <span className={memoryItem.source}>
                       {t("discardSource")}: {m.discard_memory_source_id.slice(0, 8)}…
                     </span>
                   ) : null}

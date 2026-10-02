@@ -10,6 +10,8 @@ import {
   formatRunClock,
   runChecks,
 } from "@dodi/studio/agent-run-log";
+import { agentRun } from "@dodi/ui-recipes";
+import { cn } from "@/lib/utils";
 
 interface AgentRunHistoryProps {
   run: AgentRunLog;
@@ -37,16 +39,16 @@ export function AgentRunHistory({ run }: AgentRunHistoryProps) {
   ].filter((part): part is string => part !== null);
 
   return (
-    <details className="group mt-1">
-      <summary className="text-faint hover:text-primary focus-visible:ring-ring flex min-h-11 cursor-pointer list-none items-center gap-1.5 rounded-md text-[12px] font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none motion-reduce:transition-none [&::-webkit-details-marker]:hidden">
+    <details className={cn(agentRun.webRoot, agentRun.root)}>
+      <summary className={cn(agentRun.summary, agentRun.summaryText, agentRun.webSummary)}>
         <Icon name="history" size={14} className="shrink-0" />
         <span>{t("runLogSummary")}</span>
         {meta.length > 0 && (
-          <span className="text-[11.5px] font-normal">({meta.join(", ")})</span>
+          <span className={agentRun.summaryMeta}>({meta.join(", ")})</span>
         )}
         <span
           aria-hidden
-          className="text-[13px] transition-transform group-open:rotate-90 motion-reduce:transition-none"
+          className={cn(agentRun.summaryChevron, agentRun.webSummaryChevron)}
         >
           ›
         </span>
@@ -54,7 +56,7 @@ export function AgentRunHistory({ run }: AgentRunHistoryProps) {
       {run.entries.length > 0 ? (
         <AgentRunTimeline run={run} />
       ) : (
-        <p className="text-faint text-[11.5px] italic">{t("runLogEmpty")}</p>
+        <p className={agentRun.empty}>{t("runLogEmpty")}</p>
       )}
     </details>
   );

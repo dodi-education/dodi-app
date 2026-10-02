@@ -1,9 +1,12 @@
 import Image from "next/image";
 import qrcode from "qrcode-generator";
+import { qrCode } from "@dodi/ui-recipes";
 
-const INK = "#22384E";
-/** Quiet zone (margin) around the code, in modules — the QR spec asks for ≥4. */
-const QUIET = 4;
+import { cn } from "@/lib/utils";
+
+const INK = qrCode.ink;
+/** Quiet zone (margin) around the code, in modules: the QR spec asks for ≥4. */
+const QUIET = qrCode.quiet;
 
 interface QrCodeProps {
   /** The text/URL to encode. Empty renders a blank placeholder. */
@@ -21,7 +24,7 @@ export function QrCode({ value, size = 200 }: QrCodeProps) {
   if (!value) {
     return (
       <span
-        className="inline-block rounded-[14px] bg-muted"
+        className={cn(qrCode.placeholder, qrCode.webPlaceholder)}
         style={{ width: size, height: size }}
       />
     );
@@ -60,7 +63,7 @@ export function QrCode({ value, size = 200 }: QrCodeProps) {
   ];
 
   const center = size / 2;
-  const badge = size * 0.28;
+  const badge = size * qrCode.badge;
   // White halo so dots clear the round badge; slightly larger than the badge.
   const halo = badge / 2 + m * 0.6;
 

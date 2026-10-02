@@ -2,6 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { snapshotFlash, snapshotFlashTarget } from "@dodi/ui-recipes";
+
+import { cn } from "@/lib/utils";
+
 // public/ asset — the folder must stay excluded in the middleware matcher.
 const SNAPSHOT_SOUND_URL = "/sounds/snapshot.mp3";
 
@@ -12,11 +16,7 @@ const SNAPSHOT_SOUND_URL = "/sounds/snapshot.mp3";
  * showing the kid where their snapshot went. Plays the shutter sound on mount.
  */
 
-const FLY_MS = 650;
-const HOLD_MS = 400;
-const FADE_MS = 250;
-const TARGET_SIZE = 100;
-const TARGET_GAP = 12;
+const { flyMs: FLY_MS, holdMs: HOLD_MS, fadeMs: FADE_MS } = snapshotFlash;
 
 interface FrameRect {
   left: number;
@@ -37,22 +37,11 @@ interface SnapshotFlashProps {
 /** 100×100 landing spot centered above the Snapshots nav item. */
 function snapshotTargetRect(): FrameRect {
   const navItem = document.querySelector('[data-kid-nav="/snapshots"]');
-  if (navItem) {
-    const rect = navItem.getBoundingClientRect();
-    return {
-      left: rect.left + rect.width / 2 - TARGET_SIZE / 2,
-      top: rect.top - TARGET_SIZE - TARGET_GAP,
-      width: TARGET_SIZE,
-      height: TARGET_SIZE,
-    };
-  }
-  // No kid nav on this page — land bottom-center instead.
-  return {
-    left: window.innerWidth / 2 - TARGET_SIZE / 2,
-    top: window.innerHeight - TARGET_SIZE - TARGET_GAP,
-    width: TARGET_SIZE,
-    height: TARGET_SIZE,
-  };
+  // No kid nav on this page: land bottom-center instead.
+  return snapshotFlashTarget(navItem ? navItem.getBoundingClientRect() : null, {
+    width: window.innerWidth,
+    height: window.innerHeight,
+  });
 }
 
 export function SnapshotFlash({ image, startRect, onDone }: SnapshotFlashProps) {
@@ -102,13 +91,13 @@ export function SnapshotFlash({ image, startRect, onDone }: SnapshotFlashProps) 
   }, [reducedMotion]);
 
   return (
-    <div aria-hidden className="pointer-events-none fixed inset-0 z-50">
+    <div aria-hidden className={cn(snapshotFlash.overlay, snapshotFlash.webOverlay)}>
       {/* Raw <img>: next/image can't animate its box like this. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={image}
         alt=""
-        className="absolute rounded-[16px] border-[3px] border-white object-cover shadow-[0_10px_30px_rgba(34,56,78,0.35)]"
+        className={cn(snapshotFlash.image, snapshotFlash.webImage)}
         style={{
           left: frame.left,
           top: frame.top,

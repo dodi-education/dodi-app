@@ -6,8 +6,9 @@ import {
   buildDiffLines,
   collapseUnchanged,
   type DiffLine,
-} from "@/components/parent/games/code-diff";
+} from "@dodi/studio/code-diff";
 import { cn } from "@/lib/utils";
+import { codeDiff, codeViewer } from "@dodi/ui-recipes";
 
 interface CodeDiffViewProps {
   /** The stored pre-change version (left side of the diff). */
@@ -23,8 +24,8 @@ type Entry =
   | { type: "skip"; sectionIndex: number; count: number };
 
 const ROW_TINT: Record<DiffLine["kind"], string | undefined> = {
-  added: "bg-success-soft",
-  removed: "bg-danger-soft",
+  added: codeDiff.added,
+  removed: codeDiff.removed,
   context: undefined,
 };
 
@@ -76,19 +77,19 @@ export function CodeDiffView({ previousCode, code, unchangedLabel }: CodeDiffVie
   };
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 overflow-auto">
+    <div className={cn(codeViewer.webBody, codeViewer.body)}>
       {/* Double gutter — previous | current line numbers, tinted like their rows. */}
       <div
         aria-hidden
-        className="sticky left-0 z-[1] flex-shrink-0 select-none border-r border-border bg-card py-4 text-right text-faint"
+        className={cn(codeDiff.gutter, codeViewer.gutterText, codeViewer.webGutter)}
       >
         {entries.map((entry, i) =>
           entry.type === "skip" ? (
-            <div key={i} className="px-3 text-center">
+            <div key={i} className={codeDiff.skipNumber}>
               ⋯
             </div>
           ) : (
-            <div key={i} className={cn("flex gap-2 pl-4 pr-3", ROW_TINT[entry.line.kind])}>
+            <div key={i} className={cn(codeDiff.webNumbers, codeDiff.numbers, ROW_TINT[entry.line.kind])}>
               <span className="inline-block" style={{ width: numWidth }}>
                 {entry.line.oldNo ?? ""}
               </span>
@@ -101,24 +102,25 @@ export function CodeDiffView({ previousCode, code, unchangedLabel }: CodeDiffVie
       </div>
 
       {/* Diff body — +/− marker and the line, full-width row tint, horizontal scroll. */}
-      <div className="w-max py-4 pr-8">
+      <div className={cn(codeDiff.body, codeDiff.webBody)}>
         {entries.map((entry, i) =>
           entry.type === "skip" ? (
             <button
               key={i}
               type="button"
               onClick={() => expand(entry.sectionIndex)}
-              className="block w-full whitespace-pre pl-2 text-left font-sans text-[12px] font-medium text-faint transition-colors hover:text-primary"
+              className={cn(codeDiff.skip, codeDiff.skipText, codeDiff.webSkip)}
             >
               {`⋯ ${unchangedLabel(entry.count)}`}
             </button>
           ) : (
-            <div key={i} className={cn("whitespace-pre", ROW_TINT[entry.line.kind])}>
+            <div key={i} className={cn(codeDiff.webLine, ROW_TINT[entry.line.kind])}>
               <span
                 className={cn(
-                  "inline-block w-6 select-none text-center font-bold",
-                  entry.line.kind === "added" && "text-success",
-                  entry.line.kind === "removed" && "text-danger",
+                  codeDiff.marker,
+                  codeDiff.webMarker,
+                  entry.line.kind === "added" && codeDiff.addedMarker,
+                  entry.line.kind === "removed" && codeDiff.removedMarker,
                 )}
               >
                 {entry.line.kind === "added" ? "+" : entry.line.kind === "removed" ? "−" : " "}

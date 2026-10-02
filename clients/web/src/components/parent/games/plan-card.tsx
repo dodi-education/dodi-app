@@ -5,6 +5,8 @@ import type { useTranslations } from "next-intl";
 import { Icon } from "@/components/shared/icon";
 import { Button } from "@/components/ui/button";
 import { RichText } from "@/components/parent/games/rich-text";
+import { cn } from "@/lib/utils";
+import { planCard } from "@dodi/ui-recipes";
 
 type Translate = ReturnType<typeof useTranslations>;
 
@@ -67,7 +69,13 @@ export function PlanCard({
 
   return (
     <>
-      <div className={isStage ? "flex flex-col gap-2.5 border-t border-border pt-4" : "flex flex-col gap-2.5"}>
+      <div
+        className={
+          isStage
+            ? "flex flex-col gap-2.5 border-t border-border pt-4"
+            : cn(planCard.webSection, planCard.section)
+        }
+      >
         {isStage && (
           <div className="flex items-center justify-between gap-3">
             <h3 className="text-sm font-bold text-ink">{t("planCardTitle")}</h3>
@@ -83,7 +91,7 @@ export function PlanCard({
         )}
 
         {!hasPlan ? (
-          <p className="text-[12.5px] leading-relaxed text-muted-foreground">
+          <p className={planCard.empty}>
             {t("planCardEmpty")}
           </p>
         ) : isEditingPlan ? (
@@ -92,14 +100,14 @@ export function PlanCard({
             onChange={(e) => onPlanDraftChange(e.target.value)}
             rows={isStage ? 16 : 14}
             aria-label={t("planCardTitle")}
-            className="w-full resize-y rounded-lg border border-border-strong bg-background p-3 text-[13px] leading-relaxed text-ink outline-none focus:border-primary"
+            className={cn(planCard.editor, planCard.editorText, planCard.webEditor)}
           />
         ) : (
           <div
             className={
               isStage
                 ? "max-h-[42vh] overflow-y-auto pr-1 text-[13px] leading-[1.6] text-ink"
-                : "text-[13px] leading-[1.6] text-ink"
+                : planCard.bodyText
             }
           >
             <RichText text={planDraft} />
@@ -111,7 +119,7 @@ export function PlanCard({
             type="button"
             onClick={onPersonalize}
             disabled={isBusy}
-            className="flex w-full items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-left text-[12.5px] font-medium text-ink-2 transition-colors hover:border-primary hover:bg-primary-soft hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
+            className={cn(planCard.personalize, planCard.personalizeText, planCard.webPersonalize)}
           >
             <Icon name="sparkles" size={14} className="shrink-0 text-primary" />
             {t("planChipPersonalize")}
@@ -119,7 +127,7 @@ export function PlanCard({
         )}
       </div>
 
-      <div className="flex flex-col gap-2 border-t border-border pt-4">
+      <div className={cn(planCard.webActions, planCard.actions)}>
         <Button
           size="lg"
           className="w-full"

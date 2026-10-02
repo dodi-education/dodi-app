@@ -1,51 +1,61 @@
+import type { ReactNode } from "react";
 import { ActivityIndicator, Pressable, type PressableProps } from "react-native";
+import { COLORS, type ColorToken } from "@dodi/design-tokens";
+import { button, buttonIconColor, type ButtonSize, type ButtonVariant } from "@dodi/ui-recipes";
 
 import { cn } from "@/lib/cn";
 
+import { Icon, type IconName } from "./icon";
 import { Text } from "./text";
 
-const VARIANTS = {
-  primary: { box: "bg-primary", text: "text-primary-foreground", spinner: "#FFFFFF" },
-  secondary: { box: "bg-primary-soft", text: "text-primary-hover", spinner: "#2659BC" },
-  ghost: { box: "bg-transparent", text: "text-primary", spinner: "#2F6BD8" },
-  danger: { box: "bg-danger", text: "text-white", spinner: "#FFFFFF" },
-} as const;
-
 export interface ButtonProps extends Omit<PressableProps, "children"> {
-  label: string;
-  variant?: keyof typeof VARIANTS;
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+  /** Leading icon (web: an <Icon> child, size-4 = 16). */
+  icon?: IconName;
+  /** Overrides the variant's icon color (web: a text-* class on the button, e.g. ghost + text-danger). */
+  iconColor?: ColorToken;
   isLoading?: boolean;
   className?: string;
+  textClassName?: string;
+  children?: ReactNode;
 }
 
-/** A 48pt-tall button (touch targets stay above the 44pt minimum). */
+/** The web's Button: same variants, sizes and classes (@dodi/ui-recipes). */
 export function Button({
-  label,
-  variant = "primary",
+  variant = "default",
+  size = "default",
+  icon,
+  iconColor: iconColorOverride,
   isLoading = false,
   disabled,
   className,
+  textClassName,
+  children,
   ...props
 }: ButtonProps) {
-  const style = VARIANTS[variant];
-  const isDisabled = disabled || isLoading;
+  const p = { variant, size };
+  const isDisabled = Boolean(disabled || isLoading);
+  const iconColor = iconColorOverride ?? buttonIconColor[variant];
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityState={{ disabled: isDisabled, busy: isLoading }}
       disabled={isDisabled}
-      className={cn(
-        "min-h-12 flex-row items-center justify-center rounded-xl px-5",
-        style.box,
-        isDisabled && "opacity-50",
-        className,
-      )}
+      className={cn(button.box(p), icon && size === "default" && "px-3", isDisabled && "opacity-50", "active:opacity-80", className)}
       {...props}
     >
       {isLoading ? (
-        <ActivityIndicator color={style.spinner} />
+        <ActivityIndicator size="small" color={COLORS[iconColor]} />
+      ) : icon ? (
+        <Icon name={icon} size={size === "xs" || size === "icon-xs" ? 12 : 16} color={iconColor} />
+      ) : null}
+      {typeof children === "string" || typeof children === "number" ? (
+        <Text className={cn(button.text(p), textClassName)} numberOfLines={1}>
+          {children}
+        </Text>
       ) : (
-        <Text className={cn("text-base font-semibold", style.text)}>{label}</Text>
+        children
       )}
     </Pressable>
   );

@@ -4,6 +4,8 @@ import type { useTranslations } from "next-intl";
 
 import { ActionRow } from "@/components/parent/games/plan-chat-actions";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { cn } from "@/lib/utils";
+import { referenceSheet } from "@dodi/ui-recipes";
 
 interface ReferenceImageSheetProps {
   open: boolean;
@@ -40,7 +42,7 @@ export function ReferenceImageSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent anchorRef={anchorRef}>
         <SheetTitle>{t("attachImage")}</SheetTitle>
-        <div className="flex flex-col gap-2">
+        <div className={cn(referenceSheet.webList, referenceSheet.list)}>
           <ActionRow icon="camera" label={t("planTakePhoto")} onClick={pick(onTakePhoto)} />
           <ActionRow icon="upload" label={t("attachUpload")} onClick={pick(onUpload)} />
           {onDraw && (

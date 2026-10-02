@@ -1,27 +1,34 @@
 import type { ReactNode } from "react";
 import { View } from "react-native";
+import { card } from "@dodi/ui-recipes";
 
 import { cn } from "@/lib/cn";
 
 import { Text } from "./text";
 
-/** A titled white card: the unit settings and forms are grouped in. */
-export function Card({
-  title,
-  description,
-  children,
-  className,
-}: {
-  title?: string;
-  description?: string;
-  children?: ReactNode;
-  className?: string;
-}) {
-  return (
-    <View className={cn("gap-3 rounded-2xl border border-border bg-card p-4", className)}>
-      {title ? <Text variant="heading">{title}</Text> : null}
-      {description ? <Text variant="muted">{description}</Text> : null}
-      {children}
-    </View>
-  );
+type Props = { className?: string; children?: ReactNode };
+
+/** The web's Card and its parts. */
+export function Card({ className, children }: Props) {
+  return <View className={cn(card.root, className)}>{children}</View>;
+}
+
+export function CardHeader({ className, children }: Props) {
+  return <View className={cn(card.header, className)}>{children}</View>;
+}
+
+export function CardTitle({ className, children }: Props) {
+  return <Text className={cn(card.title, className)}>{children}</Text>;
+}
+
+export function CardDescription({ className, children }: Props) {
+  return <Text className={cn(card.description, className)}>{children}</Text>;
+}
+
+export function CardContent({ className, children }: Props) {
+  return <View className={cn(card.content, className)}>{children}</View>;
+}
+
+export function CardFooter({ className, children }: Props) {
+  return <View className={cn(card.footer, className)}>{children}</View>;
 }

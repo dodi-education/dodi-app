@@ -79,20 +79,26 @@ def export_accessory(path: str, root: bpy.types.Object) -> None:
     )
 
 
-# The web app serves the runtime assets from its public folder.
+# The web app serves the runtime assets from its public folder; the mobile app
+# bundles them as assets (core/character's tests check the copies match).
 WEB_CHARACTERS = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "clients", "web", "public", "characters")
+)
+MOBILE_CHARACTERS = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "clients", "mobile", "assets", "characters")
 )
 
 
 def publish_to_web(path: str, name: str) -> None:
     """Copy an exported .glb to ``clients/web/public/characters/<name>``, the
-    URL the app loads it from."""
+    URL the web app loads it from, and to ``clients/mobile/assets/characters/<name>``,
+    which the mobile app bundles."""
     import shutil
 
-    target = os.path.join(WEB_CHARACTERS, name)
-    os.makedirs(os.path.dirname(target), exist_ok=True)
-    shutil.copyfile(path, target)
+    for folder in (WEB_CHARACTERS, MOBILE_CHARACTERS):
+        target = os.path.join(folder, name)
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        shutil.copyfile(path, target)
 
 
 def attach_accessory(path: str) -> tuple[bpy.types.Object, dict]:

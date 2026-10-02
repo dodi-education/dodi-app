@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
+import { companionVolume as v } from "@dodi/ui-recipes";
 
 import { Icon } from "@/components/shared/icon";
 import { useActiveKidStore } from "@/stores/active-kid-store";
@@ -49,14 +50,11 @@ export function CompanionVolumeControl() {
   const iconName = muted ? "volume_off" : volume <= 0.5 ? "volume_low" : "volume";
 
   return (
-    <div ref={rootRef} className="relative shrink-0">
+    <div ref={rootRef} className={v.root}>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className={cn(
-          "relative flex h-11 w-11 items-center justify-center rounded-full border border-dodi-200 bg-white shadow-sm transition-shadow hover:shadow-md",
-          muted && "text-danger",
-        )}
+        className={cn(v.button, v.webButton, muted && v.mutedButtonText)}
         aria-label={t("voiceVolumeOpen")}
         aria-expanded={open}
       >
@@ -65,13 +63,13 @@ export function CompanionVolumeControl() {
 
       {open && (
         <div
-          className="absolute left-0 top-full z-50 mt-2 w-56 rounded-2xl border border-dodi-200 bg-white p-4 shadow-lg animate-in fade-in slide-in-from-top-1 duration-150"
+          className={cn(v.flyout, v.webFlyout)}
           role="group"
           aria-label={t("voiceVolume")}
         >
           <label
             htmlFor={sliderId}
-            className="mb-2 block text-[13px] font-bold text-ink-2"
+            className={cn(v.webLabel, v.label)}
           >
             {t("voiceVolume")}
           </label>
@@ -84,17 +82,19 @@ export function CompanionVolumeControl() {
             disabled={muted}
             onChange={(e) => setVolume(Number(e.target.value) / 100)}
             aria-label={t("voiceVolume")}
-            className="h-11 w-full cursor-pointer accent-dodi-500 disabled:cursor-not-allowed disabled:opacity-50"
+            className={v.webSlider}
           />
 
           <button
             type="button"
             onClick={() => setMuted(!muted, activeKidId ?? undefined)}
             className={cn(
-              "mt-2 flex h-11 w-full items-center justify-center gap-2 rounded-xl border text-[13px] font-bold transition-colors",
+              v.mute,
+              v.webMute,
+              v.muteText,
               muted
-                ? "border-danger/30 bg-danger/10 text-danger"
-                : "border-dodi-200 bg-white text-ink-2 hover:bg-dodi-50",
+                ? [v.muteOn, v.muteOnText]
+                : [v.muteOff, v.muteOffText, v.webMuteOff],
             )}
             aria-pressed={muted}
           >

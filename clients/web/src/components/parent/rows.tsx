@@ -1,3 +1,4 @@
+import { fieldRow, fieldSelect, requiredMark, row, stackField } from "@dodi/ui-recipes";
 import { cn } from "@/lib/utils";
 
 interface RowProps extends React.ComponentProps<"div"> {
@@ -9,8 +10,9 @@ export function Row({ clickable, className, children, ...props }: RowProps) {
   return (
     <div
       className={cn(
-        "flex items-center gap-3.5 px-5 py-3.5",
-        clickable && "transition-colors hover:bg-[#FAFCFE]",
+        row.box,
+        row.web,
+        clickable && row.webClickable,
         className,
       )}
       {...props}
@@ -24,7 +26,7 @@ export function RowMain({
   className,
   children,
 }: React.ComponentProps<"div">) {
-  return <div className={cn("min-w-0 flex-1", className)}>{children}</div>;
+  return <div className={cn(row.main, className)}>{children}</div>;
 }
 
 export function RowTitle({
@@ -33,10 +35,7 @@ export function RowTitle({
 }: React.ComponentProps<"div">) {
   return (
     <div
-      className={cn(
-        "flex items-center gap-2 text-sm font-semibold",
-        className,
-      )}
+      className={cn(row.title, "flex", row.titleText, className)}
     >
       {children}
     </div>
@@ -45,7 +44,7 @@ export function RowTitle({
 
 export function RowMeta({ className, children }: React.ComponentProps<"div">) {
   return (
-    <div className={cn("mt-0.5 text-[12.5px] text-muted-foreground", className)}>
+    <div className={cn(row.meta, className)}>
       {children}
     </div>
   );
@@ -53,22 +52,21 @@ export function RowMeta({ className, children }: React.ComponentProps<"div">) {
 
 /** Separator dot between meta segments. */
 export function DotSep() {
-  return <span className="mx-1.5 text-border-strong">·</span>;
+  return <span className={row.dot}>·</span>;
 }
 
 /** Subtle red asterisk marking a mandatory field. Decorative — fields carry
  *  `aria-required` for assistive tech, so this is hidden from screen readers. */
 export function RequiredMark() {
   return (
-    <span aria-hidden="true" className="ml-0.5 text-destructive/70">
+    <span aria-hidden="true" className={requiredMark}>
       *
     </span>
   );
 }
 
 /** Select styled to match the inputs inside a FieldRow. */
-export const fieldSelectClass =
-  "h-9 w-full rounded-md border border-input bg-card px-3 text-sm outline-none transition-[color,box-shadow,border-color] hover:border-faint focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary-soft-2 sm:w-[250px]";
+export const fieldSelectClass = cn(fieldSelect.box, fieldSelect.text, fieldSelect.web);
 
 interface FieldRowProps {
   label: string;
@@ -91,22 +89,23 @@ export function FieldRow({
   return (
     <div
       className={cn(
-        "flex flex-col gap-2 px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:gap-6",
+        fieldRow.box,
+        fieldRow.web,
         className,
       )}
     >
       <div>
-        <label htmlFor={htmlFor} className="text-sm font-medium">
+        <label htmlFor={htmlFor} className={fieldRow.label}>
           {label}
           {required ? <RequiredMark /> : null}
         </label>
         {hint ? (
-          <div className="mt-0.5 text-[12.5px] text-muted-foreground">
+          <div className={fieldRow.hint}>
             {hint}
           </div>
         ) : null}
       </div>
-      <div className="flex items-center gap-2 sm:shrink-0">{children}</div>
+      <div className={cn(fieldRow.control, fieldRow.webControl)}>{children}</div>
     </div>
   );
 }
@@ -117,6 +116,6 @@ export function StackField({
   children,
 }: React.ComponentProps<"div">) {
   return (
-    <div className={cn("px-5 py-3.5 pb-4", className)}>{children}</div>
+    <div className={cn(stackField, className)}>{children}</div>
   );
 }

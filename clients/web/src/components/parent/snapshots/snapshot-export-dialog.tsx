@@ -21,17 +21,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { ensureFriendKeys } from "@/lib/friends";
 import { downloadBlob } from "@/lib/games/game-export-zip";
-import { packSnapshotExportZip } from "@/lib/snapshot-export-zip";
-import { decodeSnapshotPayload, fetchSnapshot } from "@/lib/snapshots";
+import { snapshotDeps } from "@/lib/snapshots";
 import { useKids } from "@/hooks/use-kids";
 import type { AccountSnapshot } from "@/hooks/use-account-snapshots";
 import { useVaultStore } from "@/stores/vault-store";
-import {
-  buildSnapshotExportFiles,
-  snapshotExportFileName,
-} from "@dodi/protocol/snapshot-export";
+import { buildSnapshotExportArchive } from "@dodi/client-state/snapshot-transfer";
 
 interface SnapshotExportDialogProps {
   open: boolean;
@@ -61,27 +56,19 @@ export function SnapshotExportDialog({
     setExporting(true);
     setError(null);
     try {
-      const detail = await fetchSnapshot(snapshot.view.id);
       // Received rows are sealed to the kid's friend KEM key, not the vault.
-      const kid = (kids ?? []).find((k) => k.id === snapshot.kidId);
-      const kidKeys =
-        detail.origin === "received" && kid
-          ? await ensureFriendKeys(kid, session)
-          : null;
-      const { payload, sanitizedCode } = decodeSnapshotPayload(
-        detail,
+      const kid = (kids ?? []).find((k) => k.id === snapshot.kidId) ?? null;
+      const archive = await buildSnapshotExportArchive(snapshotDeps, {
+        snapshot,
+        kid,
         session,
-        kidKeys,
-      );
-      const files = buildSnapshotExportFiles({
-        info: snapshot.info,
-        payload: { ...payload, codeBundle: sanitizedCode },
-        kidName: snapshot.kidName,
         appVersion: "dodi web",
       });
       downloadBlob(
-        packSnapshotExportZip(files),
-        snapshotExportFileName(payload.title),
+        new Blob([archive.bytes as Uint8Array<ArrayBuffer>], {
+          type: "application/zip",
+        }),
+        archive.fileName,
       );
       setError(null);
       onClose();

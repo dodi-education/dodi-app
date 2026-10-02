@@ -1,7 +1,12 @@
 import Image from "next/image";
 
 import {
-  KID_AVA_COLORS,
+  avatarColorOf,
+  avatarInitial,
+  avatarRingPadding,
+} from "@dodi/client-state/avatars";
+
+import {
   avatarImage,
   readAvatarConfig,
   type AvatarConfig,
@@ -29,11 +34,11 @@ interface KidAvatarProps {
  */
 export function KidAvatar({ kid, size = 34, pad, className }: KidAvatarProps) {
   const cfg: AvatarConfig = readAvatarConfig(kid.avatar_config);
-  const color = KID_AVA_COLORS[cfg.color] ?? KID_AVA_COLORS[0];
+  const color = avatarColorOf(cfg);
   const img = cfg.avatar ? avatarImage(cfg.avatar) : null;
 
   if (!img) {
-    const initial = (kid.display_name?.[0] ?? "?").toUpperCase();
+    const initial = avatarInitial(kid.display_name);
     return (
       <span
         className={`inline-flex shrink-0 items-center justify-center rounded-full font-extrabold ${className ?? ""}`}
@@ -50,7 +55,7 @@ export function KidAvatar({ kid, size = 34, pad, className }: KidAvatarProps) {
     );
   }
 
-  const ring = pad != null ? pad : Math.max(2, Math.round(size * 0.08));
+  const ring = avatarRingPadding(size, pad);
   return (
     <span
       className={`box-border inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full ${className ?? ""}`}

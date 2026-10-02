@@ -12,8 +12,8 @@ import { loadModelConfig, needsAiSetup } from "@dodi/client-state/dashboard";
 import type { AccountModelConfig } from "@dodi/types/ai";
 
 import { api } from "@/adapters/platform";
-import { Button, Card, Text } from "@/components/ui";
-import { IconAi } from "@/components/ui/icons";
+import { Section } from "@/components/parent/section";
+import { Button, Icon, Text } from "@/components/ui";
 import { useProvidersStore, useVaultStore } from "@/lib/client-state";
 
 export function AiSetupCard() {
@@ -43,19 +43,23 @@ export function AiSetupCard() {
   if (!needsAiSetup(providers, config)) return null;
 
   return (
-    <Card>
-      <View className="flex-row items-start gap-3">
-        <View className="rounded-lg bg-primary-soft p-2">
-          <IconAi size={20} color="#2F6BD8" />
+    <Section>
+      <View className="flex-col gap-4 px-5 py-4">
+        <View className="flex-row items-start gap-3.5">
+          <View className="rounded-lg bg-primary-soft p-2">
+            <Icon name="ai" size={20} color="primary" />
+          </View>
+          <View className="min-w-0 flex-1">
+            <Text className="text-sm font-semibold" accessibilityRole="header">
+              {t("aiSetupTitle")}
+            </Text>
+            <Text className="mt-0.5 text-[13px] text-muted-foreground">{t("aiSetupDescription")}</Text>
+          </View>
         </View>
-        <View className="flex-1 gap-0.5">
-          <Text className="text-sm font-semibold">{t("aiSetupTitle")}</Text>
-          <Text variant="muted">{t("aiSetupDescription")}</Text>
-        </View>
+        <Link href="/parent/settings/ai-providers" asChild>
+          <Button>{t("aiSetupCta")}</Button>
+        </Link>
       </View>
-      <Link href="/parent/settings/ai-providers" asChild>
-        <Button label={t("aiSetupCta")} />
-      </Link>
-    </Card>
+    </Section>
   );
 }

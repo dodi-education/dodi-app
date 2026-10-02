@@ -1,22 +1,13 @@
 "use client";
 
+import { AGE_MAX, AGE_MIN, isValidAgeRange } from "@dodi/studio/age-range";
+import { ageRange } from "@dodi/ui-recipes";
+
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
-/** Inclusive bounds a game's recommended-age range may take (mirrors the API). */
-export const AGE_MIN = 1;
-export const AGE_MAX = 25;
-
-/** True when a min/max pair is in range and correctly ordered (min ≤ max). */
-export function isValidAgeRange(min: number, max: number): boolean {
-  return (
-    Number.isInteger(min) &&
-    Number.isInteger(max) &&
-    min >= AGE_MIN &&
-    max <= AGE_MAX &&
-    min <= max
-  );
-}
+// The validation rules are shared (core/studio); re-exported for the forms.
+export { AGE_MAX, AGE_MIN, isValidAgeRange };
 
 interface AgeRangeProps {
   min: number;
@@ -40,9 +31,8 @@ export function AgeRange({
   disabled,
 }: AgeRangeProps) {
   const invalid = !isValidAgeRange(min, max);
-  const field = "w-16 text-center";
   return (
-    <div className="flex items-center gap-2.5">
+    <div className={cn(ageRange.webRow, ageRange.row)}>
       <Input
         type="number"
         inputMode="numeric"
@@ -53,9 +43,9 @@ export function AgeRange({
         aria-invalid={invalid || undefined}
         disabled={disabled}
         onChange={(e) => onMinChange(e.target.valueAsNumber)}
-        className={cn(field, invalid && "border-destructive")}
+        className={cn(ageRange.field, invalid && ageRange.invalid)}
       />
-      <span aria-hidden className="text-sm font-medium text-muted-foreground">
+      <span aria-hidden className={ageRange.dash}>
         –
       </span>
       <Input
@@ -68,7 +58,7 @@ export function AgeRange({
         aria-invalid={invalid || undefined}
         disabled={disabled}
         onChange={(e) => onMaxChange(e.target.valueAsNumber)}
-        className={cn(field, invalid && "border-destructive")}
+        className={cn(ageRange.field, invalid && ageRange.invalid)}
       />
     </div>
   );

@@ -2,6 +2,8 @@
 
 import { PlanCard, PlanEditToggle, type PlanCardProps } from "@/components/parent/games/plan-card";
 import { PlanSurfaceHeader } from "@/components/parent/games/plan-surface-header";
+import { cn } from "@/lib/utils";
+import { planSurface } from "@dodi/ui-recipes";
 
 interface PlanSurfaceProps extends Omit<PlanCardProps, "layout"> {
   onBack: () => void;
@@ -16,7 +18,7 @@ export function PlanSurface({ onBack, ...card }: PlanSurfaceProps) {
   const hasPlan = planDraft.trim().length > 0;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className={cn(planSurface.webRoot, planSurface.root)}>
       <PlanSurfaceHeader
         title={t("planCardTitle")}
         backLabel={t("planBack")}
@@ -32,9 +34,9 @@ export function PlanSurface({ onBack, ...card }: PlanSurfaceProps) {
           ) : undefined
         }
       />
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+      <div className={cn(planSurface.body, planSurface.bodyPadding, planSurface.webBody)}>
         {/* Reading width on a wide stage; the full width on a phone. */}
-        <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
+        <div className={cn(planSurface.webColumn, planSurface.column)}>
           <PlanCard {...card} layout="surface" />
         </div>
       </div>

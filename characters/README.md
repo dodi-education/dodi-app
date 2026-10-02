@@ -29,18 +29,21 @@ procedurally in Blender so it can be regenerated and tweaked from code.
 | `dodi/previews/dodi-headphones.glb` | dodi wearing the headphones, for gltf-viewer (gitignored, made by `preview-all.sh`). |
 | `accessories/headphones/headphones.glb` | The headphones accessory (the "deaf" state). |
 | `accessories/headphones/note.png` | The note on the ear cups (also embedded in the `.glb`). |
-| `../clients/web/public/characters/` | Copies the builds write for the app to load (`dodi.glb`, `accessories/headphones.glb`). |
+| `../clients/web/public/characters/`, `../clients/mobile/assets/characters/` | Copies the builds write for the apps to load (`dodi.glb`, `accessories/headphones.glb`); `core/character`'s tests fail when they drift. |
 
 ## In the app
 
-The web renderer lives in `clients/web/src/lib/character/`: toon shading from
-`shade_color` (`toon-materials.ts`), outlines from a part-ID and depth pass
-like the previews (`outline-pass.ts`), the state table below
-(`character-pose.ts`) and one shared canvas that moves between views and
-cross-fades clips (`character-stage.ts`). The jaw follows the voice loudness
-from the audio player. `components/dodi/dodi-character-3d.tsx` lazy-loads it
-when the account's "3D character" setting is on; for now only `/home` asks for
-it (`canRender3d`). Antenna springs and extra random blinks are not done yet.
+The renderer is `core/character` (`@dodi/character`, plain three.js, no DOM):
+toon shading from `shade_color` (`toon-materials.ts`), outlines from a part-ID
+and depth pass like the previews (`outline-pass.ts`; an inverted hull,
+`hull-outline.ts`, where a GL driver cannot run it), the state table below
+(`character-pose.ts`) and the stage that cross-fades clips and moves the jaw
+with the voice loudness (`character-stage.ts`). The web binds it in
+`clients/web/src/lib/character/` (one shared canvas that moves between views)
+and `components/dodi/dodi-character-3d.tsx` lazy-loads it when the account's
+"3D character" setting is on; the app draws it with expo-gl in
+`clients/mobile/src/components/dodi/character-3d.tsx`. For now only the kid
+home asks for it (`canRender3d`). Antenna springs and extra random blinks are not done yet.
 
 ## Build
 

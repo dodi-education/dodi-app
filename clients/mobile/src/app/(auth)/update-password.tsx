@@ -10,7 +10,19 @@ import {
 
 import { mobileAuthApi } from "@/adapters/auth";
 import { api } from "@/adapters/platform";
-import { Button, Notice, Screen, Text, TextField } from "@/components/ui";
+import { AuthLayout } from "@/components/shared/auth-layout";
+import {
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+  Input,
+  Label,
+  Text,
+} from "@/components/ui";
 import { clientState } from "@/lib/client-state";
 import { markSignedIn } from "@/lib/session";
 
@@ -55,56 +67,77 @@ export default function UpdatePasswordScreen() {
     markSignedIn();
   }
 
-  const secure = { showLabel: t("showPassword"), hideLabel: t("hidePassword") };
   return (
-    <Screen isCentered>
-      <View className="gap-1">
-        <Text variant="title">{t("updatePasswordTitle")}</Text>
-        <Text variant="muted">
-          {hasVault === false ? t("updatePasswordDescription") : t("updatePasswordWithNsecHint")}
-        </Text>
-      </View>
-      <TextField
-        label={t("newPassword")}
-        placeholder={t("passwordPlaceholder")}
-        value={password}
-        onChangeText={setPassword}
-        autoComplete="new-password"
-        textContentType="newPassword"
-        secure={secure}
-        autoFocus
-      />
-      <TextField
-        label={t("confirmPassword")}
-        value={confirmPassword}
-        onChangeText={setConfirmPassword}
-        autoComplete="new-password"
-        textContentType="newPassword"
-        secure={secure}
-      />
-      {hasVault ? (
-        <TextField
-          label={t("accountKey")}
-          placeholder={t("accountKeyPlaceholder")}
-          value={nsec}
-          onChangeText={setNsec}
-          autoCapitalize="none"
-          autoCorrect={false}
-          autoComplete="off"
-          spellCheck={false}
-          className="font-mono"
-        />
-      ) : null}
-      {error ? <Notice tone="danger">{error}</Notice> : null}
-      <Button
-        label={isLoading ? t("updatingPassword") : t("updatePassword")}
-        isLoading={isLoading}
-        disabled={hasVault === null || !password || !confirmPassword}
-        onPress={() => void submit()}
-      />
-      <Link href="/login" asChild>
-        <Button variant="ghost" label={t("backToSignIn")} />
-      </Link>
-    </Screen>
+    <AuthLayout>
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("updatePasswordTitle")}</CardTitle>
+          <CardDescription>
+            {hasVault === false ? t("updatePasswordDescription") : t("updatePasswordWithNsecHint")}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <View className="flex flex-col gap-4">
+            <View className="flex flex-col gap-2">
+              <Label>{t("newPassword")}</Label>
+              <Input
+                placeholder={t("passwordPlaceholder")}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+                autoCapitalize="none"
+                autoComplete="new-password"
+                textContentType="newPassword"
+                accessibilityLabel={t("newPassword")}
+                autoFocus
+              />
+            </View>
+            <View className="flex flex-col gap-2">
+              <Label>{t("confirmPassword")}</Label>
+              <Input
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                secureTextEntry
+                autoCapitalize="none"
+                autoComplete="new-password"
+                textContentType="newPassword"
+                accessibilityLabel={t("confirmPassword")}
+              />
+            </View>
+            {hasVault ? (
+              <View className="flex flex-col gap-2">
+                <Label>{t("accountKey")}</Label>
+                <Input
+                  value={nsec}
+                  onChangeText={setNsec}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder={t("accountKeyPlaceholder")}
+                  className="font-mono"
+                  accessibilityLabel={t("accountKey")}
+                />
+              </View>
+            ) : null}
+            {error ? <Text className="text-sm text-destructive">{error}</Text> : null}
+            <Button
+              onPress={() => void submit()}
+              disabled={isLoading || hasVault === null || !password || !confirmPassword}
+              className="w-full"
+            >
+              {isLoading ? t("updatingPassword") : t("updatePassword")}
+            </Button>
+          </View>
+        </CardContent>
+        <CardFooter>
+          <Link href="/login" asChild>
+            <Text accessibilityRole="link" className="text-sm text-muted-foreground">
+              {t("backToSignIn")}
+            </Text>
+          </Link>
+        </CardFooter>
+      </Card>
+    </AuthLayout>
   );
 }

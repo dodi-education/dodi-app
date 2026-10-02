@@ -9,7 +9,9 @@
     "loading": "Laden...",
     "saved": "Änderungen gespeichert",
     "openCalendar": "Kalender öffnen",
-    "details": "Details"
+    "details": "Details",
+    "done": "Fertig",
+    "chooseFile": "Datei auswählen"
   },
   "auth": {
     "welcomeBack": "Willkommen zurück",
@@ -102,7 +104,8 @@
     "unlocking": "Wird entsperrt…",
     "unlockFailed": "Der Tresor konnte nicht entsperrt werden",
     "forgotPasswordUseKey": "Passwort vergessen? Kontoschlüssel verwenden",
-    "usePasswordInstead": "Stattdessen Passwort verwenden"
+    "usePasswordInstead": "Stattdessen Passwort verwenden",
+    "unlockingVault": "Entsperre deinen sicheren Tresor…"
   },
   "onboarding": {
     "prefsTitle": "Ein paar Grundeinstellungen",
@@ -437,7 +440,7 @@
     "kidNotFound": "Kind nicht gefunden"
   },
   "games": {
-    "title": "Spielebibliothek",
+    "title": "Spiele",
     "subtitle": "Spiele, die für dich ausgesucht wurden.",
     "kidRequired": "Wähle zuerst ein Kind aus, um Spiele zu nutzen.",
     "backToLibrary": "Zur Bibliothek",
@@ -549,12 +552,9 @@
     "tapToStart": "Tippe zum Starten",
     "tapToTalk": "Tippe, um mit mir zu sprechen!",
     "sessionEnded": "Sitzung beendet",
-    "chatPlaceholder": "Chat und Sprachinteraktion kommen bald.",
-    "dodiChatPlaceholder": "dodi-Chat erscheint hier",
     "gamesTitle": "Spiele",
-    "gamesPlaceholder": "Spielebibliothek kommt in Phase 3.",
     "friendsTitle": "Freunde",
-    "friendsPlaceholder": "Freundesystem kommt in Phase 4."
+    "noKidSelected": "Kein Kind ausgewählt"
   },
   "activities": {
     "title": "Aktivitäten",
@@ -972,6 +972,7 @@
     "importErrUnsafeCode": "Der Spielcode hat die Sicherheitsprüfung nicht bestanden.",
     "importErrBackground": "Das Hintergrundbild fehlt im Archiv.",
     "buildRunningHint": "Du kannst die App weiter benutzen, während dodi baut. Wenn du diesen Tab schließt oder neu lädst, pausiert der Build und du kannst ihn hier fortsetzen.",
+    "buildRunningHintApp": "Du kannst zu anderen Apps wechseln, während dodi baut. Der Build läuft im Hintergrund weiter.",
     "buildPaused": "Pausiert. dodi kann diesen Build dort fortsetzen, wo er aufgehört hat.",
     "otherBuildRunning": "dodi baut gerade ein anderes Spiel. Warte, bis es fertig ist, und versuche es dann erneut.",
     "resumeBuildNotice": "dodis letzter Build dieses Spiels wurde unterbrochen. Dort weitermachen, wo er aufgehört hat?",
@@ -1090,7 +1091,8 @@
     "openMenu": "Menü öffnen",
     "closeMenu": "Menü schließen",
     "snapshots": "Knipser",
-    "parentSnapshots": "Knipser"
+    "parentSnapshots": "Knipser",
+    "switchToParentView": "Zur Elternansicht wechseln"
   },
   "usage": {
     "title": "Nutzung",
@@ -1115,6 +1117,7 @@
     "look": "{name}s Aussehen",
     "lookHint": "Wähle eine Farbe & eine Figur",
     "colorLabel": "Farbe {n}",
+    "slotLabel": "Feld {n}",
     "group": {
       "animals": "Tiere",
       "dinos": "Dinos",
@@ -1234,5 +1237,16 @@
   "buildActivity": {
     "building": "dodi baut ein Spiel",
     "open": "Ansehen"
+  },
+  "backgroundBuild": {
+    "title": "Dein Spiel wird gebaut",
+    "planTitle": "Dein Spiel wird geplant",
+    "channelName": "Spiel-Builds",
+    "readyTitle": "Dein Spiel ist fertig",
+    "readyBody": "Tippe, um es im Game Studio zu öffnen.",
+    "pausedTitle": "Build pausiert",
+    "pausedBody": "Öffne die App und der Build geht dort weiter, wo er aufgehört hat.",
+    "failedTitle": "Build fehlgeschlagen",
+    "failedBody": "Öffne das Game Studio, um es erneut zu versuchen."
   }
 }

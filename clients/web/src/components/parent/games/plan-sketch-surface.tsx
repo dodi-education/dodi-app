@@ -6,8 +6,10 @@ import { Icon } from "@/components/shared/icon";
 import { Button } from "@/components/ui/button";
 import { PlanSurfaceHeader } from "@/components/parent/games/plan-surface-header";
 import { SKETCH_TOOLBAR_HEIGHT, SketchPad } from "@/components/parent/games/sketch-pad";
-import type { SketchStroke } from "@/components/parent/games/sketch-strokes";
+import type { SketchStroke } from "@dodi/studio/sketch-strokes";
 import { STAGE } from "@/lib/games/stage";
+import { cn } from "@/lib/utils";
+import { planSurface } from "@dodi/ui-recipes";
 
 /** Vertical padding around the pad, in px (p-2 top + bottom). */
 const PAD_INSET = 16;
@@ -41,7 +43,7 @@ export function PlanSketchSurface({
   t,
 }: PlanSketchSurfaceProps) {
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className={cn(planSurface.webRoot, planSurface.root)}>
       <PlanSurfaceHeader
         title={t("planDrawSketch")}
         backLabel={t("planBack")}
@@ -62,7 +64,7 @@ export function PlanSketchSurface({
       {/* A size container: the canvas takes the height left under the header
           and derives its 4:5 width from it, or the full width when that is the
           tighter limit. Centered, so leftover space falls on both sides. */}
-      <div className="flex min-h-0 flex-1 items-center justify-center p-2 [container-type:size]">
+      <div className={cn(planSurface.webSketchArea, planSurface.sketchArea)}>
         <SketchPad
           strokes={strokes}
           onStrokesChange={onStrokesChange}

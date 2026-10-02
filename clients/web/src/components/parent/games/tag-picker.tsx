@@ -9,6 +9,7 @@ import { tagStyle } from "@/components/parent/games/tag-style";
 import { useTagLabel } from "@/lib/games/tag-label";
 import { cn } from "@/lib/utils";
 import { GAME_TAGS } from "@dodi/games/tags";
+import { optionChip, tagPicker } from "@dodi/ui-recipes";
 
 interface TagPickerProps {
   selected: string[];
@@ -30,7 +31,7 @@ export function TagPicker({ selected, onChange }: TagPickerProps) {
     : GAME_TAGS.filter((tag) => selected.includes(tag.id));
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className={cn(tagPicker.web, tagPicker.box)}>
       {visibleTags.map((tag) => {
         const isSelected = selected.includes(tag.id);
         const chip = (
@@ -41,10 +42,12 @@ export function TagPicker({ selected, onChange }: TagPickerProps) {
           </>
         );
         const chipClass = cn(
-          "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-semibold transition-colors",
+          optionChip.box,
+          optionChip.text,
+          optionChip.web,
           isSelected
-            ? "border-primary bg-primary-soft text-primary"
-            : "border-border-strong bg-card text-ink-2 hover:border-faint",
+            ? cn(optionChip.selected, optionChip.selectedText)
+            : cn(optionChip.idle, optionChip.idleText, optionChip.webIdle),
         );
         return isEditing ? (
           <button
@@ -67,7 +70,7 @@ export function TagPicker({ selected, onChange }: TagPickerProps) {
         );
       })}
       {!isEditing && visibleTags.length === 0 && (
-        <span className="text-sm text-muted-foreground">{t("tagsNone")}</span>
+        <span className={tagPicker.none}>{t("tagsNone")}</span>
       )}
       <Button
         type="button"

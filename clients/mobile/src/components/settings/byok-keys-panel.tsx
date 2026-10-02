@@ -4,18 +4,19 @@
  * provider, then sealed into the vault; the server never sees it.
  */
 import { useState } from "react";
-import { Alert, Linking, Pressable, View } from "react-native";
+import { Linking, Pressable, View } from "react-native";
 import { useTranslations } from "use-intl";
+import { button } from "@dodi/ui-recipes";
 import { validateProviderKey } from "@dodi/ai/validate-key";
 import { addableProviders, addProviderKey, byokKeyRows } from "@dodi/client-state/byok-keys";
 import type { DraftModelConfig } from "@dodi/client-state/model-config";
 import type { AIProviderId } from "@dodi/types/ai";
 
-import { Button, Card, Notice, Text, TextField } from "@/components/ui";
-import { Badge } from "@/components/ui/badge";
-import { ChoiceList } from "@/components/ui/choice-list";
-import { IconExternalLink, IconTrash } from "@/components/ui/icons";
+import { Row, RowMain, RowMeta, RowTitle, RowTitleText } from "@/components/parent/rows";
+import { Section } from "@/components/parent/section";
+import { Badge, Button, Dialog, Icon, Label, PasswordInput, Select, Text } from "@/components/ui";
 import { clientState, useProvidersStore } from "@/lib/client-state";
+import { cn } from "@/lib/cn";
 import { useAccountDateFormat } from "@/lib/date-format";
 import { SITE_URL } from "@/lib/env";
 import { useLocaleSetting } from "@/lib/intl";
@@ -37,20 +38,25 @@ export function ByokKeysPanel({
   const rows = byokKeyRows(providersMap);
   const available = addableProviders(providersMap);
 
-  const [isAdding, setIsAdding] = useState(false);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [providerId, setProviderId] = useState<AIProviderId | "">("");
   const [apiKey, setApiKey] = useState("");
   const [phase, setPhase] = useState<"idle" | "validating" | "saving">("idle");
   const [status, setStatus] = useState<"idle" | "valid" | "invalid">("idle");
   const [validationError, setValidationError] = useState("");
+  const [removeId, setRemoveId] = useState<AIProviderId | null>(null);
 
-  function resetForm(): void {
-    setIsAdding(false);
+  function resetDialog(): void {
     setProviderId("");
     setApiKey("");
     setPhase("idle");
     setStatus("idle");
     setValidationError("");
+  }
+
+  function closeDialog(): void {
+    setIsDialogOpen(false);
+    resetDialog();
   }
 
   async function validateAndSave(): Promise<void> {
@@ -68,7 +74,7 @@ export function ByokKeysPanel({
     );
     if (outcome.kind === "added") {
       if (outcome.seed && onFirstKeySeeded) onFirstKeySeeded(outcome.seed);
-      resetForm();
+      closeDialog();
       return;
     }
     setStatus("invalid");
@@ -76,88 +82,143 @@ export function ByokKeysPanel({
     setPhase("idle");
   }
 
-  function confirmRemove(id: AIProviderId): void {
-    Alert.alert(t("removeProvider"), t("confirmRemoveProvider"), [
-      { text: tc("cancel"), style: "cancel" },
-      {
-        text: t("removeProvider"),
-        style: "destructive",
-        onPress: () => void clientState.providers.getState().removeKey(id).catch(() => {}),
-      },
-    ]);
+  function remove(id: AIProviderId): void {
+    setRemoveId(null);
+    void clientState.providers.getState().removeKey(id).catch(() => {});
   }
 
   const isBusy = phase !== "idle";
   return (
-    <Card title={t("aiConfigTitle")} description={t("aiConfigDescription")}>
-      {rows.length === 0 ? <Text variant="muted">{t("noProviders")}</Text> : null}
-      {rows.map((row) => (
-        <View key={row.id} className="flex-row items-center gap-3 border-t border-border pt-3">
-          <View className="flex-1 gap-1">
-            <Text className="font-semibold">{row.name}</Text>
-            <Badge label={`...${row.keyPreview}`} />
-            <Text variant="muted">{t("added", { date: formatDate(row.addedAt) })}</Text>
-          </View>
+    <>
+      <Section
+        title={t("aiConfigTitle")}
+        desc={t("aiConfigDescription")}
+        action={
+          available.length > 0 ? (
+            <Button variant="outline" size="sm" icon="add" onPress={() => setIsDialogOpen(true)}>
+              {t("addProvider")}
+            </Button>
+          ) : undefined
+        }
+      >
+        {rows.length === 0 ? (
+          <Text className="px-5 py-3.5 text-sm text-muted-foreground">{t("noProviders")}</Text>
+        ) : null}
+        {rows.map((row) => (
+          <Row key={row.id}>
+            <RowMain>
+              <RowTitle>
+                <RowTitleText>{row.name}</RowTitleText>
+                <Badge variant="key">...{row.keyPreview}</Badge>
+              </RowTitle>
+              <RowMeta>{t("added", { date: formatDate(row.addedAt) })}</RowMeta>
+            </RowMain>
+            {/* web: ghost sm button recolored text-danger (Button has no icon-color override) */}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`${t("removeProvider")}: ${row.name}`}
+              hitSlop={6}
+              onPress={() => setRemoveId(row.id)}
+              className={cn(button.box({ variant: "ghost", size: "sm" }), "active:bg-danger-soft")}
+            >
+              <Icon name="delete" size={16} color="danger" />
+              <Text className={cn(button.text({ variant: "ghost", size: "sm" }), "text-danger")}>
+                {t("removeProvider")}
+              </Text>
+            </Pressable>
+          </Row>
+        ))}
+        <Row>
           <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`${t("removeProvider")}: ${row.name}`}
-            onPress={() => confirmRemove(row.id)}
-            className="h-11 w-11 items-center justify-center"
+            accessibilityRole="link"
+            hitSlop={8}
+            onPress={() => void Linking.openURL(`${SITE_URL}${BYOK_HELP_PATH[locale]}`)}
+            className="flex-row items-center gap-1.5 active:opacity-70"
           >
-            <IconTrash size={20} color="#BF4F44" />
+            <Icon name="info" size={16} color="primary" />
+            <Text className="text-[13px] font-semibold text-primary">{t("byokHelpLink")}</Text>
+            <Icon name="external" size={14} color="primary" />
           </Pressable>
-        </View>
-      ))}
+        </Row>
+      </Section>
 
-      {isAdding ? (
-        <View className="gap-3 border-t border-border pt-3">
-          <Text variant="heading">{t("addProviderTitle")}</Text>
-          <Text variant="muted">{t("addProviderDescription")}</Text>
-          <ChoiceList
-            label={t("selectProvider")}
-            choices={available.map((p) => ({ value: p.id, label: p.name }))}
-            value={providerId}
-            onChange={(id) => {
-              setProviderId(id);
-              setStatus("idle");
-              setValidationError("");
-            }}
-            disabled={isBusy}
-          />
-          <TextField
-            label={t("apiKey")}
-            placeholder={t("apiKeyPlaceholder")}
-            value={apiKey}
-            onChangeText={(text) => {
-              setApiKey(text);
-              setStatus("idle");
-              setValidationError("");
-            }}
-            autoCorrect={false}
-            secure={{ showLabel: t("showApiKey"), hideLabel: t("hideApiKey") }}
-          />
-          {status === "valid" ? <Notice tone="success">{t("keyValid")}</Notice> : null}
-          {status === "invalid" ? <Notice tone="danger">{validationError || t("keyInvalid")}</Notice> : null}
+      <Dialog
+        isOpen={isDialogOpen}
+        onClose={closeDialog}
+        title={t("addProviderTitle")}
+        description={t("addProviderDescription")}
+        footer={
           <Button
-            label={isBusy ? t("validating") : t("validateAndSave")}
             isLoading={isBusy}
             disabled={!providerId || !apiKey}
             onPress={() => void validateAndSave()}
-          />
-          <Button variant="ghost" label={tc("cancel")} disabled={isBusy} onPress={resetForm} />
-        </View>
-      ) : available.length > 0 ? (
-        <Button variant="secondary" label={t("addProvider")} onPress={() => setIsAdding(true)} />
-      ) : null}
-
-      <Pressable
-        accessibilityRole="link"
-        onPress={() => void Linking.openURL(`${SITE_URL}${BYOK_HELP_PATH[locale]}`)}
-        className="min-h-11 flex-row items-center gap-1.5"
+          >
+            {isBusy ? t("validating") : t("validateAndSave")}
+          </Button>
+        }
       >
-        <Text className="text-sm font-semibold text-primary">{t("byokHelpLink")}</Text>
-        <IconExternalLink size={14} color="#2F6BD8" />
-      </Pressable>
-    </Card>
+        <View className="flex-col gap-4">
+          <View className="flex-col gap-2">
+            <Label>{t("selectProvider")}</Label>
+            <Select<AIProviderId | "">
+              label={t("selectProvider")}
+              value={providerId}
+              options={available.map((p) => ({ value: p.id, label: p.name }))}
+              onValueChange={(id) => {
+                setProviderId(id);
+                setStatus("idle");
+                setValidationError("");
+              }}
+              disabled={isBusy}
+            />
+          </View>
+          <View className="flex-col gap-2">
+            <Label>{t("apiKey")}</Label>
+            <PasswordInput
+              showPasswordLabel={t("showApiKey")}
+              hidePasswordLabel={t("hideApiKey")}
+              accessibilityLabel={t("apiKey")}
+              placeholder={t("apiKeyPlaceholder")}
+              value={apiKey}
+              onChangeText={(text) => {
+                setApiKey(text);
+                setStatus("idle");
+                setValidationError("");
+              }}
+            />
+          </View>
+          {status === "valid" ? (
+            <View className="flex-row items-center gap-2">
+              <Icon name="success" size={16} color="success" />
+              <Text className="min-w-0 flex-1 text-sm text-success">{t("keyValid")}</Text>
+            </View>
+          ) : null}
+          {status === "invalid" ? (
+            <View className="flex-row items-center gap-2" accessibilityRole="alert">
+              <Icon name="alert" size={16} color="danger" />
+              <Text className="min-w-0 flex-1 text-sm text-danger">{validationError || t("keyInvalid")}</Text>
+            </View>
+          ) : null}
+        </View>
+      </Dialog>
+
+      {/* web: window.confirm(confirmRemoveProvider) */}
+      <Dialog
+        isOpen={removeId !== null}
+        onClose={() => setRemoveId(null)}
+        title={t("removeProvider")}
+        description={t("confirmRemoveProvider")}
+        footer={
+          <>
+            <Button variant="destructive" onPress={() => removeId && remove(removeId)}>
+              {t("removeProvider")}
+            </Button>
+            <Button variant="outline" onPress={() => setRemoveId(null)}>
+              {tc("cancel")}
+            </Button>
+          </>
+        }
+      />
+    </>
   );
 }

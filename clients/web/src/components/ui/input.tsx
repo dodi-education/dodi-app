@@ -1,5 +1,7 @@
 import * as React from "react"
 
+import { input } from "@dodi/ui-recipes"
+
 import { cn } from "@/lib/utils"
 
 function Input({ className, type, ...props }: React.ComponentProps<"input">) {
@@ -7,12 +9,7 @@ function Input({ className, type, ...props }: React.ComponentProps<"input">) {
     <input
       type={type}
       data-slot="input"
-      className={cn(
-        "file:text-foreground placeholder:text-faint selection:bg-primary selection:text-primary-foreground border-input h-9 w-full min-w-0 rounded-md border bg-card px-3 py-1 text-base transition-[color,box-shadow,border-color] outline-none file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:font-medium hover:border-faint disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
-        "focus-visible:border-primary focus-visible:ring-primary-soft-2 focus-visible:ring-2",
-        "aria-invalid:ring-destructive/20 aria-invalid:border-destructive",
-        className
-      )}
+      className={cn(input.box, input.text, input.web, className)}
       {...props}
     />
   )

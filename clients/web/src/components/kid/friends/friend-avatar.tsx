@@ -2,25 +2,14 @@
  *  ring when set, otherwise a colored circle with the first initial, color
  *  hashed from the label so a given friend is always the same color. */
 
+import { friendAvatarColor } from "@dodi/client-state/avatars";
+
 import { KidAvatar } from "@/components/kid/kid-avatar";
 import { readAvatarConfig } from "@/lib/avatars";
 
 import type { Json } from "@dodi/types/database";
 
-const PALETTE = [
-  { bg: "#DCE9FA", fg: "#2F6BD8" },
-  { bg: "#E9F5F0", fg: "#2E8B6A" },
-  { bg: "#EFE9FA", fg: "#7456C4" },
-  { bg: "#FDF1DC", fg: "#B0782A" },
-  { bg: "#FBEAF1", fg: "#C2558A" },
-  { bg: "#E2F3F3", fg: "#2E8B8B" },
-];
-
-function colorFor(seed: string) {
-  let sum = 0;
-  for (let i = 0; i < seed.length; i++) sum += seed.charCodeAt(i);
-  return PALETTE[sum % PALETTE.length];
-}
+const colorFor = friendAvatarColor;
 
 interface FriendAvatarProps {
   /** Name or handle — drives both the initial and the fallback color. */

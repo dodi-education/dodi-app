@@ -8,38 +8,15 @@ import { Section } from "@/components/parent/section";
 import { StatCell, StatStrip } from "@/components/parent/stat-strip";
 import { useKids } from "@/hooks/use-kids";
 import { dodi } from "@/lib/api";
-
-interface ModelLine {
-  provider: string;
-  model: string;
-  creates: number;
-  edits: number;
-  plans: number;
-  analyses: number;
-  inputTokens: number;
-  outputTokens: number;
-  cacheReadTokens: number;
-}
-interface KidLine {
-  kidId: string | null;
-  games: number;
-  voiceSeconds: number;
-}
-interface UsageResponse {
-  perModel: ModelLine[];
-  perKid: KidLine[];
-  gamesByModel: Record<string, number>;
-  voiceSeconds: number;
-}
-
-/** "claude-opus-4-8" → "Claude opus-4-8"; strips dated snapshot suffixes. */
-function prettyModel(model: string): string {
-  const base = model.replace(/-\d{8}$/, "");
-  if (base.startsWith("claude-")) return `Claude ${base.slice(7)}`;
-  if (base.startsWith("gemini-")) return `Gemini ${base.slice(7)}`;
-  if (base.startsWith("mistral-")) return `Mistral ${base.slice(8)}`;
-  return base;
-}
+import { cn } from "@/lib/utils";
+import { sectionMessage, usageStats } from "@dodi/ui-recipes";
+import {
+  loadUsage,
+  minutesOf,
+  prettyModel,
+  usageSummary,
+  type UsageResponse,
+} from "@dodi/client-state/usage";
 
 export default function UsagePage() {
   const t = useTranslations("usage");
@@ -48,16 +25,10 @@ export default function UsagePage() {
 
   useEffect(() => {
     let alive = true;
-    void (async () => {
-      try {
-        const res = await dodi.request("/api/usage");
-        if (!res.ok) return;
-        const json = (await res.json()) as UsageResponse;
-        if (alive) setData(json);
-      } catch {
-        /* non-critical — the page just shows the empty state */
-      }
-    })();
+    // Non-critical: on failure the page just shows the empty state.
+    void loadUsage(dodi).then((json) => {
+      if (alive && json) setData(json);
+    });
     return () => {
       alive = false;
     };
@@ -66,23 +37,18 @@ export default function UsagePage() {
   const kidName = (id: string | null): string =>
     (id && kids?.find((k) => k.id === id)?.display_name) || t("unknownChild");
 
-  const gamesMade = (data?.perModel ?? []).reduce(
-    (s, m) => s + m.creates + m.edits,
-    0,
-  );
-  const voiceMinutes = Math.round((data?.voiceSeconds ?? 0) / 60);
-  const hasUsage = !!data && (data.perModel.length > 0 || data.voiceSeconds > 0);
+  const { gamesMade, voiceMinutes, hasUsage } = usageSummary(data);
 
   return (
     <div>
-      <StatStrip className="mb-8 overflow-hidden rounded-lg border bg-card shadow-card">
+      <StatStrip className={usageStats}>
         <StatCell num={voiceMinutes} label={t("voiceMinutes")} />
         <StatCell num={gamesMade} label={t("gamesMade")} />
       </StatStrip>
 
-      {!hasUsage ? (
+      {!hasUsage || !data ? (
         <Section>
-          <div className="px-5 py-12 text-center text-sm text-muted-foreground">
+          <div className={cn(sectionMessage.box, sectionMessage.text)}>
             {t("noUsage")}
           </div>
         </Section>
@@ -114,7 +80,7 @@ export default function UsagePage() {
                   <RowMeta>
                     {t("childGames", { count: k.games })}
                     {" · "}
-                    {t("childVoice", { count: Math.round(k.voiceSeconds / 60) })}
+                    {t("childVoice", { count: minutesOf(k.voiceSeconds) })}
                   </RowMeta>
                 </RowMain>
               </Row>

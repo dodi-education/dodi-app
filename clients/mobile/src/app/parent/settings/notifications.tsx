@@ -8,12 +8,14 @@ import {
 import type { NotificationPreferences } from "@dodi/client-state/account-store";
 
 import { api } from "@/adapters/platform";
-import { Card, Notice, Screen, SwitchRow } from "@/components/ui";
+import { FieldRow } from "@/components/parent/rows";
+import { Section } from "@/components/parent/section";
+import { Switch, Text } from "@/components/ui";
 import { clientState, useAccountStore } from "@/lib/client-state";
 
 /**
- * Notification settings (web: parent/settings/notifications): opt in or out
- * of the transactional emails. Toggles save immediately (optimistic).
+ * Notification settings (web: parent/settings/notifications/page): opt in or
+ * out of the transactional emails. Toggles save immediately (optimistic).
  */
 export default function NotificationsSettingsScreen() {
   const t = useTranslations("settings");
@@ -27,6 +29,7 @@ export default function NotificationsSettingsScreen() {
     void load();
   }, [load]);
 
+  // Opt-out: absent reads as on.
   const { isFriendApprovalOn, isPublicationOutcomeOn } = notificationTogglesOf(prefs);
 
   async function saveToggle(patch: NotificationPreferences): Promise<void> {
@@ -39,24 +42,30 @@ export default function NotificationsSettingsScreen() {
 
   const isDisabled = !isLoaded || isSaving;
   return (
-    <Screen>
-      <Card title={t("notificationsEmailTitle")} description={t("notificationsEmailDescription")}>
-        <SwitchRow
-          label={t("notifyFriendApproval")}
-          description={t("notifyFriendApprovalHint")}
-          value={isFriendApprovalOn}
-          disabled={isDisabled}
-          onValueChange={(next) => void saveToggle({ friend_approval_email: next })}
-        />
-        <SwitchRow
-          label={t("notifyPublicationOutcome")}
-          description={t("notifyPublicationOutcomeHint")}
-          value={isPublicationOutcomeOn}
-          disabled={isDisabled}
-          onValueChange={(next) => void saveToggle({ publication_outcome_email: next })}
-        />
-      </Card>
-      {error ? <Notice tone="danger">{error}</Notice> : null}
-    </Screen>
+    <>
+      <Section title={t("notificationsEmailTitle")} desc={t("notificationsEmailDescription")}>
+        <FieldRow label={t("notifyFriendApproval")} hint={t("notifyFriendApprovalHint")}>
+          <Switch
+            checked={isFriendApprovalOn}
+            disabled={isDisabled}
+            onCheckedChange={(next) => void saveToggle({ friend_approval_email: next })}
+            accessibilityLabel={t("notifyFriendApproval")}
+          />
+        </FieldRow>
+        <FieldRow label={t("notifyPublicationOutcome")} hint={t("notifyPublicationOutcomeHint")}>
+          <Switch
+            checked={isPublicationOutcomeOn}
+            disabled={isDisabled}
+            onCheckedChange={(next) => void saveToggle({ publication_outcome_email: next })}
+            accessibilityLabel={t("notifyPublicationOutcome")}
+          />
+        </FieldRow>
+      </Section>
+      {error ? (
+        <Text className="px-1 text-sm text-danger" accessibilityRole="alert">
+          {error}
+        </Text>
+      ) : null}
+    </>
   );
 }

@@ -15,23 +15,17 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useDateFormat } from "@/components/providers/date-format-provider";
-import { unpackSnapshotExportZip } from "@/lib/snapshot-export-zip";
-import { createOwnSnapshot } from "@/lib/snapshots";
+import { snapshotDeps } from "@/lib/snapshots";
 import { cn } from "@/lib/utils";
 import { useKids } from "@/hooks/use-kids";
 import { useVaultStore } from "@/stores/vault-store";
 import {
-  estimateSnapshotPayloadBytes,
-  sealOwnSnapshotInfo,
-  sealOwnSnapshotPayload,
-} from "@dodi/protocol";
-import {
-  SnapshotImportError,
-  type SnapshotImportErrorCode,
-  type ParsedSnapshotExport,
-  matchKidByName,
-  parseSnapshotExportFiles,
-} from "@dodi/protocol/snapshot-export";
+  importSnapshot,
+  parseSnapshotImportArchive,
+  snapshotImportErrorKey,
+  suggestImportKidId,
+} from "@dodi/client-state/snapshot-transfer";
+import type { ParsedSnapshotExport } from "@dodi/protocol/snapshot-export";
 
 interface SnapshotImportDialogProps {
   open: boolean;
@@ -39,20 +33,6 @@ interface SnapshotImportDialogProps {
   /** The list refetches through this after a successful import. */
   onImported: () => void;
 }
-
-/** i18n key (parentSnapshots ns) for each structured import-error code. */
-const ERROR_KEY_BY_CODE: Record<SnapshotImportErrorCode, string> = {
-  "archive-too-large": "importErrArchiveTooLarge",
-  "archive-invalid": "importErrArchiveInvalid",
-  "manifest-missing": "importErrManifest",
-  "manifest-invalid": "importErrManifest",
-  "unsupported-version": "importErrVersion",
-  "code-missing": "importErrCode",
-  "unsafe-code": "importErrUnsafeCode",
-  "state-missing": "importErrState",
-  "state-invalid": "importErrState",
-  "payload-invalid": "importErrPayload",
-};
 
 /**
  * Import a `.dodi-snap.zip` (visual twin of the game import dialog): unzip +
@@ -102,19 +82,12 @@ export function SnapshotImportDialog({
     setSubmitError(null);
     try {
       const bytes = new Uint8Array(await file.arrayBuffer());
-      const next = parseSnapshotExportFiles(unpackSnapshotExportZip(bytes));
+      const next = parseSnapshotImportArchive(bytes);
       setParsed(next);
       // Suggest the same-named kid; a single-kid account needs no choosing.
-      setKidId(
-        matchKidByName(next.manifest.kidName, kidOptions) ??
-          (kidOptions.length === 1 ? kidOptions[0].id : null),
-      );
+      setKidId(suggestImportKidId(next, kidOptions));
     } catch (error) {
-      setParseError(
-        error instanceof SnapshotImportError
-          ? t(ERROR_KEY_BY_CODE[error.code])
-          : t("importErrArchiveInvalid"),
-      );
+      setParseError(t(snapshotImportErrorKey(error)));
     } finally {
       // Allow re-picking the same file after an error.
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -130,18 +103,10 @@ export function SnapshotImportDialog({
     setImporting(true);
     setSubmitError(null);
     try {
-      // The archive is hostile input, already validated + sanitized by
-      // parseSnapshotExportFiles. Seal here: once it is ciphertext no later
-      // layer can check it.
-      await createOwnSnapshot({
-        kidId,
-        // The soft game reference never crosses accounts; the payload is
-        // self-contained, so the snapshot plays without the source game.
-        gameId: null,
-        infoEnc: sealOwnSnapshotInfo(session, parsed.info),
-        payloadEnc: sealOwnSnapshotPayload(session, parsed.payload),
-        payloadBytes: estimateSnapshotPayloadBytes(parsed.payload),
-      });
+      // The archive is hostile input, already validated + sanitized by the
+      // parse; importSnapshot seals it under this vault (gameId: null, the
+      // soft game reference never crosses accounts).
+      await importSnapshot(snapshotDeps, { parsed, kidId, session });
       onImported();
       handleOpenChange(false);
     } catch (error) {

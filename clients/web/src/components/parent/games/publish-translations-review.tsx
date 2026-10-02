@@ -2,14 +2,16 @@
 
 import { useTranslations } from "next-intl";
 
-import { Input } from "@/components/ui/input";
-import { ListingSameTextWarning } from "@/components/parent/games/listing-same-text-warning";
-import { findSameDescriptionGroups } from "@/lib/games/listing-checks";
-import { cn } from "@/lib/utils";
 import type {
   ListingText,
   PublicationTranslationResult,
-} from "@/lib/ai/client-translate-game";
+} from "@dodi/client-state/game-publication";
+import { flaggedListingLocales } from "@dodi/client-state/listing-checks";
+import { dialogField, translationsReview } from "@dodi/ui-recipes";
+
+import { Input } from "@/components/ui/input";
+import { ListingSameTextWarning } from "@/components/parent/games/listing-same-text-warning";
+import { cn } from "@/lib/utils";
 
 interface PublishTranslationsReviewProps {
   review: PublicationTranslationResult;
@@ -28,20 +30,20 @@ export function PublishTranslationsReview({
   onChange,
 }: PublishTranslationsReviewProps) {
   const t = useTranslations("gameStudio");
-  const flagged = new Set(findSameDescriptionGroups(review.translations).flat());
+  const flagged = flaggedListingLocales(review.translations);
 
   return (
-    <div className="flex max-h-[50vh] flex-col gap-3 overflow-y-auto">
-      <p className="text-xs text-muted-foreground">{t("publishReviewTranslationsHint")}</p>
+    <div className={cn(translationsReview.webRoot, translationsReview.root)}>
+      <p className={dialogField.note}>{t("publishReviewTranslationsHint")}</p>
       <ListingSameTextWarning translations={review.translations} />
       {Object.entries(review.translations).map(([locale, entry]) => {
         const isSource = locale === review.sourceLocale;
         return (
-          <div key={locale} className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold uppercase text-ink-2">
+          <div key={locale} className={cn(translationsReview.webField, translationsReview.field)}>
+            <label className={translationsReview.locale}>
               {locale}
               {isSource && (
-                <span className="ml-1.5 normal-case text-faint">
+                <span className={translationsReview.sourceTag}>
                   {t("listingTranslationGameLanguage")}
                 </span>
               )}
@@ -60,8 +62,10 @@ export function PublishTranslationsReview({
               rows={2}
               aria-label={t("publishTranslatedDescription", { locale })}
               className={cn(
-                "w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring disabled:cursor-not-allowed disabled:opacity-50",
-                flagged.has(locale) && "border-warning",
+                translationsReview.textarea,
+                translationsReview.textareaText,
+                translationsReview.webTextarea,
+                flagged.has(locale) && translationsReview.flagged,
               )}
               onChange={(e) => onChange(locale, { ...entry, description: e.target.value })}
             />

@@ -51,6 +51,11 @@ export interface KeyValueStorage {
   setItem(key: string, value: string): void;
 }
 
+/** Synchronous device storage that can also delete (outboxes, small markers). */
+export interface DeviceStorage extends KeyValueStorage {
+  removeItem(key: string): void;
+}
+
 /** Where the active kid and this session's solved avatar-PIN puzzles persist. */
 export interface ActiveKidPersistence {
   readActiveKidId(): string | null;

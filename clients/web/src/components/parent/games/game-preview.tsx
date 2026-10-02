@@ -31,6 +31,8 @@ import { useTagLabel } from "@/lib/games/tag-label";
 import { STAGE } from "@/lib/games/stage";
 import { cn } from "@/lib/utils";
 import { useBreadcrumbStore } from "@/stores/breadcrumb-store";
+import { isSharingAdded } from "@dodi/client-state/game-sharing";
+import { gamePreview } from "@dodi/ui-recipes";
 import type { DiscoverGameDetail, GameSharingState } from "@dodi/types/games";
 
 type PreviewView = "infos" | "code" | "preview";
@@ -61,7 +63,7 @@ export function GamePreview({
     return () => setLeaf(null);
   }, [detail.title, setLeaf]);
 
-  const added = sharing.family || sharing.kidIds.length > 0;
+  const added = isSharingAdded(sharing);
   const shareTarget: ShareableGame = {
     id: detail.id,
     title: detail.title,
@@ -76,8 +78,8 @@ export function GamePreview({
       <div className="flex min-h-0 flex-1 flex-col bg-background">
         {/* Header — tab switch on the left, Share with kids on the right
             (replacing the studio's active/inactive toggle). */}
-        <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border bg-card px-4 py-2.5 md:px-5">
-          <div className="inline-flex gap-0.5 rounded-[10px] border border-border bg-background p-[3px]">
+        <div className={cn(gamePreview.webHeader, gamePreview.header)}>
+          <div className={cn(gamePreview.webSegments, gamePreview.segments)}>
             <SegTab
               active={view === "infos"}
               onClick={() => setView("infos")}
@@ -97,7 +99,7 @@ export function GamePreview({
               label={t("preview")}
             />
           </div>
-          <div className="flex items-center gap-2.5">
+          <div className={cn(gamePreview.webHeaderActions, gamePreview.headerActions)}>
             {added && (
               <span className="hidden items-center gap-1.5 rounded-full bg-primary-soft px-2.5 py-1 text-[11px] font-semibold text-primary sm:inline-flex">
                 <Icon name="check" size={11} strokeWidth={3} />
@@ -119,7 +121,7 @@ export function GamePreview({
             <div
               aria-hidden={view !== "preview" || undefined}
               className={cn(
-                "flex min-h-full items-center justify-center p-5 md:p-8",
+                cn(gamePreview.webStage, gamePreview.stage),
                 view !== "preview" &&
                   "pointer-events-none invisible absolute inset-0 -z-10 overflow-hidden",
               )}
@@ -142,10 +144,10 @@ export function GamePreview({
           )}
 
           {view === "infos" && (
-            <div className="mx-auto flex max-w-[560px] flex-col gap-6 p-5 md:p-8">
+            <div className={cn(gamePreview.webInfos, gamePreview.infos)}>
               <InfoRow label={t("learningGoal")}>
                 {detail.learning_goal ? (
-                  <p className="text-sm leading-relaxed text-ink">
+                  <p className={cn(gamePreview.infoText, gamePreview.infoLongText)}>
                     {detail.learning_goal}
                   </p>
                 ) : (
@@ -155,7 +157,7 @@ export function GamePreview({
 
               <InfoRow label={t("tags")}>
                 {detail.tags.length > 0 ? (
-                  <div className="flex flex-wrap gap-2">
+                  <div className={cn(gamePreview.webTags, gamePreview.tags)}>
                     {detail.tags.map((tag) => (
                       <TagChip key={tag} tag={tag} />
                     ))}
@@ -166,7 +168,7 @@ export function GamePreview({
               </InfoRow>
 
               <InfoRow label={t("recommendedAge")}>
-                <p className="text-sm text-ink">
+                <p className={gamePreview.infoText}>
                   {detail.target_age_min}–{detail.target_age_max}
                 </p>
               </InfoRow>
@@ -202,10 +204,12 @@ function SegTab({
       type="button"
       onClick={onClick}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-[7px] px-3.5 py-[7px] text-[13px] font-semibold transition-colors",
+        gamePreview.webSegment,
+        gamePreview.segment,
+        gamePreview.segmentText,
         active
-          ? "bg-card text-ink shadow-[0_1px_2px_rgba(34,56,78,0.06)]"
-          : "text-muted-foreground hover:text-ink-2",
+          ? cn(gamePreview.segmentActive, gamePreview.segmentActiveText, gamePreview.webSegmentActive)
+          : cn(gamePreview.segmentIdleText, gamePreview.webSegmentIdle),
       )}
     >
       <Icon name={icon} size={15} />
@@ -223,8 +227,8 @@ function InfoRow({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-1.5">
-      <span className="text-xs font-semibold text-ink-2">{label}</span>
+    <div className={cn(gamePreview.webInfoRow, gamePreview.infoRow)}>
+      <span className={gamePreview.infoLabel}>{label}</span>
       {children}
     </div>
   );
@@ -236,7 +240,7 @@ function TagChip({ tag }: { tag: string }) {
   const s = tagStyle(tag);
   return (
     <span
-      className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold"
+      className={cn(gamePreview.webTagChip, gamePreview.tagChip, gamePreview.tagChipText)}
       style={{ background: s.bg, color: s.fg }}
     >
       <Icon name={s.icon} size={13} />
@@ -246,5 +250,5 @@ function TagChip({ tag }: { tag: string }) {
 }
 
 function EmptyValue() {
-  return <p className="text-sm text-muted-foreground">—</p>;
+  return <p className={gamePreview.infoEmpty}>—</p>;
 }

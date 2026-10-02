@@ -39,15 +39,20 @@ import { DiscoverShareDialog } from "@/components/parent/games/discover-share-di
 import { GameExportDialog } from "@/components/parent/games/game-export-dialog";
 import { tagStyle } from "@/components/parent/games/tag-style";
 import { useTagLabel } from "@/lib/games/tag-label";
-import { dodi } from "@/lib/api";
+import { gameFlowDeps } from "@/lib/games/game-flow-deps";
+import { cn } from "@/lib/utils";
 import { useKids } from "@/hooks/use-kids";
-import { sealGameCreateFields, useGameStore } from "@/stores/game-store";
-import type { Json } from "@dodi/types/database";
-import type {
-  DiscoverGameDetail,
-  DiscoverGameSummary,
-  GameSharingState,
-} from "@dodi/types/games";
+import { useGameStore } from "@/stores/game-store";
+import { primaryKidIdOf, remixDiscoverGame } from "@dodi/client-state/game-library";
+import { isSharingAdded, unshareDiscoverGame } from "@dodi/client-state/game-sharing";
+import type { DiscoverGameSummary } from "@dodi/types/games";
+import {
+  formAlert,
+  libraryEmpty,
+  libraryLoadMore,
+  libraryPill,
+  libraryRow,
+} from "@dodi/ui-recipes";
 
 /** Dialog target that survives the close animation (see game-studio-list). */
 function useDialogTarget<T>() {
@@ -62,10 +67,6 @@ function useDialogTarget<T>() {
     },
     hide: () => setOpen(false),
   };
-}
-
-function isAdded(sharing: GameSharingState): boolean {
-  return sharing.family || sharing.kidIds.length > 0;
 }
 
 export function DiscoverList() {
@@ -99,15 +100,7 @@ export function DiscoverList() {
     if (removingId) return;
     setRemovingId(game.id);
     try {
-      const res = await dodi.request(`/api/discover/games/${game.id}/sharing`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isFamily: false, audienceIds: [] }),
-      });
-      if (!res.ok) throw new Error();
-      useGameStore
-        .getState()
-        .patchDiscoverSharing(game.id, { family: false, kidIds: [] });
+      await unshareDiscoverGame(gameFlowDeps(), game.id);
     } catch {
       setError(t("discoverFailedGeneric"));
     } finally {
@@ -117,7 +110,7 @@ export function DiscoverList() {
 
   if (games === null) {
     return (
-      <p className="px-1 py-6 text-center text-sm text-muted-foreground">
+      <p className={libraryEmpty}>
         {error ?? "…"}
       </p>
     );
@@ -125,7 +118,7 @@ export function DiscoverList() {
 
   if (games.length === 0) {
     return (
-      <p className="px-1 py-6 text-center text-sm text-muted-foreground">
+      <p className={libraryEmpty}>
         {t("discoverEmpty")}
       </p>
     );
@@ -139,12 +132,12 @@ export function DiscoverList() {
         return (
           <div
             key={g.id}
-            className="flex items-center gap-3 border-b border-border py-3 pl-3 pr-1 last:border-0"
+            className={cn(libraryRow.web, libraryRow.box)}
           >
             <button
               type="button"
               onClick={() => router.push(`/parent/games/${g.id}`)}
-              className="-mx-1 flex min-w-0 flex-1 items-center gap-3 rounded-lg px-1 py-1 text-left transition-colors outline-none hover:bg-card focus-visible:ring-2 focus-visible:ring-primary-soft-2"
+              className={cn(libraryRow.webButton, libraryRow.button)}
             >
               {g.preview_image ? (
                 <Image
@@ -153,29 +146,29 @@ export function DiscoverList() {
                   width={60}
                   height={60}
                   unoptimized
-                  className="h-15 w-15 shrink-0 rounded-xl object-cover"
+                  className={cn(libraryRow.thumb, libraryRow.webThumb)}
                 />
               ) : (
                 <div
-                  className="flex h-15 w-15 shrink-0 items-center justify-center rounded-xl"
+                  className={cn(libraryRow.webThumbFallback, libraryRow.thumbFallback)}
                   style={{ background: s.bg, color: s.fg }}
                 >
                   <Icon name={s.icon} size={28} />
                 </div>
               )}
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="truncate text-sm font-semibold text-ink-1">
+              <div className={libraryRow.main}>
+                <div className={cn(libraryRow.webTitleRow, libraryRow.titleRow)}>
+                  <span className={cn(libraryRow.webTitle, libraryRow.title)}>
                     {g.title}
                   </span>
-                  {isAdded(g.sharing) && (
-                    <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-semibold text-primary">
+                  {isSharingAdded(g.sharing) && (
+                    <span className={cn(libraryPill.webWithIcon, libraryPill.withIcon, libraryPill.box, libraryPill.text, libraryPill.primary, libraryPill.primaryText)}>
                       <Icon name="check" size={11} strokeWidth={3} />
                       {t("discoverAdded")}
                     </span>
                   )}
                 </div>
-                <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                <div className={cn(libraryRow.meta, libraryRow.webMeta)}>
                   {g.is_system ? (
                     <>
                       {t("discoverByDodi")}
@@ -198,9 +191,9 @@ export function DiscoverList() {
                 </div>
                 {/* Popularity + all tags. Icon is decorative; the label carries
                   the meaning. Tags sit here so the meta line stays scannable. */}
-                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-medium text-muted-foreground">
+                <div className={cn(libraryRow.webStats, libraryRow.stats, libraryRow.statsText)}>
                   <span
-                    className="inline-flex items-center gap-1"
+                    className={cn(libraryRow.webStat, libraryRow.stat)}
                     aria-label={t("discoverPlaysLabel", { count: g.plays })}
                     title={t("discoverPlaysLabel", { count: g.plays })}
                   >
@@ -208,7 +201,7 @@ export function DiscoverList() {
                     {g.plays}
                   </span>
                   <span
-                    className="inline-flex items-center gap-1"
+                    className={cn(libraryRow.webStat, libraryRow.stat)}
                     aria-label={t("discoverCopiesLabel", { count: g.copies })}
                     title={t("discoverCopiesLabel", { count: g.copies })}
                   >
@@ -226,7 +219,7 @@ export function DiscoverList() {
                         role="img"
                         aria-label={label}
                         title={label}
-                        className="flex size-[18px] shrink-0 items-center justify-center rounded-md"
+                        className={cn(libraryRow.webTagTile, libraryRow.tagTile)}
                         style={{ background: ts.bg, color: ts.fg }}
                       >
                         <Icon name={ts.icon} size={13} stroke={2} />
@@ -239,14 +232,14 @@ export function DiscoverList() {
             {/* Share is the primary Discover action. Once shared, the blue
                 add button becomes a red trash that clears this family's
                 audience (play-in-place unshare — no copy to delete). */}
-            {isAdded(g.sharing) ? (
+            {isSharingAdded(g.sharing) ? (
               <button
                 type="button"
                 disabled={removingId === g.id}
                 onClick={() => void removeShare(g)}
                 aria-label={t("discoverUnshare")}
                 title={t("discoverUnshare")}
-                className="flex size-9 shrink-0 items-center justify-center rounded-md bg-danger text-white transition-colors outline-none hover:bg-danger/90 focus-visible:ring-2 focus-visible:ring-danger/40 disabled:pointer-events-none disabled:opacity-50"
+                className={cn(libraryRow.webUnshare, libraryRow.unshare, libraryRow.unshareText)}
               >
                 <Icon name="delete" size={18} />
               </button>
@@ -267,7 +260,7 @@ export function DiscoverList() {
                 <button
                   type="button"
                   aria-label={t("gameActions", { title: g.title })}
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-transparent text-ink-2 transition-colors outline-none hover:border-border-strong hover:bg-card focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary-soft-2 data-[state=open]:border-border-strong data-[state=open]:bg-card"
+                  className={cn(libraryRow.webMenuButton, libraryRow.menuButton, libraryRow.menuButtonText)}
                 >
                   <Icon name="dots" size={18} />
                 </button>
@@ -294,7 +287,7 @@ export function DiscoverList() {
       })}
 
       {cursor && (
-        <div className="flex justify-center pt-3">
+        <div className={cn(libraryLoadMore.web, libraryLoadMore.box)}>
           <Button
             variant="outline"
             size="sm"
@@ -351,7 +344,7 @@ function DiscoverRemixDialog({
   const locale = useLocale();
   const router = useRouter();
   const { kids } = useKids();
-  const primaryKidId = kids?.[0]?.id ?? null;
+  const primaryKidId = primaryKidIdOf(kids);
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -368,50 +361,10 @@ function DiscoverRemixDialog({
     setBusy(true);
     setError(null);
     try {
-      const detailRes = await dodi.request(
-        `/api/discover/games/${game.id}?locale=${encodeURIComponent(locale)}`,
-      );
-      if (!detailRes.ok) throw new Error();
-      const detail = (await detailRes.json()) as DiscoverGameDetail;
-
-      const sealed = await sealGameCreateFields({
-        title: detail.title,
-        description: detail.description || undefined,
-        markdown: detail.markdown || undefined,
-        codeBundle: detail.code_bundle,
-        learningGoal: detail.learning_goal || undefined,
-        successDefinition: detail.success_definition || undefined,
-        successCriteria:
-          detail.success_criteria &&
-          typeof detail.success_criteria === "object" &&
-          Object.keys(detail.success_criteria).length
-            ? (detail.success_criteria as Json)
-            : undefined,
-        // The published row's plaintext preview, re-sealed under this vault.
-        previewImage: detail.preview_image || undefined,
-      });
-      const res = await dodi.request("/api/games", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          kidId: primaryKidId,
-          sourceGameId: game.id,
-          ...sealed,
-          tags: detail.tags,
-          progressKind: detail.progress_kind,
-          targetAgeMin: detail.target_age_min,
-          targetAgeMax: detail.target_age_max,
-          estimatedDurationMinutes: detail.estimated_duration_minutes,
-          metadata: detail.metadata ?? {},
-          // A remix starts inactive, like an import — the parent reviews first.
-          isActive: false,
-        }),
-      });
-      if (!res.ok) throw new Error();
-      const created = (await res.json()) as { id: string };
-      useGameStore.getState().invalidate();
+      // Fetch the plaintext detail, re-seal it under this vault, create the copy.
+      const createdId = await remixDiscoverGame(gameFlowDeps(), game.id, primaryKidId, locale);
       onClose();
-      router.push(`/parent/game-studio/${created.id}`);
+      router.push(`/parent/game-studio/${createdId}`);
     } catch {
       setError(t("discoverFailedGeneric"));
     } finally {
@@ -435,12 +388,12 @@ function DiscoverRemixDialog({
         </DialogHeader>
 
         {!primaryKidId && (
-          <div className="rounded-lg bg-danger-soft px-3 py-2 text-xs font-medium text-danger">
+          <div className={cn(formAlert.box, formAlert.text)}>
             {t("discoverRemixNeedsKid")}
           </div>
         )}
         {error && (
-          <div className="rounded-lg bg-danger-soft px-3 py-2 text-xs font-medium text-danger">
+          <div className={cn(formAlert.box, formAlert.text)}>
             {error}
           </div>
         )}

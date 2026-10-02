@@ -7,17 +7,18 @@ import { useCallback, useMemo, useState } from "react";
 import { PageActions, Section } from "@/components/parent/section";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/shared/icon";
-import {
-  GameStudioList,
-  type GameListItem,
-} from "@/components/parent/games/game-studio-list";
+import { GameStudioList } from "@/components/parent/games/game-studio-list";
 import { DiscoverList } from "@/components/parent/games/discover-list";
 import { GameImportDialog } from "@/components/parent/games/game-import-dialog";
 import { useAccountGames } from "@/hooks/use-games";
 import { useKids } from "@/hooks/use-kids";
-import { dodi } from "@/lib/api";
-import { useGameStore } from "@/stores/game-store";
-import { isUnbuiltBundle } from "@dodi/games/placeholder";
+import { gameFlowDeps } from "@/lib/games/game-flow-deps";
+import {
+  type GameListItem,
+  buildGameListItems,
+  deleteGame as deleteOwnedGame,
+} from "@dodi/client-state/game-library";
+import { libraryEmpty } from "@dodi/ui-recipes";
 
 /**
  * The games list — "Your games" plus dodi Discover — at `/parent/games`.
@@ -37,51 +38,24 @@ export default function ParentGamesPage() {
   // libraries hold copies of this row too).
   const deleteGame = useCallback(
     async (id: string) => {
-      const res = await dodi.request(`/api/games/${id}`, { method: "DELETE" });
-      if (!res.ok) {
-        const data = (await res.json().catch(() => null)) as {
-          error?: string;
-        } | null;
-        throw new Error(data?.error || t("deleteFailedGeneric"));
+      try {
+        // Clearing the cache makes useAccountGames refetch on the next render.
+        await deleteOwnedGame(gameFlowDeps(), id);
+      } catch (e) {
+        throw new Error(
+          e instanceof Error && e.message ? e.message : t("deleteFailedGeneric"),
+        );
       }
-      // Clearing the cache makes useAccountGames refetch on the next render.
-      useGameStore.getState().invalidate();
     },
     [t],
   );
 
-  const items: GameListItem[] = useMemo(() => {
-    if (!games) return [];
-    // Decrypted names come from the kid cache (E2EE display_name).
-    const nameById = new Map((kids ?? []).map((p) => [p.id, p.display_name]));
-    return games.map((g) => {
-      const share = g.sharing ?? { family: false, kidIds: [] };
-      // The owning kid (for kid-created games) always counts as audience.
-      const audienceIds = new Set(share.kidIds);
-      if (g.kid_id) audienceIds.add(g.kid_id);
-      const kidNames = Array.from(audienceIds)
-        .map((id) => nameById.get(id))
-        .filter((name): name is string => Boolean(name));
-
-      return {
-        id: g.id,
-        // A planning draft has no name until its settings are saved.
-        title: g.title || t("untitledPlan"),
-        tags: g.tags,
-        updatedAt: g.updated_at,
-        isActive: g.is_active,
-        isFamily: share.family,
-        kidNames,
-        sharing: share,
-        // Readable only because the store decrypted the bundle for us.
-        built: !isUnbuiltBundle(g.code_bundle),
-        isPlanning: g.plan_enc != null,
-        previewImage: g.preview_image,
-        plays: g.plays,
-        copies: g.copies,
-      };
-    });
-  }, [games, kids, t]);
+  // Decrypted titles come from the game cache, names from the kid cache (E2EE).
+  // A planning draft has no name until its settings are saved.
+  const items: GameListItem[] = useMemo(
+    () => buildGameListItems(games, kids, t("untitledPlan")),
+    [games, kids, t],
+  );
 
   return (
     <div>
@@ -102,11 +76,11 @@ export default function ParentGamesPage() {
 
       <Section title={t("yourGames")}>
         {games === null ? (
-          <p className="px-1 py-6 text-center text-sm text-muted-foreground">
+          <p className={libraryEmpty}>
             …
           </p>
         ) : items.length === 0 ? (
-          <p className="px-1 py-6 text-center text-sm text-muted-foreground">
+          <p className={libraryEmpty}>
             {t("noGames")}
           </p>
         ) : (

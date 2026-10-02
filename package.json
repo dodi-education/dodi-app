@@ -15,7 +15,8 @@
     "typecheck": "turbo run typecheck",
     "db": "pnpm --filter @dodi/platform db:migrate",
     "parity:check": "pnpm --filter @dodi/parity check",
-    "verify": "turbo run typecheck lint test && pnpm parity:check"
+    "verify": "turbo run typecheck lint test && pnpm parity:check",
+    "visual:parity": "pnpm --filter @dodi/visual-parity exec tsx src/cli.ts"
   },
   "devDependencies": {
     "turbo": "^2.5.5",
@@ -26,7 +27,8 @@
       "zod": "4.5.4"
     },
     "patchedDependencies": {
-      "react-native-argon2@4.0.0": "patches/react-native-argon2@4.0.0.patch"
+      "react-native-argon2@4.0.0": "patches/react-native-argon2@4.0.0.patch",
+      "react-native-audio-api@0.13.6": "patches/react-native-audio-api@0.13.6.patch"
     }
   }
 }

@@ -2,16 +2,22 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
+import {
+  MIN_HANDLE_LENGTH,
+  friendErrorKey,
+  friendShareUrl,
+} from "@dodi/client-state/friends";
+import { addFriend, friendProfile } from "@dodi/ui-recipes";
 
 import { KidButton } from "@/components/kid/kid-button";
 import { Icon } from "@/components/shared/icon";
 import type { IconName } from "@/components/shared/icon";
 import {
-  FriendsError,
   formatHandle,
   normalizeHandle,
   parseScannedCode,
 } from "@/lib/friends";
+import { cn } from "@/lib/utils";
 
 import { QrCode } from "./qr-code";
 import { QrScanner } from "./qr-scanner";
@@ -36,7 +42,7 @@ const SEGMENTS: Array<{ key: Seg; labelKey: string; icon: IconName }> = [
   { key: "code", labelKey: "segCode", icon: "qrcode" },
 ];
 
-const CARD = "flex flex-col items-center rounded-[26px] bg-white px-6 py-[26px] shadow-[0_4px_18px_rgba(34,56,78,0.06)]";
+const CARD = cn(addFriend.card, addFriend.webCard);
 
 export function AddFriend({
   myHandle,
@@ -77,10 +83,7 @@ export function AddFriend({
       cancelled = true;
     };
   }, []);
-  const shareUrl =
-    myHandle && origin
-      ? `${origin}/friends?add=${encodeURIComponent(myHandle)}`
-      : "";
+  const shareUrl = friendShareUrl(origin, myHandle);
 
   function switchSeg(next: Seg) {
     setSeg(next);
@@ -111,32 +114,12 @@ export function AddFriend({
 
   // Map a server error code (or 404 / locked vault) to localized, kid-friendly copy.
   function friendlyError(e: unknown, name: string): string {
-    if (e instanceof FriendsError) {
-      if (e.status === 404) return t("errorNotFound");
-      switch (e.message) {
-        case "already_friends":
-          return t("errorAlreadyFriends", { name });
-        case "request_exists":
-          return t("errorRequestExists", { name });
-        case "friendship_blocked":
-          return t("errorBlocked", { name });
-        case "cannot_initiate":
-          return t("errorNotAllowed");
-        case "cannot_add_self":
-          return t("errorSelf");
-        case "target_unavailable":
-          return t("errorNotFound");
-        default:
-          return t("errorGeneric");
-      }
-    }
-    if (e instanceof Error && e.message === "locked") return t("errorVaultLocked");
-    return t("errorGeneric");
+    return t(friendErrorKey(e), { name });
   }
 
   async function submit() {
     const clean = normalizeHandle(tag);
-    if (clean.length < 3 || trimmedNickname.length === 0) return;
+    if (clean.length < MIN_HANDLE_LENGTH || trimmedNickname.length === 0) return;
     setSubmitting(true);
     setError(null);
     try {
@@ -154,26 +137,33 @@ export function AddFriend({
   }
 
   return (
-    <div className="mx-auto w-full max-w-[460px] px-5 pb-8">
-      <KidButton variant="back" size="sm" onClick={onBack} className="pl-3">
+    <div className={addFriend.root}>
+      <KidButton variant="back" size="sm" onClick={onBack} className={friendProfile.back}>
         <Icon name="arrow_left" stroke={2.2} />
         {t("kidBack")}
       </KidButton>
-      <h1 className="mb-4 mt-1 text-2xl font-extrabold tracking-tight text-ink">
+      <h1 className={addFriend.title}>
         {t("addTitle")}
       </h1>
 
-      <div className="mb-[18px] flex gap-1 rounded-2xl bg-white/70 p-[5px]">
+      <div className={cn(addFriend.segments, addFriend.webSegments)}>
         {SEGMENTS.map((s) => (
           <button
             key={s.key}
             type="button"
             onClick={() => switchSeg(s.key)}
-            className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl px-2 py-[11px] text-[13.5px] font-extrabold transition-colors ${
+            className={cn(
+              addFriend.segment,
+              addFriend.segmentText,
+              addFriend.webSegment,
               seg === s.key
-                ? "bg-white text-primary shadow-[0_2px_8px_rgba(34,56,78,0.08)]"
-                : "text-muted-foreground"
-            }`}
+                ? [
+                    addFriend.segmentActive,
+                    addFriend.segmentActiveText,
+                    addFriend.webSegmentActive,
+                  ]
+                : addFriend.segmentIdleText,
+            )}
           >
             <Icon name={s.icon} size={16} stroke={2} />
             {t(s.labelKey)}
@@ -183,19 +173,19 @@ export function AddFriend({
 
       {sent ? (
         <div className={CARD}>
-          <div className="flex size-16 items-center justify-center rounded-full bg-success-soft text-success">
+          <div className={cn(addFriend.sentIcon, addFriend.webSentIcon)}>
             <Icon name="check" size={30} stroke={2.6} />
           </div>
-          <div className="mt-3.5 text-xl font-extrabold text-ink">
+          <div className={addFriend.sentTitle}>
             {t("sentTitle")}
           </div>
-          <div className="mt-2 max-w-[320px] text-center text-sm font-semibold leading-relaxed text-muted-foreground">
+          <div className={cn(addFriend.sentSub, addFriend.textAlign)}>
             {t("sentSub", { name: sent })}
           </div>
           <KidButton
             variant="ghost"
             size="sm"
-            className="mt-[18px]"
+            className={addFriend.spaced}
             onClick={() => setSent(null)}
           >
             <Icon name="user_plus" size={14} stroke={2.2} />
@@ -204,21 +194,21 @@ export function AddFriend({
         </div>
       ) : seg === "code" ? (
         <div className={CARD}>
-          <div className="rounded-[20px] border-2 border-border bg-white p-4">
+          <div className={addFriend.qrFrame}>
             <QrCode value={shareUrl} size={208} />
           </div>
           <button
             type="button"
             onClick={copyTag}
-            className="mt-4 inline-flex items-center gap-2 rounded-full bg-primary-soft px-4 py-2 font-mono text-sm font-bold text-primary transition-colors hover:bg-primary-soft-2"
+            className={cn(addFriend.code, addFriend.codeText, addFriend.webCode)}
           >
             {myTag}
             <Icon name={copied ? "check" : "copy"} size={14} stroke={copied ? 3 : 2} />
           </button>
-          <div className="mt-4 max-w-[300px] text-center text-[13.5px] font-semibold leading-relaxed text-muted-foreground">
+          <div className={cn(addFriend.hint, addFriend.textAlign)}>
             {t("myCodeHint")}
           </div>
-          <KidButton variant="play" className="mt-[18px]" onClick={copyTag}>
+          <KidButton variant="play" className={addFriend.spaced} onClick={copyTag}>
             <Icon name="share" stroke={2} />
             {copied ? t("copied") : t("shareCode")}
           </KidButton>
@@ -229,7 +219,7 @@ export function AddFriend({
           <KidButton
             variant="ghost"
             size="sm"
-            className="mt-4"
+            className={addFriend.scanAlt}
             onClick={() => switchSeg("tag")}
           >
             <Icon name="user_plus" size={14} stroke={2.2} />
@@ -237,8 +227,8 @@ export function AddFriend({
           </KidButton>
         </div>
       ) : (
-        <div className={`${CARD} items-stretch`}>
-          <div className="mb-2.5 text-sm font-extrabold text-ink-2">
+        <div className={cn(CARD, addFriend.cardStretch)}>
+          <div className={cn(addFriend.tagLabel, addFriend.fieldLabel)}>
             {t("tagLabel")}
           </div>
           <input
@@ -255,12 +245,12 @@ export function AddFriend({
             spellCheck={false}
             autoCapitalize="off"
             autoCorrect="off"
-            className="rounded-2xl border-2 border-border-strong bg-muted px-4 py-3.5 text-center font-mono text-[17px] font-bold text-ink outline-none focus:border-primary focus:bg-white"
+            className={cn(addFriend.input, addFriend.tagInput, addFriend.webInput)}
           />
-          <div className="mt-4 self-center max-w-[300px] text-center text-[13.5px] font-semibold leading-relaxed text-muted-foreground">
+          <div className={cn(addFriend.hint, addFriend.tagHint, addFriend.textAlign)}>
             {t("tagHint")}
           </div>
-          <div className="mb-1 mt-4 text-sm font-extrabold text-ink-2">
+          <div className={cn(addFriend.nicknameLabel, addFriend.fieldLabel)}>
             {t("nicknameLabel")}
           </div>
           <input
@@ -274,19 +264,19 @@ export function AddFriend({
             }}
             placeholder={t("nicknamePlaceholder")}
             maxLength={60}
-            className="rounded-2xl border-2 border-border-strong bg-muted px-4 py-3 text-center text-[15px] font-bold text-ink outline-none focus:border-primary focus:bg-white"
+            className={cn(addFriend.input, addFriend.nicknameInput, addFriend.webInput)}
           />
           {error ? (
-            <div className="mt-2 text-center text-[13.5px] font-bold text-danger">
+            <div className={cn(addFriend.error, addFriend.textAlign)}>
               {error}
             </div>
           ) : null}
           <KidButton
             variant="play"
-            className="mt-[18px] self-center"
+            className={addFriend.send}
             onClick={() => void submit()}
             disabled={
-              normalizeHandle(tag).length < 3 ||
+              normalizeHandle(tag).length < MIN_HANDLE_LENGTH ||
               trimmedNickname.length === 0 ||
               submitting ||
               busy

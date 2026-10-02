@@ -59,6 +59,11 @@ export const BRAND_COLORS = {
   "danger-soft": "#FBEFEE",
   warning: "#9A6B12",
   "warning-soft": "#FBF3E2",
+  // Kid avatar accents (with primary and success, the four avatar pairs)
+  violet: "#7456C4",
+  "violet-soft": "#EFE9FA",
+  amber: "#B0782A",
+  "amber-soft": "#FDF1DC",
   // Public-page footer (ported from the landing site's dark footer)
   "ink-deep": "#20374D",
   mist: "#AFC2D8",

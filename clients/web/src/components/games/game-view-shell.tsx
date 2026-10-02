@@ -10,6 +10,8 @@ import {
 import { Icon } from "@/components/shared/icon";
 import { KidButton } from "@/components/kid/kid-button";
 import { STAGE, stageWidthVars } from "@/lib/games/stage";
+import { cn } from "@/lib/utils";
+import { gameViewShell } from "@dodi/ui-recipes";
 
 interface GameViewShellProps {
   /** Destination of the back button (e.g. "/games"). */
@@ -53,9 +55,9 @@ export function GameViewShell({
   children,
 }: GameViewShellProps) {
   return (
-    <div className="flex w-full flex-col gap-4 pb-4">
-      <div className="flex min-w-0 items-center gap-3 lg:grid lg:grid-cols-[300px_1fr] lg:gap-4">
-        <div className="flex shrink-0">
+    <div className={cn(gameViewShell.webRoot, gameViewShell.root)}>
+      <div className={cn(gameViewShell.webBar, gameViewShell.bar)}>
+        <div className={cn(gameViewShell.webBack, gameViewShell.back)}>
           <KidButton asChild variant="back" size="sm">
             <Link href={backHref}>
               <Icon name="arrow_left" size={15} stroke={2.2} />
@@ -67,10 +69,10 @@ export function GameViewShell({
             with the game canvas's right edge below (same column, same var). */}
         <div
           style={stageWidthVars(STAGE.reservedKid)}
-          className="flex min-w-0 flex-1 items-center justify-between gap-3 lg:max-w-[var(--stage-w)]"
+          className={cn(gameViewShell.webTitleRow, gameViewShell.titleRow)}
         >
-          <div className="min-w-0">
-            <h1 className="truncate text-[17px] font-extrabold text-ink lg:text-[21px]">
+          <div className={gameViewShell.titleWrap}>
+            <h1 className={cn(gameViewShell.webTitle, gameViewShell.title)}>
               {title}
             </h1>
           </div>
@@ -78,11 +80,11 @@ export function GameViewShell({
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[300px_1fr]">
-        <div className="hidden lg:block">
+      <div className={cn(gameViewShell.webCols, gameViewShell.cols)}>
+        <div className={gameViewShell.webSide}>
           {sidebar ?? <DodiFullGame actions={assistantActions} />}
         </div>
-        <div className="min-w-0">{children}</div>
+        <div className={gameViewShell.content}>{children}</div>
       </div>
     </div>
   );

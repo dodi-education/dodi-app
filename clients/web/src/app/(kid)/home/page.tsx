@@ -1,13 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
+import { kidHomeEmpty } from "@dodi/ui-recipes";
 
 import { DodiFullHome } from "@/components/dodi/dodi-full-home";
 import { useActiveKid } from "@/hooks/use-active-kid";
+import { cn } from "@/lib/utils";
 import { useProvidersStore } from "@/stores/providers-store";
 import { useVaultStore } from "@/stores/vault-store";
 
 export default function KidHomePage() {
+  const t = useTranslations("kid");
   // Reactive active kid: resolves the first-available profile on a cold entry
   // and updates on switch, so this no longer races the switcher's cookie write.
   const { kids, activeKidId, needsPin } = useActiveKid();
@@ -40,9 +44,9 @@ export default function KidHomePage() {
 
   if (!activeKidId) {
     return (
-      <div className="my-auto w-full max-w-xs rounded-[20px] bg-white p-5 text-center shadow-[0_2px_10px_rgba(34,56,78,0.05)]">
-        <p className="text-sm font-bold text-muted-foreground">
-          No kid selected
+      <div className={cn(kidHomeEmpty.box, kidHomeEmpty.web)}>
+        <p className={kidHomeEmpty.text}>
+          {t("noKidSelected")}
         </p>
       </div>
     );

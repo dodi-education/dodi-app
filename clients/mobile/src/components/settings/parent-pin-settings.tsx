@@ -3,7 +3,7 @@
  * PIN is sealed with the vault on this device; the server stays blind.
  */
 import { useEffect, useState } from "react";
-import { View } from "react-native";
+import { Pressable, View } from "react-native";
 import { useTranslations } from "use-intl";
 import {
   PARENT_PIN_LENGTH,
@@ -14,7 +14,8 @@ import {
 } from "@dodi/client-state/parent-pin";
 
 import { api, mobilePlatform } from "@/adapters/platform";
-import { Button, Card, Notice, Text, TextField } from "@/components/ui";
+import { Section } from "@/components/parent/section";
+import { Button, Input, Label, Text } from "@/components/ui";
 import { clientState, useAccountStore } from "@/lib/client-state";
 
 export function ParentPinSettings() {
@@ -31,6 +32,11 @@ export function ParentPinSettings() {
     void load();
   }, [load]);
 
+  function clearFeedback(): void {
+    setError(null);
+    setDone(null);
+  }
+
   function show(outcome: ParentPinOutcome): void {
     if (outcome.kind === "done") {
       setPin("");
@@ -41,8 +47,7 @@ export function ParentPinSettings() {
   }
 
   async function save(): Promise<void> {
-    setError(null);
-    setDone(null);
+    clearFeedback();
     if (pin.length !== PARENT_PIN_LENGTH) return setError(t("invalid"));
     setBusy("save");
     show(
@@ -60,52 +65,62 @@ export function ParentPinSettings() {
   }
 
   async function remove(): Promise<void> {
-    setError(null);
-    setDone(null);
+    clearFeedback();
     setBusy("remove");
     show(await removeParentPin({ api, account: clientState.account }));
     setBusy(null);
   }
 
   return (
-    <Card title={t("settingsTitle")} description={t("settingsDescription")}>
-      <TextField
-        label={t("newLabel")}
-        value={pin}
-        onChangeText={(text) => {
-          setError(null);
-          setDone(null);
-          setPin(sanitizePinInput(text));
-        }}
-        keyboardType="number-pad"
-        maxLength={PARENT_PIN_LENGTH}
-        placeholder="••••"
-        autoComplete="off"
-        className="tracking-[0.4em]"
-        secureTextEntry
-      />
-      {error ? <Notice tone="danger">{error}</Notice> : null}
-      {done ? <Notice tone="success">{done}</Notice> : null}
-      <Button
-        label={busy === "save" ? t("saving") : hasPin ? t("change") : t("set")}
-        isLoading={busy === "save"}
-        disabled={busy !== null || pin.length !== PARENT_PIN_LENGTH}
-        onPress={() => void save()}
-      />
-      {hasPin ? (
-        <Button
-          variant="ghost"
-          label={busy === "remove" ? t("removing") : t("remove")}
-          isLoading={busy === "remove"}
-          disabled={busy !== null}
-          onPress={() => void remove()}
-          className="self-start"
-        />
-      ) : (
-        <View className="min-h-11 justify-center">
-          <Text variant="muted">{isLoaded ? t("statusOff") : "…"}</Text>
+    <Section title={t("settingsTitle")} desc={t("settingsDescription")}>
+      <View className="flex-col gap-4 px-5 py-4">
+        <View className="flex-col gap-2">
+          <Label>{t("newLabel")}</Label>
+          <Input
+            accessibilityLabel={t("newLabel")}
+            value={pin}
+            onChangeText={(text) => {
+              clearFeedback();
+              setPin(sanitizePinInput(text));
+            }}
+            secureTextEntry
+            keyboardType="number-pad"
+            autoComplete="off"
+            maxLength={PARENT_PIN_LENGTH}
+            placeholder="••••"
+            onSubmitEditing={() => void save()}
+            className="max-w-[12rem] tracking-[0.4em]"
+          />
         </View>
-      )}
-    </Card>
+
+        {error ? (
+          <Text className="text-sm text-destructive" accessibilityRole="alert">
+            {error}
+          </Text>
+        ) : null}
+        {done ? <Text className="text-sm text-success">{done}</Text> : null}
+
+        <View className="flex-row items-center justify-between gap-3">
+          <Button disabled={busy !== null || pin.length !== PARENT_PIN_LENGTH} onPress={() => void save()}>
+            {busy === "save" ? t("saving") : hasPin ? t("change") : t("set")}
+          </Button>
+          {hasPin ? (
+            <Pressable
+              accessibilityRole="button"
+              disabled={busy !== null}
+              hitSlop={12}
+              onPress={() => void remove()}
+              className={busy !== null ? "opacity-50" : "active:opacity-80"}
+            >
+              <Text className="text-[13px] font-semibold text-destructive">
+                {busy === "remove" ? t("removing") : t("remove")}
+              </Text>
+            </Pressable>
+          ) : (
+            <Text className="text-[13px] text-muted-foreground">{isLoaded ? t("statusOff") : "…"}</Text>
+          )}
+        </View>
+      </View>
+    </Section>
   );
 }

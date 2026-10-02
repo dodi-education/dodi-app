@@ -22,6 +22,14 @@ import type { DodiAIKeyStore } from "./dodi-ai-key-store";
 import type { PlatformApi } from "./platform";
 import type { ProvidersStore } from "./providers-store";
 
+/** No thinking model (provider + key) is configured for the account. */
+export class NoThinkingModelError extends Error {
+  constructor() {
+    super("No thinking model configured");
+    this.name = "NoThinkingModelError";
+  }
+}
+
 export type DodiAICategory = "voice" | "thinking" | "game" | "image";
 
 const CATEGORY_CAPABILITY: Record<DodiAICategory, "voice" | "thinking" | "agentic" | "image"> = {

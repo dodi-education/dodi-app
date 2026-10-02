@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useState } from "react";
+
+import { companionContextKey } from "@dodi/client-state/companion-session";
 
 import { useOnline } from "@/hooks/use-online";
 import {
@@ -32,22 +34,17 @@ export function useDodiContext({
   const fatalError = useDodiSessionStore((s) => s.fatalError);
   const isOnline = useOnline();
 
-  // Stable reference for context object to avoid re-triggering on every render.
-  // Snapshot sessions key on the snapshot id — two snapshots of the same game
-  // are distinct sessions (different restored state).
-  const gameKey = (c: DodiContext): string | null =>
-    c.type === "game" ? (c.snapshotId ?? c.gameId) : null;
-  const contextRef = useRef(context);
-  const contextKey =
-    context.type === "game" ? `game:${gameKey(context)}` : context.type;
-
-  // Update ref when context key changes
-  if (
-    (context.type === "game" && contextRef.current.type === "game" && gameKey(context) !== gameKey(contextRef.current)) ||
-    context.type !== contextRef.current.type
-  ) {
-    contextRef.current = context;
+  // Stable context object per context key, so a new object for the same
+  // context doesn't re-trigger the switch on every render. Snapshot sessions
+  // key on the snapshot id — two snapshots of the same game are distinct
+  // sessions (different restored state). Re-derived during render when the key
+  // changes (React's "store information from previous renders" pattern).
+  const contextKey = companionContextKey(context);
+  const [keyedContext, setKeyedContext] = useState({ key: contextKey, context });
+  if (keyedContext.key !== contextKey) {
+    setKeyedContext({ key: contextKey, context });
   }
+  const stableContext = keyedContext.key === contextKey ? keyedContext.context : context;
 
   useEffect(() => {
     setDisplayMode(displayMode);
@@ -55,10 +52,9 @@ export function useDodiContext({
 
   useEffect(() => {
     if (kidId) {
-      void setContext(contextRef.current, kidId);
+      void setContext(stableContext, kidId);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contextKey, kidId, setContext]);
+  }, [stableContext, kidId, setContext]);
 
   // Auto-connect if session is disconnected (e.g. direct navigation to /games).
   // Skip when the last close was fatal (quota/auth) — retrying won't help and

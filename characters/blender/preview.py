@@ -45,7 +45,7 @@ VIEWS = {
     "side": (0.0, 0.0),
     "three-quarter": (50.0, 14.0),
     "back": (215.0, 12.0),
-    "app": (55.0, 14.0),  # the web app's default camera (clients/web/src/lib/character/character-stage.ts)
+    "app": (55.0, 14.0),  # the apps' default camera (core/character/src/character-view.ts)
 }
 
 

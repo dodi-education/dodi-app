@@ -2,9 +2,13 @@
 
 import Image from "next/image";
 import { useState } from "react";
+import { useTranslations } from "next-intl";
+
+import { PIN_SHAKE_MS } from "@dodi/client-state/kid-view";
 
 import { PIN_LENGTH, PIN_PALETTE, avatarImage } from "@/lib/avatars";
 import { cn } from "@/lib/utils";
+import { pinPuzzle } from "@dodi/ui-recipes";
 
 type Slots = (string | null)[];
 const emptySlots = (): Slots => Array<string | null>(PIN_LENGTH).fill(null);
@@ -33,6 +37,7 @@ type AvatarPinPuzzleProps = SolveProps | SetProps;
  * `set` mode is controlled and just reports the chosen slots for the parent.
  */
 export function AvatarPinPuzzle(props: AvatarPinPuzzleProps) {
+  const t = useTranslations("kidProfile");
   const palette = props.palette ?? PIN_PALETTE;
   const [internal, setInternal] = useState<Slots>(emptySlots);
   const [activeSlot, setActiveSlot] = useState(0);
@@ -61,7 +66,7 @@ export function AvatarPinPuzzle(props: AvatarPinPuzzleProps) {
           setInternal(emptySlots());
           setActiveSlot(0);
           setShake(false);
-        }, 520);
+        }, PIN_SHAKE_MS);
       }
     } else {
       setActiveSlot(nextEmpty);
@@ -72,8 +77,9 @@ export function AvatarPinPuzzle(props: AvatarPinPuzzleProps) {
     <div className={props.className}>
       <div
         className={cn(
-          "mb-[18px] flex justify-center gap-3.5",
-          shake && "animate-pin-shake",
+          pinPuzzle.slots,
+          pinPuzzle.webSlots,
+          shake && pinPuzzle.webShake,
         )}
       >
         {slots.map((s, i) => {
@@ -84,14 +90,15 @@ export function AvatarPinPuzzle(props: AvatarPinPuzzleProps) {
               type="button"
               onClick={() => setActiveSlot(i)}
               className={cn(
-                "flex h-[62px] w-[62px] items-center justify-center overflow-hidden rounded-[18px] border-[2.5px] transition-colors",
+                pinPuzzle.slot,
+                pinPuzzle.webSlot,
                 s
-                  ? "border-solid border-primary bg-white"
+                  ? pinPuzzle.slotFilled
                   : isActive
-                    ? "border-solid border-primary bg-primary-soft"
-                    : "border-dashed border-border bg-muted",
+                    ? pinPuzzle.slotActive
+                    : pinPuzzle.slotEmpty,
               )}
-              aria-label={`Slot ${i + 1}`}
+              aria-label={t("slotLabel", { n: i + 1 })}
             >
               {s ? (
                 <Image
@@ -100,13 +107,13 @@ export function AvatarPinPuzzle(props: AvatarPinPuzzleProps) {
                   width={62}
                   height={62}
                   unoptimized
-                  className="h-full w-full object-contain p-[5px]"
+                  className={cn(pinPuzzle.slotImage, pinPuzzle.webSlotImage)}
                 />
               ) : (
                 <span
                   className={cn(
-                    "h-3 w-3 rounded-full",
-                    isActive ? "bg-primary" : "bg-border",
+                    pinPuzzle.dot,
+                    isActive ? pinPuzzle.dotActive : pinPuzzle.dotIdle,
                   )}
                 />
               )}
@@ -114,13 +121,13 @@ export function AvatarPinPuzzle(props: AvatarPinPuzzleProps) {
           );
         })}
       </div>
-      <div className="grid grid-cols-4 gap-2.5">
+      <div className={cn(pinPuzzle.palette, pinPuzzle.webPalette)}>
         {palette.map((id) => (
           <button
             key={id}
             type="button"
             onClick={() => place(id)}
-            className="aspect-square overflow-hidden rounded-[14px] bg-muted p-[5px] transition hover:-translate-y-0.5 hover:bg-primary-soft"
+            className={cn(pinPuzzle.tile, pinPuzzle.webTile)}
             aria-label={id}
           >
             <Image
@@ -129,7 +136,7 @@ export function AvatarPinPuzzle(props: AvatarPinPuzzleProps) {
               width={64}
               height={64}
               unoptimized
-              className="h-full w-full object-contain"
+              className={cn(pinPuzzle.tileImage, pinPuzzle.webTileImage)}
             />
           </button>
         ))}

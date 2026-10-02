@@ -69,7 +69,7 @@ export interface GameCache {
 
 export interface StudioErrorReport {
   context: ErrorLogContext;
-  kidId: string;
+  kidId: string | null;
   gameId: string | null;
   provider?: string;
   model?: string;
@@ -107,5 +107,29 @@ export interface StudioPorts {
   games: GameCache;
   /** Absent ⇒ builds are not resumable on this client. */
   checkpoints?: CheckpointStore;
+  now?: () => number;
+}
+
+/** The game cache as the studio editor uses it (the web `useGameStore`). */
+export interface EditorGameCache extends GameCache {
+  /** Drop every cached list, so the next read refetches (a new row exists). */
+  invalidate(): void;
+}
+
+/**
+ * What the studio editor's own actions (plan turns, settings save, versions,
+ * the active toggle) need from a client. A subset of `StudioPorts` plus the
+ * synchronous vault read: sealing the transcript and the Plan-step envelope
+ * is skipped (or clears) while the vault is locked, it never waits for it.
+ */
+export interface StudioEditorPorts {
+  api: StudioApi;
+  /** Resolves once the vault is unlocked; rejects when it can't be. Seals/opens game fields. */
+  session(): Promise<VaultSession>;
+  /** The vault session right now, or null while locked. */
+  currentSession(): VaultSession | null;
+  execution: ExecutionResolver;
+  telemetry: StudioTelemetry;
+  games: EditorGameCache;
   now?: () => number;
 }

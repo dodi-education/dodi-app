@@ -1,5 +1,7 @@
 "use client";
 
+import { SETTINGS_NAV } from "@dodi/client-state/parent-nav";
+import { settingsTab } from "@dodi/ui-recipes";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -16,27 +18,8 @@ interface SettingsNavItem {
 }
 
 function useSettingsNav(): SettingsNavItem[] {
-  const t = useTranslations("settings");
-  return [
-    { href: "/parent/settings/general", label: t("navGeneral"), icon: "settings" },
-    {
-      href: "/parent/settings/notifications",
-      label: t("navNotifications"),
-      icon: "bell",
-    },
-    { href: "/parent/settings/security", label: t("navSecurity"), icon: "lock" },
-    {
-      href: "/parent/settings/ai-providers",
-      label: t("navAiProviders"),
-      icon: "sparkles",
-    },
-    {
-      href: "/parent/settings/game-studio",
-      label: t("navGameStudio"),
-      icon: "games",
-    },
-    { href: "/parent/settings/devices", label: t("navDevices"), icon: "qrcode" },
-  ];
+  const t = useTranslations();
+  return SETTINGS_NAV.map((item) => ({ href: item.href, label: t(item.labelKey), icon: item.icon }));
 }
 
 /** Active/inactive tokens mirror SidebarNav so the two rails read identically. */
@@ -97,7 +80,7 @@ export function SettingsSidebar() {
       {/* compact: sub-tab strip above the section content */}
       <div className="mb-5 wide:hidden">
         <BackLink href="/parent/dashboard">{t("back")}</BackLink>
-        <nav className="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1">
+        <nav className={cn(settingsTab.strip, "flex overflow-x-auto")}>
           {items.map((item) => {
             const isActive = pathname.startsWith(item.href);
             return (
@@ -105,8 +88,12 @@ export function SettingsSidebar() {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "shrink-0 rounded-md px-3 py-1.5 text-[13px] whitespace-nowrap transition-colors",
-                  isActive ? itemActive : itemInactive,
+                  settingsTab.box,
+                  settingsTab.text,
+                  settingsTab.web,
+                  isActive
+                    ? cn(settingsTab.boxActive, settingsTab.textActive)
+                    : settingsTab.textInactive,
                 )}
               >
                 {item.label}

@@ -11,7 +11,19 @@ import {
 import { mobileAuthApi } from "@/adapters/auth";
 import { Captcha, type CaptchaHandle, requestCaptchaToken } from "@/components/auth/captcha";
 import { VerifyCodeForm } from "@/components/auth/verify-code-form";
-import { Button, Notice, Screen, Text, TextField } from "@/components/ui";
+import { AuthLayout } from "@/components/shared/auth-layout";
+import {
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+  Input,
+  Label,
+  Text,
+} from "@/components/ui";
 
 /**
  * Forgot password, step one (web: (auth)/reset-password): the email carries a
@@ -50,72 +62,89 @@ export default function ResetPasswordScreen() {
   }
 
   const backToSignIn = (
-    <Link href="/login" asChild>
-      <Button variant="ghost" label={t("backToSignIn")} />
-    </Link>
+    <CardFooter>
+      <Link href="/login" asChild>
+        <Text accessibilityRole="link" className="text-sm text-muted-foreground">
+          {t("backToSignIn")}
+        </Text>
+      </Link>
+    </CardFooter>
   );
 
   if (step === "awaitingOtp") {
     return (
-      <Screen isCentered>
-        <VerifyCodeForm
-          description={t("enterCodeResetDescription", { email: email.trim() })}
-          onVerify={async (code) => {
-            const key = await verifyResetCode(mobileAuthApi, { email: email.trim(), code });
-            if (key) return t(key);
-            // Signed in (the bearer is stored): on to the new password. The
-            // session is marked only once that is set, so the signed-out area
-            // keeps hosting update-password.
-            router.replace("/update-password");
-            return null;
-          }}
-          onResend={async () => {
-            const captcha = await requestCaptchaToken(captchaRef.current);
-            if (!captcha.ok) return t("captchaUnavailable");
-            const key = await resendResetCode(mobileAuthApi, {
-              email: email.trim(),
-              captchaToken: captcha.token,
-            });
-            return key ? t(key) : null;
-          }}
-          onBack={() => {
-            setStep("form");
-            setError(null);
-          }}
-        >
-          <Captcha ref={captchaRef} action="reset-password" />
-        </VerifyCodeForm>
-        {backToSignIn}
-      </Screen>
+      <AuthLayout>
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("enterCodeTitle")}</CardTitle>
+            <CardDescription>{t("enterCodeResetDescription", { email: email.trim() })}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <VerifyCodeForm
+              onVerify={async (code) => {
+                const key = await verifyResetCode(mobileAuthApi, { email: email.trim(), code });
+                if (key) return t(key);
+                // Signed in (the bearer is stored): on to the new password. The
+                // session is marked only once that is set, so the signed-out area
+                // keeps hosting update-password.
+                router.replace("/update-password");
+                return null;
+              }}
+              onResend={async () => {
+                const captcha = await requestCaptchaToken(captchaRef.current);
+                if (!captcha.ok) return t("captchaUnavailable");
+                const key = await resendResetCode(mobileAuthApi, {
+                  email: email.trim(),
+                  captchaToken: captcha.token,
+                });
+                return key ? t(key) : null;
+              }}
+              onBack={() => {
+                setStep("form");
+                setError(null);
+              }}
+            >
+              <Captcha ref={captchaRef} action="reset-password" />
+            </VerifyCodeForm>
+          </CardContent>
+          {backToSignIn}
+        </Card>
+      </AuthLayout>
     );
   }
 
   return (
-    <Screen isCentered>
-      <View className="gap-1">
-        <Text variant="title">{t("resetPasswordTitle")}</Text>
-        <Text variant="muted">{t("resetPasswordDescription")}</Text>
-      </View>
-      <TextField
-        label={t("email")}
-        placeholder={t("emailPlaceholder")}
-        value={email}
-        onChangeText={setEmail}
-        keyboardType="email-address"
-        autoCapitalize="none"
-        autoComplete="email"
-        textContentType="username"
-        onSubmitEditing={() => void submit()}
-      />
-      {error ? <Notice tone="danger">{error}</Notice> : null}
-      <Captcha ref={captchaRef} action="reset-password" />
-      <Button
-        label={isLoading ? t("sending") : t("sendResetCode")}
-        isLoading={isLoading}
-        disabled={!email.trim()}
-        onPress={() => void submit()}
-      />
-      {backToSignIn}
-    </Screen>
+    <AuthLayout>
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("resetPasswordTitle")}</CardTitle>
+          <CardDescription>{t("resetPasswordDescription")}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <View className="flex flex-col gap-4">
+            <View className="flex flex-col gap-2">
+              <Label>{t("email")}</Label>
+              <Input
+                placeholder={t("emailPlaceholder")}
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoComplete="email"
+                textContentType="username"
+                accessibilityLabel={t("email")}
+                onSubmitEditing={() => void submit()}
+              />
+            </View>
+            {error ? <Text className="text-sm text-destructive">{error}</Text> : null}
+            <Captcha ref={captchaRef} action="reset-password" />
+            <Button onPress={() => void submit()} disabled={isLoading || !email.trim()} className="w-full">
+              {isLoading ? t("sending") : t("sendResetCode")}
+            </Button>
+          </View>
+        </CardContent>
+        {backToSignIn}
+      </Card>
+    </AuthLayout>
   );
 }

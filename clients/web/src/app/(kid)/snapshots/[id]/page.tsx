@@ -7,18 +7,23 @@ import { useEffect, useRef, useState } from "react";
 import { GamePlayView } from "@/components/games/game-play-view";
 import { Icon } from "@/components/shared/icon";
 import { getCookie } from "@/lib/cookies";
-import { ensureFriendKeys } from "@/lib/friends";
 import {
   type DecodedSnapshotPayload,
   type SnapshotDetailView,
-  decodeSnapshotPayload,
   fetchSnapshot,
   markSnapshotViewed,
+  snapshotDeps,
 } from "@/lib/snapshots";
 import { isCurrentlyOnline } from "@/stores/connectivity-store";
 import { useKidStore } from "@/stores/kid-store";
 import { useVaultStore } from "@/stores/vault-store";
-import { EMPTY_SUCCESS_CRITERIA } from "@dodi/games/game-spec";
+import { cn } from "@/lib/utils";
+import { gamePlayNotice } from "@dodi/ui-recipes";
+import { gamePlayPropsFromSnapshot } from "@dodi/client-state/game-play";
+import {
+  isNewSnapshot,
+  openSnapshotPayload,
+} from "@dodi/client-state/snapshots";
 
 export default function SnapshotPlayPage() {
   const params = useParams<{ id: string }>();
@@ -83,15 +88,12 @@ export default function SnapshotPlayPage() {
       try {
         const kid = await useKidStore.getState().loadOne(kidId);
         if (!kid) throw new Error("kid_not_found");
-        const keys =
-          detail.origin === "received"
-            ? await ensureFriendKeys(kid, vaultSession)
-            : null;
-        const result = decodeSnapshotPayload(detail, vaultSession, keys);
+        // Received rows open with the kid's friend keys, own rows the vault.
+        const result = await openSnapshotPayload(snapshotDeps, detail, kid, vaultSession);
         if (cancelled) return;
         setDecoded(result);
         // Clear the "new" badge on first open of a received snapshot.
-        if (detail.origin === "received" && !detail.viewedAt && !viewedRef.current) {
+        if (isNewSnapshot(detail) && !viewedRef.current) {
           viewedRef.current = true;
           void markSnapshotViewed(id).catch(() => {});
         }
@@ -108,13 +110,13 @@ export default function SnapshotPlayPage() {
 
   if (offlineUnavailable) {
     return (
-      <div className="w-full max-w-xl rounded-2xl border bg-white p-6 text-center shadow-sm">
+      <div className={cn(gamePlayNotice.box, gamePlayNotice.web)}>
         <Icon
           name="wifi_off"
           size={28}
-          className="mx-auto text-muted-foreground"
+          className={gamePlayNotice.webIcon}
         />
-        <p className="mt-3 text-sm font-semibold text-muted-foreground">
+        <p className={gamePlayNotice.text}>
           {t("offlineNotAvailable")}
         </p>
       </div>
@@ -123,42 +125,25 @@ export default function SnapshotPlayPage() {
 
   if (ready && !kidId) {
     return (
-      <div className="w-full max-w-xl rounded-2xl border bg-white p-6 text-center shadow-sm">
-        <h1 className="text-xl font-bold text-dodi-800">{t("title")}</h1>
-        <p className="mt-2 text-sm text-muted-foreground">{t("kidRequired")}</p>
+      <div className={cn(gamePlayNotice.box, gamePlayNotice.web)}>
+        <h1 className={gamePlayNotice.title}>{t("title")}</h1>
+        <p className={gamePlayNotice.body}>{t("kidRequired")}</p>
       </div>
     );
   }
 
   if (openFailed) {
     return (
-      <div className="w-full max-w-xl rounded-2xl border bg-white p-6 text-center shadow-sm">
-        <h1 className="text-xl font-bold text-dodi-800">{t("title")}</h1>
-        <p className="mt-2 text-sm text-muted-foreground">{t("openFailed")}</p>
+      <div className={cn(gamePlayNotice.box, gamePlayNotice.web)}>
+        <h1 className={gamePlayNotice.title}>{t("title")}</h1>
+        <p className={gamePlayNotice.body}>{t("openFailed")}</p>
       </div>
     );
   }
 
   if (!decoded || !kidId) return null;
 
-  const { payload, sanitizedCode } = decoded;
-
-  return (
-    <GamePlayView
-      gameId={payload.gameId ?? id}
-      kidId={kidId}
-      title={payload.title}
-      description={payload.gameTitle}
-      codeBundle={sanitizedCode}
-      markdown={payload.gameMarkdown}
-      learningGoal=""
-      successDefinition=""
-      successCriteria={EMPTY_SUCCESS_CRITERIA}
-      progressKind="open"
-      capabilities={payload.capabilities}
-      drawingStyle={payload.drawingStyle}
-      snapshot={{ id, savedState: payload.savedState, gameId: payload.gameId }}
-      inlineContext={{ title: payload.gameTitle, description: payload.gameDescription }}
-    />
-  );
+  // The snapshot's own title, its saved state, open-ended progress and the
+  // re-sanitized code (the only code that may reach the sandbox).
+  return <GamePlayView kidId={kidId} {...gamePlayPropsFromSnapshot(id, decoded)} />;
 }

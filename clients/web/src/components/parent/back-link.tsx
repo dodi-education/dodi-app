@@ -1,3 +1,4 @@
+import { backLink } from "@dodi/ui-recipes";
 import Link from "next/link";
 
 import { Icon } from "@/components/shared/icon";
@@ -14,11 +15,13 @@ export function BackLink({ href, className, children }: BackLinkProps) {
     <Link
       href={href}
       className={cn(
-        "mb-3 inline-flex items-center gap-1.5 text-[13px] font-semibold text-muted-foreground transition-colors hover:text-primary",
+        backLink.box,
+        backLink.text,
+        backLink.web,
         className,
       )}
     >
-      <Icon name="arrow_left" size={14} stroke={2.2} />
+      <Icon name="arrow_left" size={backLink.icon.size} stroke={backLink.icon.stroke} />
       {children}
     </Link>
   );

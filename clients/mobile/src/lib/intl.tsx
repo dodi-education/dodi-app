@@ -30,13 +30,11 @@ function deviceLocale(): Locale {
 
 export function LocaleProvider({ children }: { children: ReactNode }): ReactNode {
   const accountLanguage = useAccountStore((s) => s.account?.language ?? null);
-  const [locale, setLocale] = useState<Locale>(deviceLocale);
+  // An explicit choice on this device wins; else the account's saved language
+  // (it follows the parent to new devices), else the device language.
+  const [chosenLocale, setLocale] = useState<Locale | null>(null);
+  const locale = chosenLocale ?? (accountLanguage ? normalizeLocale(accountLanguage) : deviceLocale());
   const [messages, setMessages] = useState<Messages | null>(null);
-
-  // The parent's saved language follows them to this device.
-  useEffect(() => {
-    if (accountLanguage) setLocale(normalizeLocale(accountLanguage));
-  }, [accountLanguage]);
 
   useEffect(() => {
     let isCurrent = true;

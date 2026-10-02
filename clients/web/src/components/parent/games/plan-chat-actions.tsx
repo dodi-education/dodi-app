@@ -4,8 +4,9 @@ import type { useTranslations } from "next-intl";
 
 import { Icon, type IconName } from "@/components/shared/icon";
 import { Button } from "@/components/ui/button";
-import type { PlanSurface } from "@/components/parent/games/studio-panes";
+import type { PlanSurface } from "@dodi/studio/studio-panes";
 import { cn } from "@/lib/utils";
+import { chatWelcome, planActionBar, planPill, studioActionRow } from "@dodi/ui-recipes";
 
 type Translate = ReturnType<typeof useTranslations>;
 
@@ -43,7 +44,12 @@ export function ActionRow({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="flex items-center gap-2.5 rounded-lg border border-border bg-card px-3.5 py-[11px] text-left text-[13.5px] font-medium text-ink-2 transition-colors hover:border-primary hover:bg-primary-soft hover:text-primary disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-border disabled:hover:bg-card disabled:hover:text-ink-2"
+      className={cn(
+        studioActionRow.box,
+        studioActionRow.text,
+        studioActionRow.web,
+        studioActionRow.webDisableable,
+      )}
     >
       <Icon name={icon} size={14} className="shrink-0 text-primary" />
       {label}
@@ -70,7 +76,7 @@ export function PlanEmptyActions({
   return (
     <>
       {!needsGameProvider && (
-        <div className="mt-[18px] flex w-full flex-col gap-2">
+        <div className={cn(chatWelcome.webList, chatWelcome.list)}>
           <ActionRow
             icon="sparkles"
             label={t("planStarterIdea")}
@@ -122,13 +128,13 @@ function Pill({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "inline-flex shrink-0 items-center gap-1.5 rounded-[9px] border px-3 py-2 text-[13px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50",
-        highlighted
-          ? "border-primary-soft-2 bg-primary-soft text-primary"
-          : "border-border bg-background text-muted-foreground",
+        planPill.box,
+        planPill.text,
+        planPill.web,
+        highlighted ? cn(planPill.on, planPill.onText) : cn(planPill.off, planPill.offText),
       )}
     >
-      <Icon name={icon} size={15} />
+      <Icon name={icon} size={planPill.icon.size} />
       {label}
     </button>
   );
@@ -161,7 +167,7 @@ export function PlanActionRow({
   t,
 }: PlanActionRowProps) {
   return (
-    <div className="flex shrink-0 items-center gap-2 overflow-x-auto border-b border-border bg-card px-3 py-2">
+    <div className={cn(planActionBar.web, planActionBar.box, planActionBar.content)}>
       {hasPlan && (
         <Pill
           icon="book"

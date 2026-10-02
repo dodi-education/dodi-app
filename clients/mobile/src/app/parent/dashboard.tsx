@@ -1,3 +1,4 @@
+import { type Href, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { View } from "react-native";
 import { useTranslations } from "use-intl";
@@ -8,21 +9,18 @@ import {
 } from "@dodi/client-state/dashboard";
 
 import { api } from "@/adapters/platform";
-import { AccountBadge } from "@/components/parent/account-badge";
 import { AiSetupCard } from "@/components/parent/ai-setup-card";
 import { KidsGlance } from "@/components/parent/kids-glance";
+import { PageActions, Section } from "@/components/parent/section";
 import { StatCell, StatStrip } from "@/components/parent/stat-strip";
-import { Card, Screen, Text } from "@/components/ui";
-import { IconUser } from "@/components/ui/icons";
+import { ShellContent } from "@/components/shared/shell-content";
+import { Button, Icon, Text } from "@/components/ui";
 import { useKidStore } from "@/lib/client-state";
 
-/**
- * The parent dashboard (web: parent/dashboard): AI setup nudge, activity
- * stats and the kids at a glance. Adding kids and creating games arrive with
- * the kid and Game Studio screens.
- */
+/** The parent dashboard (web: parent/dashboard/page), as it renders on a phone. */
 export default function DashboardScreen() {
   const t = useTranslations("dashboard");
+  const router = useRouter();
   const kids = useKidStore((s) => s.list);
   const loadKids = useKidStore((s) => s.loadList);
   const [stats, setStats] = useState<DashboardStats>(EMPTY_DASHBOARD_STATS);
@@ -42,39 +40,48 @@ export default function DashboardScreen() {
     };
   }, []);
 
-  return (
-    <Screen>
-      <View className="gap-1">
-        <Text variant="title">{t("title")}</Text>
-        <Text variant="muted">{t("subtitle")}</Text>
-      </View>
-      <AccountBadge />
-      {kids === null ? null : kids.length === 0 ? (
-        <>
-          <AiSetupCard />
-          <Card>
-            <View className="items-center gap-3 py-6">
-              <IconUser size={40} color="#2F6BD8" />
-              <Text className="font-semibold">{t("noKidsTitle")}</Text>
-              <Text variant="muted" className="text-center">
-                {t("noKidsDescription")}
+  // Still loading the (decrypted) kid list: the breadcrumb carries the title.
+  if (kids === null) return null;
+
+  if (kids.length === 0) {
+    return (
+      <ShellContent>
+        <AiSetupCard />
+        <Section>
+          <View className="flex-col items-center gap-4 px-5 py-12">
+            <Icon name="kids" size={40} color="primary" />
+            <View>
+              <Text className="text-center font-semibold" accessibilityRole="header">
+                {t("noKidsTitle")}
               </Text>
+              <Text className="text-center text-sm text-muted-foreground">{t("noKidsDescription")}</Text>
             </View>
-          </Card>
-        </>
-      ) : (
-        <>
-          <AiSetupCard />
-          <Card title={t("overview")}>
-            <StatStrip>
-              <StatCell isFirst num={stats.sessionsToday} label={t("statSessionsToday")} />
-              <StatCell num={stats.sessionsThisWeek} label={t("statSessionsWeek")} />
-              <StatCell num={stats.gamesCreated} label={t("statGamesCreated")} />
-            </StatStrip>
-          </Card>
-          <KidsGlance kids={kids} />
-        </>
-      )}
-    </Screen>
+            <Button onPress={() => router.push("/parent/kids/new" as Href)}>{t("addKid")}</Button>
+          </View>
+        </Section>
+      </ShellContent>
+    );
+  }
+
+  return (
+    <ShellContent>
+      <PageActions>
+        <Button icon="sparkles" onPress={() => router.push("/parent/game-studio/new" as Href)}>
+          {t("addGame")}
+        </Button>
+      </PageActions>
+
+      <AiSetupCard />
+
+      <Section title={t("overview")}>
+        <StatStrip>
+          <StatCell num={stats.sessionsToday} label={t("statSessionsToday")} />
+          <StatCell num={stats.sessionsThisWeek} label={t("statSessionsWeek")} />
+          <StatCell num={stats.gamesCreated} label={t("statGamesCreated")} />
+        </StatStrip>
+      </Section>
+
+      <KidsGlance />
+    </ShellContent>
   );
 }

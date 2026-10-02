@@ -1,4 +1,5 @@
-// Must stay first: crypto and streaming fetch before anything uses them.
+// The polyfills run from the app entry (index.ts), before Expo Router loads
+// any route; importing them here too is a no-op kept as a safety net.
 import "@/polyfills";
 import "@/global.css";
 
@@ -10,6 +11,8 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { installArgon2, verifyArgon2Executor } from "@/adapters/argon2";
+import { BackgroundBuildBridge } from "@/lib/background-build";
+import { useAppFonts } from "@/lib/fonts";
 import { LocaleProvider } from "@/lib/intl";
 import { restoreSession, useSession } from "@/lib/session";
 
@@ -19,22 +22,24 @@ void SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   const isLoaded = useSession((s) => s.isLoaded);
+  const areFontsLoaded = useAppFonts();
 
   useEffect(() => {
     void restoreSession();
   }, []);
 
   useEffect(() => {
-    if (isLoaded) void SplashScreen.hideAsync();
-  }, [isLoaded]);
+    if (isLoaded && areFontsLoaded) void SplashScreen.hideAsync();
+  }, [isLoaded, areFontsLoaded]);
 
-  if (!isLoaded) return null;
+  if (!isLoaded || !areFontsLoaded) return null;
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <LocaleProvider>
           <StatusBar style="dark" />
+          <BackgroundBuildBridge />
           <Stack screenOptions={{ headerShown: false }} />
         </LocaleProvider>
       </SafeAreaProvider>

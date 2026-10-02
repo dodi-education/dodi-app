@@ -3,6 +3,8 @@
 import type { ReactNode } from "react";
 
 import { Icon } from "@/components/shared/icon";
+import { cn } from "@/lib/utils";
+import { planSurface } from "@dodi/ui-recipes";
 
 interface PlanSurfaceHeaderProps {
   title: string;
@@ -18,17 +20,17 @@ interface PlanSurfaceHeaderProps {
  */
 export function PlanSurfaceHeader({ title, backLabel, onBack, right }: PlanSurfaceHeaderProps) {
   return (
-    <div className="flex shrink-0 items-center gap-2 border-b border-border px-2 py-2">
+    <div className={cn(planSurface.webHeader, planSurface.header)}>
       <button
         type="button"
         onClick={onBack}
         aria-label={backLabel}
         title={backLabel}
-        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-primary-soft hover:text-primary"
+        className={cn(planSurface.back, planSurface.webBack)}
       >
         <Icon name="arrow_left" size={18} />
       </button>
-      <h2 className="min-w-0 flex-1 truncate text-[15px] font-bold text-ink">{title}</h2>
+      <h2 className={cn(planSurface.title, planSurface.webTitle)}>{title}</h2>
       {right}
     </div>
   );

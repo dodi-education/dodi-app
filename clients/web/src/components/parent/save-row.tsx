@@ -1,3 +1,4 @@
+import { saveRow } from "@dodi/ui-recipes";
 import { cn } from "@/lib/utils";
 
 interface SaveRowProps {
@@ -12,12 +13,13 @@ export function SaveRow({ note, className, children }: SaveRowProps) {
   return (
     <div
       className={cn(
-        "flex items-center justify-end gap-2.5 px-5 py-3.5",
+        saveRow.box,
+        saveRow.web,
         className,
       )}
     >
       {note ? (
-        <span className="mr-auto text-[12.5px] text-success">{note}</span>
+        <span className={saveRow.note}>{note}</span>
       ) : null}
       {children}
     </div>

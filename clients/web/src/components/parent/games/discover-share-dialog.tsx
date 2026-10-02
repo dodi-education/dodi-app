@@ -25,20 +25,23 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { dodi } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { gameFlowDeps } from "@/lib/games/game-flow-deps";
 import { useKids } from "@/hooks/use-kids";
-import { useGameStore } from "@/stores/game-store";
+import {
+  type AudienceSelection,
+  type ShareVariant,
+  type ShareableGame,
+  audienceFromSharing,
+  isAudienceKidSelected,
+  saveGameSharing,
+  selectFamilyAudience,
+  toggleAudienceKid,
+} from "@dodi/client-state/game-sharing";
 import type { GameSharingState } from "@dodi/types/games";
+import { audiencePill, formAlert } from "@dodi/ui-recipes";
 
-/** Fields the share dialog needs — works for Discover summaries and studio rows. */
-export type ShareableGame = {
-  id: string;
-  title: string;
-  sharing: GameSharingState;
-};
-
-export type ShareDialogVariant = "discover" | "studio";
+export type { ShareableGame };
 
 /** Pick which of this family's kids can play the game. */
 export function DiscoverShareDialog({
@@ -58,7 +61,7 @@ export function DiscoverShareDialog({
    */
   onSaved?: (sharing: GameSharingState) => void;
   /** Which backend owns this game's sharing rows. */
-  variant?: ShareDialogVariant;
+  variant?: ShareVariant;
 }) {
   const t = useTranslations("gameStudio");
   const { kids } = useKids();
@@ -67,8 +70,10 @@ export function DiscoverShareDialog({
     name: k.display_name,
   }));
 
-  const [isFamily, setIsFamily] = useState(false);
-  const [audienceIds, setAudienceIds] = useState<string[]>([]);
+  const [audience, setAudience] = useState<AudienceSelection>({
+    isFamily: false,
+    audienceIds: [],
+  });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -78,8 +83,7 @@ export function DiscoverShareDialog({
   if (open !== prevOpen) {
     setPrevOpen(open);
     if (open && game) {
-      setIsFamily(game.sharing.family);
-      setAudienceIds(game.sharing.kidIds);
+      setAudience(audienceFromSharing(game.sharing));
       setError(null);
     }
   }
@@ -89,33 +93,8 @@ export function DiscoverShareDialog({
     setBusy(true);
     setError(null);
     try {
-      let sharing: GameSharingState;
-      if (variant === "studio") {
-        const res = await dodi.request(`/api/games/${game.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            audience: { isFamily, audienceIds },
-          }),
-        });
-        if (!res.ok) throw new Error();
-        sharing = {
-          family: isFamily,
-          kidIds: isFamily ? [] : audienceIds,
-        };
-        useGameStore.getState().patchLocal(game.id, { sharing });
-        // Audience changed — kid libraries must refetch on next visit.
-        useGameStore.setState({ byKid: {} });
-      } else {
-        const res = await dodi.request(`/api/discover/games/${game.id}/sharing`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ isFamily, audienceIds }),
-        });
-        if (!res.ok) throw new Error();
-        ({ sharing } = (await res.json()) as { sharing: GameSharingState });
-        useGameStore.getState().patchDiscoverSharing(game.id, sharing);
-      }
+      // Saves through the variant's backend and mirrors it into the game cache.
+      const sharing = await saveGameSharing(gameFlowDeps(), variant, game.id, audience);
       onSaved?.(sharing);
       onClose();
     } catch {
@@ -143,28 +122,18 @@ export function DiscoverShareDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-wrap gap-2">
+        <div className={cn(audiencePill.webRow, audiencePill.row)}>
           <AudiencePill
-            selected={isFamily}
-            onClick={() => {
-              setIsFamily(true);
-              setAudienceIds([]);
-            }}
+            selected={audience.isFamily}
+            onClick={() => setAudience(selectFamilyAudience())}
             icon
             label={t("family")}
           />
           {kidOptions.map((kid) => (
             <AudiencePill
               key={kid.id}
-              selected={!isFamily && audienceIds.includes(kid.id)}
-              onClick={() => {
-                setIsFamily(false);
-                setAudienceIds((ids) =>
-                  ids.includes(kid.id)
-                    ? ids.filter((id) => id !== kid.id)
-                    : [...ids, kid.id],
-                );
-              }}
+              selected={isAudienceKidSelected(audience, kid.id)}
+              onClick={() => setAudience((current) => toggleAudienceKid(current, kid.id))}
               initial={kid.name.charAt(0).toUpperCase()}
               label={kid.name}
             />
@@ -172,7 +141,7 @@ export function DiscoverShareDialog({
         </div>
 
         {error && (
-          <div className="rounded-lg bg-danger-soft px-3 py-2 text-xs font-medium text-danger">
+          <div className={cn(formAlert.box, formAlert.text)}>
             {error}
           </div>
         )}
@@ -210,10 +179,12 @@ function AudiencePill({
       type="button"
       onClick={onClick}
       className={cn(
-        "inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm font-semibold transition-colors",
+        audiencePill.web,
+        audiencePill.box,
+        audiencePill.text,
         selected
-          ? "border-primary bg-primary-soft text-primary"
-          : "border-border-strong bg-card text-ink-2 hover:border-faint",
+          ? cn(audiencePill.selected, audiencePill.selectedText)
+          : cn(audiencePill.idle, audiencePill.idleText, audiencePill.webIdle),
       )}
     >
       {icon ? (
@@ -223,7 +194,7 @@ function AudiencePill({
           className={selected ? "text-primary" : "text-muted-foreground"}
         />
       ) : (
-        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary-soft text-[11px] font-bold text-primary">
+        <span className={cn(audiencePill.webInitial, audiencePill.initial, audiencePill.initialText)}>
           {initial}
         </span>
       )}

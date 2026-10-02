@@ -4,12 +4,20 @@ import Link from "next/link";
 import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
+import {
+  kidChrome,
+  kidGateHint,
+  kidLoadingStage,
+  kidNav,
+} from "@dodi/ui-recipes";
+import { onKidViewMount } from "@dodi/client-state/kid-view";
 
 import { Icon, type IconName } from "@/components/shared/icon";
 import { DodiCompact } from "@/components/dodi/dodi-compact";
 import { CompanionVolumeControl } from "@/components/kid/companion-volume-control";
 import { cn } from "@/lib/utils";
-import { clearParentUnlocked } from "@/lib/parent-lock";
+import { clientState } from "@/lib/client-state";
+import { clearParentUnlocked, markParentUnlocked } from "@/lib/parent-lock";
 import { flushPlayOutbox } from "@/lib/games/play-sync";
 import {
   fetchSnapshots,
@@ -62,9 +70,10 @@ export function KidChrome({
   useEffect(() => {
     // Being in kid view always locks the parent area for this device session,
     // so returning to parent requires the PIN again (when one is set).
-    clearParentUnlocked();
-    const { status, unlockSilently } = useVaultStore.getState();
-    if (status !== "unlocked") void unlockSilently();
+    onKidViewMount({
+      parentLock: { markUnlocked: markParentUnlocked, clear: clearParentUnlocked },
+      vault: clientState.vault,
+    });
   }, []);
 
   // Account with no vault yet (registration not finished) → force finish-setup,
@@ -204,10 +213,10 @@ export function KidChrome({
   }
 
   return (
-    <div className="flex min-h-screen flex-col font-kid">
+    <div className={kidChrome.webRoot}>
       {/* Kid header */}
-      <header className="flex items-center justify-between px-4 py-3 md:px-6 md:py-4">
-        <div className="flex min-w-0 items-center gap-3">
+      <header className={cn(kidChrome.header, kidChrome.webHeader)}>
+        <div className={cn(kidChrome.headerLeft, kidChrome.webHeaderLeft)}>
           <div className="shrink-0">
             <KidSwitcher />
           </div>
@@ -228,10 +237,14 @@ export function KidChrome({
         <a
           href="/parent/dashboard"
           onClick={handleSwitchToParent}
-          className="flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-2 text-sm font-bold text-faint transition-colors hover:text-muted-foreground"
-          aria-label="Switch to parent view"
+          className={cn(
+            kidChrome.parentLink,
+            kidChrome.parentLinkText,
+            kidChrome.webParentLink,
+          )}
+          aria-label={t("switchToParentView")}
         >
-          <Icon name="lock" size={15} />
+          <Icon name="lock" size={kidChrome.parentIcon.size} />
           {t("parent")}
         </a>
       </header>
@@ -242,25 +255,25 @@ export function KidChrome({
           unlocked before we mount the page, so dodi never initializes for a
           locked profile or before we know which kid is active. */}
       {kids === null ? (
-        <main className="flex flex-1 flex-col items-center px-4 pb-24">
+        <main className={cn(kidChrome.main, kidChrome.webMain)}>
           <KidLoadingStage />
         </main>
       ) : needsPin ? (
-        <main className="flex flex-1 flex-col items-center px-4 pb-24">
+        <main className={cn(kidChrome.main, kidChrome.webMain)}>
           <KidGateHint kid={activeKid} />
         </main>
       ) : isFullMode ? (
-        <main className="flex flex-1 flex-col px-4 pb-24">
-          <div className="mx-auto w-full max-w-6xl">{children}</div>
+        <main className={cn(kidChrome.mainFull, kidChrome.webMainFull)}>
+          <div className={kidChrome.mainFullInner}>{children}</div>
         </main>
       ) : (
-        <main className="flex flex-1 flex-col items-center px-4 pb-24">
+        <main className={cn(kidChrome.main, kidChrome.webMain)}>
           {children}
         </main>
       )}
 
       {/* Bottom navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 z-40 flex items-center justify-center gap-3 border-t bg-white/85 px-4 pt-2.5 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] backdrop-blur-md">
+      <nav className={cn(kidNav.box, kidNav.web)}>
         {kidNavItems.map((item) => {
           const isActive = pathname.startsWith(item.href);
           return (
@@ -270,10 +283,12 @@ export function KidChrome({
               data-kid-nav={item.href}
               onClick={(e) => handleNavReselect(e, item.href)}
               className={cn(
-                "flex min-w-[88px] flex-col items-center gap-1 rounded-2xl px-5 py-2 text-[13.5px] font-extrabold transition-colors sm:min-w-[110px]",
+                kidNav.item,
+                kidNav.itemText,
+                kidNav.webItem,
                 isActive
-                  ? "bg-primary-soft text-primary"
-                  : "text-faint hover:text-muted-foreground",
+                  ? [kidNav.activeItem, kidNav.activeText]
+                  : [kidNav.inactiveText, kidNav.webInactive],
               )}
             >
               <Icon name={item.icon} className="h-6 w-6" stroke={2} />
@@ -289,9 +304,9 @@ export function KidChrome({
 /** Placeholder while the E2EE kid list loads (before we know the active kid). */
 function KidLoadingStage() {
   return (
-    <div className="my-auto flex flex-col items-center gap-6">
-      <div className="h-40 w-40 animate-pulse rounded-full bg-dodi-100" />
-      <div className="h-6 w-32 animate-pulse rounded-lg bg-dodi-100" />
+    <div className={cn(kidLoadingStage.root, kidLoadingStage.webRoot)}>
+      <div className={cn(kidLoadingStage.circle, kidLoadingStage.webPulse)} />
+      <div className={cn(kidLoadingStage.bar, kidLoadingStage.webPulse)} />
     </div>
   );
 }
@@ -301,14 +316,18 @@ function KidGateHint({ kid }: { kid: Kid | null }) {
   const t = useTranslations("kidProfile");
   if (!kid) return null;
   return (
-    <div className="my-auto flex flex-col items-center gap-4 text-center">
-      <div className="relative opacity-70">
+    <div className={cn(kidGateHint.root, kidGateHint.webRoot)}>
+      <div className={kidGateHint.avatarWrap}>
         <KidAvatar kid={kid} size={96} />
-        <span className="absolute -bottom-1 -right-1 flex size-9 items-center justify-center rounded-full bg-white text-faint shadow">
+        <span className={cn(
+            kidGateHint.lockBadge,
+            kidGateHint.lockBadgeText,
+            kidGateHint.webLockBadge,
+          )}>
           <Icon name="lock" size={20} />
         </span>
       </div>
-      <p className="max-w-[16rem] text-sm font-bold text-muted-foreground">
+      <p className={kidGateHint.text}>
         {t("solveToStart")}
       </p>
     </div>

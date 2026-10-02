@@ -21,6 +21,20 @@ export const SANDBOX_CSP =
 function injectHostShim(html: string): string {
   const shim = `<script>
 (function(){
+  // ── Native host (the mobile app's WebView) ─────────────────────────────
+  // A WebView document is top-level, so parent === window: the game's
+  // parent.postMessage would only echo back into the game. Route it to the
+  // app instead (JSON, the only thing the native bridge carries). The app
+  // delivers its own messages as dispatched MessageEvents, never through
+  // postMessage. Runs before any game script, so a game can't pre-empt it;
+  // in a browser iframe ReactNativeWebView never exists and nothing changes.
+  if(window.ReactNativeWebView&&window.parent===window){
+    var nativeHost=window.ReactNativeWebView;
+    window.postMessage=function(message){
+      try{nativeHost.postMessage(JSON.stringify(message));}
+      catch(err){console.warn('[iframe-shim] message not sendable',err);}
+    };
+  }
   function dominantCanvas(){
     var vw=window.innerWidth,vh=window.innerHeight;
     var list=document.querySelectorAll('canvas');

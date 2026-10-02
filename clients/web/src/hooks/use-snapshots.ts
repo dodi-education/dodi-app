@@ -2,27 +2,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   type CachedFriendKeys,
-  keysForKid,
-} from "@/lib/friend-keys-cache";
-import { decodeView, ensureFriendKeys, fetchFriends } from "@/lib/friends";
-import {
-  type SnapshotView,
-  decodeSnapshotInfo,
-  deleteSnapshot,
-  fetchSnapshots,
-  prefetchSnapshotPayloadsForOffline,
-} from "@/lib/snapshots";
+  type DecodedSnapshot,
+  loadKidSnapshots,
+} from "@dodi/client-state/snapshots";
+import { deleteSnapshot, snapshotDeps } from "@/lib/snapshots";
 import { useKids } from "@/hooks/use-kids";
 import { useVaultStore } from "@/stores/vault-store";
-import type { SnapshotInfoV1 } from "@dodi/types/games";
 
-export interface DecodedSnapshot {
-  view: SnapshotView;
-  /** Null = blob unreadable (wrong keys / tampered) — render a fallback card. */
-  info: SnapshotInfoV1 | null;
-  /** Decrypted sender name for received snapshots ("from Lea"). */
-  senderName: string | null;
-}
+export type { DecodedSnapshot };
 
 export interface UseSnapshots {
   snapshots: DecodedSnapshot[];
@@ -33,9 +20,9 @@ export interface UseSnapshots {
 }
 
 /**
- * Loads and decrypts a kid's snapshot collection (own + received). Friend keys
- * are only touched when received rows exist — browsing your own snapshots never
- * generates/publishes a friend identity as a side effect.
+ * Loads and decrypts a kid's snapshot collection (own + received) through the
+ * shared loader (`loadKidSnapshots`). Friend keys are only touched when
+ * received rows exist, and are remembered per kid across reloads.
  */
 export function useSnapshots(kidId: string): UseSnapshots {
   const { kids } = useKids();
@@ -55,38 +42,9 @@ export function useSnapshots(kidId: string): UseSnapshots {
       return;
     }
     try {
-      const views = await fetchSnapshots(kid.id);
-      // Background-fill the offline payload cache (skip-if-present; no-ops
-      // when the list itself came from the offline cache).
-      void prefetchSnapshotPayloadsForOffline(views);
-
-      const hasReceived = views.some((v) => v.origin === "received");
-      let keys = keysForKid(keysRef.current, kid.id);
-      const senderNames = new Map<string, string>();
-      if (hasReceived) {
-        keys = keys ?? (await ensureFriendKeys(kid, session));
-        keysRef.current = { kidId: kid.id, keys };
-        // Sender names come from the kid's own decrypted friend cards.
-        try {
-          for (const friendView of await fetchFriends(kid.id)) {
-            const decoded = decodeView(friendView, keys, session);
-            const name = decoded.name ?? decoded.nickname;
-            if (name) senderNames.set(friendView.counterpartKidId, name);
-          }
-        } catch {
-          // Names are cosmetic — the collection still renders without them.
-        }
-      }
-
-      setSnapshots(
-        views.map((view) => ({
-          view,
-          info: decodeSnapshotInfo(view, session, keys),
-          senderName: view.senderKidId
-            ? (senderNames.get(view.senderKidId) ?? null)
-            : null,
-        })),
-      );
+      const loaded = await loadKidSnapshots(snapshotDeps, kid, session, keysRef.current);
+      keysRef.current = loaded.keys;
+      setSnapshots(loaded.snapshots);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "error");

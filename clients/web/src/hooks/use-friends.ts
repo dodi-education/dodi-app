@@ -3,6 +3,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Kid } from "@dodi/types/database";
 
 import {
+  EMPTY_FRIEND_BUCKETS,
+  type FriendBuckets,
+  loadFriendBuckets,
+} from "@dodi/client-state/friends";
+
+import { dodi } from "@/lib/api";
+import {
   type CachedFriendKeys,
   keysForKid,
 } from "@/lib/friend-keys-cache";
@@ -10,11 +17,6 @@ import {
   type DecodedFriend,
   acceptRequest,
   blockFriend,
-  decodeView,
-  ensureFriendKeys,
-  fetchBlocked,
-  fetchFriends,
-  fetchRequests,
   rejectRequest,
   removeFriend,
   sendFriendRequest,
@@ -24,14 +26,7 @@ import { useKids } from "@/hooks/use-kids";
 import { useKidStore } from "@/stores/kid-store";
 import { useVaultStore } from "@/stores/vault-store";
 
-interface FriendBuckets {
-  friends: DecodedFriend[];
-  incoming: DecodedFriend[];
-  outgoing: DecodedFriend[];
-  blocked: DecodedFriend[];
-}
-
-const EMPTY: FriendBuckets = { friends: [], incoming: [], outgoing: [], blocked: [] };
+const EMPTY: FriendBuckets = EMPTY_FRIEND_BUCKETS;
 
 export interface UseFriends extends FriendBuckets {
   kid: Kid | null;
@@ -76,32 +71,18 @@ export function useFriends(kidId: string): UseFriends {
     try {
       // Keys are scoped to this kid: never reuse another kid's keys after a
       // kid switch, or their sealed cards won't open (names show as "—").
-      const cached = keysForKid(keysRef.current, kid.id);
-      const hadKeys = kid.friend_secret_keys != null || cached != null;
-      const keys = cached ?? (await ensureFriendKeys(kid, session));
-      keysRef.current = { kidId: kid.id, keys };
+      const loaded = await loadFriendBuckets(dodi, kid, session, keysRef.current);
+      keysRef.current = loaded.keys;
       // First-time publish: refresh the cache so our public key is visible.
-      if (!hadKeys) useKidStore.getState().invalidate();
-
-      const [friendsV, incomingV, outgoingV, blockedV] = await Promise.all([
-        fetchFriends(kidId),
-        fetchRequests(kidId, "incoming"),
-        fetchRequests(kidId, "outgoing"),
-        fetchBlocked(kidId),
-      ]);
-      setBuckets({
-        friends: friendsV.map((v) => decodeView(v, keys, session)),
-        incoming: incomingV.map((v) => decodeView(v, keys, session)),
-        outgoing: outgoingV.map((v) => decodeView(v, keys, session)),
-        blocked: blockedV.map((v) => decodeView(v, keys, session)),
-      });
+      if (loaded.hasPublishedKeys) useKidStore.getState().invalidate();
+      setBuckets(loaded.buckets);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "error");
     } finally {
       setLoading(false);
     }
-  }, [kid, kidId]);
+  }, [kid]);
 
   useEffect(() => {
     // Mount/kid-change fetch: reload() decrypts and sets state asynchronously.

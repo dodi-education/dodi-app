@@ -5,7 +5,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 
-import { activeKidId, buildCrumbs } from "@/components/shared/build-crumbs";
+import { activeKidId, buildCrumbs } from "@dodi/client-state/breadcrumbs";
+import { kidCrumbSwitcher } from "@dodi/ui-recipes";
 import { Icon } from "@/components/shared/icon";
 import { useKids } from "@/hooks/use-kids";
 import { useBreadcrumbStore } from "@/stores/breadcrumb-store";
@@ -130,8 +131,9 @@ function KidSwitcher({
         aria-haspopup="menu"
         aria-expanded={open}
         className={cn(
-          "flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-primary",
-          open && "bg-foreground/5 text-primary",
+          kidCrumbSwitcher.webButton,
+          kidCrumbSwitcher.button,
+          open && cn(kidCrumbSwitcher.open, kidCrumbSwitcher.webOpen),
         )}
       >
         <Icon name="switch_vertical" size={16} />

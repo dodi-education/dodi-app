@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, View } from "react-native";
+import { ActivityIndicator, View } from "react-native";
 import { useTranslations } from "use-intl";
+import { COLORS } from "@dodi/design-tokens";
 import {
   byokProviderOptions,
   clearModelConfig,
@@ -12,19 +13,20 @@ import {
 } from "@dodi/client-state/model-config";
 
 import { api } from "@/adapters/platform";
+import { Section } from "@/components/parent/section";
 import { ByokKeysPanel } from "@/components/settings/byok-keys-panel";
 import { CapabilityModelConfig } from "@/components/settings/capability-model-config";
 import { DodiAIPanel } from "@/components/settings/dodi-ai-panel";
-import { Screen, Text } from "@/components/ui";
+import { Badge, Icon, TabsLabel, TabsList, TabsTrigger, Text } from "@/components/ui";
 import { clientState, useDodiAIKeyStore, useProvidersStore } from "@/lib/client-state";
-import { cn } from "@/lib/cn";
 
 type Tab = "dodi-ai" | "byok";
 
 /**
- * AI providers (web: parent/settings/ai-providers). With dodi AI configured:
- * two tabs, "dodi AI" (state card + per-capability pickers) and "Your own
- * keys". Self-host (no dodi AI URL): the own-keys page alone.
+ * AI providers (web: parent/settings/ai-providers → ai-provider-config). With
+ * dodi AI configured: two underlined tabs, "dodi AI" (state card + per-
+ * capability pickers) and "Your own keys". Self-host (no dodi AI URL): the
+ * own-keys page alone.
  */
 export default function AiProvidersSettingsScreen() {
   const t = useTranslations("settings");
@@ -83,12 +85,12 @@ export default function AiProvidersSettingsScreen() {
 
   if (isLoading) {
     return (
-      <Screen>
-        <View className="flex-row items-center gap-2" accessibilityState={{ busy: true }}>
-          <ActivityIndicator color="#2F6BD8" />
-          <Text variant="muted">{tc("loading")}</Text>
+      <Section title={t("aiConfigTitle")}>
+        <View className="flex-row items-center gap-2 px-5 py-3.5" accessibilityState={{ busy: true }}>
+          <ActivityIndicator size="small" color={COLORS["muted-foreground"]} />
+          <Text className="text-sm text-muted-foreground">{tc("loading")}</Text>
         </View>
-      </Screen>
+      </Section>
     );
   }
 
@@ -106,50 +108,36 @@ export default function AiProvidersSettingsScreen() {
     ) : null;
   const byokPanel = <ByokKeysPanel onFirstKeySeeded={(patch) => void persist({ ...config, ...patch })} />;
 
+  // Self-host: no dodi AI anywhere, the page is the own-keys experience.
   if (!isDodiConfigured) {
     return (
-      <Screen>
+      <>
         {byokPanel}
         {capabilityConfig}
-      </Screen>
+      </>
     );
   }
 
-  const tabs: { id: Tab; label: string }[] = [
-    { id: "dodi-ai", label: t("aiTabManaged") },
-    {
-      id: "byok",
-      label: byokProviders.length > 0 ? `${t("aiTabByok")} (${byokProviders.length})` : t("aiTabByok"),
-    },
-  ];
   return (
-    <Screen>
-      <View accessibilityRole="tablist" className="flex-row gap-1 rounded-xl bg-muted p-1">
-        {tabs.map((item) => {
-          const isActive = item.id === tab;
-          return (
-            <Pressable
-              key={item.id}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: isActive }}
-              onPress={() => setTab(item.id)}
-              className={cn("min-h-11 flex-1 items-center justify-center rounded-lg px-2", isActive && "bg-card")}
-            >
-              <Text className={cn("text-sm font-semibold", isActive ? "text-primary" : "text-muted-foreground")}>
-                {item.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
+    <View>
+      <TabsList>
+        <TabsTrigger isActive={tab === "dodi-ai"} onPress={() => setTab("dodi-ai")}>
+          <Icon name="sparkles" size={16} color={tab === "dodi-ai" ? "primary" : "muted-foreground"} />
+          <TabsLabel isActive={tab === "dodi-ai"}>{t("aiTabManaged")}</TabsLabel>
+        </TabsTrigger>
+        <TabsTrigger isActive={tab === "byok"} onPress={() => setTab("byok")}>
+          <TabsLabel isActive={tab === "byok"}>{t("aiTabByok")}</TabsLabel>
+          {byokProviders.length > 0 ? <Badge variant="secondary">{byokProviders.length}</Badge> : null}
+        </TabsTrigger>
+      </TabsList>
       {tab === "dodi-ai" ? (
-        <>
+        <View>
           <DodiAIPanel config={config} applyConfig={persist} clearConfig={clearConfig} />
           {capabilityConfig}
-        </>
+        </View>
       ) : (
         byokPanel
       )}
-    </Screen>
+    </View>
   );
 }

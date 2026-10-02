@@ -14,12 +14,14 @@ const nextConfig: NextConfig = {
   },
   transpilePackages: [
     "@dodi/ai",
+    "@dodi/character",
     "@dodi/client-state",
     "@dodi/crypto",
     "@dodi/games",
     "@dodi/protocol",
     "@dodi/studio",
     "@dodi/types",
+    "@dodi/ui-recipes",
     "@dodi/vault",
   ],
 };

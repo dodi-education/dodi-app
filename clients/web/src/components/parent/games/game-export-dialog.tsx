@@ -25,18 +25,17 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
-import { dodi } from "@/lib/api";
-import { downloadBlob, packGameExportZip } from "@/lib/games/game-export-zip";
-import { useGameStore } from "@/stores/game-store";
+import { downloadBlob, zipBlob } from "@/lib/games/game-export-zip";
+import { gameFlowDeps } from "@/lib/games/game-flow-deps";
+import { cn } from "@/lib/utils";
 import { useVaultStore } from "@/stores/vault-store";
 import {
-  buildGameExportFiles,
-  gameExportFileName,
-  type ExportableGame,
-} from "@dodi/games/export";
-import type { DiscoverGameDetail } from "@dodi/types/games";
-
-export type GameExportSource = "owned" | "discover";
+  type GameExportSource,
+  GameExportLoadError,
+  buildGameExportArchive,
+  loadExportTranscript,
+} from "@dodi/client-state/game-transfer";
+import { dialogField, exportOption, formAlert } from "@dodi/ui-recipes";
 
 interface GameExportDialogProps {
   open: boolean;
@@ -63,33 +62,29 @@ export function GameExportDialog({
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Owned only: unseal the stored conversation so the toggle can say whether
-  // there is one. Discover exports have no parent conversation.
-  useEffect(() => {
-    if (!open || !gameId || source !== "owned") {
-      if (open && gameId && source === "discover") {
-        setTranscript(null);
-        setWithTranscript(false);
-        setError(null);
-        setLoadedFor(gameId);
-      }
-      return;
+  // Discover exports have no parent conversation: reset on each open
+  // (render-phase adjustment, no effect).
+  const discoverOpenFor = open && gameId && source === "discover" ? gameId : null;
+  const [prevDiscoverOpenFor, setPrevDiscoverOpenFor] = useState<string | null>(null);
+  if (discoverOpenFor !== prevDiscoverOpenFor) {
+    setPrevDiscoverOpenFor(discoverOpenFor);
+    if (discoverOpenFor) {
+      setTranscript(null);
+      setWithTranscript(false);
+      setError(null);
+      setLoadedFor(discoverOpenFor);
     }
+  }
+
+  // Owned only: unseal the stored conversation so the toggle can say whether
+  // there is one.
+  useEffect(() => {
+    if (!open || !gameId || source !== "owned") return;
     let cancelled = false;
-    void useGameStore
-      .getState()
-      .loadOne(gameId)
-      .then((game) => {
+    // Re-runs when the vault unlocks (`session`), so the toggle can enable.
+    void loadExportTranscript(gameFlowDeps(), gameId)
+      .then((restored) => {
         if (cancelled) return;
-        let restored: unknown[] | null = null;
-        if (game?.agent_transcript_enc && session) {
-          try {
-            const parsed = session.decryptJson<unknown[]>(game.agent_transcript_enc);
-            if (Array.isArray(parsed) && parsed.length > 0) restored = parsed;
-          } catch {
-            /* malformed / wrong key — export without the conversation */
-          }
-        }
         setTranscript(restored);
         // Opting in is per-game and per-open; never carry it over.
         setWithTranscript(false);
@@ -109,30 +104,21 @@ export function GameExportDialog({
     setExporting(true);
     setError(null);
     try {
-      let row: ExportableGame | null = null;
-      if (source === "discover") {
-        const res = await dodi.request(`/api/discover/games/${gameId}`);
-        if (!res.ok) throw new Error(t("exportFailedGeneric"));
-        const detail = (await res.json()) as DiscoverGameDetail;
-        row = detailToExportable(detail);
-      } else {
-        // Re-read (forced): studio state lacks ages/duration, and the row may have
-        // changed since the list was cached.
-        row = await useGameStore.getState().loadOne(gameId, undefined, true);
-      }
-      if (!row) throw new Error(t("exportFailedGeneric"));
-      const files = buildGameExportFiles({
-        game: row,
-        transcript:
-          source === "owned" && withTranscript && loadedFor === gameId
-            ? transcript
-            : null,
+      const archive = await buildGameExportArchive(gameFlowDeps(), {
+        gameId,
+        source,
+        transcript: withTranscript && loadedFor === gameId ? transcript : null,
         appVersion: "dodi web",
       });
-      downloadBlob(packGameExportZip(files), gameExportFileName(row.title));
+      downloadBlob(zipBlob(archive.bytes), archive.fileName);
       onClose();
     } catch (e) {
-      const reason = e instanceof Error && e.message ? e.message : "";
+      const reason =
+        e instanceof GameExportLoadError
+          ? t("exportFailedGeneric")
+          : e instanceof Error && e.message
+            ? e.message
+            : "";
       setError(reason ? t("exportFailed", { reason }) : t("exportFailedGeneric"));
     } finally {
       setExporting(false);
@@ -164,8 +150,8 @@ export function GameExportDialog({
           <DialogDescription>{t("exportDescription")}</DialogDescription>
         </DialogHeader>
         {source === "owned" && (
-          <div className="flex flex-col gap-2">
-            <label className="flex w-fit cursor-pointer items-center gap-2.5 text-sm font-medium text-ink-2">
+          <div className={cn(exportOption.webGroup, exportOption.group)}>
+            <label className={cn(exportOption.web, exportOption.box, exportOption.text)}>
               <Switch
                 checked={withTranscript && hasTranscript}
                 disabled={!hasTranscript}
@@ -174,14 +160,14 @@ export function GameExportDialog({
               {t("exportIncludeTranscript")}
             </label>
             {!hasTranscript && (
-              <p className="text-xs text-muted-foreground">
+              <p className={dialogField.note}>
                 {t(session ? "exportTranscriptEmpty" : "exportTranscriptLocked")}
               </p>
             )}
           </div>
         )}
         {error && (
-          <div className="rounded-lg bg-danger-soft px-3 py-2 text-xs font-medium text-danger">
+          <div className={cn(formAlert.box, formAlert.text)}>
             {error}
           </div>
         )}
@@ -197,23 +183,4 @@ export function GameExportDialog({
       </DialogContent>
     </Dialog>
   );
-}
-
-function detailToExportable(detail: DiscoverGameDetail): ExportableGame {
-  return {
-    title: detail.title,
-    description: detail.description,
-    tags: detail.tags,
-    learning_goal: detail.learning_goal,
-    success_definition: detail.success_definition,
-    success_criteria: detail.success_criteria,
-    progress_kind: detail.progress_kind,
-    target_age_min: detail.target_age_min,
-    target_age_max: detail.target_age_max,
-    estimated_duration_minutes: detail.estimated_duration_minutes,
-    code_bundle: detail.code_bundle,
-    markdown: detail.markdown,
-    metadata: detail.metadata,
-    preview_image: detail.preview_image,
-  };
 }

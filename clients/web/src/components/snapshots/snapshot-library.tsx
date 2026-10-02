@@ -2,8 +2,12 @@
 
 import { useTranslations } from "next-intl";
 
+import { splitSnapshotSections } from "@dodi/client-state/snapshots";
+import { kidLibrary, kidLibraryState } from "@dodi/ui-recipes";
+
 import { SnapshotCard } from "@/components/snapshots/snapshot-card";
 import { useSnapshots } from "@/hooks/use-snapshots";
+import { cn } from "@/lib/utils";
 
 interface SnapshotLibraryProps {
   kidId: string;
@@ -13,46 +17,64 @@ export function SnapshotLibrary({ kidId }: SnapshotLibraryProps) {
   const t = useTranslations("snapshots");
   const { snapshots, loading, error, remove } = useSnapshots(kidId);
 
-  const received = snapshots.filter((s) => s.view.origin === "received");
-  const own = snapshots.filter((s) => s.view.origin === "own");
+  const { received, own } = splitSnapshotSections(snapshots);
 
   return (
-    <div className="w-full max-w-5xl">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className={kidLibrary.root}>
+      <div className={cn(kidLibrary.webHead, kidLibrary.head)}>
         <div>
-          <h1 className="text-[27px] font-extrabold tracking-tight text-ink">
+          <h1 className={kidLibrary.title}>
             {t("title")}
           </h1>
-          <p className="mt-0.5 text-sm font-semibold text-muted-foreground">
+          <p className={kidLibrary.subtitle}>
             {t("subtitle")}
           </p>
         </div>
       </div>
 
       {loading && (
-        <div className="mt-6 rounded-[20px] bg-white p-6 text-sm font-semibold text-muted-foreground shadow-[0_2px_10px_rgba(34,56,78,0.05)]">
+        <div
+          className={cn(
+            kidLibraryState.spaced,
+            kidLibraryState.loading,
+            kidLibraryState.loadingText,
+            kidLibraryState.webLoading,
+          )}
+        >
           {t("loading")}
         </div>
       )}
 
       {!loading && error && (
-        <div className="mt-6 rounded-[20px] bg-danger-soft p-6 text-sm font-semibold text-danger">
+        <div
+          className={cn(
+            kidLibraryState.spaced,
+            kidLibraryState.error,
+            kidLibraryState.errorText,
+          )}
+        >
           {error === "locked" ? t("locked") : t("loadFailed")}
         </div>
       )}
 
       {!loading && !error && snapshots.length === 0 && (
-        <div className="mt-6 rounded-[20px] bg-white/70 p-5 text-sm font-semibold text-muted-foreground">
+        <div
+          className={cn(
+            kidLibraryState.spaced,
+            kidLibraryState.empty,
+            kidLibraryState.emptyText,
+          )}
+        >
           {t("empty")}
         </div>
       )}
 
       {!loading && !error && received.length > 0 && (
         <section>
-          <h2 className="mb-3 mt-5 text-[13px] font-extrabold tracking-[0.07em] text-faint uppercase">
+          <h2 className={cn(kidLibrary.section, kidLibrary.sectionFirst)}>
             {t("sectionFriends")}
           </h2>
-          <div className="grid gap-3.5 sm:grid-cols-[repeat(auto-fill,minmax(310px,1fr))]">
+          <div className={cn(kidLibrary.webGrid, kidLibrary.grid)}>
             {received.map((snapshot) => (
               <SnapshotCard
                 key={snapshot.view.id}
@@ -66,10 +88,10 @@ export function SnapshotLibrary({ kidId }: SnapshotLibraryProps) {
 
       {!loading && !error && own.length > 0 && (
         <section>
-          <h2 className="mb-3 mt-6 text-[13px] font-extrabold tracking-[0.07em] text-faint uppercase">
+          <h2 className={cn(kidLibrary.section, kidLibrary.sectionNext)}>
             {t("sectionMine")}
           </h2>
-          <div className="grid gap-3.5 sm:grid-cols-[repeat(auto-fill,minmax(310px,1fr))]">
+          <div className={cn(kidLibrary.webGrid, kidLibrary.grid)}>
             {own.map((snapshot) => (
               <SnapshotCard
                 key={snapshot.view.id}

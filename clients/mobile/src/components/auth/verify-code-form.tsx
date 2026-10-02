@@ -1,15 +1,18 @@
 import { useEffect, useState } from "react";
-import { View } from "react-native";
+import { Pressable, View } from "react-native";
 import { useTranslations } from "use-intl";
 import { RESEND_COOLDOWN_SECONDS } from "@dodi/client-state";
 
-import { Button, Notice, Text, TextField } from "@/components/ui";
+import { Button, PinInput, Text } from "@/components/ui";
+import { cn } from "@/lib/cn";
 
 const CODE_LENGTH = 6;
 
 /**
- * The emailed 6-digit code step (sign-in of an unconfirmed account, and
- * registration). Callers resolve with an error message to show, or null.
+ * The 6-digit email-code entry (web: components/auth/verify-code-form): owns
+ * the code value, the resend cooldown and the inline error/info lines.
+ * Callers resolve with an error message to show, or null; on success the
+ * caller navigates away, so the form stays busy until it unmounts.
  */
 export function VerifyCodeForm({
   description,
@@ -18,7 +21,8 @@ export function VerifyCodeForm({
   onBack,
   children,
 }: {
-  description: string;
+  /** Shown above the code entry. Omit when the card header already says it. */
+  description?: string;
   onVerify: (code: string) => Promise<string | null>;
   onResend: () => Promise<string | null>;
   onBack: () => void;
@@ -38,11 +42,11 @@ export function VerifyCodeForm({
     return () => clearTimeout(timer);
   }, [cooldown]);
 
-  async function verify(): Promise<void> {
-    if (code.length < CODE_LENGTH || isVerifying) return;
+  async function verify(value: string): Promise<void> {
+    if (value.length < CODE_LENGTH || isVerifying) return;
     setIsVerifying(true);
     setError(null);
-    const message = await onVerify(code);
+    const message = await onVerify(value);
     if (message !== null) {
       setError(message);
       setCode("");
@@ -51,6 +55,7 @@ export function VerifyCodeForm({
   }
 
   async function resend(): Promise<void> {
+    if (cooldown > 0) return;
     setError(null);
     setInfo(null);
     const message = await onResend();
@@ -63,36 +68,45 @@ export function VerifyCodeForm({
   }
 
   return (
-    <View className="gap-4">
-      <Text variant="title">{t("enterCodeTitle")}</Text>
-      <Text variant="muted">{description}</Text>
-      <TextField
-        label={t("codeLabel")}
-        value={code}
-        onChangeText={(value) => setCode(value.replace(/\D/g, "").slice(0, CODE_LENGTH))}
-        keyboardType="number-pad"
-        textContentType="oneTimeCode"
-        autoComplete="one-time-code"
-        maxLength={CODE_LENGTH}
-        onSubmitEditing={() => void verify()}
-        className="tracking-[0.5em]"
-      />
-      {error ? <Notice tone="danger">{error}</Notice> : null}
-      {info ? <Notice tone="success">{info}</Notice> : null}
+    <View className="flex flex-col gap-4">
+      {description ? <Text className="text-sm text-muted-foreground">{description}</Text> : null}
+      <View className="flex flex-col gap-2">
+        <PinInput
+          length={CODE_LENGTH}
+          value={code}
+          onChange={setCode}
+          onComplete={(value) => void verify(value)}
+          isError={Boolean(error)}
+          autoFocus
+          accessibilityLabel={t("codeLabel")}
+        />
+      </View>
+      {error ? <Text className="text-center text-sm text-destructive">{error}</Text> : null}
+      {info ? <Text className="text-center text-sm text-success">{info}</Text> : null}
       {children}
       <Button
-        label={isVerifying ? t("verifyingCode") : t("verifyButton")}
-        isLoading={isVerifying}
-        disabled={code.length < CODE_LENGTH}
-        onPress={() => void verify()}
-      />
-      <Button
-        variant="ghost"
-        label={cooldown > 0 ? t("resendCodeIn", { seconds: cooldown }) : t("resendCode")}
-        disabled={cooldown > 0}
-        onPress={() => void resend()}
-      />
-      <Button variant="ghost" label={t("backToDifferentEmail")} onPress={onBack} />
+        onPress={() => void verify(code)}
+        disabled={isVerifying || code.length < CODE_LENGTH}
+        className="w-full"
+      >
+        {isVerifying ? t("verifyingCode") : t("verifyButton")}
+      </Button>
+      <View className="flex-row items-center justify-between">
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ disabled: cooldown > 0 }}
+          onPress={() => void resend()}
+          disabled={cooldown > 0}
+          hitSlop={12}
+        >
+          <Text className={cn("text-sm text-muted-foreground", cooldown > 0 && "opacity-50")}>
+            {cooldown > 0 ? t("resendCodeIn", { seconds: cooldown }) : t("resendCode")}
+          </Text>
+        </Pressable>
+        <Pressable accessibilityRole="button" onPress={onBack} hitSlop={12}>
+          <Text className="text-sm text-muted-foreground">{t("backToDifferentEmail")}</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }

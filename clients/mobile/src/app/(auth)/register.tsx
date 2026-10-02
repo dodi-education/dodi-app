@@ -1,6 +1,6 @@
 import { Link, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { View } from "react-native";
+import { Pressable, View } from "react-native";
 import { useTranslations } from "use-intl";
 import {
   type FinishRegistrationOutcome,
@@ -15,7 +15,20 @@ import {
 import { mobileAuthApi } from "@/adapters/auth";
 import { Captcha, type CaptchaHandle, requestCaptchaToken } from "@/components/auth/captcha";
 import { VerifyCodeForm } from "@/components/auth/verify-code-form";
-import { Button, Notice, Screen, SwitchRow, Text, TextField } from "@/components/ui";
+import { AuthLayout } from "@/components/shared/auth-layout";
+import {
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+  Icon,
+  Input,
+  Label,
+  Text,
+} from "@/components/ui";
 import { authDeps, isNpubConflict } from "@/lib/auth-deps";
 import { clientState } from "@/lib/client-state";
 import { markSignedIn } from "@/lib/session";
@@ -27,6 +40,7 @@ import { markSignedIn } from "@/lib/session";
  */
 export default function RegisterScreen() {
   const t = useTranslations("auth");
+  const tc = useTranslations("common");
   const router = useRouter();
   const [mode, setMode] = useState<RegistrationMode | null>(null);
   const [email, setEmail] = useState("");
@@ -40,6 +54,7 @@ export default function RegisterScreen() {
   const [step, setStep] = useState<"form" | "awaitingOtp">("form");
   // The code was consumed but persisting failed: retry the persist, not the code.
   const [isFinalizeRetry, setIsFinalizeRetry] = useState(false);
+  const [isFinalizing, setIsFinalizing] = useState(false);
   const captchaRef = useRef<CaptchaHandle>(null);
 
   useEffect(() => {
@@ -97,138 +112,209 @@ export default function RegisterScreen() {
     setIsFinalizeRetry(false);
   }
 
+  const signInFooter = (
+    <CardFooter>
+      <Text className="text-sm text-muted-foreground">
+        {t("alreadyHaveAccount")}{" "}
+        <Link href="/login" asChild>
+          <Text accessibilityRole="link" className="text-sm font-medium text-primary">
+            {tc("signIn")}
+          </Text>
+        </Link>
+      </Text>
+    </CardFooter>
+  );
+
   if (mode === null) {
     return (
-      <Screen isCentered>
-        <Text variant="title">{t("createAccountTitle")}</Text>
-        <Text variant="muted">{t("loadingRegistration")}</Text>
-      </Screen>
-    );
-  }
-
-  if (mode === "closed") {
-    return (
-      <Screen isCentered>
-        <Text variant="title">{t("registrationClosedTitle")}</Text>
-        <Text variant="muted">{t("registrationClosed")}</Text>
-        <Link href="/login" asChild>
-          <Button variant="secondary" label={t("backToSignIn")} />
-        </Link>
-      </Screen>
+      <AuthLayout>
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("createAccountTitle")}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Text className="text-sm text-muted-foreground">{t("loadingRegistration")}</Text>
+          </CardContent>
+        </Card>
+      </AuthLayout>
     );
   }
 
   if (step === "awaitingOtp") {
     return (
-      <Screen isCentered>
-        {isFinalizeRetry ? (
-          <>
-            <Notice tone="danger">{t("vaultSetupFailed")}</Notice>
-            <Button
-              label={t("tryAgain")}
-              onPress={async () => {
-                const message = handleFinish(
-                  await finalizeRegistration(clientState.vault, isNpubConflict),
-                );
-                if (message !== null) setError(message);
-              }}
-            />
-            {error ? <Notice tone="danger">{error}</Notice> : null}
-          </>
-        ) : (
-          <VerifyCodeForm
-            description={t("enterCodeDescription", { email })}
-            onVerify={async (code) =>
-              handleFinish(
-                await verifyRegistrationCode(authDeps, { email: email.trim(), code }, isNpubConflict),
-              )
-            }
-            onResend={async () => {
-              const captcha = await requestCaptchaToken(captchaRef.current);
-              if (!captcha.ok) return t("captchaUnavailable");
-              const key = await resendCode(mobileAuthApi, {
-                email: email.trim(),
-                captchaToken: captcha.token,
-              });
-              return key ? t(key) : null;
-            }}
-            onBack={() => void backToForm()}
-          >
-            <Captcha ref={captchaRef} action="sign-up" />
-          </VerifyCodeForm>
-        )}
-      </Screen>
+      <AuthLayout>
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("enterCodeTitle")}</CardTitle>
+            <CardDescription>{t("enterCodeDescription", { email })}</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            {isFinalizeRetry ? (
+              <>
+                {error ? <Text className="text-sm text-destructive">{error}</Text> : null}
+                <Button
+                  onPress={async () => {
+                    setIsFinalizing(true);
+                    setError(null);
+                    const message = handleFinish(
+                      await finalizeRegistration(clientState.vault, isNpubConflict),
+                    );
+                    if (message !== null) setError(message);
+                    setIsFinalizing(false);
+                  }}
+                  disabled={isFinalizing}
+                  className="w-full"
+                >
+                  {isFinalizing ? tc("loading") : t("tryAgain")}
+                </Button>
+              </>
+            ) : (
+              <VerifyCodeForm
+                onVerify={async (code) => {
+                  const message = handleFinish(
+                    await verifyRegistrationCode(authDeps, { email: email.trim(), code }, isNpubConflict),
+                  );
+                  // A consumed code with a failed persist moves to the retry above.
+                  if (message !== null) setError(message);
+                  return message;
+                }}
+                onResend={async () => {
+                  const captcha = await requestCaptchaToken(captchaRef.current);
+                  if (!captcha.ok) return t("captchaUnavailable");
+                  const key = await resendCode(mobileAuthApi, {
+                    email: email.trim(),
+                    captchaToken: captcha.token,
+                  });
+                  return key ? t(key) : null;
+                }}
+                onBack={() => void backToForm()}
+              >
+                <Captcha ref={captchaRef} action="sign-up" />
+              </VerifyCodeForm>
+            )}
+          </CardContent>
+          {signInFooter}
+        </Card>
+      </AuthLayout>
     );
   }
 
-  const secure = { showLabel: t("showPassword"), hideLabel: t("hidePassword") };
+  if (mode === "closed") {
+    return (
+      <AuthLayout>
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("registrationClosedTitle")}</CardTitle>
+            <CardDescription>{t("registrationClosed")}</CardDescription>
+          </CardHeader>
+          {signInFooter}
+        </Card>
+      </AuthLayout>
+    );
+  }
+
   return (
-    <Screen isCentered>
-      <View className="gap-1">
-        <Text variant="title">{t("createAccountTitle")}</Text>
-        <Text variant="muted">{t("createAccountDescription")}</Text>
-      </View>
-      <TextField
-        label={t("email")}
-        placeholder={t("emailPlaceholder")}
-        value={email}
-        onChangeText={setEmail}
-        keyboardType="email-address"
-        autoCapitalize="none"
-        autoComplete="email"
-        textContentType="username"
-      />
-      <TextField
-        label={t("password")}
-        placeholder={t("passwordPlaceholder")}
-        value={password}
-        onChangeText={setPassword}
-        autoComplete="new-password"
-        textContentType="newPassword"
-        secure={secure}
-      />
-      <TextField
-        label={t("confirmPassword")}
-        value={confirmPassword}
-        onChangeText={setConfirmPassword}
-        autoComplete="new-password"
-        textContentType="newPassword"
-        secure={secure}
-      />
-      {mode === "invite" ? (
-        <TextField
-          label={t("inviteCode")}
-          placeholder={t("inviteCodePlaceholder")}
-          value={inviteCode}
-          onChangeText={setInviteCode}
-          autoCapitalize="none"
-        />
-      ) : null}
-      <SwitchRow label={t("importNsecToggle")} value={isImportingNsec} onValueChange={setIsImportingNsec} />
-      {isImportingNsec ? (
-        <TextField
-          label={t("importNsecLabel")}
-          hint={t("importNsecHint")}
-          value={importedNsec}
-          onChangeText={setImportedNsec}
-          autoCapitalize="none"
-          autoCorrect={false}
-          secure={secure}
-        />
-      ) : null}
-      {error ? <Notice tone="danger">{error}</Notice> : null}
-      <Captcha ref={captchaRef} action="sign-up" />
-      <Button
-        label={isLoading ? t("creatingAccount") : t("createAccount")}
-        isLoading={isLoading}
-        onPress={() => void submit()}
-      />
-      <View className="flex-row flex-wrap items-center justify-center gap-1">
-        <Text variant="muted">{t("alreadyHaveAccount")}</Text>
-        <Link href="/login" asChild>
-          <Button variant="ghost" label={t("backToSignIn")} />
-        </Link>
-      </View>
-    </Screen>
+    <AuthLayout>
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("createAccountTitle")}</CardTitle>
+          <CardDescription>{t("createAccountDescription")}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <View className="flex flex-col gap-4">
+            {mode === "invite" ? (
+              <View className="flex flex-col gap-2">
+                <Label>{t("inviteCode")}</Label>
+                <Input
+                  placeholder={t("inviteCodePlaceholder")}
+                  value={inviteCode}
+                  onChangeText={setInviteCode}
+                  autoCapitalize="none"
+                  accessibilityLabel={t("inviteCode")}
+                />
+              </View>
+            ) : null}
+            <View className="flex flex-col gap-2">
+              <Label>{t("email")}</Label>
+              <Input
+                placeholder={t("emailPlaceholder")}
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoComplete="email"
+                textContentType="username"
+                accessibilityLabel={t("email")}
+              />
+            </View>
+            <View className="flex flex-col gap-2">
+              <Label>{t("password")}</Label>
+              <Input
+                placeholder={t("passwordPlaceholder")}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+                autoCapitalize="none"
+                autoComplete="new-password"
+                textContentType="newPassword"
+                accessibilityLabel={t("password")}
+              />
+            </View>
+            <View className="flex flex-col gap-2">
+              <Label>{t("confirmPassword")}</Label>
+              <Input
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                secureTextEntry
+                autoCapitalize="none"
+                autoComplete="new-password"
+                textContentType="newPassword"
+                accessibilityLabel={t("confirmPassword")}
+              />
+            </View>
+            {/* The web's <details>: a disclosure line, the field below it when open. */}
+            <View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ expanded: isImportingNsec }}
+                onPress={() => setIsImportingNsec((open) => !open)}
+                hitSlop={12}
+                className="flex-row items-center gap-1 self-start"
+              >
+                <Icon
+                  name={isImportingNsec ? "chevron_down" : "chevron_right"}
+                  size={14}
+                  color="muted-foreground"
+                />
+                <Text className="text-sm text-muted-foreground">{t("importNsecToggle")}</Text>
+              </Pressable>
+              {isImportingNsec ? (
+                <View className="mt-3 flex flex-col gap-2">
+                  <Label>{t("importNsecLabel")}</Label>
+                  <Input
+                    value={importedNsec}
+                    onChangeText={setImportedNsec}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    autoComplete="off"
+                    spellCheck={false}
+                    placeholder={t("accountKeyPlaceholder")}
+                    className="font-mono"
+                    accessibilityLabel={t("importNsecLabel")}
+                  />
+                  <Text className="text-xs text-muted-foreground">{t("importNsecHint")}</Text>
+                </View>
+              ) : null}
+            </View>
+            {error ? <Text className="text-sm text-destructive">{error}</Text> : null}
+            <Captcha ref={captchaRef} action="sign-up" />
+            <Button onPress={() => void submit()} disabled={isLoading} className="w-full">
+              {isLoading ? t("creatingAccount") : t("createAccount")}
+            </Button>
+          </View>
+        </CardContent>
+        {signInFooter}
+      </Card>
+    </AuthLayout>
   );
 }

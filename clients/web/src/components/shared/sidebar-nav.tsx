@@ -1,5 +1,7 @@
 "use client";
 
+import { isNavItemActive, PARENT_NAV_GROUPS } from "@dodi/client-state/parent-nav";
+import { navGroupLabel, navItem } from "@dodi/ui-recipes";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -11,8 +13,6 @@ interface NavItem {
   href: string;
   label: string;
   icon: IconName;
-  /** Extra path prefixes that also mark this item active — for sibling routes
-   *  the destination links out to (e.g. the games list → the game studio). */
   aliases?: string[];
 }
 
@@ -21,55 +21,21 @@ interface NavGroup {
   items: NavItem[];
 }
 
-/** True when the current path falls under a nav item (its href or an alias). */
-function navItemActive(item: NavItem, pathname: string): boolean {
-  return [item.href, ...(item.aliases ?? [])].some((prefix) =>
-    pathname.startsWith(prefix),
-  );
-}
-
+/** The shared parent navigation (@dodi/client-state/parent-nav), localized. */
 export function useNavGroups(): NavGroup[] {
-  const t = useTranslations("nav");
-
-  return [
-    {
-      label: t("navGroupFamily"),
-      items: [
-        { href: "/parent/dashboard", label: t("dashboard"), icon: "dashboard" },
-        { href: "/parent/kids", label: t("kids"), icon: "kids" },
-        { href: "/parent/personas", label: t("personas"), icon: "personas" },
-        {
-          href: "/parent/games",
-          label: t("gameStudio"),
-          icon: "games",
-          // Creating/editing a game lives under /parent/game-studio; keep the
-          // Games item active there too.
-          aliases: ["/parent/game-studio"],
-        },
-        {
-          href: "/parent/snapshots",
-          label: t("parentSnapshots"),
-          icon: "camera",
-        },
-      ],
-    },
-    {
-      label: t("navGroupInsights"),
-      items: [
-        {
-          href: "/parent/activities",
-          label: t("activities"),
-          icon: "activities",
-        },
-        {
-          href: "/parent/usage",
-          label: t("usage"),
-          icon: "usage",
-        },
-      ],
-    },
-  ];
+  const t = useTranslations();
+  return PARENT_NAV_GROUPS.map((group) => ({
+    label: t(group.labelKey),
+    items: group.items.map((item) => ({
+      href: item.href,
+      label: t(item.labelKey),
+      icon: item.icon,
+      aliases: item.aliases,
+    })),
+  }));
 }
+
+const navItemActive = isNavItemActive;
 
 /** Label for the nav destination matching the current path (for the mobile top bar). */
 export function useCurrentNavLabel(): string | null {
@@ -94,8 +60,8 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
         <div key={group.label} className="flex flex-col gap-0.5">
           <div
             className={cn(
-              "px-2.5 pb-1.5 text-[11px] font-bold tracking-[0.07em] text-faint uppercase",
-              gi === 0 ? "pt-1" : "pt-4",
+              navGroupLabel.text,
+              gi === 0 ? navGroupLabel.first : navGroupLabel.rest,
             )}
           >
             {group.label}
@@ -108,13 +74,15 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
                 href={item.href}
                 onClick={onNavigate}
                 className={cn(
-                  "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors",
+                  navItem.box,
+                  navItem.text,
+                  navItem.web,
                   isActive
-                    ? "bg-primary-soft font-semibold text-primary"
-                    : "font-medium text-ink-2 hover:bg-foreground/5",
+                    ? cn(navItem.boxActive, navItem.textActive)
+                    : cn(navItem.textInactive, navItem.webInactive),
                 )}
               >
-                <Icon name={item.icon} size={17} />
+                <Icon name={item.icon} size={navItem.icon.size} />
                 <span>{item.label}</span>
               </Link>
             );

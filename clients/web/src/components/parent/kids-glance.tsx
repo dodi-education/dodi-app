@@ -1,5 +1,6 @@
 "use client";
 
+import { kidAvatar, kidAvatarPalette, kidRowLink } from "@dodi/ui-recipes";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 
@@ -8,15 +9,12 @@ import { KidRowActions } from "@/components/parent/kid-row-actions";
 import { Section } from "@/components/parent/section";
 import { Badge } from "@/components/ui/badge";
 import { useKids } from "@/hooks/use-kids";
+import { cn } from "@/lib/utils";
 import { kidGlanceItems } from "@dodi/client-state/dashboard";
 import { ageFromBirthdate } from "@dodi/intl";
 
-const AVATAR_PALETTE = [
-  { bg: "bg-primary-soft-2", fg: "text-primary" },
-  { bg: "bg-success-soft", fg: "text-success" },
-  { bg: "bg-[#EFE9FA]", fg: "text-[#7456C4]" },
-  { bg: "bg-[#FDF1DC]", fg: "text-[#B0782A]" },
-];
+/** Shared with the app (@dodi/ui-recipes). */
+const AVATAR_PALETTE = kidAvatarPalette;
 
 function avatarColor(index: number) {
   return AVATAR_PALETTE[index % AVATAR_PALETTE.length];
@@ -44,10 +42,16 @@ export function KidsGlance() {
             <Row key={kid.id} clickable>
               <Link
                 href={`/parent/kids/${kid.id}`}
-                className="flex min-w-0 flex-1 items-center gap-3.5"
+                className={cn(kidRowLink.web, kidRowLink.box)}
               >
                 <div
-                  className={`flex size-[34px] shrink-0 items-center justify-center rounded-full text-[13px] font-bold ${color.bg} ${color.fg}`}
+                  className={cn(
+                    kidAvatar.web,
+                    kidAvatar.box,
+                    kidAvatar.text,
+                    color.bg,
+                    color.fg,
+                  )}
                 >
                   {kid.initial}
                 </div>

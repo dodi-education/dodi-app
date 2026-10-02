@@ -4,6 +4,8 @@ import { getTranslations } from "next-intl/server";
 
 import { GameLibrary } from "@/components/games/game-library";
 import { BrowseContext } from "@/components/kid/browse-context";
+import { cn } from "@/lib/utils";
+import { kidRequiredCard } from "@dodi/ui-recipes";
 
 export default async function GamesPage() {
   const t = await getTranslations("games");
@@ -12,9 +14,9 @@ export default async function GamesPage() {
 
   if (!kidId) {
     return (
-      <div className="my-auto w-full max-w-xl rounded-[20px] bg-white p-6 text-center shadow-[0_2px_10px_rgba(34,56,78,0.05)]">
-        <h1 className="text-xl font-extrabold text-ink">{t("title")}</h1>
-        <p className="mt-2 text-sm font-semibold text-muted-foreground">
+      <div className={cn(kidRequiredCard.box, kidRequiredCard.web)}>
+        <h1 className={kidRequiredCard.title}>{t("title")}</h1>
+        <p className={kidRequiredCard.text}>
           {t("kidRequired")}
         </p>
       </div>

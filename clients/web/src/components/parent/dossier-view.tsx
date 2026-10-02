@@ -4,14 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 
 import { useDateFormat } from "@/components/providers/date-format-provider";
-import { tokenizeDossier } from "@/lib/dossier-citations";
+import { cn } from "@/lib/utils";
+import { dossierView } from "@dodi/ui-recipes";
+import {
+  tokenizeDossier,
+  type CitationEntry,
+} from "@dodi/client-state/kid-memory";
 
-/** Decrypted transcript turn backing one dossier citation. */
-export interface CitationEntry {
-  role: "dodi" | "kid";
-  text: string;
-  occurredAt: string;
-}
+export type { CitationEntry };
 
 interface DossierViewProps {
   dossier: string;
@@ -67,7 +67,7 @@ export function DossierView({
   return (
     <div
       ref={containerRef}
-      className="max-h-96 overflow-auto whitespace-pre-wrap rounded-md bg-muted p-3.5 text-sm leading-relaxed text-ink-2"
+      className={cn(dossierView.web, dossierView.box, dossierView.text)}
     >
       {tokens.map((tok, i) => {
         if (tok.type === "text") {
@@ -90,7 +90,7 @@ export function DossierView({
               type="button"
               aria-expanded={isOpen}
               aria-label={t("citationLabel", { num: tok.num })}
-              className="-my-1 mx-px cursor-pointer p-1 align-super text-[10px] font-semibold leading-none text-primary hover:underline"
+              className={cn(dossierView.webCitation, dossierView.citation)}
               onClick={() => setOpenIndex(isOpen ? null : i)}
             >
               [{tok.num}]
@@ -98,20 +98,30 @@ export function DossierView({
             {isOpen && (
               <span
                 role="tooltip"
-                className="absolute left-1/2 top-full z-10 mt-1 block w-64 max-w-[80vw] -translate-x-1/2 whitespace-normal rounded-md border border-border bg-card p-3 text-xs shadow-lg"
+                className={cn(
+                  dossierView.webPopover,
+                  dossierView.popover,
+                  dossierView.popoverSize,
+                )}
               >
                 {entry ? (
                   <>
-                    <span className="block font-medium text-faint">
+                    <span
+                      className={cn(dossierView.webBlock, dossierView.popoverMeta)}
+                    >
                       {entry.role === "kid" ? kidName : "dodi"} ·{" "}
                       {formatDateTime(entry.occurredAt)}
                     </span>
-                    <span className="mt-1 block leading-relaxed text-ink-2">
+                    <span
+                      className={cn(dossierView.webBlock, dossierView.popoverText)}
+                    >
                       {entry.text}
                     </span>
                   </>
                 ) : (
-                  <span className="block text-faint">
+                  <span
+                    className={cn(dossierView.webBlock, dossierView.popoverMissing)}
+                  >
                     {t("citationMissing")}
                   </span>
                 )}

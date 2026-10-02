@@ -1,0 +1,41 @@
+diff --git a/android/src/main/cpp/audioapi/android/core/AndroidAudioRecorder.cpp b/android/src/main/cpp/audioapi/android/core/AndroidAudioRecorder.cpp
+index 0f997f8ebaae0243057cc920be5c86a7fbf679ad..2d1a1cb4fae3e2ba8730dbab835d6923d06cd363 100644
+--- a/android/src/main/cpp/audioapi/android/core/AndroidAudioRecorder.cpp
++++ b/android/src/main/cpp/audioapi/android/core/AndroidAudioRecorder.cpp
+@@ -69,7 +69,12 @@ Result<NoneType, std::string> AndroidAudioRecorder::openAudioStream() {
+   }
+ 
+   oboe::AudioStreamBuilder builder;
+-  builder.setSharingMode(oboe::SharingMode::Exclusive)
++  // dodi patch: a full-duplex voice conversation (the mic stays open while
++  // the companion speaks) needs the platform's echo canceller. The
++  // VoiceCommunication preset turns on AEC + noise suppression; effects only
++  // run on shared (non-MMAP) input streams, so the stream is shared.
++  builder.setSharingMode(oboe::SharingMode::Shared)
++      ->setInputPreset(oboe::InputPreset::VoiceCommunication)
+       ->setDirection(oboe::Direction::Input)
+       ->setFormat(oboe::AudioFormat::Float)
+       ->setFormatConversionAllowed(true)
+diff --git a/ios/audioapi/ios/system/AudioEngine.mm b/ios/audioapi/ios/system/AudioEngine.mm
+index d0e77d89c1d26f721e093702b2fd75e02339a86e..afeadee4dab19642dd531ce2b6d99401ed1fde1a 100644
+--- a/ios/audioapi/ios/system/AudioEngine.mm
++++ b/ios/audioapi/ios/system/AudioEngine.mm
+@@ -59,6 +59,18 @@ static AudioEngine *_sharedInstance = nil;
+   }
+ 
+   self.audioEngine = [[AVAudioEngine alloc] init];
++
++  // dodi patch: the voice companion runs full duplex (mic open while it
++  // speaks), so the engine's I/O needs Apple's voice processing (echo
++  // cancellation + AGC). The voiceChat session mode alone doesn't enable it for
++  // AVAudioEngine. It has to be set on a stopped engine, before any input format
++  // is read (voice processing changes it), so it is enabled here, once, at
++  // creation. A failure (e.g. no record-capable session yet, simulator) only
++  // logs: audio still works, without echo cancellation.
++  NSError *voiceProcessingError = nil;
++  if (![self.audioEngine.inputNode setVoiceProcessingEnabled:YES error:&voiceProcessingError]) {
++    NSLog(@"AudioEngine: voice processing not enabled: %@", [voiceProcessingError debugDescription]);
++  }
+ }
+ 
+ - (void)destroyAudioEngine

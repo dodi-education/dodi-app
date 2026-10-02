@@ -10,37 +10,33 @@ import { KidAvatar } from "@/components/kid/kid-avatar";
 import { Icon } from "@/components/shared/icon";
 import { useActiveKid } from "@/hooks/use-active-kid";
 import { dodi } from "@/lib/api";
-import { computeNeedsPin } from "@/lib/active-kid";
+import { clientState } from "@/lib/client-state";
 import { refreshFriendCards } from "@/lib/friends";
 import {
   AVATAR_GROUPS,
   KID_AVA_COLORS,
-  PIN_LENGTH,
   avatarImage,
   readAvatarConfig,
   type AvatarConfig,
 } from "@/lib/avatars";
 import { cn } from "@/lib/utils";
+import { kidSwitcher, kidSwitcherSizes } from "@dodi/ui-recipes";
 import { useActiveKidStore } from "@/stores/active-kid-store";
 import { useDodiSessionStore } from "@/stores/dodi-session-store";
 import { useKidStore } from "@/stores/kid-store";
 import { useVaultStore } from "@/stores/vault-store";
-import { encryptKidFields } from "@dodi/vault";
+import {
+  PIN_SOLVED_DELAY_MS,
+  createCardRefreshScheduler,
+  kidPickAction,
+  parseAvatarPin as parsePin,
+  solvedPinAction,
+  switchActiveKid,
+  updateKidLook,
+  verifyAvatarPin,
+} from "@dodi/client-state/kid-view";
 
-import type { Json, Kid } from "@dodi/types/database";
-
-/** The target kid's decrypted PIN sequence, or null when the puzzle is off. */
-function parsePin(kid: Kid): string[] | null {
-  if (!kid.avatar_pin) return null;
-  try {
-    const arr: unknown = JSON.parse(kid.avatar_pin);
-    return Array.isArray(arr) && arr.length === PIN_LENGTH
-      ? (arr as string[])
-      : null;
-  } catch {
-    return null;
-  }
-}
+import type { Kid } from "@dodi/types/database";
 
 export function KidSwitcher() {
   const t = useTranslations("kidProfile");
@@ -52,36 +48,23 @@ export function KidSwitcher() {
   const { kids: kidList, activeKid, activeKidId, needsPin } = useActiveKid();
   const kids = kidList ?? [];
   const unlockedKidIds = useActiveKidStore((s) => s.unlockedKidIds);
-  const setActive = useActiveKidStore((s) => s.setActive);
   const markUnlocked = useActiveKidStore((s) => s.markUnlocked);
 
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
-  const cardRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const cardRefreshKidId = useRef<string | null>(null);
 
   // Re-seal this kid's friend cards after they edit their look, so friends see
   // the new avatar/color. Debounced while tapping; flushed when the popover
   // closes or unmounts so a friend never keeps a stale card.
-  const flushCardRefresh = useCallback(() => {
-    if (cardRefreshTimer.current) {
-      clearTimeout(cardRefreshTimer.current);
-      cardRefreshTimer.current = null;
-    }
-    const pid = cardRefreshKidId.current;
-    cardRefreshKidId.current = null;
-    if (!pid) return;
-    const session = useVaultStore.getState().session;
-    const prof = useKidStore.getState().byId[pid];
-    if (session && prof) void refreshFriendCards(prof, session).catch(() => {});
-  }, []);
-
-  function scheduleCardRefresh(kidId: string) {
-    cardRefreshKidId.current = kidId;
-    if (cardRefreshTimer.current) clearTimeout(cardRefreshTimer.current);
-    cardRefreshTimer.current = setTimeout(flushCardRefresh, 1200);
-  }
+  const [cardRefresh] = useState(() =>
+    createCardRefreshScheduler((pid) => {
+      const session = useVaultStore.getState().session;
+      const prof = useKidStore.getState().byId[pid];
+      if (session && prof) void refreshFriendCards(prof, session).catch(() => {});
+    }),
+  );
+  const flushCardRefresh = useCallback(() => cardRefresh.flush(), [cardRefresh]);
 
   useEffect(() => () => flushCardRefresh(), [flushCardRefresh]);
 
@@ -123,49 +106,42 @@ export function KidSwitcher() {
   const canCancelPuzzle = !!pending && pending !== activeKidId;
 
   function handleSwitch(kid: Kid) {
-    // End Dodi session for the outgoing kid (fires the memory update).
-    useDodiSessionStore.getState().endSession();
-    // Store persists cookies (active kid + locale) and marks the kid unlocked.
-    setActive(kid);
+    // End Dodi session for the outgoing kid (fires the memory update); the
+    // store persists cookies (active kid + locale) and marks the kid unlocked.
+    switchActiveKid(
+      {
+        activeKid: clientState.activeKid,
+        endVoiceSession: () => useDodiSessionStore.getState().endSession(),
+      },
+      kid,
+    );
     forceClose();
     router.refresh();
   }
 
   function onPickKid(kid: Kid) {
     // Re-tapping the already-active, unlocked kid is a no-op.
-    if (kid.id === activeKidId && !needsPin) return;
-    if (computeNeedsPin(kid, unlockedKidIds)) {
-      setPending(kid.id);
-    } else {
-      handleSwitch(kid);
-    }
+    const action = kidPickAction(kid, { activeKidId, needsPin, unlockedKidIds });
+    if (action === "puzzle") setPending(kid.id);
+    else if (action === "switch") handleSwitch(kid);
   }
 
   /** Persist a look change for the active kid: optimistic + encrypted PATCH. */
   function updateLook(partial: Partial<AvatarConfig>) {
     const kid = activeKid;
     if (!kid) return;
-    const cfg: AvatarConfig = {
-      ...readAvatarConfig(kid.avatar_config),
-      ...partial,
-    };
-    const cfgJson: Json = { color: cfg.color, avatar: cfg.avatar };
-    useKidStore.getState().patchLocal(kid.id, { avatar_config: cfgJson });
-
-    const session = useVaultStore.getState().session;
-    if (!session) return;
-    const enc = encryptKidFields(session, { avatar_config: cfgJson });
-    void dodi.request(`/api/kids/${kid.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ avatar_config: enc.avatar_config }),
-    });
+    const sent = updateKidLook(
+      { api: dodi, kids: clientState.kids, vault: clientState.vault },
+      kid,
+      partial,
+    );
+    if (!sent) return;
     // Propagate the new look to friends' cards (debounced across rapid taps).
-    scheduleCardRefresh(kid.id);
+    cardRefresh.schedule(kid.id);
   }
 
   if (kids.length === 0) {
-    return <div className="h-10 w-10 rounded-full bg-primary-soft-2" />;
+    return <div className={kidSwitcher.empty} />;
   }
 
   const activeCfg: AvatarConfig = activeKid
@@ -177,25 +153,26 @@ export function KidSwitcher() {
     <div className="relative" ref={ref}>
       <button
         onClick={() => (popoverOpen ? closePopover() : setOpen(true))}
-        className="flex items-center gap-2.5 rounded-full bg-white/70 py-1.5 pl-1.5 pr-4 text-[15px] font-extrabold text-ink transition hover:bg-white"
+        className={cn(kidSwitcher.pill, kidSwitcher.pillText, kidSwitcher.webPill)}
         aria-label={tn("switchKid")}
       >
         {activeKid ? (
-          <KidAvatar kid={activeKid} size={34} />
+          <KidAvatar kid={activeKid} size={kidSwitcherSizes.pillAvatar} />
         ) : (
-          <span className="size-[34px] rounded-full bg-primary-soft-2" />
+          <span className={kidSwitcher.pillAvatarEmpty} />
         )}
         {activeKid && (
-          <span className="max-w-[120px] truncate">
+          <span className={cn(kidSwitcher.pillName, kidSwitcher.webPillName)}>
             {activeKid.display_name}
           </span>
         )}
         <Icon
           name="chevron_down"
-          size={16}
+          size={kidSwitcher.chevron.size}
           className={cn(
-            "text-faint transition-transform",
-            popoverOpen && "rotate-180",
+            "text-faint",
+            kidSwitcher.webChevron,
+            popoverOpen && kidSwitcher.webChevronOpen,
           )}
         />
       </button>
@@ -204,10 +181,10 @@ export function KidSwitcher() {
         <div
           role="dialog"
           aria-label={t("whosPlaying")}
-          className="absolute left-0 top-full z-50 mt-2.5 w-[400px] max-w-[calc(100vw-2rem)] rounded-[22px] bg-white p-4 shadow-[0_20px_56px_rgba(34,56,78,0.24)]"
+          className={cn(kidSwitcher.popover, kidSwitcher.webPopover)}
         >
-          <div className="mb-2.5 flex items-center justify-between">
-            <div className="text-[12.5px] font-extrabold uppercase tracking-[0.06em] text-faint">
+          <div className={cn(kidSwitcher.head, kidSwitcher.webHead)}>
+            <div className={kidSwitcher.label}>
               {t("whosPlaying")}
             </div>
             {/* No close affordance while a locked profile is gated. */}
@@ -215,14 +192,18 @@ export function KidSwitcher() {
               <button
                 onClick={closePopover}
                 aria-label={t("close")}
-                className="flex size-7 items-center justify-center rounded-full bg-muted text-muted-foreground transition-colors hover:bg-border hover:text-ink"
+                className={cn(
+                  kidSwitcher.close,
+                  kidSwitcher.closeText,
+                  kidSwitcher.webClose,
+                )}
               >
-                <Icon name="close" size={15} stroke={2.3} />
+                <Icon name="close" size={kidSwitcherSizes.closeIcon} stroke={2.3} />
               </button>
             )}
           </div>
 
-          <div className="flex flex-col gap-1">
+          <div className={cn(kidSwitcher.list, kidSwitcher.webList)}>
             {kids.map((p) => {
               const isActive = p.id === activeKidId;
               const isPending = p.id === shownPendingId;
@@ -231,13 +212,14 @@ export function KidSwitcher() {
                   key={p.id}
                   onClick={() => onPickKid(p)}
                   className={cn(
-                    "flex w-full items-center gap-3 rounded-2xl px-2.5 py-[7px] text-left transition-colors hover:bg-muted",
-                    isActive && "bg-primary-soft",
-                    isPending && "bg-muted",
+                    kidSwitcher.row,
+                    kidSwitcher.webRow,
+                    isActive && kidSwitcher.rowActive,
+                    isPending && kidSwitcher.rowPending,
                   )}
                 >
-                  <KidAvatar kid={p} size={42} />
-                  <span className="flex-1 text-base font-extrabold text-ink">
+                  <KidAvatar kid={p} size={kidSwitcherSizes.rowAvatar} />
+                  <span className={kidSwitcher.rowName}>
                     {p.display_name}
                   </span>
                   {isPending ? (
@@ -257,44 +239,47 @@ export function KidSwitcher() {
             })}
           </div>
 
-          <div className="my-3 h-px bg-border" />
+          <div className={kidSwitcher.divider} />
 
           {shownPendingKid ? (
             <div>
-              <div className="mb-1 flex items-center justify-between">
-                <div className="text-[12.5px] font-extrabold uppercase tracking-[0.06em] text-faint">
+              <div className={cn(kidSwitcher.puzzleHead, kidSwitcher.webPuzzleHead)}>
+                <div className={kidSwitcher.label}>
                   {t("secret", { name: shownPendingKid.display_name })}
                 </div>
                 {canCancelPuzzle && (
                   <button
                     onClick={() => setPending(null)}
-                    className="rounded-[9px] px-2 py-1 text-[13px] font-bold text-muted-foreground transition-colors hover:bg-muted hover:text-ink"
+                    className={cn(
+                      kidSwitcher.cancel,
+                      kidSwitcher.cancelText,
+                      kidSwitcher.webCancel,
+                    )}
                   >
                     {t("cancel")}
                   </button>
                 )}
               </div>
-              <div className="mb-4 text-[13px] font-semibold text-muted-foreground">
+              <div className={kidSwitcher.hint}>
                 {t("secretHint")}
               </div>
               <AvatarPinPuzzle
                 mode="solve"
                 onSolve={(seq) => {
-                  const pin = parsePin(shownPendingKid);
-                  const ok =
-                    !!pin &&
-                    pin.length === seq.length &&
-                    pin.every((a, i) => a === seq[i]);
+                  const ok = verifyAvatarPin(shownPendingKid, seq);
                   if (ok) {
                     setTimeout(() => {
-                      if (shownPendingKid.id === activeKidId) {
+                      if (
+                        solvedPinAction(shownPendingKid.id, activeKidId) ===
+                        "unlock"
+                      ) {
                         // Entry unlock of the active profile — no switch.
                         markUnlocked(shownPendingKid.id);
                         forceClose();
                       } else {
                         handleSwitch(shownPendingKid);
                       }
-                    }, 250);
+                    }, PIN_SOLVED_DELAY_MS);
                   }
                   return ok;
                 }}
@@ -302,19 +287,23 @@ export function KidSwitcher() {
             </div>
           ) : activeKid ? (
             <>
-              <div className="mb-3 flex items-center gap-3.5">
-                <KidAvatar kid={activeKid} size={76} pad={5} />
+              <div className={cn(kidSwitcher.lookHead, kidSwitcher.webLookHead)}>
+                <KidAvatar
+                  kid={activeKid}
+                  size={kidSwitcherSizes.lookAvatar}
+                  pad={kidSwitcherSizes.lookAvatarPad}
+                />
                 <div>
-                  <div className="text-[12.5px] font-extrabold uppercase tracking-[0.06em] text-faint">
+                  <div className={kidSwitcher.label}>
                     {t("look", { name: activeKid.display_name })}
                   </div>
-                  <div className="mt-[3px] text-[13px] font-semibold text-muted-foreground">
+                  <div className={kidSwitcher.lookHint}>
                     {t("lookHint")}
                   </div>
                 </div>
               </div>
 
-              <div className="mb-3.5 flex gap-2.5">
+              <div className={cn(kidSwitcher.colors, kidSwitcher.webColors)}>
                 {KID_AVA_COLORS.map((cc, i) => {
                   const sel = activeCfg.color === i;
                   return (
@@ -322,7 +311,7 @@ export function KidSwitcher() {
                       key={i}
                       onClick={() => updateLook({ color: i })}
                       aria-label={t("colorLabel", { n: i + 1 })}
-                      className="flex size-[34px] items-center justify-center rounded-full outline-[2.5px] outline-offset-2 transition hover:scale-110"
+                      className={cn(kidSwitcher.color, kidSwitcher.webColor)}
                       style={{
                         background: cc.bg,
                         outlineStyle: "solid",
@@ -330,10 +319,10 @@ export function KidSwitcher() {
                       }}
                     >
                       <span
-                        className="rounded-full transition-transform"
+                        className={cn(kidSwitcher.colorDot, kidSwitcher.webColorDot)}
                         style={{
-                          width: 15,
-                          height: 15,
+                          width: kidSwitcherSizes.colorDot,
+                          height: kidSwitcherSizes.colorDot,
                           background: cc.fg,
                           transform: sel ? "scale(1.25)" : undefined,
                         }}
@@ -343,13 +332,13 @@ export function KidSwitcher() {
                 })}
               </div>
 
-              <div className="-mx-1 max-h-[244px] overflow-y-auto px-1">
+              <div className={cn(kidSwitcher.grid, kidSwitcher.webGrid)}>
                 {AVATAR_GROUPS.map((g) => (
                   <div key={g.key}>
-                    <div className="mx-0.5 mb-2 mt-3 text-[12px] font-extrabold uppercase tracking-[0.05em] text-faint first:mt-0.5">
+                    <div className={cn(kidSwitcher.groupLabel, kidSwitcher.webGroupLabel)}>
                       {t(`group.${g.key}`)}
                     </div>
-                    <div className="grid grid-cols-6 gap-2">
+                    <div className={cn(kidSwitcher.gridRow, kidSwitcher.webGridRow)}>
                       {g.items.map((id) => {
                         const sel = activeCfg.avatar === id;
                         return (
@@ -357,7 +346,7 @@ export function KidSwitcher() {
                             key={id}
                             onClick={() => updateLook({ avatar: id })}
                             aria-label={id}
-                            className="relative aspect-square overflow-hidden rounded-[16px] p-1 outline-[2.5px] -outline-offset-[2.5px] transition hover:-translate-y-0.5"
+                            className={cn(kidSwitcher.tile, kidSwitcher.webTile)}
                             style={{
                               background: ringColor.ring,
                               outlineStyle: "solid",
@@ -370,14 +359,18 @@ export function KidSwitcher() {
                               width={64}
                               height={64}
                               unoptimized
-                              className="h-full w-full rounded-[11px] object-contain"
+                              className={cn(kidSwitcher.tileImage, kidSwitcher.webTileImage)}
                             />
                             {sel && (
                               <span
-                                className="absolute bottom-[3px] right-[3px] flex size-[18px] items-center justify-center rounded-full text-white shadow"
+                                className={cn(
+                                  kidSwitcher.tileCheck,
+                                  kidSwitcher.tileCheckText,
+                                  kidSwitcher.webTileCheck,
+                                )}
                                 style={{ background: ringColor.fg }}
                               >
-                                <Icon name="check" size={12} stroke={3} />
+                                <Icon name="check" size={kidSwitcherSizes.tileCheckIcon} stroke={3} />
                               </span>
                             )}
                           </button>

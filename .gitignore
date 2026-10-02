@@ -53,3 +53,6 @@ next-env.d.ts
 
 certificates
 certs/
+
+# visual-parity screenshots and report
+.visual-parity/

@@ -11,6 +11,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import type { AgentRunFrame } from "@dodi/studio/agent-run-log";
+import { agentRunFrames } from "@dodi/ui-recipes";
+import { cn } from "@/lib/utils";
 
 interface AgentRunFramesProps {
   frames: AgentRunFrame[];
@@ -28,24 +30,24 @@ export function AgentRunFrames({ frames }: AgentRunFramesProps) {
 
   return (
     <>
-      <ul className="mt-1.5 flex flex-wrap gap-2">
+      <ul className={cn(agentRunFrames.webList, agentRunFrames.list)}>
         {frames.map((frame, i) => (
-          <li key={i} className="w-[76px]">
+          <li key={i} className={agentRunFrames.item}>
             <button
               type="button"
               onClick={() => setOpenIndex(i)}
               aria-label={t("runLogOpenFrame", { label: frame.label })}
-              className="border-border bg-card hover:border-primary focus-visible:ring-ring block min-h-11 w-full overflow-hidden rounded-md border transition-colors focus-visible:ring-2 focus-visible:outline-none motion-reduce:transition-none"
+              className={cn(agentRunFrames.button, agentRunFrames.webButton)}
             >
               {/* Raw <img>: frames are data URLs (next/image can't optimize them). */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={frame.image}
                 alt=""
-                className="aspect-[4/5] w-full object-cover"
+                className={cn(agentRunFrames.image, agentRunFrames.webImage)}
               />
             </button>
-            <p className="text-faint mt-0.5 line-clamp-2 text-[10.5px] leading-tight">
+            <p className={cn(agentRunFrames.label, agentRunFrames.webLabel)}>
               {frame.label}
             </p>
           </li>
@@ -65,7 +67,7 @@ export function AgentRunFrames({ frames }: AgentRunFramesProps) {
             <img
               src={open.fullImage ?? open.image}
               alt={open.label}
-              className="border-border mx-auto max-h-[70vh] w-auto rounded-md border object-contain"
+              className={cn(agentRunFrames.large, agentRunFrames.webLarge)}
             />
           )}
         </DialogContent>

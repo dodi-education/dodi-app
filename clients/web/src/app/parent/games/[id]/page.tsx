@@ -6,7 +6,7 @@ import { useLocale } from "next-intl";
 
 import { GamePreview } from "@/components/parent/games/game-preview";
 import { dodi } from "@/lib/api";
-import type { DiscoverGameDetail, GameSharingState } from "@dodi/types/games";
+import { type DiscoverPreview, loadDiscoverPreview } from "@dodi/client-state/game-sharing";
 
 /**
  * Parent preview of a PUBLISHED game at `/parent/games/{id}`. Both the game
@@ -20,35 +20,18 @@ export default function ParentGamePreviewPage() {
   const id = params.id;
   const locale = useLocale();
 
-  const [data, setData] = useState<{
-    detail: DiscoverGameDetail;
-    sharing: GameSharingState;
-  } | null>(null);
+  const [data, setData] = useState<DiscoverPreview | null>(null);
   const [missing, setMissing] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
+    // locale localizes the system games (the only translated Discover rows).
+    // A sharing failure falls back to an empty audience inside the load.
     async function load() {
-      // locale localizes the system games (the only translated Discover rows).
-      const [detailRes, sharingRes] = await Promise.all([
-        dodi.request(
-          `/api/discover/games/${id}?locale=${encodeURIComponent(locale)}`,
-        ),
-        dodi.request(`/api/discover/games/${id}/sharing`),
-      ]);
+      const preview = await loadDiscoverPreview(dodi, id, locale);
       if (cancelled) return;
-      if (!detailRes.ok) {
-        setMissing(true);
-        return;
-      }
-      const detail = (await detailRes.json()) as DiscoverGameDetail;
-      // Sharing is a nicety (it seeds the "Share with kids" dialog); a failure
-      // there falls back to an empty audience rather than blocking the preview.
-      const sharing: GameSharingState = sharingRes.ok
-        ? ((await sharingRes.json()) as { sharing: GameSharingState }).sharing
-        : { family: false, kidIds: [] };
-      if (cancelled) return;
-      setData({ detail, sharing });
+      if (!preview) setMissing(true);
+      else setData(preview);
     }
     load().catch(() => {
       if (!cancelled) setMissing(true);

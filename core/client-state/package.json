@@ -21,8 +21,11 @@
     "@dodi/billing-contract": "workspace:*",
     "@dodi/crypto": "workspace:*",
     "@dodi/games": "workspace:*",
+    "@dodi/intl": "workspace:*",
+    "@dodi/protocol": "workspace:*",
     "@dodi/types": "workspace:*",
     "@dodi/vault": "workspace:*",
+    "fflate": "^0.8.3",
     "zustand": "^5.0.11"
   },
   "peerDependencies": {

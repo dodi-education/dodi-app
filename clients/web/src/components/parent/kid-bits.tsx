@@ -1,13 +1,10 @@
 "use client";
 
+import { kidAvatarPalette } from "@dodi/ui-recipes";
 import { useKids } from "@/hooks/use-kids";
 
-const AVATAR_PALETTE = [
-  { bg: "bg-primary-soft-2", fg: "text-primary" },
-  { bg: "bg-success-soft", fg: "text-success" },
-  { bg: "bg-[#EFE9FA]", fg: "text-[#7456C4]" },
-  { bg: "bg-[#FDF1DC]", fg: "text-[#B0782A]" },
-];
+/** Shared with the app (@dodi/ui-recipes). */
+const AVATAR_PALETTE = kidAvatarPalette;
 
 function avatarColor(index: number) {
   return AVATAR_PALETTE[((index % AVATAR_PALETTE.length) + AVATAR_PALETTE.length) % AVATAR_PALETTE.length];

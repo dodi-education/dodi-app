@@ -22,9 +22,11 @@
     "./translations": "./src/translations.ts",
     "./sanitizer": "./src/sanitizer.ts",
     "./sandbox-doc": "./src/sandbox-doc.ts",
+    "./sandbox-host": "./src/sandbox-host.ts",
     "./agent-validator": "./src/agent-validator.ts",
     "./export": "./src/export.ts",
-    "./debug": "./src/debug.ts"
+    "./debug": "./src/debug.ts",
+    "./export-zip": "./src/export-zip.ts"
   },
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -36,6 +38,7 @@
   },
   "dependencies": {
     "@dodi/types": "workspace:*",
+    "fflate": "^0.8.3",
     "zod": "^4.3.6"
   },
   "devDependencies": {

@@ -4,7 +4,6 @@
  * and the own providers that support the capability; under dodi AI a
  * category shows its service name instead of a model picker.
  */
-import { View } from "react-native";
 import { useTranslations } from "use-intl";
 import {
   CATEGORY_FIELDS,
@@ -19,8 +18,10 @@ import {
 } from "@dodi/client-state/model-config";
 import type { AIProviderId } from "@dodi/types/ai";
 
-import { Button, Card, Text } from "@/components/ui";
-import { ChoiceList } from "@/components/ui/choice-list";
+import { FieldRow } from "@/components/parent/rows";
+import { SaveRow } from "@/components/parent/save-row";
+import { Section } from "@/components/parent/section";
+import { Button, Select, type SelectOption, Text } from "@/components/ui";
 
 const PROVIDER_NONE = "__none__";
 
@@ -36,13 +37,13 @@ export interface CapabilityModelConfigProps {
   isSaved: boolean;
 }
 
-function ServiceName({ label, name }: { label: string; name: string }) {
-  return (
-    <View className="gap-1">
-      <Text variant="label">{label}</Text>
-      <Text variant="muted">{name}</Text>
-    </View>
-  );
+function toOptions<T extends string>(options: readonly { id: T; name: string }[]): SelectOption<T>[] {
+  return options.map((o) => ({ value: o.id, label: o.name }));
+}
+
+/** The dodi AI service name in place of a model picker. */
+function ServiceName({ children }: { children: string }) {
+  return <Text className="text-sm text-muted-foreground">{children}</Text>;
 }
 
 export function CapabilityModelConfig({
@@ -57,8 +58,6 @@ export function CapabilityModelConfig({
   const t = useTranslations("settings");
   const tc = useTranslations("common");
   const dodiLabel = isDodiSelectable ? t("managedProviderOption") : null;
-  const toChoices = <T extends string>(options: { id: T; name: string }[]) =>
-    options.map((o) => ({ value: o.id, label: o.name }));
 
   const copy = {
     thinking: {
@@ -88,36 +87,44 @@ export function CapabilityModelConfig({
   };
 
   const voices = voiceOptionsFor(config.voiceProvider);
+  const isVoiceOnDodi = config.voiceProvider === "dodi";
   return (
     <>
-      <Card title={t("voiceConfig")} description={t("voiceConfigDescription")}>
-        <ChoiceList<AIProviderId | "">
-          label={t("voiceProvider")}
-          choices={toChoices(providerOptionsFor("voice", byokProviders, dodiLabel))}
-          value={config.voiceProvider}
-          onChange={(id) => id && onChange(voiceProviderPatch(id))}
-        />
-        {voices ? (
-          <>
-            {config.voiceProvider === "dodi" ? (
-              <ServiceName label={t("voiceModel")} name={t("serviceVoice")} />
-            ) : (
-              <ChoiceList
-                label={t("voiceModel")}
-                choices={toChoices(modelOptionsFor(config.voiceProvider, "voice"))}
-                value={config.voiceModel}
-                onChange={(voiceModel) => onChange({ voiceModel })}
-              />
-            )}
-            <ChoiceList
-              label={t("voiceName")}
-              choices={toChoices(voices)}
-              value={config.voiceName}
-              onChange={(voiceName) => onChange({ voiceName })}
-            />
-          </>
+      <Section title={t("voiceConfig")} desc={t("voiceConfigDescription")}>
+        <FieldRow label={t("voiceProvider")}>
+          <Select<AIProviderId | "">
+            label={t("voiceProvider")}
+            value={config.voiceProvider}
+            options={toOptions(providerOptionsFor("voice", byokProviders, dodiLabel))}
+            onValueChange={(id) => id && onChange(voiceProviderPatch(id))}
+          />
+        </FieldRow>
+        {voices && isVoiceOnDodi ? (
+          <FieldRow label={t("voiceModel")}>
+            <ServiceName>{t("serviceVoice")}</ServiceName>
+          </FieldRow>
         ) : null}
-      </Card>
+        {voices && !isVoiceOnDodi ? (
+          <FieldRow label={t("voiceModel")}>
+            <Select
+              label={t("voiceModel")}
+              value={config.voiceModel}
+              options={toOptions(modelOptionsFor(config.voiceProvider, "voice"))}
+              onValueChange={(voiceModel) => onChange({ voiceModel })}
+            />
+          </FieldRow>
+        ) : null}
+        {voices ? (
+          <FieldRow label={t("voiceName")}>
+            <Select
+              label={t("voiceName")}
+              value={config.voiceName}
+              options={toOptions(voices)}
+              onValueChange={(voiceName) => onChange({ voiceName })}
+            />
+          </FieldRow>
+        ) : null}
+      </Section>
 
       {CATEGORY_FIELDS.map((cat, index) => {
         const text = copy[cat.key];
@@ -126,43 +133,45 @@ export function CapabilityModelConfig({
           onChange({ [cat.provider]: nextProvider, [cat.model]: model });
         const isLast = index === CATEGORY_FIELDS.length - 1;
         return (
-          <Card key={cat.key} title={text.title} description={text.desc}>
-            <ChoiceList
-              label={text.providerLabel}
-              choices={[
-                { value: PROVIDER_NONE as AIProviderId | typeof PROVIDER_NONE, label: text.fallback },
-                ...toChoices(providerOptionsFor(cat.capability, byokProviders, dodiLabel)),
-              ]}
-              value={provider || PROVIDER_NONE}
-              onChange={(value) => {
-                if (value === PROVIDER_NONE) return set("", "");
-                const id = value as AIProviderId;
-                set(id, defaultModelFor(id, cat.capability));
-              }}
-            />
-            {provider === "dodi" ? (
-              <ServiceName label={text.modelLabel} name={text.service} />
-            ) : provider ? (
-              <ChoiceList
-                label={text.modelLabel}
-                choices={toChoices(modelOptionsFor(provider, cat.capability))}
-                value={config[cat.model]}
-                onChange={(model) => set(provider, model)}
+          <Section key={cat.key} title={text.title} desc={text.desc}>
+            <FieldRow label={text.providerLabel}>
+              <Select<string>
+                label={text.providerLabel}
+                value={provider || PROVIDER_NONE}
+                options={[
+                  { value: PROVIDER_NONE, label: text.fallback },
+                  ...toOptions(providerOptionsFor(cat.capability, byokProviders, dodiLabel)),
+                ]}
+                onValueChange={(value) => {
+                  if (value === PROVIDER_NONE) return set("", "");
+                  const id = value as AIProviderId;
+                  set(id, defaultModelFor(id, cat.capability));
+                }}
               />
+            </FieldRow>
+            {provider === "dodi" ? (
+              <FieldRow label={text.modelLabel}>
+                <ServiceName>{text.service}</ServiceName>
+              </FieldRow>
+            ) : null}
+            {provider && provider !== "dodi" ? (
+              <FieldRow label={text.modelLabel}>
+                <Select
+                  label={text.modelLabel}
+                  value={config[cat.model]}
+                  options={toOptions(modelOptionsFor(provider, cat.capability))}
+                  onValueChange={(model) => set(provider, model)}
+                />
+              </FieldRow>
             ) : null}
             {isLast ? (
-              <View className="flex-row items-center gap-3">
-                <Button
-                  className="flex-1"
-                  label={tc("save")}
-                  isLoading={isSaving}
-                  disabled={!isDraftSavable(config)}
-                  onPress={onSave}
-                />
-                {isSaved ? <Text variant="muted">{t("configSaved")}</Text> : null}
-              </View>
+              <SaveRow note={isSaved ? t("configSaved") : undefined}>
+                <Button isLoading={isSaving} disabled={!isDraftSavable(config)} onPress={onSave}>
+                  {tc("save")}
+                </Button>
+              </SaveRow>
             ) : null}
-          </Card>
+          </Section>
         );
       })}
     </>

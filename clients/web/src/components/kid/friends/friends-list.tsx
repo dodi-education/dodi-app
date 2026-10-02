@@ -4,7 +4,11 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 
 import { KidButton } from "@/components/kid/kid-button";
+import { friendMatchesQuery } from "@dodi/client-state/friends";
+import { friendsList } from "@dodi/ui-recipes";
+
 import { Icon } from "@/components/shared/icon";
+import { cn } from "@/lib/utils";
 import type { IconName } from "@/components/shared/icon";
 import type { DecodedFriend } from "@/lib/friends";
 
@@ -26,15 +30,11 @@ interface FriendsListProps {
   onUnblock: (f: DecodedFriend) => void;
 }
 
-function matchesQuery(f: DecodedFriend, q: string): boolean {
-  if (!q) return true;
-  const hay = `${f.name ?? ""} ${f.nickname ?? ""}`.toLowerCase();
-  return hay.includes(q);
-}
+const matchesQuery = friendMatchesQuery;
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mb-2.5 mt-[18px] text-[13px] font-extrabold uppercase tracking-[0.06em] text-faint first:mt-1">
+    <div className={cn(friendsList.sectionLabel, friendsList.webSectionLabel)}>
       {children}
     </div>
   );
@@ -53,7 +53,7 @@ function Section({
   return (
     <>
       <SectionLabel>{label}</SectionLabel>
-      <div className="flex flex-col gap-2.5">{list.map(render)}</div>
+      <div className={cn(friendsList.rows, friendsList.webRows)}>{list.map(render)}</div>
     </>
   );
 }
@@ -133,11 +133,17 @@ export function FriendsList({
   function renderEmpty(tabKey: Tab) {
     const e = empty[tabKey];
     return (
-      <div className="flex flex-col items-center gap-3.5 px-5 py-14 text-center">
-        <div className="flex size-[72px] items-center justify-center rounded-full bg-primary-soft text-primary">
+      <div className={cn(friendsList.empty, friendsList.webEmpty)}>
+        <div
+          className={cn(
+            friendsList.emptyIcon,
+            friendsList.emptyIconText,
+            friendsList.webEmptyIcon,
+          )}
+        >
           <Icon name={e.icon} size={34} stroke={1.7} />
         </div>
-        <div className="max-w-[300px] text-[15.5px] font-bold leading-relaxed text-muted-foreground">
+        <div className={friendsList.emptyText}>
           {e.text}
         </div>
         {(tabKey === "all" || tabKey === "accepted") && !q ? (
@@ -157,13 +163,13 @@ export function FriendsList({
     visibleBlocked.length === 0;
 
   return (
-    <div className="mx-auto w-full max-w-5xl pb-8">
-      <div className="mb-4 flex items-center justify-between gap-4">
+    <div className={friendsList.root}>
+      <div className={cn(friendsList.head, friendsList.webHead)}>
         <div>
-          <h1 className="text-[27px] font-extrabold tracking-tight text-ink">
+          <h1 className={friendsList.title}>
             {t("title")}
           </h1>
-          <div className="mt-0.5 text-sm font-semibold text-muted-foreground">
+          <div className={friendsList.count}>
             {t("friendCount", { count: counts.accepted })}
             {counts.requests > 0
               ? ` · ${t("requestCount", { count: counts.requests })}`
@@ -176,15 +182,21 @@ export function FriendsList({
         </KidButton>
       </div>
 
-      <div className="mb-6 flex flex-wrap items-center gap-2">
-        <label className="flex w-[280px] items-center gap-2.5 rounded-full bg-white px-[18px] py-[9px] text-faint shadow-[inset_0_0_0_1.5px_var(--color-border)] focus-within:shadow-[inset_0_0_0_2px_var(--color-primary-soft-2)]">
+      <div className={cn(friendsList.filters, friendsList.webFilters)}>
+        <label
+          className={cn(
+            friendsList.search,
+            friendsList.searchText,
+            friendsList.webSearch,
+          )}
+        >
           <Icon name="search" size={16} stroke={2.2} />
           <input
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={t("searchPlaceholder")}
-            className="min-w-0 flex-1 bg-transparent text-sm font-bold text-ink outline-none placeholder:font-semibold placeholder:text-faint"
+            className={cn(friendsList.searchInput, friendsList.webSearchInput)}
           />
         </label>
         {tabs.map((tabItem) => (
@@ -198,11 +210,14 @@ export function FriendsList({
             {tabItem.label}
             {tabItem.key !== "all" && counts[tabItem.key] > 0 ? (
               <span
-                className={`ml-1 inline-flex h-[19px] min-w-[19px] items-center justify-center rounded-full px-1.5 text-[11.5px] font-extrabold ${
+                className={cn(
+                  friendsList.chipCount,
+                  friendsList.chipCountText,
+                  friendsList.webChipCount,
                   tab === tabItem.key
-                    ? "bg-white/30 text-white"
-                    : "bg-border-strong text-white"
-                }`}
+                    ? friendsList.chipCountActive
+                    : friendsList.chipCountIdle,
+                )}
               >
                 {counts[tabItem.key]}
               </span>
@@ -242,7 +257,7 @@ export function FriendsList({
         visibleFriends.length === 0 ? (
           renderEmpty("accepted")
         ) : (
-          <div className="flex flex-col gap-2.5">{visibleFriends.map(friendRow)}</div>
+          <div className={cn(friendsList.rows, friendsList.webRows)}>{visibleFriends.map(friendRow)}</div>
         )
       ) : tab === "requests" ? (
         visibleIncoming.length === 0 && visibleOutgoing.length === 0 ? (
@@ -264,7 +279,7 @@ export function FriendsList({
       ) : visibleBlocked.length === 0 ? (
         renderEmpty("blocked")
       ) : (
-        <div className="flex flex-col gap-2.5">{visibleBlocked.map(blockedRow)}</div>
+        <div className={cn(friendsList.rows, friendsList.webRows)}>{visibleBlocked.map(blockedRow)}</div>
       )}
     </div>
   );

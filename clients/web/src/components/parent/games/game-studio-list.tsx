@@ -31,45 +31,16 @@ import { GameExportDialog } from "@/components/parent/games/game-export-dialog";
 import { PublishDialog } from "@/components/parent/games/publish-dialog";
 import { tagStyle } from "@/components/parent/games/tag-style";
 import { useKids } from "@/hooks/use-kids";
-import { dodi } from "@/lib/api";
+import { gameFlowDeps } from "@/lib/games/game-flow-deps";
 import { useTagLabel } from "@/lib/games/tag-label";
-import { sealGameCreateFields, useGameStore } from "@/stores/game-store";
-import type { Json } from "@dodi/types/database";
-import type { GameSharingState } from "@dodi/types/games";
-
-export interface GameListItem {
-  id: string;
-  title: string;
-  tags: string[];
-  updatedAt: string;
-  /** Whether kids can see/play this game (false = parent hasn't activated it). */
-  isActive: boolean;
-  /** Shared with the whole family. */
-  isFamily: boolean;
-  /** Decrypted names of the specific kids this game is shared with. */
-  kidNames: string[];
-  /** Current sharing state — seeds the "Share with kids" dialog. */
-  sharing: GameSharingState;
-  /** Dodi has written real code (not the unbuilt placeholder) — publishable. */
-  built: boolean;
-  /** Still on the studio's Plan step (games.plan_enc set): no settings saved yet. */
-  isPlanning: boolean;
-  /** Decrypted 100×100 list preview; null falls back to the tag tile. */
-  previewImage: string | null;
-  /** Times this game has been played (this row's game_plays). */
-  plays: number;
-  /** Private remixes pointing back at this game via source_game_id. */
-  copies: number;
-}
-
-type EditedKey = "editedToday" | "editedDaysAgo" | "editedWeeksAgo";
-
-function editedKey(iso: string): { key: EditedKey; values?: Record<string, number> } {
-  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
-  if (days <= 0) return { key: "editedToday" };
-  if (days < 7) return { key: "editedDaysAgo", values: { days } };
-  return { key: "editedWeeksAgo", values: { weeks: Math.floor(days / 7) } };
-}
+import { cn } from "@/lib/utils";
+import { formAlert, libraryPill, libraryRow } from "@dodi/ui-recipes";
+import {
+  type GameListItem,
+  copyOwnedGame,
+  editedAgo,
+  primaryKidIdOf,
+} from "@dodi/client-state/game-library";
 
 interface GameStudioListProps {
   items: GameListItem[];
@@ -148,18 +119,18 @@ export function GameStudioList({ items, onDelete }: GameStudioListProps) {
       {items.map((g) => {
         const primaryTag = g.tags[0] ?? "";
         const s = tagStyle(primaryTag);
-        const e = editedKey(g.updatedAt);
+        const e = editedAgo(g.updatedAt);
         const href = `/parent/game-studio/${g.id}`;
         return (
           <div
             key={g.id}
-            className="flex items-center gap-3 border-b border-border py-3 pl-3 pr-1 last:border-0"
+            className={cn(libraryRow.web, libraryRow.box)}
           >
             {/* Everything except the actions menu is the link, so the audience
                 badges stay part of the click target as they were before. */}
             <Link
               href={href}
-              className="group flex min-w-0 flex-1 items-start gap-3 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-primary-soft-2"
+              className={cn(libraryRow.webLink, libraryRow.link)}
             >
               {g.previewImage ? (
                 <Image
@@ -168,32 +139,32 @@ export function GameStudioList({ items, onDelete }: GameStudioListProps) {
                   width={60}
                   height={60}
                   unoptimized
-                  className="h-15 w-15 shrink-0 rounded-xl object-cover"
+                  className={cn(libraryRow.thumb, libraryRow.webThumb)}
                 />
               ) : (
                 <div
-                  className="flex h-15 w-15 shrink-0 items-center justify-center rounded-xl"
+                  className={cn(libraryRow.webThumbFallback, libraryRow.thumbFallback)}
                   style={{ background: s.bg, color: s.fg }}
                 >
                   <Icon name={s.icon} size={28} />
                 </div>
               )}
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="truncate text-sm font-semibold text-ink-1 transition-colors group-hover:text-primary">
+              <div className={libraryRow.main}>
+                <div className={cn(libraryRow.webTitleRow, libraryRow.titleRow)}>
+                  <span className={cn(libraryRow.webTitle, libraryRow.title, libraryRow.webTitleHover)}>
                     {g.title}
                   </span>
                   {g.isPlanning ? (
-                    <span className="shrink-0 rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-semibold text-primary">
+                    <span className={cn(libraryPill.box, libraryPill.text, libraryPill.primary, libraryPill.primaryText)}>
                       {t("planning")}
                     </span>
                   ) : g.isActive ? (
-                    <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-semibold text-primary">
-                      <span className="h-[7px] w-[7px] rounded-full bg-primary" />
+                    <span className={cn(libraryPill.webWithIcon, libraryPill.withIcon, libraryPill.box, libraryPill.text, libraryPill.primary, libraryPill.primaryText)}>
+                      <span className={libraryPill.dot} />
                       {t("active")}
                     </span>
                   ) : (
-                    <span className="shrink-0 rounded-full bg-foreground/5 px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
+                    <span className={cn(libraryPill.box, libraryPill.text, libraryPill.muted, libraryPill.mutedText)}>
                       {t("inactive")}
                     </span>
                   )}
@@ -219,13 +190,13 @@ export function GameStudioList({ items, onDelete }: GameStudioListProps) {
                     </span>
                   ) : null}
                 </div>
-                <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                <div className={cn(libraryRow.meta, libraryRow.webMeta)}>
                   {t(e.key, e.values)}
                 </div>
                 {/* Plays/copies + all tags — mirrors Discover's third row. */}
-                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-medium text-muted-foreground">
+                <div className={cn(libraryRow.webStats, libraryRow.stats, libraryRow.statsText)}>
                   <span
-                    className="inline-flex items-center gap-1"
+                    className={cn(libraryRow.webStat, libraryRow.stat)}
                     aria-label={t("discoverPlaysLabel", { count: g.plays })}
                     title={t("discoverPlaysLabel", { count: g.plays })}
                   >
@@ -233,7 +204,7 @@ export function GameStudioList({ items, onDelete }: GameStudioListProps) {
                     {g.plays}
                   </span>
                   <span
-                    className="inline-flex items-center gap-1"
+                    className={cn(libraryRow.webStat, libraryRow.stat)}
                     aria-label={t("discoverCopiesLabel", { count: g.copies })}
                     title={t("discoverCopiesLabel", { count: g.copies })}
                   >
@@ -251,7 +222,7 @@ export function GameStudioList({ items, onDelete }: GameStudioListProps) {
                         role="img"
                         aria-label={label}
                         title={label}
-                        className="flex size-[18px] shrink-0 items-center justify-center rounded-md"
+                        className={cn(libraryRow.webTagTile, libraryRow.tagTile)}
                         style={{ background: ts.bg, color: ts.fg }}
                       >
                         <Icon name={ts.icon} size={13} stroke={2} />
@@ -266,7 +237,7 @@ export function GameStudioList({ items, onDelete }: GameStudioListProps) {
                 <button
                   type="button"
                   aria-label={t("gameActions", { title: g.title })}
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-transparent text-ink-2 transition-colors outline-none hover:border-border-strong hover:bg-card focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary-soft-2 data-[state=open]:border-border-strong data-[state=open]:bg-card"
+                  className={cn(libraryRow.webMenuButton, libraryRow.menuButton, libraryRow.menuButtonText)}
                 >
                   <Icon name="dots" size={18} />
                 </button>
@@ -353,7 +324,7 @@ export function GameStudioList({ items, onDelete }: GameStudioListProps) {
             </DialogDescription>
           </DialogHeader>
           {error && (
-            <div className="rounded-lg bg-danger-soft px-3 py-2 text-xs font-medium text-danger">
+            <div className={cn(formAlert.box, formAlert.text)}>
               {error}
             </div>
           )}
@@ -389,7 +360,7 @@ function StudioCopyDialog({
   const t = useTranslations("gameStudio");
   const router = useRouter();
   const { kids } = useKids();
-  const primaryKidId = kids?.[0]?.id ?? null;
+  const primaryKidId = primaryKidIdOf(kids);
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -405,46 +376,10 @@ function StudioCopyDialog({
     setBusy(true);
     setError(null);
     try {
-      const row = await useGameStore.getState().loadOne(game.id, undefined, true);
-      if (!row) throw new Error();
-
-      const sealed = await sealGameCreateFields({
-        title: row.title,
-        description: row.description || undefined,
-        markdown: row.markdown || undefined,
-        codeBundle: row.code_bundle,
-        learningGoal: row.learning_goal || undefined,
-        successDefinition: row.success_definition || undefined,
-        successCriteria:
-          row.success_criteria &&
-          typeof row.success_criteria === "object" &&
-          Object.keys(row.success_criteria).length
-            ? (row.success_criteria as Json)
-            : undefined,
-        previewImage: row.preview_image || undefined,
-      });
-      const res = await dodi.request("/api/games", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          kidId: primaryKidId,
-          sourceGameId: game.id,
-          ...sealed,
-          tags: row.tags,
-          progressKind: row.progress_kind,
-          targetAgeMin: row.target_age_min,
-          targetAgeMax: row.target_age_max,
-          estimatedDurationMinutes: row.estimated_duration_minutes,
-          metadata: row.metadata ?? {},
-          // A copy starts inactive — parent reviews before kids see it.
-          isActive: false,
-        }),
-      });
-      if (!res.ok) throw new Error();
-      const created = (await res.json()) as { id: string };
-      useGameStore.getState().invalidate();
+      // Re-read the decrypted row, re-seal it under this vault, create the copy.
+      const createdId = await copyOwnedGame(gameFlowDeps(), game.id, primaryKidId);
       onClose();
-      router.push(`/parent/game-studio/${created.id}`);
+      router.push(`/parent/game-studio/${createdId}`);
     } catch {
       setError(t("discoverFailedGeneric"));
     } finally {
@@ -468,12 +403,12 @@ function StudioCopyDialog({
         </DialogHeader>
 
         {!primaryKidId && (
-          <div className="rounded-lg bg-danger-soft px-3 py-2 text-xs font-medium text-danger">
+          <div className={cn(formAlert.box, formAlert.text)}>
             {t("discoverRemixNeedsKid")}
           </div>
         )}
         {error && (
-          <div className="rounded-lg bg-danger-soft px-3 py-2 text-xs font-medium text-danger">
+          <div className={cn(formAlert.box, formAlert.text)}>
             {error}
           </div>
         )}
