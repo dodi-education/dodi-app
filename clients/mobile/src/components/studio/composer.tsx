@@ -78,7 +78,14 @@ export function Composer({
           <View className={styles.pending}>
             {pendingImages.map((img, i) => (
               <View key={i} className="relative">
-                <Image source={{ uri: img }} className={styles.pendingImage} resizeMode="cover" />
+                <Image
+                  source={{ uri: img }}
+                  className={styles.pendingImage}
+                  resizeMode="cover"
+                  accessible
+                  accessibilityRole="image"
+                  accessibilityLabel={t("attachedImage", { n: i + 1 })}
+                />
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={t("removeImage")}

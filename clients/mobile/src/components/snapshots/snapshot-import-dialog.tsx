@@ -139,6 +139,9 @@ export function SnapshotImportDialog({
                   className={importPreview.thumb}
                   resizeMode="cover"
                   accessibilityIgnoresInvertColors
+                  // Decorative: the title beside it names the item.
+                  accessibilityElementsHidden
+                  importantForAccessibility="no"
                 />
               ) : (
                 <View className={parentSnapshotRow.importTile}>
@@ -195,7 +198,7 @@ export function SnapshotImportDialog({
 
             <Pressable
               accessibilityRole="button"
-              hitSlop={12}
+              hitSlop={14}
               className="self-start"
               onPress={() => {
                 setParsed(null);

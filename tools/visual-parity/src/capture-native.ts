@@ -9,7 +9,7 @@ import { join } from "node:path";
 
 import { type ScreenTarget, slugOf } from "./routes";
 
-const PACKAGE = "app.dodi.mobile";
+const PACKAGE = "app.dodi";
 
 function adb(args: string[], encoding: "utf8" | "buffer" = "utf8"): string | Buffer {
   const bin = process.env.ANDROID_HOME ? join(process.env.ANDROID_HOME, "platform-tools", "adb") : "adb";

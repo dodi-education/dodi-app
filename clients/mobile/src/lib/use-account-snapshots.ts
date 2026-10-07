@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   type AccountSnapshot,
   type FriendKidOption,
@@ -27,41 +27,45 @@ export function useAccountSnapshots(): {
   loading: boolean;
   error: string | null;
   reload: () => void;
+  /** `reload`, settling when the snapshots are in (pull to refresh). */
+  refresh: () => Promise<void>;
 } {
   const { kids } = useKids();
   const session = useVaultStore((s) => s.session);
   const [loaded, setLoaded] = useState<Loaded | null>(null);
-  const [reloadNonce, setReloadNonce] = useState(0);
+  // Each load takes a ticket; only the latest one lands.
+  const ticketRef = useRef(0);
 
-  useEffect(() => {
+  const load = useCallback(async (): Promise<void> => {
     if (!kids || !session) return;
-    let isCurrent = true;
-    loadAccountSnapshots(snapshotDeps, kids, session).then(
-      (result) => {
-        if (isCurrent) setLoaded({ ...result, error: null });
-      },
-      (e: unknown) => {
-        if (!isCurrent) return;
-        setLoaded((prev) => ({
-          snapshots: prev?.snapshots ?? [],
-          friendKids: prev?.friendKids ?? [],
-          error: e instanceof Error ? e.message : "error",
-        }));
-      },
-    );
-    return () => {
-      isCurrent = false;
-    };
-  }, [kids, session, reloadNonce]);
+    const ticket = ++ticketRef.current;
+    try {
+      const result = await loadAccountSnapshots(snapshotDeps, kids, session);
+      if (ticket === ticketRef.current) setLoaded({ ...result, error: null });
+    } catch (e) {
+      if (ticket !== ticketRef.current) return;
+      setLoaded((prev) => ({
+        snapshots: prev?.snapshots ?? [],
+        friendKids: prev?.friendKids ?? [],
+        error: e instanceof Error ? e.message : "error",
+      }));
+    }
+  }, [kids, session]);
 
-  const reload = useCallback(() => setReloadNonce((n) => n + 1), []);
+  // Mount / kids / vault change (a newer load supersedes one in flight).
+  useEffect(() => {
+    void load();
+  }, [load]);
 
-  if (!session) return { snapshots: [], friendKids: [], loading: false, error: "locked", reload };
+  const reload = useCallback(() => void load(), [load]);
+
+  if (!session) return { snapshots: [], friendKids: [], loading: false, error: "locked", reload, refresh: load };
   return {
     snapshots: loaded?.snapshots ?? [],
     friendKids: loaded?.friendKids ?? [],
     loading: loaded === null,
     error: loaded?.error ?? null,
     reload,
+    refresh: load,
   };
 }

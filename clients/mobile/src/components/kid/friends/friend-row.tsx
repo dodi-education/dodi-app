@@ -104,6 +104,7 @@ export function FriendRow({ friend, onOpen, onAccept, onDecline, onCancel, onUnb
         <View className={r.actions}>
           <DeclineButton onPress={onDecline} disabled={disabled} label={t("reject")} />
           <Pressable
+            hitSlop={{ top: 4, bottom: 4 }}
             accessibilityRole="button"
             onPress={onAccept}
             disabled={disabled}
@@ -162,6 +163,7 @@ export function FriendRow({ friend, onOpen, onAccept, onDecline, onCancel, onUnb
         <Status text={t("blocked")} tone="muted" />
       </View>
       <Pressable
+        hitSlop={{ top: 4, bottom: 4 }}
         accessibilityRole="button"
         onPress={onUnblock}
         disabled={disabled}

@@ -3,6 +3,7 @@ import { TextInput, type TextInputProps } from "react-native";
 import { input } from "@dodi/ui-recipes";
 
 import { cn } from "@/lib/cn";
+import { MAX_FONT_SCALE } from "@/lib/font-scale";
 import { fontFamilyFor } from "@/lib/fonts";
 
 export interface InputProps extends TextInputProps {
@@ -28,6 +29,8 @@ export const Input = forwardRef<TextInput, InputProps>(function Input(
     <TextInput
       ref={ref}
       placeholderTextColor={input.placeholderColor}
+      // 36pt tall: the text grows to 1.5× and still fits.
+      maxFontSizeMultiplier={MAX_FONT_SCALE.control}
       className={classes}
       style={[{ fontFamily: fontFamilyFor(classes), paddingVertical: 0 }, style]}
       onFocus={(e) => {

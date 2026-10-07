@@ -12,6 +12,7 @@ import { DotSep, Row, RowMain, RowMeta, RowTitle, RowTitleText } from "@/compone
 import { PageActions, Section } from "@/components/parent/section";
 import { ShellContent } from "@/components/shared/shell-content";
 import { Badge, Button, Icon, Text } from "@/components/ui";
+import { clientState } from "@/lib/client-state";
 import { cn } from "@/lib/cn";
 import { useAccountDateFormat } from "@/lib/date-format";
 import { useKids } from "@/lib/use-kids";
@@ -31,8 +32,9 @@ export default function KidsScreen() {
 
   const addKid = (): void => router.push("/parent/kids/new" as Href);
 
+  // Pull to refresh: the kid list (pending approvals reload themselves).
   return (
-    <ShellContent>
+    <ShellContent onRefresh={() => clientState.kids.getState().loadList(true)}>
       <PageActions>
         <Button onPress={addKid}>{t("addKid")}</Button>
       </PageActions>

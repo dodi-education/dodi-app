@@ -34,6 +34,9 @@ export function FriendAvatar({ label, avatarConfig, size = 50, grayscale = false
     <View
       className="shrink-0 items-center justify-center rounded-full"
       style={{ width: size, height: size, backgroundColor: c.bg, opacity: grayscale ? 0.6 : 1 }}
+      // Decorative: the friend's name is beside it.
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
     >
       <KidText className="font-extrabold" style={{ color: c.fg, fontSize: Math.round(size * 0.4) }}>
         {safe[0].toUpperCase()}

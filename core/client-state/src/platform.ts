@@ -29,9 +29,18 @@ export interface OfflineCache {
 }
 
 /**
+ * How long a `SealedSecretSlot` stash stays usable: the lifetime of the
+ * platform's sign-up email code. Past it `consume` resolves null (and wipes),
+ * bounding the exposure window of an abandoned registration; the caller falls
+ * back to re-entering the password at finish-setup.
+ */
+export const SEALED_SECRET_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+/**
  * One device-local slot for a short-lived secret (the vault built at
  * registration, held across the email-code round trip). `consume` reads and
- * wipes in one go.
+ * wipes in one go, and resolves null once the stash is older than
+ * `SEALED_SECRET_TTL_MS`.
  */
 export interface SealedSecretSlot {
   stash(secret: string): Promise<void>;

@@ -22,7 +22,11 @@ function TurnLinks({ onShowChanges, onRevert, isReverted, isRevertDisabled }: Tu
   const t = useTranslations("gameStudio");
   return (
     <View className={styles.links}>
-      <Pressable accessibilityRole="button" onPress={onShowChanges} hitSlop={12}>
+      <Pressable
+        accessibilityRole="button"
+        onPress={onShowChanges}
+        hitSlop={{ top: 15, bottom: 15, left: 8, right: 8 }}
+      >
         <Text className={styles.linksText}>{t("showChanges")}</Text>
       </Pressable>
       <Text className={styles.linksText} accessibilityElementsHidden importantForAccessibility="no">
@@ -33,7 +37,7 @@ function TurnLinks({ onShowChanges, onRevert, isReverted, isRevertDisabled }: Tu
         accessibilityState={{ disabled: isRevertDisabled }}
         onPress={onRevert}
         disabled={isRevertDisabled}
-        hitSlop={12}
+        hitSlop={{ top: 15, bottom: 15, left: 8, right: 8 }}
         className={cn(isRevertDisabled && styles.linkDisabled)}
       >
         <Text className={styles.linksText}>{isReverted ? t("restoreVersion") : t("revertVersion")}</Text>
@@ -50,10 +54,18 @@ interface ChatMessageItemProps {
 
 /** One turn of the thread: dodi's reply (with its run log), or the parent's bubble. */
 export function ChatMessageItem({ message, links }: ChatMessageItemProps) {
+  const t = useTranslations("gameStudio");
   if (message.role === "assistant") {
     return (
       <View className={styles.row}>
-        <Image source={DODI_HEAD} className={styles.avatar} resizeMode="contain" accessibilityIgnoresInvertColors />
+        <Image
+          source={DODI_HEAD}
+          className={styles.avatar}
+          resizeMode="contain"
+          accessibilityIgnoresInvertColors
+          accessibilityElementsHidden
+          importantForAccessibility="no"
+        />
         <View className={styles.body}>
           <RichText text={message.text} textClassName={styles.bodyText} />
           {message.run ? <AgentRunHistory run={message.run} /> : null}
@@ -68,7 +80,15 @@ export function ChatMessageItem({ message, links }: ChatMessageItemProps) {
         {message.images && message.images.length > 0 ? (
           <View className={styles.images}>
             {message.images.map((img, j) => (
-              <Image key={j} source={{ uri: img }} className={styles.image} resizeMode="cover" />
+              <Image
+                key={j}
+                source={{ uri: img }}
+                className={styles.image}
+                resizeMode="cover"
+                accessible
+                accessibilityRole="image"
+                accessibilityLabel={t("attachedImage", { n: j + 1 })}
+              />
             ))}
           </View>
         ) : null}

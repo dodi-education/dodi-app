@@ -13,6 +13,7 @@ import {
 import { addFriend as a, input as inputRecipe, friendProfile } from "@dodi/ui-recipes";
 
 import { Icon, type IconName } from "@/components/ui";
+import { useAnnounceOnIos } from "@/lib/announce";
 import { cn } from "@/lib/cn";
 import { APP_URL } from "@/lib/env";
 import { fontFamilyFor } from "@/lib/fonts";
@@ -76,6 +77,8 @@ export function AddFriend({ myHandle, busy, initialCode, onBack, onSendRequest, 
   const [nickname, setNickname] = useState("");
   const [sent, setSent] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // TalkBack reads the live regions below; VoiceOver hears the same here.
+  useAnnounceOnIos(sent ? t("sentTitle") : error);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [focused, setFocused] = useState<"tag" | "nickname" | null>(null);
   const tagInputRef = useRef<TextInput>(null);
@@ -159,6 +162,7 @@ export function AddFriend({ myHandle, busy, initialCode, onBack, onSendRequest, 
           const isActive = seg === s.key;
           return (
             <Pressable
+              hitSlop={{ top: 3, bottom: 3 }}
               key={s.key}
               accessibilityRole="tab"
               accessibilityState={{ selected: isActive }}
@@ -199,7 +203,7 @@ export function AddFriend({ myHandle, busy, initialCode, onBack, onSendRequest, 
       ) : seg === "code" ? (
         <View className={a.card} style={cardShadow}>
           <View className={a.qrFrame}>
-            <QrCode value={shareUrl} size={208} />
+            <QrCode value={shareUrl} size={208} accessibilityLabel={t("segCode")} />
           </View>
           <Pressable
             accessibilityRole="button"

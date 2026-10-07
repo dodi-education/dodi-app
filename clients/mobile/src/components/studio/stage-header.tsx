@@ -68,7 +68,7 @@ export function StageHeader({
                 accessibilityRole="button"
                 accessibilityState={{ selected: isCurrent }}
                 onPress={() => onPreviewLocaleChange(code)}
-                hitSlop={8}
+                hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
                 className={cn(localeStyles.box, isCurrent && localeStyles.active)}
               >
                 <Text className={cn(localeStyles.text, isCurrent ? localeStyles.activeText : localeStyles.idleText)}>
@@ -90,7 +90,7 @@ export function StageHeader({
             accessibilityState={{ checked: isActive, disabled: isTogglingActive }}
             onPress={onToggleActive}
             disabled={isTogglingActive}
-            hitSlop={8}
+            hitSlop={{ top: 9, bottom: 9, left: 8, right: 8 }}
             className={cn(
               activeToggle.box,
               isActive ? activeToggle.on : activeToggle.off,

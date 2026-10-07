@@ -51,7 +51,7 @@ export function PublishStatusView({
           <Icon name="success" size={18} color="success" />
           <View className={cn(c.body, "flex-1")}>
             <Text className={bodyText}>{t("publishLiveBody")}</Text>
-            <Pressable accessibilityRole="link" hitSlop={12} onPress={onViewOnDiscover} className={cn(c.link, "self-start")}>
+            <Pressable accessibilityRole="link" hitSlop={14} onPress={onViewOnDiscover} className={cn(c.link, "self-start")}>
               <Text className={cn(c.text, c.linkText)}>{t("publishViewOnDiscover")}</Text>
               <Icon name="chevron_right" size={14} color="primary" />
             </Pressable>

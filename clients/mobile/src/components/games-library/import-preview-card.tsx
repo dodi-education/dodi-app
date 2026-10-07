@@ -24,6 +24,9 @@ export function ImportPreviewCard({ parsed }: { parsed: ParsedGameExport }) {
           className={importPreview.thumb}
           resizeMode="cover"
           accessibilityIgnoresInvertColors
+          // Decorative: the title beside it names the item.
+          accessibilityElementsHidden
+          importantForAccessibility="no"
         />
       ) : null}
       <View className={importPreview.main}>

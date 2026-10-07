@@ -28,6 +28,12 @@ export {
 } from "./character-stage";
 export { CharacterView, VIEW_TARGET } from "./character-view";
 export { rendererForContext } from "./context-renderer";
+export {
+  FIGURE_DECISION_BUDGET_MS,
+  decideFigureMode,
+  type FigureMode,
+  type FigureModeInput,
+} from "./figure-mode";
 export { HullOutline, isOutlineHull } from "./hull-outline";
 export { OutlinePass } from "./outline-pass";
 export { decodePng, type DecodedImage } from "./png-decode";

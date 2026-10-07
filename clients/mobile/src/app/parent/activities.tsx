@@ -11,6 +11,7 @@ import {
   loadActivities,
   loadPersonaOptions,
 } from "@dodi/client-state/activities";
+import { settleAll } from "@dodi/client-state/pull-refresh";
 import type { Activity } from "@dodi/types/database";
 import { activityEmpty, activityRowTitle, loadMoreRow, row } from "@dodi/ui-recipes";
 
@@ -20,7 +21,7 @@ import { DotSep, Row, RowMain, RowMeta, RowTitle } from "@/components/parent/row
 import { Section } from "@/components/parent/section";
 import { ShellContent } from "@/components/shared/shell-content";
 import { Badge, Button, Text } from "@/components/ui";
-import { useVaultStore } from "@/lib/client-state";
+import { clientState, useVaultStore } from "@/lib/client-state";
 import { cn } from "@/lib/cn";
 import { useAccountDateFormat } from "@/lib/date-format";
 import { useAccountGames } from "@/lib/use-account-games";
@@ -71,12 +72,24 @@ export default function ActivitiesScreen() {
     void fetchRows(0, false);
   }, [fetchRows]);
 
+  // Pull to refresh: the first page for the current filters, the filter
+  // options, and the kid and game names the rows resolve to.
+  const refresh = (): Promise<void> =>
+    settleAll([
+      () => fetchRows(0, false),
+      async () => {
+        if (session) setPersonas(await loadPersonaOptions(api, session));
+      },
+      () => clientState.kids.getState().loadList(true),
+      () => clientState.games.getState().loadAccount(true),
+    ]);
+
   const kidNameMap = new Map(kids.map((k) => [k.id, k.display_name]));
   const { games: accountGames } = useAccountGames();
   const gameNameMap = new Map((accountGames ?? []).map((g) => [g.id, g.title]));
 
   return (
-    <ShellContent>
+    <ShellContent onRefresh={refresh}>
       <ActivityFilters
         filters={filters}
         kids={kids.map((k) => ({ id: k.id, name: k.display_name }))}

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { View } from "react-native";
 import { useTranslations } from "use-intl";
 import { flowErrorText } from "@dodi/client-state/flow-error";
+import { settleAll } from "@dodi/client-state/pull-refresh";
 import {
   type MemoryRow,
   citationEntriesOf,
@@ -58,6 +59,12 @@ export default function KidMemoryScreen() {
     setDiscardedMemories(lists.discarded);
   }, []);
 
+  const applyKid = useCallback((data: Kid) => {
+    setKid(data);
+    setMemory(data.memory ?? "");
+    setParentNotes(data.parent_notes ?? "");
+  }, []);
+
   useEffect(() => {
     let isCancelled = false;
     async function load(): Promise<void> {
@@ -69,9 +76,7 @@ export default function KidMemoryScreen() {
           setIsFetching(false);
           return;
         }
-        setKid(data);
-        setMemory(data.memory ?? "");
-        setParentNotes(data.parent_notes ?? "");
+        applyKid(data);
         await loadStructured(id);
         setIsFetching(false);
       } catch {
@@ -85,7 +90,23 @@ export default function KidMemoryScreen() {
     return () => {
       isCancelled = true;
     };
-  }, [id, t, loadStructured]);
+  }, [id, t, applyKid, loadStructured]);
+
+  // Pull to refresh: the dossier and notes past the cache (re-seeded as a
+  // browser reload would: an open edit closes, unsaved text goes) and the
+  // structured memories behind them.
+  const refresh = (): Promise<void> =>
+    settleAll([
+      async () => {
+        const data = await useKidStore.getState().loadOne(id, true);
+        if (!data) return;
+        applyKid(data);
+        setIsEditingMemory(false);
+        setError(null);
+        setIsFetching(false);
+      },
+      () => loadStructured(id),
+    ]);
 
   async function handleSave(): Promise<void> {
     setError(null);
@@ -133,7 +154,7 @@ export default function KidMemoryScreen() {
 
   if (isFetching) {
     return (
-      <ShellContent>
+      <ShellContent onRefresh={refresh}>
         <PageMessage>{tc("loading")}</PageMessage>
       </ShellContent>
     );
@@ -141,7 +162,7 @@ export default function KidMemoryScreen() {
 
   if (!kid) {
     return (
-      <ShellContent>
+      <ShellContent onRefresh={refresh}>
         <PageMessage>{t("kidNotFound")}</PageMessage>
       </ShellContent>
     );
@@ -150,7 +171,7 @@ export default function KidMemoryScreen() {
   const citationCount = parseCitationIds(memory).length;
 
   return (
-    <ShellContent>
+    <ShellContent onRefresh={refresh}>
       <Section title={t("parentNotesTitle")} desc={t("parentNotesHint")}>
         <StackField>
           <MemoryTextarea

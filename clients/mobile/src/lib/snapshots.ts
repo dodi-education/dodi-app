@@ -1,24 +1,24 @@
 /**
  * The app's deps for the shared snapshot flows (`@dodi/client-state/snapshots`,
- * `snapshot-transfer`, `game-play`): the platform API, the connectivity store
- * and the shared friends layer (received rows open with the kid's friend
- * keys). No offline ciphertext cache yet (roadmap phase 6), so autosaves are
- * never parked: the flush is a no-op until then.
+ * `snapshot-transfer`, `game-play`): the platform API, the connectivity store,
+ * the device's offline ciphertext cache (lists, payloads, autosave slots, and
+ * autosaves parked while offline) and the shared friends layer (received rows
+ * open with the kid's friend keys). Web: lib/snapshots.
  */
 import {
-  NO_SNAPSHOT_OFFLINE_CACHE,
   type SnapshotDeps,
   flushPendingAutosaves as flushPendingAutosavesWith,
   snapshotFriendsPort,
 } from "@dodi/client-state/snapshots";
 
+import { offlineCache } from "@/adapters/offline-cache";
 import { api } from "@/adapters/platform";
 import { clientState } from "@/lib/client-state";
 
 export const snapshotDeps: SnapshotDeps = {
   api,
   connectivity: clientState.connectivity,
-  offline: NO_SNAPSHOT_OFFLINE_CACHE,
+  offline: offlineCache,
   friends: snapshotFriendsPort(api),
 };
 

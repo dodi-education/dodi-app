@@ -35,6 +35,7 @@ export function ActionRow({
 }) {
   return (
     <Pressable
+      hitSlop={{ top: 2, bottom: 2 }}
       accessibilityRole="button"
       accessibilityState={{ disabled: Boolean(disabled) }}
       onPress={onPress}
@@ -100,7 +101,7 @@ function Pill({
       accessibilityState={{ disabled: Boolean(disabled), selected: Boolean(highlighted) }}
       onPress={onPress}
       disabled={disabled}
-      hitSlop={4}
+      hitSlop={{ top: 5, bottom: 5, left: 4, right: 4 }}
       className={cn(planPill.box, highlighted ? planPill.on : planPill.off, disabled && planPill.disabled)}
     >
       <Icon name={icon} size={planPill.icon.size} color={highlighted ? "primary" : "muted-foreground"} />

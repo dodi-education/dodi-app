@@ -6,6 +6,7 @@ import type { DiscoverGameDetail, GameSharingState } from "@dodi/types/games";
 import { gamePreview as g } from "@dodi/ui-recipes";
 
 import { GameStage } from "@/components/games/game-stage";
+import { useRefreshControl } from "@/components/shared/refresh-control";
 import { CodeViewer } from "@/components/studio/code-viewer";
 import { Button } from "@/components/ui";
 import { useBreadcrumbStore } from "@/lib/breadcrumb-store";
@@ -37,6 +38,15 @@ export function GamePreview({
   const [isShareOpen, setIsShareOpen] = useState(false);
   // Kept locally so a save re-seeds the pills on the next open.
   const [sharing, setSharing] = useState<GameSharingState>(initialSharing);
+  // A pull to refresh hands in a newer audience: adopt it.
+  const [seededSharing, setSeededSharing] = useState<GameSharingState>(initialSharing);
+  if (initialSharing !== seededSharing) {
+    setSeededSharing(initialSharing);
+    setSharing(initialSharing);
+  }
+  // Pull to refresh on the Infos tab only: Preview runs the game (a pull
+  // would fight a drag or drawing game) and the code viewer scrolls itself.
+  const refreshControl = useRefreshControl();
 
   // The game title is the breadcrumb leaf (the route only has the id).
   const setLeaf = useBreadcrumbStore((s) => s.setLeaf);
@@ -87,7 +97,7 @@ export function GamePreview({
       ) : null}
 
       {view === "infos" ? (
-        <ScrollView className="flex-1">
+        <ScrollView className="flex-1" refreshControl={refreshControl}>
           <PreviewInfos detail={detail} />
         </ScrollView>
       ) : null}

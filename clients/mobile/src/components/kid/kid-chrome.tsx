@@ -1,17 +1,20 @@
 import { type Href, usePathname, useRouter } from "expo-router";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import { type ReactNode, useEffect } from "react";
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from "react-native";
+import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTranslations } from "use-intl";
 import { onBackOnline } from "@dodi/client-state/connectivity-store";
+import { previewImageSource } from "@dodi/client-state/game-preview-image";
 import { onKidViewMount } from "@dodi/client-state/kid-view";
+import { startOfflineWarmup } from "@dodi/client-state/offline-warmup";
 import type { Kid } from "@dodi/types/database";
 import { kidChrome, kidGateHint, kidLoadingStage, kidNav } from "@dodi/ui-recipes";
 
-import { mobilePlatform } from "@/adapters/platform";
+import { mobilePlatform, writeLastView } from "@/adapters/platform";
 import { DodiCompact } from "@/components/dodi/dodi-compact";
 import { CompanionVolumeControl } from "@/components/kid/companion-volume-control";
+import { useRefreshControl } from "@/components/shared/refresh-control";
 import { PageBackground } from "@/components/shared/page-background";
 import { SnapshotFlashHost } from "@/components/snapshots/snapshot-flash-host";
 import { Icon, type IconName } from "@/components/ui";
@@ -19,11 +22,14 @@ import { clientState } from "@/lib/client-state";
 import { cn } from "@/lib/cn";
 import { notifyCompanionInteraction } from "@/lib/companion-session";
 import { useDodiSessionStore } from "@/lib/dodi-session-store";
+import { APP_URL } from "@/lib/env";
+import { MAX_FONT_SCALE } from "@/lib/font-scale";
 import { registerKidNavItem, remeasureKidNavItem } from "@/lib/kid-nav-rects";
 import { emitKidTabReselect } from "@/lib/kid-tab-reselect";
 import { endVoiceSession } from "@/lib/kid-voice";
 import { flushPlayOutbox } from "@/lib/play-sync";
-import { flushPendingAutosaves } from "@/lib/snapshots";
+import { RefreshScope, useNewRefreshRegistry } from "@/lib/refresh-scope";
+import { flushPendingAutosaves, snapshotDeps } from "@/lib/snapshots";
 import { useActiveKid } from "@/lib/use-active-kid";
 
 import { KidAvatar } from "./kid-avatar";
@@ -49,8 +55,15 @@ const KID_NAV_ITEMS: { href: "/home" | "/games" | "/snapshots" | "/friends"; key
  * (launch_game), the keep-awake while a conversation is on, and the session's
  * end when the kid view goes away.
  *
+ * It also keeps the kid view working offline, as the web's does: flushing
+ * work parked while offline and warming the offline cache.
+ *
+ * App-only: pull to refresh on the scrolling pages (a refresh scope the kid
+ * screens register their reloads in; the game views have none).
+ *
  * Not here: the web's "any click lifts the audio-gesture deaf" listener (native
- * audio needs no gesture) and the offline data warmup (roadmap phase 6).
+ * audio needs no gesture) and its `navigator.storage.persist()` (app storage
+ * is not evicted).
  */
 export function KidChrome({ children }: { children: ReactNode }) {
   const t = useTranslations("nav");
@@ -66,6 +79,8 @@ export function KidChrome({ children }: { children: ReactNode }) {
   // way back), and the vault re-opens silently with the device key.
   useEffect(() => {
     onKidViewMount({ parentLock: mobilePlatform.parentLock, vault: clientState.vault });
+    // The next launch reopens the kid view (web: the `dodi-view` cookie).
+    writeLastView("kid");
   }, []);
 
   // Leaving the kid view ends the voice session.
@@ -104,6 +119,38 @@ export function KidChrome({ children }: { children: ReactNode }) {
     flush();
     return onBackOnline(clientState.connectivity, flush);
   }, []);
+
+  // Offline data warmup (shared: @dodi/client-state/offline-warmup): pull the
+  // active kid's games and snapshots once per session, and again when back
+  // online, so their ciphertext lands in the offline cache even if the tabs
+  // are never opened online. System games' path-based previews go into the
+  // native image cache; family games carry inline data: URLs.
+  const activeKidId = activeKid?.id ?? null;
+  useEffect(() => {
+    if (!activeKidId) return;
+    return startOfflineWarmup(
+      {
+        games: clientState.games,
+        snapshots: snapshotDeps,
+        connectivity: clientState.connectivity,
+        prefetchPreviewImage: async (path) => {
+          const uri = previewImageSource(path, APP_URL);
+          if (uri) await Image.prefetch(uri);
+        },
+      },
+      activeKidId,
+    );
+  }, [activeKidId]);
+
+  // Pull to refresh on the browse pages (not the full-mode game views): the
+  // kid list here (switcher, greeting), each page registers its own data.
+  // The page starts under the status bar, so the spinner is offset below it.
+  const refreshRegistry = useNewRefreshRegistry();
+  useEffect(
+    () => refreshRegistry.register("kids", () => clientState.kids.getState().loadList(true)),
+    [refreshRegistry],
+  );
+  const refreshControl = useRefreshControl({ registry: refreshRegistry, progressViewOffset: insets.top });
 
   function onNavPress(href: (typeof KID_NAV_ITEMS)[number]["href"]): void {
     // Re-tapping the tab you're on resets that section (web: kid-tab-reselect).
@@ -146,7 +193,9 @@ export function KidChrome({ children }: { children: ReactNode }) {
         className={cn(kidChrome.parentLink, "active:opacity-70")}
       >
         <Icon name="lock" size={kidChrome.parentIcon.size} color="faint" />
-        <KidText className={kidChrome.parentLinkText}>{t("parent")}</KidText>
+        <KidText className={kidChrome.parentLinkText} maxFontSizeMultiplier={MAX_FONT_SCALE.chrome}>
+          {t("parent")}
+        </KidText>
       </Pressable>
     </View>
   );
@@ -159,25 +208,28 @@ export function KidChrome({ children }: { children: ReactNode }) {
     // Every touch keeps dodi awake (web: document click/touch/key listeners).
     <PageBackground onTouchStart={() => notifyCompanionInteraction()}>
       <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        {isFullMode && !page ? (
-          <View className="flex-1" style={{ paddingTop: insets.top }}>
-            {header}
-            <View className={kidChrome.mainFull} style={{ paddingBottom: 96 + insets.bottom }}>
-              <View className={cn(kidChrome.mainFullInner, "flex-1")}>{children}</View>
+        <RefreshScope registry={refreshRegistry}>
+          {isFullMode && !page ? (
+            <View className="flex-1" style={{ paddingTop: insets.top }}>
+              {header}
+              <View className={kidChrome.mainFull} style={{ paddingBottom: 96 + insets.bottom }}>
+                <View className={cn(kidChrome.mainFullInner, "flex-1")}>{children}</View>
+              </View>
             </View>
-          </View>
-        ) : (
-          <ScrollView
-            keyboardShouldPersistTaps="handled"
-            contentContainerClassName="grow"
-            contentContainerStyle={{ paddingTop: insets.top }}
-          >
-            {header}
-            <View className={kidChrome.main} style={{ paddingBottom: 96 + insets.bottom }}>
-              {page ?? children}
-            </View>
-          </ScrollView>
-        )}
+          ) : (
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              contentContainerClassName="grow"
+              contentContainerStyle={{ paddingTop: insets.top }}
+              refreshControl={refreshControl}
+            >
+              {header}
+              <View className={kidChrome.main} style={{ paddingBottom: 96 + insets.bottom }}>
+                {page ?? children}
+              </View>
+            </ScrollView>
+          )}
+        </RefreshScope>
       </KeyboardAvoidingView>
 
       {/* Bottom navigation */}
@@ -207,7 +259,12 @@ export function KidChrome({ children }: { children: ReactNode }) {
                 stroke={kidNav.icon.stroke}
                 color={isActive ? "primary" : "faint"}
               />
-              <KidText className={cn(kidNav.itemText, isActive ? kidNav.activeText : kidNav.inactiveText)}>
+              <KidText
+                className={cn(kidNav.itemText, isActive ? kidNav.activeText : kidNav.inactiveText)}
+                // Four items share the row on a 360pt phone (and the page leaves 96pt for the bar).
+                maxFontSizeMultiplier={MAX_FONT_SCALE.chrome}
+                numberOfLines={1}
+              >
                 {t(item.key as "home")}
               </KidText>
             </Pressable>

@@ -91,6 +91,7 @@ export function PlanCard({
 
         {hasPlan && !isEditingPlan ? (
           <Pressable
+            hitSlop={{ top: 6, bottom: 6 }}
             accessibilityRole="button"
             accessibilityState={{ disabled: isBusy }}
             onPress={onPersonalize}

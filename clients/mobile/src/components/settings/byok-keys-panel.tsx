@@ -131,7 +131,7 @@ export function ByokKeysPanel({
         <Row>
           <Pressable
             accessibilityRole="link"
-            hitSlop={8}
+            hitSlop={14}
             onPress={() => void Linking.openURL(`${SITE_URL}${BYOK_HELP_PATH[locale]}`)}
             className="flex-row items-center gap-1.5 active:opacity-70"
           >

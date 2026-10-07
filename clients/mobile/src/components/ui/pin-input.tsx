@@ -3,6 +3,8 @@ import { Animated, Pressable, TextInput, View } from "react-native";
 import { pinCell } from "@dodi/ui-recipes";
 
 import { cn } from "@/lib/cn";
+import { MAX_FONT_SCALE } from "@/lib/font-scale";
+import { isReduceMotionOn } from "@/lib/use-reduce-motion";
 
 import { Text } from "./text";
 
@@ -35,7 +37,8 @@ export function PinInput({
   const [shake] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
-    if (!isError) return;
+    // Reduced motion: no shake; the red cells still say it.
+    if (!isError || isReduceMotionOn()) return;
     Animated.sequence(
       [-9, 9, -9, 9, 0].map((toValue) =>
         Animated.timing(shake, { toValue, duration: 80, useNativeDriver: true }),
@@ -44,8 +47,13 @@ export function PinInput({
   }, [isError, shake]);
 
   return (
+    // The one element screen readers see: the hidden field below is out of
+    // their reach (and invisible to VoiceOver at opacity 0). The value says
+    // how many digits are in, never which.
     <Pressable
+      accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
+      accessibilityValue={{ text: `${value.length}/${length}` }}
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={() => inputRef.current?.focus()}
@@ -64,7 +72,9 @@ export function PinInput({
               isError && pinCell.invalid,
             )}
           >
-            <Text className={pinCell.text}>{value[i] ? "•" : ""}</Text>
+            <Text className={pinCell.text} maxFontSizeMultiplier={MAX_FONT_SCALE.none}>
+              {value[i] ? "•" : ""}
+            </Text>
           </View>
         ))}
       </Animated.View>
@@ -84,6 +94,8 @@ export function PinInput({
         maxLength={length}
         secureTextEntry
         accessibilityLabel={accessibilityLabel}
+        accessibilityElementsHidden
+        importantForAccessibility="no"
         className="absolute h-px w-px opacity-0"
       />
     </Pressable>

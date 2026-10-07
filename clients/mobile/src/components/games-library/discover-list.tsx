@@ -10,6 +10,7 @@ import { Button, Icon, Text } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { useGameStore } from "@/lib/client-state";
 import { gameFlowDeps } from "@/lib/game-flow-deps";
+import { useRefreshOnPull } from "@/lib/refresh-scope";
 
 import { DiscoverShareDialog } from "./discover-share-dialog";
 import { type GameAction, GameActionsSheet } from "./game-actions-sheet";
@@ -48,6 +49,12 @@ export function DiscoverList() {
       .then(() => setError(null))
       .catch(() => setError(t("discoverFailedGeneric")));
   }, [games, locale, loadDiscover, t]);
+
+  // Pull to refresh (the games page): the first page again, past the cache.
+  useRefreshOnPull("discover", async () => {
+    await loadDiscover(locale, true);
+    setError(null);
+  });
 
   const openPreview = (id: string): void => router.push(`/parent/games/${id}` as Href);
 

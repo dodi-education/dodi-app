@@ -20,18 +20,18 @@ const config: ExpoConfig = {
   icon: "./assets/images/icon.png",
   userInterfaceStyle: "light",
   ios: {
-    bundleIdentifier: "app.dodi.mobile",
+    bundleIdentifier: "app.dodi",
     supportsTablet: true,
     deploymentTarget: "17.0",
     config: { usesNonExemptEncryption: true },
     infoPlist: {
       // Game Studio builds keep running as BGContinuedProcessingTask (iOS 26+);
       // the module registers one identifier per build under this prefix.
-      BGTaskSchedulerPermittedIdentifiers: ["app.dodi.mobile.build.*"],
+      BGTaskSchedulerPermittedIdentifiers: ["app.dodi.build.*"],
     },
   },
   android: {
-    package: "app.dodi.mobile",
+    package: "app.dodi",
     adaptiveIcon: {
       foregroundImage: "./assets/images/adaptive-icon.png",
       backgroundColor: "#F5F8FB",
@@ -77,6 +77,10 @@ const config: ExpoConfig = {
         androidForegroundService: false,
         androidPermissions: ["android.permission.RECORD_AUDIO", "android.permission.MODIFY_AUDIO_SETTINGS"],
         iosMicrophonePermission: MICROPHONE_PERMISSION,
+        // FFmpeg only decodes MP4/M4A/AAC; the voice streams raw PCM and the
+        // shutter sound is MP3 (miniaudio's built-in decoder). Dropping it cuts
+        // most of the library's native size.
+        disableFFmpeg: true,
       },
     ],
     "./plugins/with-android-signing",

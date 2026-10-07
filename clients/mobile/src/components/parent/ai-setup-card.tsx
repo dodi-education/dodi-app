@@ -9,12 +9,14 @@ import { useEffect, useState } from "react";
 import { View } from "react-native";
 import { useTranslations } from "use-intl";
 import { loadModelConfig, needsAiSetup } from "@dodi/client-state/dashboard";
+import { settleAll } from "@dodi/client-state/pull-refresh";
 import type { AccountModelConfig } from "@dodi/types/ai";
 
 import { api } from "@/adapters/platform";
 import { Section } from "@/components/parent/section";
 import { Button, Icon, Text } from "@/components/ui";
 import { useProvidersStore, useVaultStore } from "@/lib/client-state";
+import { useRefreshOnPull } from "@/lib/refresh-scope";
 
 export function AiSetupCard() {
   const t = useTranslations("dashboard");
@@ -39,6 +41,15 @@ export function AiSetupCard() {
       isCurrent = false;
     };
   }, []);
+
+  // Pull to refresh (the dashboard): both sources past their caches, so a key
+  // added on another device clears the nudge.
+  useRefreshOnPull("ai-setup", () =>
+    settleAll([
+      () => (session ? loadProviders(true) : undefined),
+      async () => setConfig(await loadModelConfig(api)),
+    ]),
+  );
 
   if (!needsAiSetup(providers, config)) return null;
 

@@ -10,6 +10,7 @@ import { Section } from "@/components/parent/section";
 import { Badge, Button, Dialog, Icon, Input, Label, Text } from "@/components/ui";
 import { clientState } from "@/lib/client-state";
 import { useAccountDateFormat } from "@/lib/date-format";
+import { useRefreshOnPull } from "@/lib/refresh-scope";
 
 const STATUS_BADGE: Record<string, "blue" | "success" | "gray"> = {
   active: "success",
@@ -38,6 +39,8 @@ export default function DevicesSettingsScreen() {
   const [notice, setNotice] = useState<string | null>(null);
 
   const reload = useCallback(async () => setDevices(await loadDevices(api)), []);
+  // Pull to refresh (the settings page): the paired devices and their last-seen times.
+  useRefreshOnPull("devices", reload);
 
   useEffect(() => {
     let isCurrent = true;

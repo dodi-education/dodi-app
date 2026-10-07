@@ -21,6 +21,7 @@ import { clientState } from "@/lib/client-state";
 import { cn } from "@/lib/cn";
 import { fontFamilyFor } from "@/lib/fonts";
 import { onKidTabReselect } from "@/lib/kid-tab-reselect";
+import { useRefreshOnPull } from "@/lib/refresh-scope";
 import { useKidGames } from "@/lib/use-kid-games";
 import { useTagLabel } from "@/lib/tag-label";
 
@@ -44,6 +45,9 @@ export function GameLibrary({ kidId }: { kidId: string }) {
   const [search, setSearch] = useState("");
   const [tagFilter, setTagFilter] = useState<string>(ALL_TAGS_FILTER);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
+
+  // Pull to refresh (kid chrome): the library past the cache. Filters stay.
+  useRefreshOnPull("kid-games", () => clientState.games.getState().loadForKid(kidId, true));
 
   useEffect(
     () =>

@@ -15,10 +15,13 @@ import { BackgroundBuildBridge } from "@/lib/background-build";
 import { useAppFonts } from "@/lib/fonts";
 import { LocaleProvider } from "@/lib/intl";
 import { restoreSession, useSession } from "@/lib/session";
+import { primeReduceMotion } from "@/lib/use-reduce-motion";
 
 installArgon2();
 if (__DEV__) void verifyArgon2Executor();
 void SplashScreen.preventAutoHideAsync();
+// Resolved while the splash shows, so the first animations already know it.
+primeReduceMotion();
 
 export default function RootLayout() {
   const isLoaded = useSession((s) => s.isLoaded);

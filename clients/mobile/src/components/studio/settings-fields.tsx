@@ -105,7 +105,7 @@ export function PerspectivePicker({
             accessibilityRole="radio"
             accessibilityState={{ checked: isSelected }}
             onPress={() => onChange(option)}
-            hitSlop={4}
+            hitSlop={{ top: 5, bottom: 5, left: 4, right: 4 }}
             className={cn(optionChip.box, isSelected ? optionChip.selected : optionChip.idle)}
           >
             <Text className={cn(optionChip.text, isSelected ? optionChip.selectedText : optionChip.idleText)}>

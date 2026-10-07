@@ -21,5 +21,6 @@ export function useKids(): { kids: Kid[] | null; loading: boolean; error: string
       .catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load kids"));
   }, [list, loadList, session]);
 
-  return { kids: list, loading: list === null && error === null, error };
+  // A later load (e.g. pull to refresh) that brought the list clears an earlier failure.
+  return { kids: list, loading: list === null && error === null, error: list === null ? error : null };
 }

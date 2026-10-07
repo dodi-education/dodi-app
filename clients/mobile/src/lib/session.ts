@@ -6,6 +6,7 @@ import { createStore } from "zustand/vanilla";
 import { bindStore } from "@dodi/client-state/react";
 
 import { loadAccessToken, signOut as revokeSession } from "@/adapters/auth";
+import { offlineCache } from "@/adapters/offline-cache";
 import { clientState } from "@/lib/client-state";
 
 interface SessionState {
@@ -29,8 +30,13 @@ export function markSignedIn(): void {
   sessionStore.setState({ isSignedIn: true });
 }
 
-/** Sign out: revoke, lock the vault, and drop every cached plaintext. */
+/**
+ * Sign out: wipe the offline cache (as the web does: another account on this
+ * device never inherits cached ciphertext rows, parked autosaves or the sealed
+ * vault keys), revoke, lock the vault, and drop every cached plaintext.
+ */
 export async function signOut(): Promise<void> {
+  await offlineCache.clearAll();
   await revokeSession();
   clientState.vault.getState().lock();
   clientState.kids.getState().invalidate();

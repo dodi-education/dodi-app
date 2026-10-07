@@ -7,19 +7,23 @@ import { settingsTab } from "@dodi/ui-recipes";
 import { BackLink } from "@/components/parent/back-link";
 import { ShellContent } from "@/components/shared/shell-content";
 import { Text } from "@/components/ui";
+import { clientState } from "@/lib/client-state";
 import { cn } from "@/lib/cn";
 
 /**
  * Settings (web: parent/settings/layout + settings-sidebar, compact branch):
  * a back link to the dashboard and the horizontally scrolling tab strip above
- * the section content. No native headers.
+ * the section content. No native headers. The app adds pull to refresh.
  */
 export default function SettingsLayout() {
   const t = useTranslations();
   const pathname = usePathname();
 
+  // Pull to refresh on every tab: the account (plan, interface, date/time,
+  // notifications, parent PIN, screenshot service); tabs with more data
+  // (devices, AI providers) register their own reloads.
   return (
-    <ShellContent>
+    <ShellContent onRefresh={() => clientState.account.getState().load(true)}>
       <View className="mb-5">
         <BackLink href="/parent/dashboard">{t("settings.back")}</BackLink>
         {/* settingsTab.strip: the negative margin on the scroller, the rest on its content. */}
@@ -35,6 +39,7 @@ export default function SettingsLayout() {
             return (
               <Link key={item.href} href={item.href as Href} asChild>
                 <Pressable
+                  hitSlop={{ top: 8, bottom: 8 }}
                   accessibilityRole="tab"
                   accessibilityState={{ selected: isActive }}
                   className={cn(

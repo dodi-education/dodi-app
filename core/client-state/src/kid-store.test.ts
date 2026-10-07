@@ -25,7 +25,7 @@ vi.mock("@dodi/vault/kid-crypto", () => ({
 import { createStore } from "zustand/vanilla";
 
 import { createConnectivityStore, type ConnectivityStore } from "./connectivity-store";
-import { createKidStore } from "./kid-store";
+import { createKidStore, keepUnchanged } from "./kid-store";
 import type { VaultSession } from "@dodi/vault";
 
 import type { VaultState, VaultStore } from "./vault-store";
@@ -94,5 +94,43 @@ describe("kid store loadList — vault unlock race", () => {
     await expect(store.getState().loadList()).rejects.toThrow(
       "Vault is locked",
     );
+  });
+});
+
+describe("kid store loadList(force) — structural sharing", () => {
+  it("keeps unchanged kids (and an unchanged list) by identity, replaces changed ones", async () => {
+    let rows: Array<Record<string, unknown>> = ROWS.map((r) => ({ ...r }));
+    const request = vi.fn(async () => ({ ok: true, json: async () => rows }));
+    const kidStore = createKidStore({
+      api: { request } as never,
+      offlineCache: { writeKidRows: async () => {}, readKidRows: async () => null } as never,
+      vault: createStore(() => ({ session: {} as VaultSession, status: "unlocked" }) as unknown as VaultState),
+      connectivity: createConnectivityStore(true),
+    });
+
+    const first = await kidStore.getState().loadList();
+    // A pull to refresh with nothing changed: same array, same objects.
+    const same = await kidStore.getState().loadList(true);
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(same).toBe(first);
+    expect(kidStore.getState().list).toBe(first);
+
+    rows = [{ ...ROWS[0] }, { ...ROWS[1], display_name: "Bea" }];
+    const changed = await kidStore.getState().loadList(true);
+    expect(changed).not.toBe(first);
+    expect(changed[0]).toBe(first[0]);
+    expect(changed[1]).not.toBe(first[1]);
+    expect(changed[1].display_name).toBe("Bea");
+  });
+
+  it("keepUnchanged: a new or removed kid gives a new list", () => {
+    const a = { id: "a", display_name: "A" } as never;
+    const b = { id: "b", display_name: "B" } as never;
+    const prev = [a];
+    const added = keepUnchanged(prev, [{ id: "a", display_name: "A" } as never, b]);
+    expect(added).not.toBe(prev);
+    expect(added[0]).toBe(a);
+    expect(keepUnchanged([a, b], [{ id: "a", display_name: "A" } as never])).toEqual([a]);
+    expect(keepUnchanged(null, prev)).toBe(prev);
   });
 });

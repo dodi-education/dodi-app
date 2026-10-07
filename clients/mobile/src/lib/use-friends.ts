@@ -27,6 +27,8 @@ export interface UseFriends extends FriendBuckets {
   busy: boolean;
   error: string | null;
   reload: () => void;
+  /** `reload`, settling when the lists are in (pull to refresh). */
+  refresh: () => Promise<void>;
   /** Throws a FriendsError on failure so the Add-friend form can show it inline. */
   sendRequest: (handle: string, nickname: string) => Promise<void>;
   accept: (f: DecodedFriend) => Promise<void>;
@@ -114,6 +116,7 @@ export function useFriends(kidId: string): UseFriends {
     busy,
     error,
     reload: () => void reload(),
+    refresh: reload,
     sendRequest,
     accept: (f) =>
       runAction(() => {

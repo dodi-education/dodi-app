@@ -21,7 +21,7 @@ export function SegTab({
     <Pressable
       accessibilityRole="tab"
       accessibilityState={{ selected: isActive }}
-      hitSlop={{ top: 6, bottom: 6 }}
+      hitSlop={{ top: 7, bottom: 7 }}
       onPress={onPress}
       className={cn(g.segment, isActive && g.segmentActive)}
       style={

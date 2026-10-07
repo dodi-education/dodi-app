@@ -397,10 +397,13 @@ features:
     area: kid
     title: Offline kid view (cached ciphertext, autosave outbox)
     web: done
-    mobile: planned
-    phase: 6
+    mobile: done
     core: [client-state]
     web_paths: ["clients/web/src/lib/offline/offline-cache.ts"]
+    mobile_paths:
+      - "clients/mobile/src/adapters/offline-cache.ts"
+      - "clients/mobile/src/lib/snapshots.ts"
+      - "clients/mobile/src/lib/play-sync.ts"
 
   # ----- Public / platform-specific ---------------------------------------------
   - id: public.game-page
@@ -426,3 +429,20 @@ features:
     mobile: mobile-only
     phase: 4
     notes: The web copies the link instead.
+
+  - id: mobile.pull-to-refresh
+    area: mobile
+    title: Pull to refresh on the scrolling parent pages and kid view pages
+    web: n/a
+    mobile: mobile-only
+    core: [client-state]
+    mobile_paths:
+      - "clients/mobile/src/lib/use-pull-to-refresh.ts"
+      - "clients/mobile/src/lib/refresh-scope.tsx"
+      - "clients/mobile/src/components/shared/refresh-control.tsx"
+    notes: >-
+      Browsers have their own reload. Native RefreshControl (engages only at
+      the top of the scroll view) on ShellContent pages and the kid chrome's
+      page; not on Game Studio, game play, snapshot replay, auth, dialogs or
+      the drawer. Registry and kid home composite in
+      @dodi/client-state/pull-refresh and kid-view.

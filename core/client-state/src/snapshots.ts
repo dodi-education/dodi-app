@@ -9,7 +9,8 @@
  * JSON sealed to this kid's friend KEM key and signed by the sender kid, whose
  * published signing key the server delivers alongside for verification.
  *
- * Offline: a device may keep a ciphertext cache (web: IndexedDB). Network
+ * Offline: a device may keep a ciphertext cache (`./offline-cache`; web:
+ * IndexedDB, app: SQLite + files). Network
  * failures fall back to it and park autosave uploads as pending records; an
  * app without one passes {@link NO_SNAPSHOT_OFFLINE_CACHE}.
  */

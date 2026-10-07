@@ -19,6 +19,7 @@ import { CapabilityModelConfig } from "@/components/settings/capability-model-co
 import { DodiAIPanel } from "@/components/settings/dodi-ai-panel";
 import { Badge, Icon, TabsLabel, TabsList, TabsTrigger, Text } from "@/components/ui";
 import { clientState, useDodiAIKeyStore, useProvidersStore } from "@/lib/client-state";
+import { useRefreshOnPull } from "@/lib/refresh-scope";
 
 type Tab = "dodi-ai" | "byok";
 
@@ -51,6 +52,10 @@ export default function AiProvidersSettingsScreen() {
       isCurrent = false;
     };
   }, []);
+
+  // Pull to refresh (the settings page): your own keys past the cache. The
+  // model choices are a draft with its own Save, so they stay as edited.
+  useRefreshOnPull("ai-providers", () => clientState.providers.getState().load(true));
 
   useEffect(() => {
     if (!isSaved) return;

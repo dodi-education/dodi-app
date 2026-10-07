@@ -9,9 +9,11 @@ import { Icon } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { useConnectivityStore } from "@/lib/client-state";
 import { selectDodiActivityKind, selectDodiThinking, useDodiSessionStore } from "@/lib/dodi-session-store";
+import { useAnnounceOnIos } from "@/lib/announce";
 import { useReduceMotion } from "@/lib/use-reduce-motion";
 
 import { getDodiImage } from "./dodi-image";
+import { useCompanionStateLabel } from "./use-companion-state-label";
 
 /** A looping 0 → 1 value (still under reduced motion), while `isOn`. */
 function useLoopValue(isOn: boolean, make: (value: Animated.Value) => Animated.CompositeAnimation): Animated.Value {
@@ -22,7 +24,10 @@ function useLoopValue(isOn: boolean, make: (value: Animated.Value) => Animated.C
     value.setValue(0);
     const loop = Animated.loop(make(value));
     loop.start();
-    return () => loop.stop();
+    return () => {
+      loop.stop();
+      value.setValue(0); // at rest if reduced motion stops it mid-way
+    };
     // `make` is a fresh closure every render; the loop is set up per switch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, isOn, isReduced]);
@@ -44,6 +49,7 @@ export function DodiCompact() {
   const isThinking = useDodiSessionStore(selectDodiThinking);
   const activityKind = useDodiSessionStore(selectDodiActivityKind);
   const isOnline = useConnectivityStore((s) => s.isOnline);
+  const stateLabel = useCompanionStateLabel();
 
   const isConnected = dodiState === "active" || dodiState === "deaf";
   const isConnecting = dodiState === "connecting";
@@ -84,12 +90,17 @@ export function DodiCompact() {
             : dodiSpeaking && dodiState === "active"
               ? t("voiceSpeaking")
               : null;
+  // "Speaking" is not announced: dodi's voice says it, and a screen reader
+  // talking over it (into the open microphone) would only get in the way.
+  const isSpeakingLine = statusLine !== null && statusLine === t("voiceSpeaking");
+  useAnnounceOnIos(isSpeakingLine ? null : statusLine);
 
   return (
     <View className={c.root}>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={ariaLabel}
+        accessibilityValue={{ text: stateLabel }}
         accessibilityState={{ disabled: isConnecting, busy: isConnecting || isThinking }}
         onPress={toggleActive}
         disabled={isConnecting}
@@ -99,6 +110,8 @@ export function DodiCompact() {
         style={kidShadowStyle("sm")}
       >
         <Animated.Image
+          accessibilityElementsHidden
+          importantForAccessibility="no"
           source={getDodiImage(dodiState, true, isThinking)}
           style={{ width: c.head, height: c.head, transform: isThinking ? [{ rotate }] : [] }}
           className="rounded-full"
@@ -139,7 +152,12 @@ export function DodiCompact() {
           changes; only visible while dodi is doing something. */}
       <View className={c.liveRegion} accessibilityLiveRegion="polite">
         {statusLine ? (
-          <View className={c.bubble} style={kidShadowStyle("sm")}>
+          <View
+            className={c.bubble}
+            style={kidShadowStyle("sm")}
+            importantForAccessibility={isSpeakingLine ? "no-hide-descendants" : "auto"}
+            accessibilityElementsHidden={isSpeakingLine}
+          >
             {/* Tail pointing left toward the avatar */}
             <View className={c.bubbleTail} style={{ marginTop: c.bubbleTailOffset }} />
             <KidText className={c.bubbleText} numberOfLines={1}>

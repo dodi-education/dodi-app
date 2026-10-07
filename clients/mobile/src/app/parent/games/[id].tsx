@@ -5,6 +5,7 @@ import { type DiscoverPreview, loadDiscoverPreview } from "@dodi/client-state/ga
 
 import { api } from "@/adapters/platform";
 import { GamePreview } from "@/components/games-library/game-preview";
+import { useRefreshOnPull } from "@/lib/refresh-scope";
 
 /**
  * Parent preview of a PUBLISHED game (web: parent/games/[id]/page). Content
@@ -34,6 +35,13 @@ export default function ParentGamePreviewScreen() {
       isCurrent = false;
     };
   }, [id, locale]);
+
+  // Pull to refresh (the Infos tab): the listing and this family's sharing.
+  // A failed reload keeps what's shown.
+  useRefreshOnPull("game-preview", async () => {
+    const preview = await loadDiscoverPreview(api, id, locale);
+    if (preview) setData(preview);
+  });
 
   if (isMissing) return <Redirect href="/parent/games" />;
   if (!data) return null;

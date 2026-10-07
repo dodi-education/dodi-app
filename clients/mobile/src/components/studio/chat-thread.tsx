@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { Image, ScrollView, View } from "react-native";
 import { useTranslations } from "use-intl";
 import type { AgentRunLog } from "@dodi/studio/agent-run-log";
@@ -8,6 +8,7 @@ import type { AgentStep } from "@dodi/types/agent-progress";
 import { chatMessage, chatThinking, chatThread, chatWelcome } from "@dodi/ui-recipes";
 
 import { Text } from "@/components/ui";
+import { announce } from "@/lib/announce";
 import { cn } from "@/lib/cn";
 
 import { AgentRunTimeline } from "./agent-run-timeline";
@@ -64,6 +65,15 @@ export function ChatThread({
   const scrollRef = useRef<ScrollView>(null);
   const starters = [t("starterCounting"), t("starterMath"), t("starterStory"), t("starterDrawing")];
 
+  // A new reply is read out (a resumed or reloaded thread is not news).
+  const seenCount = useRef(messages.length);
+  useEffect(() => {
+    const isNewTurn = messages.length > seenCount.current;
+    seenCount.current = messages.length;
+    const last = messages.at(-1);
+    if (isNewTurn && last?.role === "assistant") announce(last.text);
+  }, [messages]);
+
   return (
     <ScrollView
       ref={scrollRef}
@@ -75,7 +85,15 @@ export function ChatThread({
     >
       {messages.length === 0 ? (
         <View className={cn(chatWelcome.box, isMobilePlan ? chatWelcome.plan : chatWelcome.idle)}>
-          {!isMobilePlan ? <Image source={DODI_FULL} className={chatWelcome.image} resizeMode="contain" /> : null}
+          {!isMobilePlan ? (
+            <Image
+              source={DODI_FULL}
+              className={chatWelcome.image}
+              resizeMode="contain"
+              accessibilityElementsHidden
+              importantForAccessibility="no"
+            />
+          ) : null}
           <Text accessibilityRole="header" className={cn(chatWelcome.text, chatWelcome.title)}>
             {t(isPlanMode ? "planWelcomeTitle" : "welcomeTitle")}
           </Text>
@@ -103,7 +121,13 @@ export function ChatThread({
       )}
       {isThinking ? (
         <View className={chatMessage.row}>
-          <Image source={DODI_HEAD} className={chatMessage.avatar} resizeMode="contain" />
+          <Image
+            source={DODI_HEAD}
+            className={chatMessage.avatar}
+            resizeMode="contain"
+            accessibilityElementsHidden
+            importantForAccessibility="no"
+          />
           <View className={chatMessage.body}>
             <ThinkingDots />
             {liveRun ? <AgentRunTimeline run={liveRun} isLive /> : null}

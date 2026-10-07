@@ -6,6 +6,7 @@ import { kidLibrary, kidLibraryState } from "@dodi/ui-recipes";
 import { kidShadowStyle } from "@/components/kid/kid-shadow";
 import { KidText } from "@/components/kid/kid-text";
 import { cn } from "@/lib/cn";
+import { useRefreshOnPull } from "@/lib/refresh-scope";
 import { useSnapshots } from "@/lib/use-snapshots";
 
 import { SnapshotCard } from "./snapshot-card";
@@ -16,7 +17,9 @@ import { SnapshotCard } from "./snapshot-card";
  */
 export function SnapshotLibrary({ kidId }: { kidId: string }) {
   const t = useTranslations("snapshots");
-  const { snapshots, loading, error, remove } = useSnapshots(kidId);
+  const { snapshots, loading, error, refresh, remove } = useSnapshots(kidId);
+  // Pull to refresh (kid chrome): own and received snapshots.
+  useRefreshOnPull("kid-snapshots", refresh);
   const { received, own } = splitSnapshotSections(snapshots);
 
   return (

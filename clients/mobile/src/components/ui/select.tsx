@@ -75,6 +75,8 @@ export function Select<T extends string>({
           accessibilityValue={{ text: current?.label ?? placeholder }}
           disabled={disabled}
           onPress={() => setIsOpen(true)}
+          // The web's h-9 field: a 44pt target.
+          hitSlop={{ top: 4, bottom: 4 }}
           className={cn(fieldSelect.box, "flex-row items-center justify-between", disabled && "opacity-50", className)}
         >
           <Text className={cn(fieldSelect.text, !current && "text-faint")} numberOfLines={1}>

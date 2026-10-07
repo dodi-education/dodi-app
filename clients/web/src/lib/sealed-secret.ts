@@ -22,16 +22,11 @@
  * `passwordWrap`, never the plaintext password.
  */
 
+import { SEALED_SECRET_TTL_MS } from "@dodi/client-state/platform";
+
 const DB_NAME = "dodi-sealed-secret";
 const STORE = "secret";
 const RECORD_KEY = "self";
-
-/**
- * How long a sealed secret stays usable. Past this we drop it; the caller then
- * falls back (registration → re-enter password at /finish-setup). Bounds the
- * exposure window of an abandoned registration; aligned with the OTP expiry.
- */
-const TTL_MS = 60 * 60 * 1000; // 1 hour
 
 interface SealedSecret {
   /** Non-extractable AES-GCM key — can decrypt in-page, never leaves the browser. */
@@ -187,7 +182,7 @@ export async function consumeSealedSecret(
   const record = await store.load();
   await store.clear();
   if (!record) return null;
-  if (Date.now() - record.createdAt > TTL_MS) return null;
+  if (Date.now() - record.createdAt > SEALED_SECRET_TTL_MS) return null;
   try {
     const plaintext = await s.decrypt(
       { name: "AES-GCM", iv: record.iv },

@@ -9,6 +9,7 @@ import { Button, Dialog, Icon } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { useConnectivityStore } from "@/lib/client-state";
 import { onKidTabReselect } from "@/lib/kid-tab-reselect";
+import { useRefreshOnPull } from "@/lib/refresh-scope";
 import { useFriends } from "@/lib/use-friends";
 
 import { KidText } from "../kid-text";
@@ -42,6 +43,8 @@ export function FriendsApp({ kidId, initialAddCode }: { kidId: string; initialAd
   const tp = useTranslations("kidProfile");
   const f = useFriends(kidId);
   const { reload } = f;
+  // Pull to refresh (kid chrome): friends, requests and blocked list.
+  useRefreshOnPull("friends", f.refresh);
   const isOnline = useConnectivityStore((s) => s.isOnline);
 
   const [view, setView] = useState<View_>(initialAddCode ? { mode: "add" } : { mode: "list" });

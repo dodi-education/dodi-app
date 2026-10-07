@@ -27,6 +27,8 @@ export function useSnapshots(kidId: string): {
   loading: boolean;
   error: string | null;
   reload: () => void;
+  /** `reload`, settling when the snapshots are in (pull to refresh). */
+  refresh: () => Promise<void>;
   remove: (id: string) => Promise<void>;
 } {
   const { kids } = useKids();
@@ -35,32 +37,34 @@ export function useSnapshots(kidId: string): {
 
   const keysRef = useRef<CachedFriendKeys | null>(null);
   const [loaded, setLoaded] = useState<Loaded | null>(null);
-  const [reloadNonce, setReloadNonce] = useState(0);
+  // Each load takes a ticket; only the latest one lands (a kid switch or a
+  // newer reload supersedes it).
+  const ticketRef = useRef(0);
 
-  useEffect(() => {
+  const load = useCallback(async (): Promise<void> => {
     if (!kid || !session) return;
-    let isCurrent = true;
-    loadKidSnapshots(snapshotDeps, kid, session, keysRef.current).then(
-      (result) => {
-        if (!isCurrent) return;
-        keysRef.current = result.keys;
-        setLoaded({ kidId: kid.id, snapshots: result.snapshots, error: null });
-      },
-      (e: unknown) => {
-        if (!isCurrent) return;
-        setLoaded((prev) => ({
-          kidId: kid.id,
-          snapshots: prev?.kidId === kid.id ? prev.snapshots : [],
-          error: e instanceof Error ? e.message : "error",
-        }));
-      },
-    );
-    return () => {
-      isCurrent = false;
-    };
-  }, [kid, session, reloadNonce]);
+    const ticket = ++ticketRef.current;
+    try {
+      const result = await loadKidSnapshots(snapshotDeps, kid, session, keysRef.current);
+      if (ticket !== ticketRef.current) return;
+      keysRef.current = result.keys;
+      setLoaded({ kidId: kid.id, snapshots: result.snapshots, error: null });
+    } catch (e) {
+      if (ticket !== ticketRef.current) return;
+      setLoaded((prev) => ({
+        kidId: kid.id,
+        snapshots: prev?.kidId === kid.id ? prev.snapshots : [],
+        error: e instanceof Error ? e.message : "error",
+      }));
+    }
+  }, [kid, session]);
 
-  const reload = useCallback(() => setReloadNonce((n) => n + 1), []);
+  // Mount / kid / vault change (a newer load supersedes one in flight).
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const reload = useCallback(() => void load(), [load]);
 
   const remove = useCallback(
     async (id: string) => {
@@ -76,12 +80,13 @@ export function useSnapshots(kidId: string): {
   );
 
   const current = loaded?.kidId === kidId ? loaded : null;
-  if (!session) return { snapshots: [], loading: false, error: "locked", reload, remove };
+  if (!session) return { snapshots: [], loading: false, error: "locked", reload, refresh: load, remove };
   return {
     snapshots: current?.snapshots ?? [],
     loading: current === null,
     error: current?.error ?? null,
     reload,
+    refresh: load,
     remove,
   };
 }

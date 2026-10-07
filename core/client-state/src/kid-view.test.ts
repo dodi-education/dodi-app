@@ -10,15 +10,18 @@ import type { KidStore, KidStoreState } from "./kid-store";
 import {
   createCardRefreshScheduler,
   enterKidView,
+  isCompanionInError,
   kidPickAction,
   onKidViewMount,
   parseAvatarPin,
+  refreshKidHome,
   solvedPinAction,
   switchActiveKid,
   updateKidLook,
   verifyAvatarPin,
 } from "./kid-view";
 import type { ActiveKidPersistence, PlatformApi } from "./platform";
+import type { ProvidersStore } from "./providers-store";
 import type { VaultState, VaultStore } from "./vault-store";
 
 function kid(id: string, extra: Partial<Kid> = {}): Kid {
@@ -212,5 +215,74 @@ describe("createCardRefreshScheduler", () => {
     s.flush();
     vi.advanceTimersByTime(5000);
     expect(refresh).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("refreshKidHome (pull to refresh)", () => {
+  type Companion = { state: "disconnected" | "active" | "sleep"; error: string | null; fatalError: boolean };
+
+  function setup(opts: { providers: () => Promise<Record<string, unknown>>; companion: Companion }) {
+    const load = vi.fn(opts.providers);
+    const connect = vi.fn(async () => {});
+    const deps = {
+      providers: createStore(() => ({ load })) as unknown as ProvidersStore,
+      companion: { getState: () => ({ ...opts.companion, connect }) },
+    };
+    return { deps, load, connect };
+  }
+
+  it("reloads the provider keys past the cache and reports whether one is set up", async () => {
+    const { deps, load, connect } = setup({
+      providers: async () => ({ xai: { apiKey: "k" } }),
+      companion: { state: "active", error: null, fatalError: false },
+    });
+    await expect(refreshKidHome(deps, "k1")).resolves.toBe(true);
+    expect(load).toHaveBeenCalledWith(true);
+    expect(connect).not.toHaveBeenCalled();
+  });
+
+  it("retries dodi's connection when it is stuck in an error, like Tap to retry", async () => {
+    const { deps, connect } = setup({
+      providers: async () => ({ xai: { apiKey: "k" } }),
+      companion: { state: "disconnected", error: "Failed to start voice", fatalError: true },
+    });
+    await refreshKidHome(deps, "k1");
+    expect(connect).toHaveBeenCalledWith("k1");
+  });
+
+  it("does not connect without a provider, or when dodi is merely idle or asleep", async () => {
+    const noProvider = setup({
+      providers: async () => ({}),
+      companion: { state: "disconnected", error: "boom", fatalError: true },
+    });
+    await expect(refreshKidHome(noProvider.deps, "k1")).resolves.toBe(false);
+    expect(noProvider.connect).not.toHaveBeenCalled();
+
+    for (const companion of [
+      { state: "disconnected", error: null, fatalError: false },
+      { state: "sleep", error: null, fatalError: false },
+    ] as Companion[]) {
+      const idle = setup({ providers: async () => ({ xai: {} }), companion });
+      await refreshKidHome(idle.deps, "k1");
+      expect(idle.connect).not.toHaveBeenCalled();
+    }
+  });
+
+  it("resolves null (keep what's shown) when the keys can't be loaded, and never throws", async () => {
+    const { deps, connect } = setup({
+      providers: async () => {
+        throw new TypeError("Network request failed");
+      },
+      companion: { state: "disconnected", error: "boom", fatalError: true },
+    });
+    await expect(refreshKidHome(deps, "k1")).resolves.toBeNull();
+    expect(connect).not.toHaveBeenCalled();
+  });
+
+  it("isCompanionInError: disconnected with an error or a fatal flag only", () => {
+    expect(isCompanionInError({ state: "disconnected", error: "x", fatalError: false })).toBe(true);
+    expect(isCompanionInError({ state: "disconnected", error: null, fatalError: true })).toBe(true);
+    expect(isCompanionInError({ state: "disconnected", error: null, fatalError: false })).toBe(false);
+    expect(isCompanionInError({ state: "active", error: "micPermissionNeeded", fatalError: false })).toBe(false);
   });
 });

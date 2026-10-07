@@ -1,10 +1,11 @@
 import { type Href, useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { View } from "react-native";
 import { useTranslations } from "use-intl";
 import { generateSocialId } from "@dodi/crypto/social-id";
 import { readStoredDatePref } from "@dodi/client-state/date-preferences";
 import { flowErrorText } from "@dodi/client-state/flow-error";
+import { settleAll } from "@dodi/client-state/pull-refresh";
 import {
   KID_NAME_MAX_LENGTH,
   SOCIAL_ID_MAX_LENGTH,
@@ -102,6 +103,28 @@ export default function EditKidScreen() {
   // What a kid sees when inheriting: drives the preview's fallback values.
   const dateBasePref = resolvePref(locale, "kid", readStoredDatePref(accountStored, vaultSession));
 
+  // Seeds the form from a (decrypted) kid.
+  const applyKid = useCallback((data: Kid) => {
+    setKid(data);
+    const form = kidProfileFormOf(data);
+    setDisplayName(form.displayName);
+    setSocialId(form.socialId);
+    setBirthdate(form.birthdate);
+    setLanguage(form.language);
+    setActivePersonaId(data.active_persona?.id ?? null);
+    setCanInitiate(form.canAddFriends);
+    setCanBeAdded(form.canBeAddedAsFriend);
+    setIncomingApproval(form.incomingApproval);
+    setOutgoingApproval(form.outgoingApproval);
+    const storedPin = parseStoredPin(data.avatar_pin);
+    setIsPinEnabled(storedPin != null);
+    setPinSlots(storedPin ?? emptyPinSlots());
+    const dp = kidDatePrefsFormOf(data, useVaultStore.getState().session);
+    setDpDateStyle(dp.dateStyle);
+    setDpTimeStyle(dp.timeStyle);
+    setDpTimeZone(dp.timeZone);
+  }, []);
+
   useEffect(() => {
     let isCancelled = false;
     async function load(): Promise<void> {
@@ -113,24 +136,7 @@ export default function EditKidScreen() {
           setIsFetching(false);
           return;
         }
-        setKid(data);
-        const form = kidProfileFormOf(data);
-        setDisplayName(form.displayName);
-        setSocialId(form.socialId);
-        setBirthdate(form.birthdate);
-        setLanguage(form.language);
-        setActivePersonaId(data.active_persona?.id ?? null);
-        setCanInitiate(form.canAddFriends);
-        setCanBeAdded(form.canBeAddedAsFriend);
-        setIncomingApproval(form.incomingApproval);
-        setOutgoingApproval(form.outgoingApproval);
-        const storedPin = parseStoredPin(data.avatar_pin);
-        setIsPinEnabled(storedPin != null);
-        setPinSlots(storedPin ?? emptyPinSlots());
-        const dp = kidDatePrefsFormOf(data, useVaultStore.getState().session);
-        setDpDateStyle(dp.dateStyle);
-        setDpTimeStyle(dp.timeStyle);
-        setDpTimeZone(dp.timeZone);
+        applyKid(data);
         setIsFetching(false);
       } catch {
         if (!isCancelled) {
@@ -143,7 +149,21 @@ export default function EditKidScreen() {
     return () => {
       isCancelled = true;
     };
-  }, [id, t]);
+  }, [id, t, applyKid]);
+
+  // Pull to refresh: the kid past the cache, re-seeding the form as a browser
+  // reload would (unsaved edits go), and the account's date defaults.
+  const refresh = (): Promise<void> =>
+    settleAll([
+      () => loadAccountPref(true),
+      async () => {
+        const data = await useKidStore.getState().loadOne(id, true);
+        if (!data) return;
+        applyKid(data);
+        setError(null);
+        setIsFetching(false);
+      },
+    ]);
 
   async function handleUpdate(): Promise<void> {
     setError(null);
@@ -225,7 +245,7 @@ export default function EditKidScreen() {
 
   if (isFetching) {
     return (
-      <ShellContent>
+      <ShellContent onRefresh={refresh}>
         <PageMessage>{t("loadingKid")}</PageMessage>
       </ShellContent>
     );
@@ -233,14 +253,14 @@ export default function EditKidScreen() {
 
   if (!kid) {
     return (
-      <ShellContent>
+      <ShellContent onRefresh={refresh}>
         <PageMessage>{t("kidNotFound")}</PageMessage>
       </ShellContent>
     );
   }
 
   return (
-    <ShellContent>
+    <ShellContent onRefresh={refresh}>
       <Section title={t("editTitle")}>
         <FieldRow label={t("displayName")} required>
           <Input

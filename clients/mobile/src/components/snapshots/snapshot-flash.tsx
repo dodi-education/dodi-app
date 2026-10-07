@@ -119,6 +119,9 @@ export function SnapshotFlash({
           className="h-full w-full rounded-[13px]"
           resizeMode="cover"
           accessibilityIgnoresInvertColors
+          // Decorative: the flash only shows the save happening.
+          accessibilityElementsHidden
+          importantForAccessibility="no"
         />
       </Animated.View>
     </View>

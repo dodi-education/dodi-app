@@ -34,6 +34,23 @@ export interface DataStoreDeps {
 
 export type KidStore = StoreApi<KidStoreState>;
 
+/**
+ * Structural sharing for a reload (a forced one, e.g. pull to refresh): a kid
+ * whose decrypted content didn't change keeps its object, and an unchanged
+ * list keeps its array, so the reload doesn't re-fire every effect keyed on a
+ * kid (snapshots, friends) or re-render the kid view for nothing.
+ */
+export function keepUnchanged(previous: Kid[] | null, next: Kid[]): Kid[] {
+  if (!previous) return next;
+  const byId = new Map(previous.map((kid) => [kid.id, kid]));
+  const merged = next.map((kid) => {
+    const prev = byId.get(kid.id);
+    return prev && JSON.stringify(prev) === JSON.stringify(kid) ? prev : kid;
+  });
+  const isSame = merged.length === previous.length && merged.every((kid, i) => kid === previous[i]);
+  return isSame ? previous : merged;
+}
+
 export function createKidStore({
   api,
   offlineCache,
@@ -72,7 +89,10 @@ export function createKidStore({
           rows = cached;
         }
         const session = await awaitSession(vault);
-        const decrypted = rows.map((row) => decryptKid(session, row));
+        const decrypted = keepUnchanged(
+          get().list,
+          rows.map((row) => decryptKid(session, row)),
+        );
 
         set((state) => ({
           list: decrypted,

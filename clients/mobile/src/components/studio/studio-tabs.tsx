@@ -17,6 +17,7 @@ interface TabProps {
 export function StudioTab({ isActive, onPress, icon, label }: TabProps) {
   return (
     <Pressable
+      hitSlop={{ top: 5, bottom: 5 }}
       accessibilityRole="tab"
       accessibilityState={{ selected: isActive }}
       onPress={onPress}
@@ -44,7 +45,7 @@ export function SegTab({ isActive, onPress, icon, label }: TabProps) {
       accessibilityRole="tab"
       accessibilityState={{ selected: isActive }}
       onPress={onPress}
-      hitSlop={{ top: 6, bottom: 6 }}
+      hitSlop={{ top: 7, bottom: 7 }}
       className={cn(studioSeg.box, isActive && studioSeg.active)}
       style={
         isActive

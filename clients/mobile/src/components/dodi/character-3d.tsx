@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { AccessibilityInfo, AppState, Pressable, StyleSheet, View, type LayoutChangeEvent } from "react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { StyleSheet, View, type LayoutChangeEvent } from "react-native";
 import { GLView, type ExpoWebGLRenderingContext } from "expo-gl";
 import { useIsFocused } from "expo-router";
 import { canvasScaleFor, type CharacterStage } from "@dodi/character/character-stage";
 import { characterPoseFor, IDLE_POSE, type CompanionState } from "@dodi/character/character-pose";
+import type { FigureModeInput } from "@dodi/character/figure-mode";
 import { companionCharacter } from "@dodi/ui-recipes";
 
 import {
@@ -13,10 +14,16 @@ import {
   routeVoiceLevel,
   type CharacterRenderer,
 } from "@/adapters/character-gl";
+import { useIsAppActive } from "@/lib/use-app-active";
+import { useReduceMotion } from "@/lib/use-reduce-motion";
 
 import { useCharacterGestures, type CharacterGestureTarget } from "./use-character-gestures";
 
 export interface Character3dProps {
+  /** The loaded stage (useCharacterStage); null keeps the figure's box empty while the figure is decided. */
+  stage: CharacterStage | null;
+  /** GL setup failed: the view falls back to the 2D figure. */
+  onFailed: () => void;
   /** The voice session's state; unset, the character stands by (idle). */
   state?: CompanionState;
   /** Mid-activity (thinking, creating a picture, writing). */
@@ -28,8 +35,8 @@ export interface Character3dProps {
   /** A tap on the character (the web's: talk / wake). */
   onPress?: () => void;
   alt: string;
-  /** The 2D figure, shown until the first frame is drawn (and if GL or the model fails). */
-  fallback: ReactNode;
+  /** What the companion is doing (read after `alt`): listening, asleep … */
+  stateLabel?: string;
 }
 
 interface Box {
@@ -45,61 +52,24 @@ const CANVAS_SCALE = canvasScaleFor(1);
 // battery's) work against the display's 60 or 120 Hz.
 const FRAME_INTERVAL_MS = 1000 / 30;
 
-// The views showing the character, latest last: only the latest draws and
-// advances the clips (one stage, shared, as the web's one canvas).
-const owners: object[] = [];
-
-function useReduceMotion(): boolean {
-  const [isReduced, setIsReduced] = useState(false);
-  useEffect(() => {
-    let isCurrent = true;
-    void AccessibilityInfo.isReduceMotionEnabled().then((value) => {
-      if (isCurrent) setIsReduced(value);
-    });
-    const sub = AccessibilityInfo.addEventListener("reduceMotionChanged", setIsReduced);
-    return () => {
-      isCurrent = false;
-      sub.remove();
-    };
-  }, []);
-  return isReduced;
-}
-
-function useIsAppActive(): boolean {
-  const [isActive, setIsActive] = useState(AppState.currentState === "active");
-  useEffect(() => {
-    const sub = AppState.addEventListener("change", (next) => setIsActive(next === "active"));
-    return () => sub.remove();
-  }, []);
-  return isActive;
+export interface CharacterStageLoad {
+  stage: CharacterStage | null;
+  load: FigureModeInput["load"];
+  /** Mark the character unavailable (GL setup failed). */
+  fail: () => void;
 }
 
 /**
- * dodi as the 3D character (web: components/dodi/dodi-character-3d), drawn
- * with expo-gl by @dodi/character. Renders only while its screen is focused
- * and the app in the foreground; reduced motion holds each pose still.
+ * The app's one character stage for a view: at once if an earlier view loaded
+ * it, else loaded while `isWanted` (the account's 3D setting is on or not
+ * known yet).
  */
-export function Character3d({ state, isThinking = false, isSpeaking = false, voiceLevel, onPress, alt, fallback }: Character3dProps) {
-  const pose = useMemo(
-    () => (state ? characterPoseFor({ state, isThinking, isSpeaking }) : IDLE_POSE),
-    [state, isThinking, isSpeaking],
-  );
+export function useCharacterStage(isWanted: boolean): CharacterStageLoad {
   const [stage, setStage] = useState<CharacterStage | null>(loadedCharacterStage);
   const [hasFailed, setHasFailed] = useState(false);
-  const [hasFrame, setHasFrame] = useState(false);
-  const [box, setBox] = useState<Box | null>(null);
-  const isReducedMotion = useReduceMotion();
-  const isFocused = useIsFocused();
-  const isAppActive = useIsAppActive();
-  const isRunning = isFocused && isAppActive;
-  const [token] = useState(() => ({}));
-  // The GL context of the current GLView. Its resources go with the view (expo-gl
-  // destroys the context on unmount), so renderers are dropped, not disposed.
-  const gl = useRef<{ context: ExpoWebGLRenderingContext; renderer: CharacterRenderer } | null>(null);
-  const hasFrameRef = useRef(false);
 
   useEffect(() => {
-    if (stage) return;
+    if (stage || !isWanted) return;
     let isCurrent = true;
     loadCharacterStage().then(
       (loaded) => isCurrent && setStage(loaded),
@@ -111,7 +81,47 @@ export function Character3d({ state, isThinking = false, isSpeaking = false, voi
     return () => {
       isCurrent = false;
     };
-  }, [stage]);
+  }, [stage, isWanted]);
+
+  const fail = useCallback(() => setHasFailed(true), []);
+  return { stage, load: hasFailed ? "failed" : stage ? "ready" : "loading", fail };
+}
+
+// The views showing the character, latest last: only the latest draws and
+// advances the clips (one stage, shared, as the web's one canvas).
+const owners: object[] = [];
+
+/**
+ * dodi as the 3D character (web: components/dodi/dodi-character-3d), drawn
+ * with expo-gl by @dodi/character. Renders only while its screen is focused
+ * and the app in the foreground; reduced motion holds each pose still.
+ * Without a stage it is the figure's empty box (still named), shown while
+ * the view decides between 2D and 3D (@dodi/character/figure-mode).
+ */
+export function Character3d({
+  stage,
+  onFailed,
+  state,
+  isThinking = false,
+  isSpeaking = false,
+  voiceLevel,
+  onPress,
+  alt,
+  stateLabel,
+}: Character3dProps) {
+  const pose = useMemo(
+    () => (state ? characterPoseFor({ state, isThinking, isSpeaking }) : IDLE_POSE),
+    [state, isThinking, isSpeaking],
+  );
+  const [box, setBox] = useState<Box | null>(null);
+  const isReducedMotion = useReduceMotion();
+  const isFocused = useIsFocused();
+  const isAppActive = useIsAppActive();
+  const isRunning = isFocused && isAppActive;
+  const [token] = useState(() => ({}));
+  // The GL context of the current GLView. Its resources go with the view (expo-gl
+  // destroys the context on unmount), so renderers are dropped, not disposed.
+  const gl = useRef<{ context: ExpoWebGLRenderingContext; renderer: CharacterRenderer } | null>(null);
 
   useEffect(() => {
     owners.push(token);
@@ -145,10 +155,6 @@ export function Character3d({ state, isThinking = false, isSpeaking = false, voi
       stage.update(delta);
       stage.render(current.renderer);
       current.context.endFrameEXP();
-      if (!hasFrameRef.current) {
-        hasFrameRef.current = true;
-        setHasFrame(true);
-      }
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
@@ -191,7 +197,7 @@ export function Character3d({ state, isThinking = false, isSpeaking = false, voi
       gl.current = { context, renderer };
     } catch (err) {
       console.warn("[character] GL setup failed, showing the 2D figure:", err);
-      setHasFailed(true);
+      onFailed();
     }
   }
 
@@ -200,7 +206,6 @@ export function Character3d({ state, isThinking = false, isSpeaking = false, voi
     if (width > 0 && height > 0 && (width !== box?.width || height !== box?.height)) setBox({ width, height });
   };
 
-  const isShown3d = stage !== null && !hasFailed;
   return (
     <View
       className={companionCharacter.host}
@@ -208,21 +213,12 @@ export function Character3d({ state, isThinking = false, isSpeaking = false, voi
       accessible
       accessibilityRole={onPress ? "button" : "image"}
       accessibilityLabel={alt}
+      accessibilityValue={stateLabel ? { text: stateLabel } : undefined}
       accessibilityActions={onPress ? [{ name: "activate" }] : undefined}
       onAccessibilityAction={onPress ? () => onPress() : undefined}
-      {...(isShown3d ? handlers : {})}
+      {...(stage ? handlers : {})}
     >
-      {!hasFrame || !isShown3d ? (
-        // The 2D figure takes the taps while the 3D one isn't drawing.
-        onPress && !isShown3d ? (
-          <Pressable className="h-full w-full" onPress={onPress} accessible={false}>
-            {fallback}
-          </Pressable>
-        ) : (
-          fallback
-        )
-      ) : null}
-      {isShown3d && box && canvas ? (
+      {stage && box && canvas ? (
         <View
           className={companionCharacter.surface}
           style={{

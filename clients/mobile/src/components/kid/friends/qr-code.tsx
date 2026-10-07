@@ -7,6 +7,8 @@ interface QrCodeProps {
   /** The text/URL to encode. Empty renders a blank placeholder. */
   value: string;
   size?: number;
+  /** What it is, for screen readers (the code itself is not read out). */
+  accessibilityLabel: string;
 }
 
 /**
@@ -14,7 +16,7 @@ interface QrCodeProps {
  * rounded data dots, rounded finder eyes and the dodi head as the center logo.
  * Error-correction level H (~30% recoverable) leaves room for the badge.
  */
-export function QrCode({ value, size = 200 }: QrCodeProps) {
+export function QrCode({ value, size = 200, accessibilityLabel }: QrCodeProps) {
   if (!value) {
     return <View className={qrCode.placeholder} style={{ width: size, height: size }} />;
   }
@@ -57,7 +59,12 @@ export function QrCode({ value, size = 200 }: QrCodeProps) {
   const paper = qrCode.paper;
 
   return (
-    <View style={{ width: size, height: size }} accessibilityRole="image">
+    <View
+      style={{ width: size, height: size }}
+      accessible
+      accessibilityRole="image"
+      accessibilityLabel={accessibilityLabel}
+    >
       <Svg viewBox={`0 0 ${size} ${size}`} width={size} height={size}>
         {dots.map((d, i) => (
           <Rect
@@ -92,7 +99,8 @@ export function QrCode({ value, size = 200 }: QrCodeProps) {
       >
         <Image
           source={require("../../../../assets/images/dodi-head-active.png")}
-          accessibilityLabel="dodi"
+          accessibilityElementsHidden
+          importantForAccessibility="no"
           resizeMode="contain"
           style={{ width: "100%", height: "100%", transform: [{ scale: 1.1 }] }}
         />

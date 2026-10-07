@@ -6,6 +6,7 @@ import {
   buildGameListItems,
   deleteGame as deleteOwnedGame,
 } from "@dodi/client-state/game-library";
+import { settleAll } from "@dodi/client-state/pull-refresh";
 import { libraryEmpty } from "@dodi/ui-recipes";
 
 import { DiscoverList } from "@/components/games-library/discover-list";
@@ -14,6 +15,7 @@ import { GameStudioList } from "@/components/games-library/game-studio-list";
 import { PageActions, Section } from "@/components/parent/section";
 import { ShellContent } from "@/components/shared/shell-content";
 import { Button, Text } from "@/components/ui";
+import { clientState } from "@/lib/client-state";
 import { gameFlowDeps } from "@/lib/game-flow-deps";
 import { useAccountGames } from "@/lib/use-account-games";
 import { useKids } from "@/lib/use-kids";
@@ -50,8 +52,13 @@ export default function ParentGamesScreen() {
     [games, kids, t],
   );
 
+  // Pull to refresh: your games past the cache, plus the kids for their
+  // audience names (Discover reloads itself).
+  const refresh = (): Promise<void> =>
+    settleAll([() => clientState.games.getState().loadAccount(true), () => clientState.kids.getState().loadList(true)]);
+
   return (
-    <ShellContent>
+    <ShellContent onRefresh={refresh}>
       <PageActions>
         <Button variant="outline" icon="upload" onPress={() => setIsImportOpen(true)}>
           {t("importGame")}

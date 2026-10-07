@@ -15,8 +15,10 @@ import { encryptKidFields } from "@dodi/vault";
 import type { ActiveKidStore } from "./active-kid-store";
 import { computeNeedsPin, pickActiveKidId } from "./active-kid-store";
 import { type AvatarConfig, PIN_LENGTH, readAvatarConfig } from "./avatars";
+import type { CompanionSessionState } from "./companion-session";
 import type { KidStore } from "./kid-store";
 import type { ActiveKidPersistence, ParentLock, PlatformApi } from "./platform";
+import type { ProvidersStore } from "./providers-store";
 import type { VaultStore } from "./vault-store";
 
 // ----- Entering / leaving ---------------------------------------------------
@@ -198,4 +200,46 @@ export function createCardRefreshScheduler(
     },
     flush,
   };
+}
+
+// ----- Pull to refresh (the app's kid home) ------------------------------------
+
+/** The companion session, as far as the kid home's refresh needs it. */
+export interface CompanionRetryTarget {
+  getState(): Pick<CompanionSessionState, "state" | "error" | "fatalError" | "connect">;
+}
+
+export interface KidHomeRefreshDeps {
+  providers: ProvidersStore;
+  companion: CompanionRetryTarget;
+}
+
+/** dodi is disconnected after an error: the home shows "Tap to retry". */
+export function isCompanionInError(
+  session: Pick<CompanionSessionState, "state" | "error" | "fatalError">,
+): boolean {
+  return session.state === "disconnected" && (session.error !== null || session.fatalError);
+}
+
+/**
+ * A pull on the kid home: reload the (E2EE) provider keys past the cache and,
+ * when dodi is stuck in its connection error, retry the way "Tap to retry"
+ * does (`connect`, which also clears a fatal error). Not awaited: the voice
+ * bring-up has its own "connecting" state, the spinner shouldn't wait for it.
+ *
+ * Resolves whether a provider is set up, or null when the keys could not be
+ * loaded (offline, vault locked): the home then keeps what it shows.
+ */
+export async function refreshKidHome(deps: KidHomeRefreshDeps, kidId: string): Promise<boolean | null> {
+  let hasProvider: boolean;
+  try {
+    hasProvider = Object.keys(await deps.providers.getState().load(true)).length > 0;
+  } catch {
+    return null;
+  }
+  const companion = deps.companion.getState();
+  if (hasProvider && isCompanionInError(companion)) {
+    void companion.connect(kidId).catch(() => {});
+  }
+  return hasProvider;
 }

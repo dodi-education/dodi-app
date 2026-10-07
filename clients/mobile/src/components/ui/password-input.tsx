@@ -25,7 +25,7 @@ export function PasswordInput({
         accessibilityRole="button"
         accessibilityLabel={isVisible ? hidePasswordLabel : showPasswordLabel}
         onPress={() => setIsVisible((v) => !v)}
-        hitSlop={8}
+        hitSlop={{ top: 8, bottom: 8, left: 14, right: 14 }}
         className="absolute right-3 h-full justify-center"
       >
         <Icon name={isVisible ? "hide" : "show"} size={16} color="muted-foreground" />

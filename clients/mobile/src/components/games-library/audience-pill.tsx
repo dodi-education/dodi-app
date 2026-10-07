@@ -21,6 +21,7 @@ export function AudiencePill({
 }) {
   return (
     <Pressable
+      hitSlop={{ top: 4, bottom: 4 }}
       accessibilityRole="checkbox"
       accessibilityState={{ checked: isSelected }}
       accessibilityLabel={label}

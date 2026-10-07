@@ -35,8 +35,13 @@ export default function PersonasScreen() {
     };
   }, [session]);
 
+  // Pull to refresh: the personas past any cache.
+  async function refresh(): Promise<void> {
+    if (session) setPersonas(await loadPersonas(api, session));
+  }
+
   return (
-    <ShellContent>
+    <ShellContent onRefresh={refresh}>
       <PageActions>
         <Button variant="outline" onPress={() => router.push("/parent/personas/new?import=true" as Href)}>
           {t("import")}

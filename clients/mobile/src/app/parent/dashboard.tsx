@@ -7,6 +7,7 @@ import {
   EMPTY_DASHBOARD_STATS,
   loadDashboardStats,
 } from "@dodi/client-state/dashboard";
+import { settleAll } from "@dodi/client-state/pull-refresh";
 
 import { api } from "@/adapters/platform";
 import { AiSetupCard } from "@/components/parent/ai-setup-card";
@@ -40,12 +41,22 @@ export default function DashboardScreen() {
     };
   }, []);
 
+  // Pull to refresh: the kids and the stats (the AI setup card adds its own).
+  const refresh = (): Promise<void> =>
+    settleAll([
+      () => loadKids(true),
+      async () => {
+        const loaded = await loadDashboardStats(api);
+        if (loaded) setStats(loaded);
+      },
+    ]);
+
   // Still loading the (decrypted) kid list: the breadcrumb carries the title.
   if (kids === null) return null;
 
   if (kids.length === 0) {
     return (
-      <ShellContent>
+      <ShellContent onRefresh={refresh}>
         <AiSetupCard />
         <Section>
           <View className="flex-col items-center gap-4 px-5 py-12">
@@ -64,7 +75,7 @@ export default function DashboardScreen() {
   }
 
   return (
-    <ShellContent>
+    <ShellContent onRefresh={refresh}>
       <PageActions>
         <Button icon="sparkles" onPress={() => router.push("/parent/game-studio/new" as Href)}>
           {t("addGame")}

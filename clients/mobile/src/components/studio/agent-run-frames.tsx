@@ -51,6 +51,8 @@ export function AgentRunFrames({ frames }: { frames: AgentRunFrame[] }) {
       >
         {open ? (
           <Image
+            accessible
+            accessibilityRole="image"
             accessibilityLabel={open.label}
             source={{ uri: open.fullImage ?? open.image }}
             className={styles.large}

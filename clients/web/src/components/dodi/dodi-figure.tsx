@@ -3,7 +3,7 @@
 import Image from "next/image";
 
 import { getDodiImage } from "@/lib/dodi-image";
-import { useIs3dEnabled } from "@/stores/account-store";
+import { use3dPreference } from "@/stores/account-store";
 import type { DodiState } from "@/stores/dodi-session-store";
 
 import { DodiCharacter3d } from "./dodi-character-3d";
@@ -23,14 +23,15 @@ export interface DodiFigureProps {
 
 /**
  * dodi as the 3D character or the 2D artwork, per the account's Interface
- * setting (Settings > General) and whether the view supports 3D yet.
- * Full-body figures fill their parent box.
+ * setting (Settings > General) and whether the view supports 3D yet; a view
+ * that can show 3D decides before showing either (DodiCharacter3d). The head
+ * is always 2D. Full-body figures fill their parent box.
  */
 export function DodiFigure(props: DodiFigureProps) {
-  const is3dEnabled = useIs3dEnabled();
+  const is3dEnabled = use3dPreference();
   const image = <DodiImage2d {...props} />;
-  const isShown3d = is3dEnabled && props.canRender3d === true && !props.isHead;
-  return isShown3d ? <DodiCharacter3d {...props} fallback={image} /> : image;
+  const canShow3d = props.canRender3d === true && !props.isHead;
+  return canShow3d ? <DodiCharacter3d {...props} is3dEnabled={is3dEnabled} fallback={image} /> : image;
 }
 
 function DodiImage2d({ state, isThinking, isHead, alt, className, priority }: DodiFigureProps) {

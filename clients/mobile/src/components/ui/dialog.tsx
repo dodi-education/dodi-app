@@ -3,6 +3,7 @@ import { Modal, Pressable, View } from "react-native";
 import { dialog } from "@dodi/ui-recipes";
 
 import { cn } from "@/lib/cn";
+import { useReduceMotion } from "@/lib/use-reduce-motion";
 
 import { Text } from "./text";
 
@@ -23,13 +24,22 @@ export function Dialog({
   /** Actions, primary first (rendered stacked, primary on top). */
   footer?: ReactNode;
 }) {
+  const isReduced = useReduceMotion();
   return (
-    <Modal visible={isOpen} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
+    <Modal visible={isOpen} transparent animationType={isReduced ? "none" : "fade"} onRequestClose={onClose} statusBarTranslucent>
       <View className="flex-1 items-center justify-center px-4">
-        <Pressable accessibilityLabel={title} className={cn("absolute inset-0", dialog.overlay)} onPress={onClose} />
-        <View className={dialog.content} accessibilityViewIsModal>
+        {/* A tap outside closes it; screen readers use escape (iOS) or back (Android). */}
+        <Pressable
+          accessible={false}
+          importantForAccessibility="no"
+          className={cn("absolute inset-0", dialog.overlay)}
+          onPress={onClose}
+        />
+        <View className={dialog.content} accessibilityViewIsModal onAccessibilityEscape={onClose}>
           <View className={dialog.header}>
-            <Text className={dialog.title}>{title}</Text>
+            <Text accessibilityRole="header" className={dialog.title}>
+              {title}
+            </Text>
             {description ? <Text className={dialog.description}>{description}</Text> : null}
           </View>
           {children}

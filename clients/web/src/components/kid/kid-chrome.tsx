@@ -11,6 +11,7 @@ import {
   kidNav,
 } from "@dodi/ui-recipes";
 import { onKidViewMount } from "@dodi/client-state/kid-view";
+import { startOfflineWarmup } from "@dodi/client-state/offline-warmup";
 
 import { Icon, type IconName } from "@/components/shared/icon";
 import { DodiCompact } from "@/components/dodi/dodi-compact";
@@ -19,12 +20,7 @@ import { cn } from "@/lib/utils";
 import { clientState } from "@/lib/client-state";
 import { clearParentUnlocked, markParentUnlocked } from "@/lib/parent-lock";
 import { flushPlayOutbox } from "@/lib/games/play-sync";
-import {
-  fetchSnapshots,
-  flushPendingAutosaves,
-  prefetchSnapshotPayloadsForOffline,
-} from "@/lib/snapshots";
-import { useGameStore } from "@/stores/game-store";
+import { flushPendingAutosaves, snapshotDeps } from "@/lib/snapshots";
 import { KidAvatar } from "@/components/kid/kid-avatar";
 import { KidSwitcher } from "@/components/kid/kid-switcher";
 import { useActiveKid } from "@/hooks/use-active-kid";
@@ -104,34 +100,23 @@ export function KidChrome({
     });
   }, []);
 
-  // Offline data warmup: pull the active kid's games and snapshots once per
-  // session so their ciphertext lands in the offline cache (write-through in
-  // the stores) even if the tabs are never opened online. Cache-first +
-  // single-flight in the stores make this a no-op when a tab loaded it first.
+  // Offline data warmup (shared: @dodi/client-state/offline-warmup): pull the
+  // active kid's games and snapshots once per session, and again when back
+  // online, so their ciphertext lands in the offline cache even if the tabs
+  // are never opened online. Path-based preview images (system games) are
+  // fetched so the SW caches them; family games carry inline data: URLs.
   const activeKidId = activeKid?.id ?? null;
   useEffect(() => {
     if (!activeKidId) return;
-    const warm = () => {
-      if (!isCurrentlyOnline()) return;
-      void useGameStore
-        .getState()
-        .loadForKid(activeKidId)
-        .then((games) => {
-          // Path-based preview images (system games) only load when the
-          // library renders — fetch them so the SW caches them for offline.
-          // Family games carry inline data: URLs and need nothing.
-          for (const game of games) {
-            const preview = game.preview_image;
-            if (preview?.startsWith("/")) void fetch(preview).catch(() => {});
-          }
-        })
-        .catch(() => {});
-      void fetchSnapshots(activeKidId)
-        .then((views) => prefetchSnapshotPayloadsForOffline(views))
-        .catch(() => {});
-    };
-    warm();
-    return onBackOnline(warm);
+    return startOfflineWarmup(
+      {
+        games: clientState.games,
+        snapshots: snapshotDeps,
+        connectivity: clientState.connectivity,
+        prefetchPreviewImage: (path) => fetch(path),
+      },
+      activeKidId,
+    );
   }, [activeKidId]);
 
   useEffect(() => {

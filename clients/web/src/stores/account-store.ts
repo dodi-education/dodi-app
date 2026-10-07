@@ -7,6 +7,7 @@ import { clientState } from "@/lib/client-state";
 import {
   gameScreenshotServiceOf,
   interfacePreferencesOf,
+  is3dPreferenceOf,
   patchGameScreenshotService as patchScreenshotService,
   patchInterfacePreferences as patchPreferences,
 } from "@dodi/client-state";
@@ -31,4 +32,9 @@ export function patchInterfacePreferences(prefs: InterfacePreferences): void {
 /** Whether dodi renders as the 3D character. Opt-out: on unless turned off. */
 export function useIs3dEnabled(): boolean {
   return useAccountStore((s) => interfacePreferencesOf(s.account).is_3d_enabled !== false);
+}
+
+/** The 3D setting for showing the companion: null while the account loads (decide, don't guess). */
+export function use3dPreference(): boolean | null {
+  return useAccountStore(is3dPreferenceOf);
 }

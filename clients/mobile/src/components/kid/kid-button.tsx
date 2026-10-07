@@ -10,13 +10,13 @@ import {
 
 import { Icon, type IconName } from "@/components/ui";
 import { cn } from "@/lib/cn";
+import { kidButtonHitSlop } from "@/lib/control-targets";
 
 import { kidShadowStyle } from "./kid-shadow";
 import { KidText } from "./kid-text";
 
-export interface KidButtonProps extends Omit<PressableProps, "children" | "style"> {
+interface KidButtonBaseProps extends Omit<PressableProps, "children" | "style"> {
   style?: StyleProp<ViewStyle>;
-  variant?: KidButtonVariant;
   size?: KidButtonSize;
   /** Leading icon (web: an <Icon> child). */
   icon?: IconName;
@@ -28,6 +28,13 @@ export interface KidButtonProps extends Omit<PressableProps, "children" | "style
   textClassName?: string;
   children?: ReactNode;
 }
+
+/** The icon variant shows no text, so it must be named for screen readers. */
+export type KidButtonProps = KidButtonBaseProps &
+  (
+    | { variant: "icon"; accessibilityLabel: string }
+    | { variant?: Exclude<KidButtonVariant, "icon"> }
+  );
 
 /** The web's KidButton: the kid view's pill buttons (@dodi/ui-recipes kidButton). */
 export function KidButton({
@@ -52,8 +59,8 @@ export function KidButton({
       accessibilityRole="button"
       accessibilityState={{ disabled: Boolean(disabled), selected: variant === "chip" ? active : undefined }}
       disabled={disabled}
-      // Kid targets: at least 44pt tall even for the small pills.
-      hitSlop={size === "sm" ? 6 : undefined}
+      // Kid targets: at least 44pt even for the small pills and the 38pt icon circle.
+      hitSlop={kidButtonHitSlop(variant, size)}
       style={[variant === "play" && !disabled ? kidShadowStyle("play") : null, style]}
       className={cn(
         kidButton.box(p),

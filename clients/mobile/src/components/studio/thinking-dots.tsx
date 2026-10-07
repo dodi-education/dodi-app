@@ -1,23 +1,8 @@
 import { useEffect, useState } from "react";
-import { AccessibilityInfo, Animated, Easing, View } from "react-native";
+import { Animated, Easing, View } from "react-native";
 import { chatThinking } from "@dodi/ui-recipes";
 
-/** Whether the OS asks for reduced motion (the web's motion-reduce). */
-function useReduceMotion(): boolean {
-  const [isReduced, setIsReduced] = useState(false);
-  useEffect(() => {
-    let isCurrent = true;
-    void AccessibilityInfo.isReduceMotionEnabled().then((value) => {
-      if (isCurrent) setIsReduced(value);
-    });
-    const sub = AccessibilityInfo.addEventListener("reduceMotionChanged", setIsReduced);
-    return () => {
-      isCurrent = false;
-      sub.remove();
-    };
-  }, []);
-  return isReduced;
-}
+import { useReduceMotion } from "@/lib/use-reduce-motion";
 
 /** One looping animation value, started on mount (static under reduced motion). */
 function useLoop(make: (value: Animated.Value) => Animated.CompositeAnimation): Animated.Value {
@@ -27,7 +12,10 @@ function useLoop(make: (value: Animated.Value) => Animated.CompositeAnimation): 
     if (isReduced) return;
     const loop = Animated.loop(make(value));
     loop.start();
-    return () => loop.stop();
+    return () => {
+      loop.stop();
+      value.setValue(0); // at rest if reduced motion stops it mid-way
+    };
     // `make` is a fresh closure every render; the loop is set up once.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, isReduced]);

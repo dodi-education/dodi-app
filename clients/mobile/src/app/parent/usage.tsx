@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { View } from "react-native";
 import { useTranslations } from "use-intl";
 import { type UsageResponse, loadUsage, minutesOf, prettyModel, usageSummary } from "@dodi/client-state/usage";
+import { settleAll } from "@dodi/client-state/pull-refresh";
 import { sectionMessage, usageStats } from "@dodi/ui-recipes";
 
 import { api } from "@/adapters/platform";
@@ -10,6 +11,7 @@ import { Section } from "@/components/parent/section";
 import { StatCell, StatStrip } from "@/components/parent/stat-strip";
 import { ShellContent } from "@/components/shared/shell-content";
 import { Text } from "@/components/ui";
+import { clientState } from "@/lib/client-state";
 import { useKids } from "@/lib/use-kids";
 
 /**
@@ -32,12 +34,22 @@ export default function UsageScreen() {
     };
   }, []);
 
+  // Pull to refresh: this month's numbers, and the kid names they resolve to.
+  const refresh = (): Promise<void> =>
+    settleAll([
+      async () => {
+        const json = await loadUsage(api);
+        if (json) setData(json);
+      },
+      () => clientState.kids.getState().loadList(true),
+    ]);
+
   const kidName = (id: string | null): string =>
     (id && kids?.find((k) => k.id === id)?.display_name) || t("unknownChild");
   const { gamesMade, voiceMinutes, hasUsage } = usageSummary(data);
 
   return (
-    <ShellContent>
+    <ShellContent onRefresh={refresh}>
       <StatStrip className={usageStats}>
         <StatCell num={voiceMinutes} label={t("voiceMinutes")} />
         <StatCell num={gamesMade} label={t("gamesMade")} />

@@ -23,6 +23,8 @@ export function AuthLayout({ children }: { children: ReactNode }) {
               source={require("../../../assets/images/splash.png")}
               style={{ width: authLayout.logoHeadSize, height: authLayout.logoHeadSize }}
               accessibilityIgnoresInvertColors
+              accessibilityElementsHidden
+              importantForAccessibility="no"
             />
             <Text className={authLayout.logoText}>dodi</Text>
           </View>

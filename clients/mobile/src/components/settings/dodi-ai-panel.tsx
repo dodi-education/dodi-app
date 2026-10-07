@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
 import { useTranslations } from "use-intl";
 import { COLORS } from "@dodi/design-tokens";
+import { settleAll } from "@dodi/client-state/pull-refresh";
 import {
   type ApplyModelConfig,
   disableDodiAI,
@@ -28,6 +29,7 @@ import {
 import { cn } from "@/lib/cn";
 import { useAccountDateFormat } from "@/lib/date-format";
 import { useLocaleSetting } from "@/lib/intl";
+import { useRefreshOnPull } from "@/lib/refresh-scope";
 
 const settingsDeps = () => ({
   dodiAIKeys: clientState.dodiAIKeys,
@@ -59,6 +61,14 @@ export function DodiAIPanel({
     void clientState.dodiAIBilling.getState().load();
     void clientState.dodiAIDefaults.getState().load();
   }, []);
+
+  // Pull to refresh (the settings page): the balance and dodi AI's defaults.
+  useRefreshOnPull("dodi-ai", () =>
+    settleAll([
+      () => clientState.dodiAIBilling.getState().load(true),
+      () => clientState.dodiAIDefaults.getState().load(true),
+    ]),
+  );
 
   useEffect(() => {
     if (!isJustEnabled) return;

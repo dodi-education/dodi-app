@@ -42,6 +42,9 @@ export function KidAvatar({ kid, size = 34, pad, isMuted = false }: KidAvatarPro
       <View
         className="shrink-0 items-center justify-center rounded-full"
         style={{ width: size, height: size, backgroundColor: color.bg, opacity: isMuted ? 0.6 : 1 }}
+        // Decorative: the kid's name is always beside it (or names the control).
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
       >
         <KidText className="font-extrabold" style={{ color: color.fg, fontSize: Math.round(size * 0.42) }}>
           {avatarInitial(kid.display_name)}
@@ -55,6 +58,8 @@ export function KidAvatar({ kid, size = 34, pad, isMuted = false }: KidAvatarPro
     <View
       className="shrink-0 items-center justify-center overflow-hidden rounded-full"
       style={{ width: size, height: size, backgroundColor: color.ring, padding: ring, opacity: isMuted ? 0.6 : 1 }}
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
     >
       <Image source={img} className="h-full w-full rounded-full bg-white" resizeMode="cover" />
     </View>

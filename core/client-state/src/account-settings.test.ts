@@ -5,7 +5,7 @@ import {
   saveInterfacePreferences,
   saveNotificationPreferences,
 } from "./account-settings";
-import { type AccountState, type AccountStore, createAccountStore } from "./account-store";
+import { type AccountState, type AccountStore, createAccountStore, is3dPreferenceOf } from "./account-store";
 import type { PlatformApi } from "./platform";
 
 function fakeApi(response: Response | Error): PlatformApi & { request: ReturnType<typeof vi.fn> } {
@@ -26,6 +26,14 @@ function loadedAccount(fields: Record<string, unknown>): AccountStore {
 }
 
 describe("interface preferences", () => {
+  it("knows the 3D setting only once the account has loaded (opt-out: on unless off)", () => {
+    expect(is3dPreferenceOf({ account: null, loaded: false })).toBeNull();
+    expect(is3dPreferenceOf(loadedAccount({}).getState())).toBe(true);
+    expect(is3dPreferenceOf(loadedAccount({ interface_preferences: { is_3d_enabled: false } }).getState())).toBe(false);
+    // A failed load counts as loaded: the default.
+    expect(is3dPreferenceOf({ account: null, loaded: true })).toBe(true);
+  });
+
   it("PATCHes only the changed toggle and keeps the merged result", async () => {
     const api = fakeApi(new Response("{}"));
     const account = loadedAccount({ interface_preferences: { is_3d_enabled: true } });

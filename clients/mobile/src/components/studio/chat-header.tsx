@@ -3,6 +3,7 @@ import { useTranslations } from "use-intl";
 import { chatHeader as styles } from "@dodi/ui-recipes";
 
 import { Icon, Text } from "@/components/ui";
+import { useAnnounceOnIos } from "@/lib/announce";
 import { cn } from "@/lib/cn";
 
 import { DODI_HEAD } from "./dodi-images";
@@ -19,9 +20,11 @@ interface ChatHeaderProps {
 /** The chat pane's header: dodi, its status line, and Clear history. */
 export function ChatHeader({ statusText, isThinking, canClear, onClear }: ChatHeaderProps) {
   const t = useTranslations("gameStudio");
+  // TalkBack reads the status line's live region; VoiceOver hears it here.
+  useAnnounceOnIos(statusText);
   return (
     <View className={styles.box}>
-      <View className={styles.avatar}>
+      <View className={styles.avatar} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
         <Image source={DODI_HEAD} className={styles.avatarImage} resizeMode="contain" />
       </View>
       <View className={styles.info}>

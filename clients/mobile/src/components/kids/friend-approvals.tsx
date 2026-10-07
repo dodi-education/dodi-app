@@ -18,6 +18,7 @@ import { Section } from "@/components/parent/section";
 import { Button, Text } from "@/components/ui";
 import { useVaultStore } from "@/lib/client-state";
 import { useAccountDateFormat } from "@/lib/date-format";
+import { useRefreshOnPull } from "@/lib/refresh-scope";
 import { useKids } from "@/lib/use-kids";
 
 /**
@@ -47,6 +48,9 @@ export function FriendApprovals() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
+
+  // Pull to refresh (the kids page).
+  useRefreshOnPull("friend-approvals", load);
 
   const decoded = useMemo<DecodedApproval[]>(() => decodeApprovals(items, kids, session), [items, kids, session]);
 

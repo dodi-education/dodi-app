@@ -9,6 +9,7 @@ import { mobilePlatform } from "@/adapters/platform";
 import { Icon, Text } from "@/components/ui";
 import { clientState } from "@/lib/client-state";
 import { cn } from "@/lib/cn";
+import { MAX_FONT_SCALE } from "@/lib/font-scale";
 
 /**
  * The top bar's "Kid View" button, as on the web: picks the last-used kid
@@ -49,7 +50,9 @@ export function KidViewButton() {
       className={cn(styles.box, "active:border-primary")}
     >
       <Icon name="games" size={styles.icon.size} />
-      <Text className={styles.text}>{t("kidView")}</Text>
+      <Text className={styles.text} maxFontSizeMultiplier={MAX_FONT_SCALE.chrome}>
+        {t("kidView")}
+      </Text>
     </Pressable>
   );
 }

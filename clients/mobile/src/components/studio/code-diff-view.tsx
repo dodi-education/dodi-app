@@ -98,6 +98,7 @@ export function CodeDiffView({ previousCode, code, unchangedLabel }: CodeDiffVie
             {entries.map((entry, i) =>
               entry.type === "skip" ? (
                 <Pressable
+                  hitSlop={{ top: 15, bottom: 15 }}
                   key={i}
                   accessibilityRole="button"
                   onPress={() => expand(entry.sectionIndex)}

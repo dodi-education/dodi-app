@@ -21,6 +21,9 @@ export function GameThumb({ previewImage, tags }: { previewImage: string | null;
         className={libraryRow.thumb}
         resizeMode="cover"
         accessibilityIgnoresInvertColors
+        // Decorative: the title beside it names the item.
+        accessibilityElementsHidden
+        importantForAccessibility="no"
       />
     );
   }

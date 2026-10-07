@@ -3,6 +3,7 @@ import { Animated, Pressable } from "react-native";
 import { switchControl } from "@dodi/ui-recipes";
 
 import { cn } from "@/lib/cn";
+import { isReduceMotionOn } from "@/lib/use-reduce-motion";
 
 /** The web's 36×20 switch (not the OS toggle): primary when on. */
 export function Switch({
@@ -14,11 +15,15 @@ export function Switch({
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
   disabled?: boolean;
-  accessibilityLabel?: string;
+  /** Required: the visible label sits beside the switch, not in it. */
+  accessibilityLabel: string;
 }) {
   const [offset] = useState(() => new Animated.Value(checked ? 1 : 0));
   useEffect(() => {
-    Animated.timing(offset, { toValue: checked ? 1 : 0, duration: 150, useNativeDriver: true }).start();
+    const toValue = checked ? 1 : 0;
+    // Reduced motion: the thumb jumps (read per toggle, so a flip never replays it).
+    if (isReduceMotionOn()) offset.setValue(toValue);
+    else Animated.timing(offset, { toValue, duration: 150, useNativeDriver: true }).start();
   }, [checked, offset]);
   const { off, on } = switchControl.thumbOffset;
   return (
@@ -27,6 +32,7 @@ export function Switch({
       accessibilityLabel={accessibilityLabel}
       accessibilityState={{ checked, disabled }}
       disabled={disabled}
+      // 36x20: a 44pt target (12 + 20 + 12, 4 + 36 + 4 and then some).
       hitSlop={12}
       onPress={() => onCheckedChange(!checked)}
       className={cn(switchControl.track, "justify-center", checked ? switchControl.trackOn : switchControl.trackOff, disabled && "opacity-50")}

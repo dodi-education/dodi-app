@@ -30,6 +30,7 @@ import { clientState, useActiveKidStore, useKidStore, useVaultStore } from "@/li
 import { cn } from "@/lib/cn";
 import { endVoiceSession } from "@/lib/kid-voice";
 import { useActiveKid } from "@/lib/use-active-kid";
+import { useReduceMotion } from "@/lib/use-reduce-motion";
 
 import { AvatarPinPuzzle } from "./avatar-pin-puzzle";
 import { KidAvatar } from "./kid-avatar";
@@ -50,6 +51,7 @@ const GRID_GAP = 8;
 export function KidSwitcher() {
   const t = useTranslations("kidProfile");
   const tn = useTranslations("nav");
+  const isReduced = useReduceMotion();
   const insets = useSafeAreaInsets();
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
 
@@ -168,11 +170,12 @@ export function KidSwitcher() {
       <Modal
         visible={isPopoverOpen && anchorBottom !== null}
         transparent
-        animationType="fade"
+        animationType={isReduced ? "none" : "fade"}
         onRequestClose={closePopover}
         statusBarTranslucent
       >
         <Pressable
+          accessibilityRole="button"
           accessibilityLabel={t("close")}
           className="absolute inset-0"
           onPress={closePopover}
@@ -180,6 +183,8 @@ export function KidSwitcher() {
         />
         <View
           accessibilityViewIsModal
+          // No escape while a locked profile is gated (as the close button).
+          onAccessibilityEscape={needsPin ? undefined : closePopover}
           accessibilityLabel={t("whosPlaying")}
           className={s.popover}
           style={[

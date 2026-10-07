@@ -7,6 +7,7 @@ import { Icon } from "@/components/ui";
 import { useActiveKidStore, useCompanionVolumeStore } from "@/lib/client-state";
 import { cn } from "@/lib/cn";
 import { useDodiSessionStore } from "@/lib/dodi-session-store";
+import { useReduceMotion } from "@/lib/use-reduce-motion";
 
 import { kidShadowStyle } from "./kid-shadow";
 import { KidText } from "./kid-text";
@@ -73,6 +74,7 @@ function VolumeSlider({
  */
 export function CompanionVolumeControl() {
   const t = useTranslations("games");
+  const isReduced = useReduceMotion();
   const tProfile = useTranslations("kidProfile");
 
   const volume = useCompanionVolumeStore((s) => s.volume);
@@ -110,9 +112,10 @@ export function CompanionVolumeControl() {
         <Icon name={iconName} size={v.icon} color={muted ? "danger" : "foreground"} />
       </Pressable>
 
-      <Modal visible={isOpen} transparent animationType="fade" onRequestClose={() => setAnchor(null)} statusBarTranslucent>
+      <Modal visible={isOpen} transparent animationType={isReduced ? "none" : "fade"} onRequestClose={() => setAnchor(null)} statusBarTranslucent>
         {/* Outside tap closes (web: pointerdown outside / Escape). */}
         <Pressable
+          accessibilityRole="button"
           accessibilityLabel={tProfile("close")}
           className="absolute inset-0"
           onPress={() => setAnchor(null)}
@@ -120,6 +123,7 @@ export function CompanionVolumeControl() {
         {anchor ? (
           <View
             accessibilityViewIsModal
+            onAccessibilityEscape={() => setAnchor(null)}
             accessibilityLabel={t("voiceVolume")}
             className={v.flyout}
             style={[{ position: "absolute", left: anchor.x, top: anchor.y, width: v.flyoutWidth }, kidShadowStyle("lg")]}

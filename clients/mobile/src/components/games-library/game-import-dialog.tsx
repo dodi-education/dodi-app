@@ -169,7 +169,7 @@ export function GameImportDialog({ isOpen, onClose }: { isOpen: boolean; onClose
 
             <Pressable
               accessibilityRole="button"
-              hitSlop={12}
+              hitSlop={14}
               className="self-start"
               onPress={() => {
                 setParsed(null);

@@ -53,7 +53,7 @@ export default function ParentSnapshotsScreen() {
   const { formatDateTime } = useAccountDateFormat();
   const { kids: kidList } = useKids();
   const kids = kidList ?? [];
-  const { snapshots, friendKids, loading, error, reload } = useAccountSnapshots();
+  const { snapshots, friendKids, loading, error, reload, refresh } = useAccountSnapshots();
 
   const [filterKid, setFilterKid] = useState<string>("all");
   const [filterType, setFilterType] = useState<SnapshotTypeFilter>("all");
@@ -114,7 +114,7 @@ export default function ParentSnapshotsScreen() {
       : null;
 
   return (
-    <ShellContent>
+    <ShellContent onRefresh={refresh}>
       <PageActions>
         <Button variant="outline" icon="upload" onPress={() => setIsImportOpen(true)}>
           {t("importSnapshot")}
@@ -161,6 +161,9 @@ export default function ParentSnapshotsScreen() {
                     className={p.thumb}
                     resizeMode="cover"
                     accessibilityIgnoresInvertColors
+                    // Decorative: the title beside it names the item.
+                    accessibilityElementsHidden
+                    importantForAccessibility="no"
                   />
                 ) : (
                   <View className={p.tile}>

@@ -9,6 +9,7 @@ import { kidCrumbSwitcher, breadcrumbs as styles } from "@dodi/ui-recipes";
 import { Icon, Select, Text } from "@/components/ui";
 import { useBreadcrumbStore } from "@/lib/breadcrumb-store";
 import { cn } from "@/lib/cn";
+import { MAX_FONT_SCALE } from "@/lib/font-scale";
 import { useKids } from "@/lib/use-kids";
 
 /**
@@ -37,14 +38,20 @@ export function Breadcrumbs() {
             {isLast || !crumb.href ? (
               <Text
                 numberOfLines={1}
+                // The 22px page title in the top bar: grows, but leaves room for the menu and Kid View.
+                maxFontSizeMultiplier={MAX_FONT_SCALE.chrome}
                 className={cn(styles.text, isLast ? styles.current : styles.link, "shrink")}
               >
                 {crumb.label}
               </Text>
             ) : (
               <Link href={crumb.href as Href} asChild>
-                <Pressable accessibilityRole="link" className="shrink">
-                  <Text numberOfLines={1} className={cn(styles.text, styles.link)}>
+                <Pressable hitSlop={{ top: 9, bottom: 9 }} accessibilityRole="link" className="shrink">
+                  <Text
+                    numberOfLines={1}
+                    maxFontSizeMultiplier={MAX_FONT_SCALE.chrome}
+                    className={cn(styles.text, styles.link)}
+                  >
                     {crumb.label}
                   </Text>
                 </Pressable>

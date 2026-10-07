@@ -116,6 +116,16 @@ export function interfacePreferencesOf(account: Account | null): InterfacePrefer
     : {};
 }
 
+/**
+ * Whether the companion shows as the 3D character (opt-out: on unless turned
+ * off); null while the account has not loaded, so a view waits instead of
+ * guessing (a failed load counts as loaded: the default, on).
+ */
+export function is3dPreferenceOf(state: Pick<AccountState, "account" | "loaded">): boolean | null {
+  if (!state.loaded) return null;
+  return interfacePreferencesOf(state.account).is_3d_enabled !== false;
+}
+
 /** Mirror saved interface toggles into the cached account. */
 export function patchInterfacePreferences(store: AccountStore, prefs: InterfacePreferences): void {
   store.getState().patchLocal({ interface_preferences: prefs as unknown as Json });

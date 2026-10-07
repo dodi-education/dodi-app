@@ -56,8 +56,6 @@ export class AudioStreamer {
   }
 
   addPcmChunk(base64Data: string): void {
-    const ctx = this.ensureContext();
-
     // Decode base64 to Int16Array
     const binary = atob(base64Data);
     const bytes = new Uint8Array(binary.length);
@@ -65,6 +63,13 @@ export class AudioStreamer {
       bytes[i] = binary.charCodeAt(i);
     }
     const int16 = new Int16Array(bytes.buffer);
+
+    // Voice clients forward empty audio deltas as they come. Web Audio rejects
+    // a zero-length buffer (NotSupportedError), and this runs inside the
+    // session's socket handler, so an empty chunk is ignored (like the app).
+    if (int16.length === 0) return;
+
+    const ctx = this.ensureContext();
 
     // Convert Int16 to Float32 (normalized to [-1, 1])
     const float32 = new Float32Array(int16.length);

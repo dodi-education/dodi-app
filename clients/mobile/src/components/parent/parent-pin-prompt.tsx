@@ -58,6 +58,8 @@ export function ParentPinPrompt() {
     <CenteredPage className="max-w-xs items-center" pageClassName="px-4">
       <Image
         source={require("../../../assets/images/splash.png")}
+        accessibilityElementsHidden
+        importantForAccessibility="no"
         style={{ width: HEAD_SIZE, height: HEAD_SIZE }}
         accessibilityIgnoresInvertColors
       />
@@ -108,7 +110,7 @@ export function ParentPinPrompt() {
         <Pressable
           accessibilityRole="button"
           onPress={() => setIsPasswordMode(true)}
-          hitSlop={12}
+          hitSlop={14}
           className="mt-6"
         >
           <Text className="text-[13px] font-semibold text-muted-foreground">{t("forgot")}</Text>

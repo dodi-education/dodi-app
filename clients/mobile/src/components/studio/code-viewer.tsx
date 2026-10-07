@@ -67,7 +67,7 @@ function HeaderButton({
       accessibilityHint={accessibilityHint}
       onPress={onPress}
       disabled={disabled}
-      hitSlop={8}
+      hitSlop={{ top: 11, bottom: 11, left: 8, right: 8 }}
       className={cn(styles.button, isActive && styles.buttonActive, disabled && styles.buttonDisabled)}
     >
       <Icon name={icon} size={14} color={iconColor ?? (isActive ? "primary" : "muted-foreground")} />
@@ -167,7 +167,7 @@ export function CodeViewer({
                   accessibilityState={{ disabled: busy }}
                   onPress={open}
                   disabled={busy}
-                  hitSlop={8}
+                  hitSlop={{ top: 11, bottom: 11, left: 8, right: 8 }}
                   className={cn(styles.button, busy && styles.buttonDisabled)}
                 >
                   <Icon name="history" size={14} color="muted-foreground" />

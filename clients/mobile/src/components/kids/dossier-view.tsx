@@ -5,6 +5,7 @@ import { type CitationEntry, tokenizeDossier } from "@dodi/client-state/kid-memo
 import { dossierView } from "@dodi/ui-recipes";
 
 import { Text } from "@/components/ui";
+import { useAnnounceOnIos } from "@/lib/announce";
 import { cn } from "@/lib/cn";
 import { useAccountDateFormat } from "@/lib/date-format";
 
@@ -33,6 +34,8 @@ export function DossierView({
   const tokens = tokenizeDossier(dossier);
   const open = openIndex !== null ? tokens[openIndex] : null;
   const entry = open?.type === "citation" ? entriesBySourceId.get(open.sourceId) : undefined;
+  // The card opens below the text, away from the focused citation: say what it shows.
+  useAnnounceOnIos(open ? (entry ? entry.text : t("citationMissing")) : null);
 
   return (
     <View>

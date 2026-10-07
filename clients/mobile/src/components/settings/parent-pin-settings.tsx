@@ -108,7 +108,7 @@ export function ParentPinSettings() {
             <Pressable
               accessibilityRole="button"
               disabled={busy !== null}
-              hitSlop={12}
+              hitSlop={14}
               onPress={() => void remove()}
               className={busy !== null ? "opacity-50" : "active:opacity-80"}
             >

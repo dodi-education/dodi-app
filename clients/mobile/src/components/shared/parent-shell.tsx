@@ -6,10 +6,13 @@ import { useTranslations } from "use-intl";
 import { isNavItemActive, PARENT_NAV_GROUPS } from "@dodi/client-state/parent-nav";
 import { drawer, navGroupLabel, navItem, topBar } from "@dodi/ui-recipes";
 
+import { writeLastView } from "@/adapters/platform";
 import { AccountBadge } from "@/components/parent/account-badge";
 import { KidViewButton } from "@/components/parent/kid-view-button";
 import { Icon, type IconName, Text } from "@/components/ui";
 import { cn } from "@/lib/cn";
+import { RefreshScope, useNewRefreshRegistry } from "@/lib/refresh-scope";
+import { isReduceMotionOn } from "@/lib/use-reduce-motion";
 
 import { Breadcrumbs } from "./breadcrumbs";
 import { PageBackground } from "./page-background";
@@ -24,16 +27,31 @@ export function ParentShell({ children }: { children: ReactNode }) {
   const t = useTranslations("nav");
   const insets = useSafeAreaInsets();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  // Pull to refresh: the page's ShellContent and its parts register here.
+  const refreshRegistry = useNewRefreshRegistry();
+
+  // The next launch opens the parent area (past the PIN gate, which renders
+  // this shell only once solved).
+  useEffect(() => writeLastView("parent"), []);
+
+  // While the drawer is open, TalkBack stays inside it (iOS: its accessibilityViewIsModal).
+  const behindDrawer = isMenuOpen ? "no-hide-descendants" : "auto";
 
   return (
     <PageBackground>
-      <View className={topBar.root} style={{ paddingTop: 12 + insets.top }}>
+      <View
+        className={topBar.root}
+        style={{ paddingTop: 12 + insets.top }}
+        importantForAccessibility={behindDrawer}
+      >
         <View className={topBar.row}>
           <View className={topBar.left}>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={t("openMenu")}
               onPress={() => setIsMenuOpen(true)}
+              // 36pt button: a 44pt target.
+              hitSlop={4}
               className={cn(topBar.menuButton, "active:bg-foreground/5")}
             >
               <Icon name="menu" size={topBar.menuIcon.size} stroke={topBar.menuIcon.stroke} color="ink-2" />
@@ -43,7 +61,9 @@ export function ParentShell({ children }: { children: ReactNode }) {
           <KidViewButton />
         </View>
       </View>
-      <View className="flex-1">{children}</View>
+      <View className="flex-1" importantForAccessibility={behindDrawer}>
+        <RefreshScope registry={refreshRegistry}>{children}</RefreshScope>
+      </View>
       <Drawer isOpen={isMenuOpen} onClose={() => setIsMenuOpen(false)} />
     </PageBackground>
   );
@@ -61,7 +81,9 @@ function Drawer({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const [isShown, setIsShown] = useState(false);
 
   useEffect(() => {
-    Animated.timing(progress, { toValue: isOpen ? 1 : 0, duration: 300, useNativeDriver: true }).start(
+    // Reduced motion: the drawer appears in place (read at the toggle, not a dependency).
+    const duration = isReduceMotionOn() ? 0 : 300;
+    Animated.timing(progress, { toValue: isOpen ? 1 : 0, duration, useNativeDriver: true }).start(
       ({ finished }) => {
         if (finished) setIsShown(isOpen);
       },
@@ -86,12 +108,17 @@ function Drawer({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
 
   if (!isOpen && !isShown) return null;
   return (
-    <View className="absolute inset-0" style={{ zIndex: 60 }}>
-      <Animated.View className={cn("absolute inset-0", drawer.backdrop)} style={{ opacity: progress }}>
-        <Pressable accessibilityLabel={t("nav.closeMenu")} className="flex-1" onPress={onClose} />
+    <View className="absolute inset-0" style={{ zIndex: 60 }} accessibilityViewIsModal onAccessibilityEscape={onClose}>
+      {/* A tap outside closes it; screen readers use the close button (or escape / back). */}
+      <Animated.View
+        className={cn("absolute inset-0", drawer.backdrop)}
+        style={{ opacity: progress }}
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+      >
+        <Pressable accessible={false} className="flex-1" onPress={onClose} />
       </Animated.View>
       <Animated.View
-        accessibilityViewIsModal
         className={cn("absolute bottom-0 left-0 top-0", drawer.panel)}
         style={{
           width,
@@ -109,6 +136,8 @@ function Drawer({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
           <Link href="/parent/dashboard" asChild>
             <Pressable accessibilityRole="link" accessibilityLabel={t("nav.dashboard")} className={drawer.brand}>
               <Image
+                accessibilityElementsHidden
+                importantForAccessibility="no"
                 source={require("../../../assets/images/splash.png")}
                 style={{ width: 30, height: 30, transform: [{ translateY: -5 }] }}
               />
@@ -120,6 +149,7 @@ function Drawer({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
               <Pressable
                 accessibilityRole="link"
                 accessibilityLabel={t("nav.settings")}
+                hitSlop={4}
                 className={cn(drawer.headerButton, "active:bg-foreground/5")}
               >
                 <Icon name="settings" size={drawer.headerIcon.size} stroke={drawer.headerIcon.stroke} color="muted-foreground" />
@@ -129,6 +159,7 @@ function Drawer({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
               accessibilityRole="button"
               accessibilityLabel={t("nav.closeMenu")}
               onPress={onClose}
+              hitSlop={4}
               className={cn(drawer.headerButton, "active:bg-foreground/5")}
             >
               <Icon name="close" size={drawer.headerIcon.size} stroke={drawer.headerIcon.stroke} color="muted-foreground" />
@@ -146,6 +177,7 @@ function Drawer({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
                 return (
                   <Link key={item.href} href={item.href as Href} asChild>
                     <Pressable
+                      hitSlop={{ top: 4, bottom: 4 }}
                       accessibilityRole="link"
                       accessibilityState={{ selected: isActive }}
                       className={cn(navItem.box, isActive ? navItem.boxActive : "active:bg-foreground/5")}

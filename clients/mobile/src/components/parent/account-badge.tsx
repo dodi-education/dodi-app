@@ -43,7 +43,7 @@ export function AccountBadge() {
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={t("common.signOut")}
-        hitSlop={10}
+        hitSlop={11}
         className={styles.signOut}
         onPress={async () => {
           await signOut();

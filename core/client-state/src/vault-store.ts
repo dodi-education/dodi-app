@@ -334,8 +334,8 @@ export function createVaultStore(deps: VaultStoreDeps): VaultStore {
           let keys: StoredVaultKeys | null;
           try {
             keys = await fetchVaultKeys();
-            // Write-through (sealed under a non-extractable key) so the next
-            // cold start can unlock offline.
+            // Write-through (sealed at rest by the platform's offline cache) so
+            // the next cold start can unlock offline.
             if (keys) void offlineCache.writeVaultKeys(keys);
           } catch (error) {
             // Network failure → sealed offline copy. `needs-setup` stays
