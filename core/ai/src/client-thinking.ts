@@ -16,8 +16,10 @@ import type OpenAI from "openai";
 import type { AIProviderId } from "@dodi/types/ai";
 import type { TokenUsage } from "@dodi/types/usage";
 
-import { createXaiClient } from "./xai";
-import { anthropicUsage, geminiUsage, xaiUsage } from "./usage-map";
+import { createProviderClient, withExtraBody, type OpenAICompatibleProvider } from "./openai-compatible";
+import { anthropicUsage, geminiUsage, veniceUsage, xaiUsage } from "./usage-map";
+import { VENICE_PROVIDER } from "./venice";
+import { XAI_PROVIDER } from "./xai";
 
 /** Fired after each underlying model call with that call's token usage. */
 export type UsageSink = (usage: TokenUsage) => void;
@@ -109,27 +111,32 @@ class AnthropicClientThinking implements ThinkingProvider {
   }
 }
 
-class XaiClientThinking implements ThinkingProvider {
+/** xAI / Venice — OpenAI-compatible chat/completions. */
+class OpenAICompatibleClientThinking implements ThinkingProvider {
+  #provider: OpenAICompatibleProvider;
   #client: OpenAI;
   #model: string;
   #onUsage?: UsageSink;
 
-  constructor(apiKey: string, model: string, onUsage?: UsageSink) {
-    this.#client = createXaiClient(apiKey, true);
+  constructor(provider: OpenAICompatibleProvider, apiKey: string, model: string, onUsage?: UsageSink) {
+    this.#provider = provider;
+    this.#client = createProviderClient(provider, apiKey, true);
     this.#model = model;
     this.#onUsage = onUsage;
   }
 
   async #text(system: string, prompt: string, jsonMode: boolean): Promise<string> {
-    const res = await this.#client.chat.completions.create({
-      model: this.#model,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: prompt },
-      ],
-      ...(jsonMode ? { response_format: { type: "json_object" as const } } : {}),
-    });
-    this.#onUsage?.(xaiUsage(res.usage));
+    const res = await this.#client.chat.completions.create(
+      withExtraBody(this.#provider, {
+        model: this.#model,
+        messages: [
+          { role: "system" as const, content: system },
+          { role: "user" as const, content: prompt },
+        ],
+        ...(jsonMode ? { response_format: { type: "json_object" as const } } : {}),
+      }),
+    );
+    this.#onUsage?.(this.#provider.id === "venice" ? veniceUsage(res.usage) : xaiUsage(res.usage));
     return res.choices[0]?.message?.content?.trim() ?? "";
   }
 
@@ -142,7 +149,7 @@ class XaiClientThinking implements ThinkingProvider {
     );
     const parsed: unknown = JSON.parse(stripJsonFences(text));
     if (typeof parsed !== "object" || parsed === null) {
-      throw new Error("xAI did not return a JSON object");
+      throw new Error(`${this.#provider.label} did not return a JSON object`);
     }
     return parsed as Record<string, unknown>;
   }
@@ -164,7 +171,9 @@ export function createClientThinkingProvider(
     case "anthropic":
       return new AnthropicClientThinking(apiKey, model, onUsage);
     case "xai":
-      return new XaiClientThinking(apiKey, model, onUsage);
+      return new OpenAICompatibleClientThinking(XAI_PROVIDER, apiKey, model, onUsage);
+    case "venice":
+      return new OpenAICompatibleClientThinking(VENICE_PROVIDER, apiKey, model, onUsage);
     default:
       throw new Error(`Provider "${providerId}" is not supported for client-side thinking`);
   }

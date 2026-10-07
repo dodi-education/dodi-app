@@ -3,31 +3,49 @@ import { z } from "zod";
 import { BalanceSchema } from "./billing";
 
 /**
- * Providers dodi AI hands out inference keys for. Widens (e.g. "venice") as
- * providers are added — clients must tolerate unknown members by filtering on
- * the providers they know how to drive.
+ * Providers dodi AI hands out inference keys for. Widens as providers are
+ * added — `KeysResponseSchema` drops entries for providers a client does not
+ * know, so an older client keeps working with the keys it can drive.
  */
-export const InferenceProviderSchema = z.enum(["xai"]);
+export const InferenceProviderSchema = z.enum(["xai", "venice"]);
 export type InferenceProvider = z.infer<typeof InferenceProviderSchema>;
 
 /**
  * One inference credential from `GET ai.dodi.app/api/keys`. The secret is a
  * session credential: hold it in memory only — never in the platform DB, the
- * vault, or any client-side storage. The `providerKeyId` is the permanent
- * provider-side key record usage attribution is bound to; the secret behind it
- * rotates (daily cron), so a provider 401 means "refetch /keys", not "key
- * gone".
+ * vault, or any client-side storage. A provider 401 means "refetch /keys", not
+ * "key gone":
+ *  - xAI rotates the secret in place (daily cron); `providerKeyId` stays the
+ *    same for the account's lifetime.
+ *  - Venice cannot rotate in place: each rotation mints a new provider key, so
+ *    `providerKeyId` changes and the key carries an `expiresAt` after which the
+ *    provider rejects it. Refetch before it passes.
  */
 export const InferenceKeySchema = z.object({
   provider: InferenceProviderSchema,
   apiKey: z.string().min(1),
   providerKeyId: z.string().min(1),
   mintedAt: z.string(),
+  /** ISO timestamp the provider stops accepting this secret; absent = no hard expiry. */
+  expiresAt: z.string().optional(),
 });
 export type InferenceKey = z.infer<typeof InferenceKeySchema>;
 
+const KNOWN_PROVIDERS: ReadonlySet<string> = new Set(InferenceProviderSchema.options);
+
 export const KeysResponseSchema = z.object({
-  keys: z.array(InferenceKeySchema),
+  keys: z.preprocess(
+    (raw) =>
+      Array.isArray(raw)
+        ? raw.filter(
+            (entry: unknown) =>
+              typeof entry === "object" &&
+              entry !== null &&
+              KNOWN_PROVIDERS.has(String((entry as { provider?: unknown }).provider)),
+          )
+        : raw,
+    z.array(InferenceKeySchema),
+  ),
 });
 export type KeysResponse = z.infer<typeof KeysResponseSchema>;
 

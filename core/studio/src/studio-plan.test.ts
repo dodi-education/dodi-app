@@ -103,8 +103,41 @@ const turn = (patch: Partial<PlanTurnInput> = {}): PlanTurnInput => ({
     planUpdatedNote: "(plan updated)",
     stopped: "Stopped.",
     planFailed: "Plan failed.",
+    aiUnavailable: "dodi AI unavailable.",
   },
   ...patch,
+});
+
+describe("runPlanTurn when the provider account is out of funds (402)", () => {
+  const outOfFunds = () =>
+    Object.assign(new Error('402 "Insufficient USD or Diem balance to complete request."'), {
+      status: 402,
+    });
+
+  it("tells the parent dodi AI is unavailable when it ran on a dodi AI key", async () => {
+    ports.execution.resolveGame = async () => ({
+      provider: "venice",
+      model: "claude-opus-5-5",
+      apiKey: KEY,
+      isManaged: true,
+    });
+    agent.mockRejectedValue(outOfFunds());
+    await expect(runPlanTurn(ports, turn())).resolves.toEqual({
+      kind: "failed",
+      reason: "ai_unavailable",
+      reply: { role: "assistant", text: "dodi AI unavailable." },
+    });
+    expect(ports.telemetry.reportError).toHaveBeenCalled();
+  });
+
+  it("keeps the generic failure on the parent's own key (BYOK)", async () => {
+    agent.mockRejectedValue(outOfFunds());
+    await expect(runPlanTurn(ports, turn())).resolves.toMatchObject({
+      kind: "failed",
+      reason: "failed",
+      reply: { text: "Plan failed." },
+    });
+  });
 });
 
 describe("runPlanTurn", () => {
@@ -163,6 +196,7 @@ describe("runPlanTurn", () => {
     agent.mockRejectedValue(new Error(`401 bad key ${KEY}`));
     await expect(runPlanTurn(ports, turn())).resolves.toEqual({
       kind: "failed",
+      reason: "failed",
       reply: { role: "assistant", text: "Plan failed." },
     });
     expect(ports.telemetry.reportError).toHaveBeenCalledWith(

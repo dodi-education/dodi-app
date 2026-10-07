@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { DodiAIDefaults } from "@dodi/types/ai";
 
@@ -36,6 +36,7 @@ const { resolveExecution } = createExecutionResolver({
   dodiAIKeys: {
     getState: () => ({
       load: async () => state.managedKeys,
+      ensureFresh: async () => state.managedKeys,
       getKey: (p: string) => state.managedKeys?.find((k) => k.provider === p)?.apiKey ?? null,
     }),
   } as never,
@@ -67,6 +68,7 @@ describe("resolveExecution — dodi (managed)", () => {
       provider: "xai",
       model: "grok-4.3",
       apiKey: "xai-managed-secret",
+      isManaged: true,
     });
   });
 
@@ -115,6 +117,52 @@ describe("resolveExecution — dodi (managed)", () => {
       model: "default",
     });
     expect(resolved).toBeNull();
+  });
+});
+
+describe("resolveExecution — dodi on Venice", () => {
+  const xaiDefaults = state.defaults;
+  beforeEach(() => {
+    state.dodiConfigured = true;
+    state.defaults = {
+      voice: { provider: "xai", model: "grok-voice-latest", voice: "ara" },
+      thinking: { provider: "venice", model: "grok-4-3" },
+      game: { provider: "venice", model: "claude-opus-5-5" },
+      image: { provider: "venice", model: "grok-imagine-image" },
+    };
+    state.managedKeys = [
+      { provider: "xai", apiKey: "xai-managed-secret", providerKeyId: "pk1", mintedAt: "t" },
+      { provider: "venice", apiKey: "venice-managed-secret", providerKeyId: "vk1", mintedAt: "t" },
+    ];
+  });
+  afterEach(() => {
+    state.defaults = xaiDefaults;
+  });
+
+  it("routes the category to Venice with the Venice key", async () => {
+    const resolved = await resolveExecution({ provider: "dodi", category: "game", model: "default" });
+    expect(resolved).toEqual({
+      provider: "venice",
+      model: "claude-opus-5-5",
+      apiKey: "venice-managed-secret",
+      isManaged: true,
+    });
+  });
+
+  it("drops a stored model of the category's previous provider for the recommendation", async () => {
+    // "grok-4.5" is an xAI id; Venice would reject it.
+    const resolved = await resolveExecution({ provider: "dodi", category: "game", model: "grok-4.5" });
+    expect(resolved).toMatchObject({ provider: "venice", model: "claude-opus-5-5" });
+  });
+
+  it("keeps a stored model that the current provider offers", async () => {
+    const resolved = await resolveExecution({ provider: "dodi", category: "game", model: "grok-4-7" });
+    expect(resolved).toMatchObject({ provider: "venice", model: "grok-4-7" });
+  });
+
+  it("keeps voice on xAI", async () => {
+    const resolved = await resolveExecution({ provider: "dodi", category: "voice", model: "default" });
+    expect(resolved).toMatchObject({ provider: "xai", apiKey: "xai-managed-secret" });
   });
 });
 
@@ -196,5 +244,28 @@ describe("resolveGame / resolveImage / resolveThinking — from the account conf
 
   it("is null without an account config", async () => {
     await expect(resolverWith(null).resolveGame()).resolves.toBeNull();
+  });
+});
+
+describe("refreshKeys", () => {
+  const resolverWithKeys = (keys: unknown[] | null, refresh: () => Promise<unknown>) =>
+    createExecutionResolver({
+      api: { request: () => Promise.reject(new Error("unused")) } as never,
+      dodiAI: { isConfigured: () => true, request: () => Promise.reject(new Error("unused")) },
+      dodiAIDefaults: { getState: () => ({ load: async () => null }) } as never,
+      dodiAIKeys: { getState: () => ({ keys, refresh }) } as never,
+      providers: { getState: () => ({}) } as never,
+    });
+
+  it("refetches held dodi AI keys", async () => {
+    const refresh = vi.fn(async () => null);
+    await resolverWithKeys([{ provider: "venice" }], refresh).refreshKeys();
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("is a no-op when no managed keys are held (BYOK)", async () => {
+    const refresh = vi.fn(async () => null);
+    await resolverWithKeys(null, refresh).refreshKeys();
+    expect(refresh).not.toHaveBeenCalled();
   });
 });

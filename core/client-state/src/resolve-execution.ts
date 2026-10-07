@@ -53,6 +53,11 @@ export interface ResolvedExecution {
   apiKey: string;
   /** Voice category only. */
   voiceName?: string;
+  /**
+   * Runs on a dodi AI inference key (dodi's provider account), not the
+   * parent's own: provider-side account problems are dodi's to fix.
+   */
+  isManaged?: true;
 }
 
 export interface ExecutionResolverDeps {
@@ -74,6 +79,11 @@ export interface ExecutionResolver {
    * is required — never the voice one (Live models can't drive text tasks).
    */
   resolveThinking(): Promise<ResolvedExecution | null>;
+  /**
+   * Refetch the dodi AI inference keys (after a provider 401: the key was
+   * rotated or expired mid-call). No-op for BYOK-only accounts.
+   */
+  refreshKeys(): Promise<void>;
 }
 
 export function createExecutionResolver(deps: ExecutionResolverDeps): ExecutionResolver {
@@ -86,10 +96,17 @@ export function createExecutionResolver(deps: ExecutionResolverDeps): ExecutionR
     if (!defaults) return null;
     const recommended = defaults[input.category];
 
+    // A stored explicit choice only stands while it belongs to the provider
+    // the category runs on today: when a default moves providers (xAI → Venice,
+    // with different model ids) an old pick falls back to the recommendation
+    // instead of being sent to the wrong API.
+    const explicit =
+      input.model && input.model !== DODI_DEFAULT_MODEL ? input.model : null;
+    const catalog = AI_PROVIDERS.find((p) => p.id === recommended.provider)?.models ?? [];
     const model =
-      !input.model || input.model === DODI_DEFAULT_MODEL ? recommended.model : input.model;
+      explicit && catalog.some((m) => m.id === explicit) ? explicit : recommended.model;
 
-    const keys = await deps.dodiAIKeys.getState().load();
+    const keys = await deps.dodiAIKeys.getState().ensureFresh();
     if (!keys) return null;
     const apiKey = deps.dodiAIKeys.getState().getKey(recommended.provider as InferenceProvider);
     if (!apiKey) return null;
@@ -98,6 +115,7 @@ export function createExecutionResolver(deps: ExecutionResolverDeps): ExecutionR
       provider: recommended.provider,
       model,
       apiKey,
+      isManaged: true,
       ...(input.category === "voice"
         ? { voiceName: input.voiceName ?? recommended.voice ?? "ara" }
         : {}),
@@ -152,5 +170,8 @@ export function createExecutionResolver(deps: ExecutionResolverDeps): ExecutionR
     resolveGame: () => resolveConfigured("game"),
     resolveImage: () => resolveConfigured("image"),
     resolveThinking: () => resolveConfigured("thinking"),
+    refreshKeys: async () => {
+      if (deps.dodiAIKeys.getState().keys) await deps.dodiAIKeys.getState().refresh();
+    },
   };
 }

@@ -42,6 +42,30 @@ export function xaiUsage(
   };
 }
 
+/**
+ * Venice (OpenAI-compatible) `response.usage` → TokenUsage. Same shape as
+ * xAI: `prompt_tokens` is the full input with the cached slice in
+ * `prompt_tokens_details.cached_tokens`. Claude behind Venice also bills cache
+ * writes; they arrive in `prompt_tokens_details.cache_creation_input_tokens`
+ * and are likewise a slice of `prompt_tokens` (verified live 2026-10-06:
+ * 7225 prompt = 13 uncached + 7212 written).
+ */
+export function veniceUsage(
+  u?: {
+    prompt_tokens?: number | null;
+    completion_tokens?: number | null;
+    prompt_tokens_details?: {
+      cached_tokens?: number | null;
+      cache_creation_input_tokens?: number | null;
+    } | null;
+  } | null,
+): TokenUsage {
+  return {
+    ...xaiUsage(u),
+    cacheWriteTokens: u?.prompt_tokens_details?.cache_creation_input_tokens ?? 0,
+  };
+}
+
 /** Anthropic `response.usage` → TokenUsage. */
 export function anthropicUsage(
   u?: {

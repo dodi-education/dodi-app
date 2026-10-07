@@ -59,3 +59,25 @@ describe("XaiClientThinking", () => {
     expect(args.response_format).toEqual({ type: "json_object" });
   });
 });
+
+describe("Venice client thinking", () => {
+  it("sends Venice's request defaults and json_object mode", async () => {
+    create.mockResolvedValueOnce({
+      choices: [{ message: { content: '{"ok":true}' } }],
+      usage: { prompt_tokens: 7, completion_tokens: 3 },
+    });
+    const provider = createClientThinkingProvider("venice", "k", "grok-4-3");
+    await expect(provider.generateJson("SYS", "hi")).resolves.toEqual({ ok: true });
+    const args = create.mock.calls[0][0] as {
+      model: string;
+      response_format?: unknown;
+      venice_parameters?: unknown;
+    };
+    expect(args.model).toBe("grok-4-3");
+    expect(args.response_format).toEqual({ type: "json_object" });
+    expect(args.venice_parameters).toEqual({
+      include_venice_system_prompt: false,
+      enable_web_search: "off",
+    });
+  });
+});

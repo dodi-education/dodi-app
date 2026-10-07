@@ -1,7 +1,7 @@
 // "dodi" is the managed dodi AI meta-provider: selectable in config like any
 // provider, but resolvers map it to a real provider + a dodi-minted key before
 // any adapter runs (see clients/web resolve-dodi-ai). It never has a vault key.
-export type AIProviderId = "gemini" | "openai" | "anthropic" | "xai" | "dodi";
+export type AIProviderId = "gemini" | "openai" | "anthropic" | "xai" | "venice" | "dodi";
 
 export interface AIProviderDefinition {
   id: AIProviderId;

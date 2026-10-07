@@ -285,6 +285,10 @@ features:
     web: done
     mobile: done
     core: [client-state, ai]
+    notes: >-
+      Venice (OpenAI-compatible, text + image, no voice) is a BYOK provider
+      and backs dodi AI's thinking, game and image categories; voice stays on
+      xAI. Core-only change (registry + adapters), so both clients pick it up.
     web_paths: ["clients/web/src/app/parent/settings/ai-providers/page.tsx"]
     mobile_paths:
       - "clients/mobile/src/app/parent/settings/ai-providers.tsx"

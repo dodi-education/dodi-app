@@ -1,22 +1,26 @@
 /**
- * xAI Grok ThinkingProvider (server-side) for simple text/JSON tasks.
- *
- * Grok exposes an OpenAI-compatible chat/completions API, so this reuses the
- * `openai` SDK pointed at api.x.ai. Mirrors AnthropicThinkingProvider; used for
- * node flows that legitimately hold the key (e.g. the future Hosted tier).
+ * OpenAI-compatible ThinkingProvider (server-side) for simple text/JSON tasks:
+ * xAI Grok (api.x.ai) and Venice share the chat/completions shape, so both
+ * reuse the `openai` SDK pointed at their base URL. Mirrors
+ * AnthropicThinkingProvider; used for node flows that legitimately hold the key
+ * (e.g. the publication security agent).
  */
 
 import type OpenAI from "openai";
 
-import { createXaiClient } from "../xai";
+import { createProviderClient, withExtraBody, type OpenAICompatibleProvider } from "../openai-compatible";
+import { VENICE_PROVIDER } from "../venice";
+import { XAI_PROVIDER } from "../xai";
 import type { ThinkingProvider } from "./factory";
 
-export class XaiThinkingProvider implements ThinkingProvider {
+export class OpenAICompatibleThinkingProvider implements ThinkingProvider {
+  private provider: OpenAICompatibleProvider;
   private client: OpenAI;
   private model: string;
 
-  constructor(apiKey: string, model: string) {
-    this.client = createXaiClient(apiKey);
+  constructor(provider: OpenAICompatibleProvider, apiKey: string, model: string) {
+    this.provider = provider;
+    this.client = createProviderClient(provider, apiKey);
     this.model = model;
   }
 
@@ -24,23 +28,25 @@ export class XaiThinkingProvider implements ThinkingProvider {
     system: string,
     prompt: string,
   ): Promise<Record<string, unknown>> {
-    const response = await this.client.chat.completions.create({
-      model: this.model,
-      response_format: { type: "json_object" },
-      messages: [
-        {
-          role: "system",
-          content:
-            system +
-            "\n\nYou MUST respond with a single valid JSON object only. No markdown fences, no preamble.",
-        },
-        { role: "user", content: prompt },
-      ],
-    });
+    const response = await this.client.chat.completions.create(
+      withExtraBody(this.provider, {
+        model: this.model,
+        response_format: { type: "json_object" as const },
+        messages: [
+          {
+            role: "system" as const,
+            content:
+              system +
+              "\n\nYou MUST respond with a single valid JSON object only. No markdown fences, no preamble.",
+          },
+          { role: "user" as const, content: prompt },
+        ],
+      }),
+    );
 
     const text = response.choices[0]?.message?.content?.trim();
     if (!text) {
-      throw new Error("xAI returned empty response");
+      throw new Error(`${this.provider.label} returned empty response`);
     }
 
     const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
@@ -54,18 +60,34 @@ export class XaiThinkingProvider implements ThinkingProvider {
   }
 
   async generateText(system: string, prompt: string): Promise<string> {
-    const response = await this.client.chat.completions.create({
-      model: this.model,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: prompt },
-      ],
-    });
+    const response = await this.client.chat.completions.create(
+      withExtraBody(this.provider, {
+        model: this.model,
+        messages: [
+          { role: "system" as const, content: system },
+          { role: "user" as const, content: prompt },
+        ],
+      }),
+    );
 
     const text = response.choices[0]?.message?.content?.trim();
     if (!text) {
-      throw new Error("xAI returned empty response");
+      throw new Error(`${this.provider.label} returned empty response`);
     }
     return text;
+  }
+}
+
+/** xAI Grok (kept as a named class for existing imports). */
+export class XaiThinkingProvider extends OpenAICompatibleThinkingProvider {
+  constructor(apiKey: string, model: string) {
+    super(XAI_PROVIDER, apiKey, model);
+  }
+}
+
+/** Venice (OpenAI-compatible, with Venice's own system prompt disabled). */
+export class VeniceThinkingProvider extends OpenAICompatibleThinkingProvider {
+  constructor(apiKey: string, model: string) {
+    super(VENICE_PROVIDER, apiKey, model);
   }
 }

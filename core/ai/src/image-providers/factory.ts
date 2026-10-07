@@ -10,6 +10,7 @@
 import type { AIProviderId } from "@dodi/types/ai";
 
 import { GeminiImageProvider } from "./gemini";
+import { VeniceImageProvider } from "./venice";
 import { XaiImageProvider } from "./xai";
 
 // ---------------------------------------------------------------------------
@@ -28,7 +29,7 @@ export interface GenerateImageOptions {
    * Style-reference images (data URLs) passed alongside the prompt so the
    * result matches an existing look (e.g. the game's background behind its
    * preview icon). Best effort: providers whose image API takes no image input
-   * (xAI) ignore them and generate from the prompt alone.
+   * (xAI, Venice) ignore them and generate from the prompt alone.
    */
   referenceImages?: string[];
 }
@@ -54,6 +55,8 @@ export function createClientImageProvider(
       return new GeminiImageProvider(apiKey, model);
     case "xai":
       return new XaiImageProvider(apiKey, model);
+    case "venice":
+      return new VeniceImageProvider(apiKey, model);
     default:
       throw new Error(
         `Provider "${providerId}" is not supported for image generation`,

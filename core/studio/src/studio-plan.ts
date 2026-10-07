@@ -23,6 +23,7 @@ import {
 
 import { isValidAgeRange } from "./age-range";
 import type { StudioKid } from "./build-runner";
+import { failureReason, type StudioFailureReason } from "./failure-reason";
 import { sendJson } from "./http";
 import type { PlanningState } from "./plan-state";
 import type { ResolvedExecution, StudioEditorPorts } from "./ports";
@@ -39,6 +40,8 @@ export interface PlanTurnTexts {
   planUpdatedNote: string;
   stopped: string;
   planFailed: string;
+  /** dodi AI's provider account cannot serve requests (e.g. out of funds). */
+  aiUnavailable: string;
 }
 
 export interface PlanTurnInput {
@@ -79,7 +82,7 @@ export type PlanTurnOutcome =
   /** Stopped by the parent: `reply` says so in the thread. */
   | { kind: "stopped"; reply: StudioChatMessage }
   /** Failed (already reported): `reply` says so in the thread. */
-  | { kind: "failed"; reply: StudioChatMessage };
+  | { kind: "failed"; reason: StudioFailureReason; reply: StudioChatMessage };
 
 /**
  * One brainstorming turn with the plan agent. No audience is chosen during
@@ -159,7 +162,15 @@ export async function runPlanTurn(
       secrets: execution ? [execution.apiKey] : [],
       meta: { durationMs: now() - startedAt },
     });
-    return { kind: "failed", reply: { role: "assistant", text: texts.planFailed } };
+    const reason = failureReason(execution, err);
+    return {
+      kind: "failed",
+      reason,
+      reply: {
+        role: "assistant",
+        text: reason === "ai_unavailable" ? texts.aiUnavailable : texts.planFailed,
+      },
+    };
   }
 }
 

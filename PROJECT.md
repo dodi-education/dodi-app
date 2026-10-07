@@ -459,7 +459,9 @@ parent-defined goal — and, in future, generate challenges like "Solve 3 math g
   - Advanced: 6 months
   - Full: Unlimited
 
-- Implement Venice.ai
+- [x] Implement Venice.ai: BYOK provider (text, game agent, images; no voice) and dodi AI
+  backend for thinking (grok-4-3), game (claude-opus-5-5) and image (grok-imagine-image);
+  voice stays on xAI. Billing/key lifecycle lives in dodi-com/ai (providers/venice.ts).
 
 - Account Export/import:parent can download their encrypted data and restore it on a
    self-hosted instance, continuing with the same vault via `nsec`. This also makes us automatically GDPR compliant in the EU.

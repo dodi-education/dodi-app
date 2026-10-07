@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { anthropicUsage, geminiUsage, xaiUsage } from "./usage-map";
+import { anthropicUsage, geminiUsage, veniceUsage, xaiUsage } from "./usage-map";
 
 describe("xaiUsage", () => {
   it("maps OpenAI-shaped usage to TokenUsage with cached input in cacheReadTokens", () => {
@@ -42,5 +42,18 @@ describe("xaiUsage", () => {
       cacheWriteTokens: 0,
       cacheReadTokens: 0,
     });
+  });
+});
+
+describe("veniceUsage", () => {
+  it("maps like xAI and picks up a cache-write count when present", () => {
+    expect(
+      veniceUsage({
+        prompt_tokens: 1248,
+        completion_tokens: 167,
+        prompt_tokens_details: { cached_tokens: 1152, cache_creation_input_tokens: 40 },
+      }),
+    ).toEqual({ inputTokens: 1248, outputTokens: 167, cacheWriteTokens: 40, cacheReadTokens: 1152 });
+    expect(veniceUsage(undefined).cacheWriteTokens).toBe(0);
   });
 });

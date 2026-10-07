@@ -12,7 +12,7 @@ import type { AccountModelConfig } from "@dodi/types/ai";
 
 // "dodi" = the managed dodi AI meta-provider (resolved client-side to a real
 // provider + dodi-minted key); it is a valid *selection*, never a vault key.
-const providerEnum = z.enum(["gemini", "openai", "anthropic", "xai", "dodi"]);
+const providerEnum = z.enum(["gemini", "openai", "anthropic", "xai", "venice", "dodi"]);
 
 const UpdateConfigSchema = z.object({
   voiceProvider: providerEnum,

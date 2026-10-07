@@ -8,7 +8,13 @@
  * dodi-com/PROJECT.md § Agentic / dual-repo maintenance).
  */
 
-export const API_VERSION = "2";
+/**
+ * Wire version the client sends in `VERSION_HEADER`. "3" = the client can
+ * drive Venice keys (the server only includes them in `/api/keys` for ≥ 3).
+ */
+export const API_VERSION = "3";
+/** First version whose clients drive Venice inference keys. */
+export const VENICE_KEYS_MIN_API_VERSION = 3;
 export const VERSION_HEADER = "X-Dodi-Ai-Api-Version";
 
 export * from "./billing";

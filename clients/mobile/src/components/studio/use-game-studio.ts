@@ -380,6 +380,7 @@ export function useGameStudio({ initialGame, initialView }: GameStudioInput) {
             planUpdatedNote: t("planUpdatedNote"),
             stopped: t("stopped"),
             planFailed: t("planFailed"),
+            aiUnavailable: t("aiUnavailable"),
           },
         },
         {
@@ -395,7 +396,9 @@ export function useGameStudio({ initialGame, initialView }: GameStudioInput) {
         return;
       }
       if (outcome.kind === "stopped" || outcome.kind === "failed") {
-        if (outcome.kind === "failed") setError(t("planFailed"));
+        if (outcome.kind === "failed") {
+          setError(t(outcome.reason === "ai_unavailable" ? "aiUnavailable" : "planFailed"));
+        }
         const reply = outcome.reply;
         setMessages((m) => [...m, reply]);
         return;
@@ -505,6 +508,7 @@ export function useGameStudio({ initialGame, initialView }: GameStudioInput) {
     stopped: t("stopped"),
     paused: t("buildPaused"),
     buildFailed: t("buildFailed"),
+    aiUnavailable: t("aiUnavailable"),
     previewUpdated: t("previewUpdatedMessage"),
     previewUpdateFailed: t("previewUpdateFailedMessage"),
   });
@@ -610,7 +614,7 @@ export function useGameStudio({ initialGame, initialView }: GameStudioInput) {
     }
     if (outcome.kind === "stopped" || outcome.kind === "paused") return;
     if (outcome.kind === "failed") {
-      setError(t("buildFailed"));
+      setError(t(outcome.reason === "ai_unavailable" ? "aiUnavailable" : "buildFailed"));
       return;
     }
     if (outcome.kind === "preview_only") {

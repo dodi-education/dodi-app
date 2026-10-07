@@ -1105,6 +1105,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
             planUpdatedNote: t("planUpdatedNote"),
             stopped: t("stopped"),
             planFailed: t("planFailed"),
+            aiUnavailable: t("aiUnavailable"),
           },
         },
         {
@@ -1122,7 +1123,9 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
         return;
       }
       if (outcome.kind === "stopped" || outcome.kind === "failed") {
-        if (outcome.kind === "failed") setError(t("planFailed"));
+        if (outcome.kind === "failed") {
+          setError(t(outcome.reason === "ai_unavailable" ? "aiUnavailable" : "planFailed"));
+        }
         const reply = outcome.reply;
         setMessages((m) => [...m, reply]);
         return;
@@ -1264,6 +1267,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     stopped: t("stopped"),
     paused: t("buildPaused"),
     buildFailed: t("buildFailed"),
+    aiUnavailable: t("aiUnavailable"),
     previewUpdated: t("previewUpdatedMessage"),
     previewUpdateFailed: t("previewUpdateFailedMessage"),
   });
@@ -1390,7 +1394,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     // A resumable failure's checkpoint is offered by the effect below, which
     // runs whenever a build of this game ends.
     if (outcome.kind === "failed") {
-      setError(t("buildFailed"));
+      setError(t(outcome.reason === "ai_unavailable" ? "aiUnavailable" : "buildFailed"));
       return;
     }
     if (outcome.kind === "preview_only") {

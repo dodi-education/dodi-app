@@ -6,7 +6,7 @@ import type { AIProviderId } from "@dodi/types/ai";
 
 import { AnthropicThinkingProvider } from "./anthropic";
 import { GeminiThinkingProvider } from "./gemini";
-import { XaiThinkingProvider } from "./xai";
+import { VeniceThinkingProvider, XaiThinkingProvider } from "./xai";
 
 // ---------------------------------------------------------------------------
 // Interface
@@ -33,6 +33,8 @@ export function createThinkingProvider(
       return new GeminiThinkingProvider(apiKey, model);
     case "xai":
       return new XaiThinkingProvider(apiKey, model);
+    case "venice":
+      return new VeniceThinkingProvider(apiKey, model);
     default:
       throw new Error(`Provider "${providerId}" is not supported for thinking tasks`);
   }

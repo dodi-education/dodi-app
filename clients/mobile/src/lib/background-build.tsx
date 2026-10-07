@@ -96,6 +96,7 @@ export function BackgroundBuildBridge(): ReactNode {
         stopped: s("stopped"),
         paused: s("buildPaused"),
         buildFailed: s("buildFailed"),
+        aiUnavailable: s("aiUnavailable"),
         previewUpdated: s("previewUpdatedMessage"),
         previewUpdateFailed: s("previewUpdateFailedMessage"),
       };

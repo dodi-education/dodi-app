@@ -1,7 +1,7 @@
 /**
  * Game-state analysis ("what did the child make?") — runs fully in the browser
  * so the provider key never leaves the vault. Ported from the former server
- * `runAnalysisTask`. Supports Gemini, xAI Grok, and Anthropic vision; falls back
+ * `runAnalysisTask`. Supports Gemini, xAI Grok, Venice, and Anthropic vision; falls back
  * to the structured state description when no snapshot is available.
  */
 
@@ -13,8 +13,10 @@ import type { AIProviderId } from "@dodi/types/ai";
 import type { TokenUsage } from "@dodi/types/usage";
 
 import { parseImageDataUrl } from "./data-url";
-import { anthropicUsage, geminiUsage, xaiUsage } from "./usage-map";
-import { createXaiClient } from "./xai";
+import { createProviderClient, withExtraBody } from "./openai-compatible";
+import { anthropicUsage, geminiUsage, veniceUsage, xaiUsage } from "./usage-map";
+import { VENICE_PROVIDER } from "./venice";
+import { XAI_PROVIDER } from "./xai";
 
 export interface AnalyzeGameStateParams {
   provider: AIProviderId;
@@ -74,10 +76,11 @@ export async function analyzeGameState(
     return { analysis, usage: geminiUsage(response.response.usageMetadata) };
   }
 
-  if (provider === "xai") {
-    // xAI is OpenAI-compatible; Grok vision takes the snapshot as an image_url
-    // content part (data URL passed through directly).
-    const client = createXaiClient(apiKey, true);
+  if (provider === "xai" || provider === "venice") {
+    // xAI and Venice are OpenAI-compatible; vision takes the snapshot as an
+    // image_url content part (data URL passed through directly).
+    const compat = provider === "venice" ? VENICE_PROVIDER : XAI_PROVIDER;
+    const client = createProviderClient(compat, apiKey, true);
     const content: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [];
     if (snapshotImage) {
       content.push({
@@ -86,18 +89,21 @@ export async function analyzeGameState(
       });
     }
     content.push({ type: "text", text: userText.join("\n") });
-    const response = await client.chat.completions.create({
-      model,
-      max_tokens: 1024,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content },
-      ],
-    });
+    const response = await client.chat.completions.create(
+      withExtraBody(compat, {
+        model,
+        max_tokens: 1024,
+        messages: [
+          { role: "system" as const, content: systemPrompt },
+          { role: "user" as const, content },
+        ],
+      }),
+    );
     const analysis =
       response.choices[0]?.message?.content?.trim() ||
       "I couldn't analyze the game state.";
-    return { analysis, usage: xaiUsage(response.usage) };
+    const usage = provider === "venice" ? veniceUsage(response.usage) : xaiUsage(response.usage);
+    return { analysis, usage };
   }
 
   // Anthropic

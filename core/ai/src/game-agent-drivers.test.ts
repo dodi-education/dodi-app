@@ -635,3 +635,108 @@ describe("transcript snapshot / restore (build checkpoints)", () => {
     expect(() => driver.restore({ provider: "xai", messages: [] })).toThrow(/xai transcript/);
   });
 });
+
+describe("Venice driver (OpenAI-compatible)", () => {
+  const doneStream = () =>
+    streamOf({
+      choices: [{ delta: { content: "ok" }, finish_reason: "stop" }],
+      usage: {
+        prompt_tokens: 120,
+        completion_tokens: 3,
+        prompt_tokens_details: { cached_tokens: 100 },
+      },
+    });
+
+  type VeniceRequest = {
+    model: string;
+    venice_parameters?: { include_venice_system_prompt: boolean; enable_web_search: string };
+    messages: Array<{ role: string; content: unknown }>;
+  };
+
+  it("disables Venice's own system prompt and web search on every turn", async () => {
+    create.mockResolvedValueOnce(doneStream());
+    const driver = createGameDriver("venice", {
+      apiKey: "k",
+      model: "grok-4-7",
+      systemPrompt: "SYS",
+      maxTokens: 10,
+    });
+    driver.seed(undefined, "go");
+    const turn = await driver.runTurn();
+    const req = create.mock.calls[0][0] as VeniceRequest;
+    expect(req.venice_parameters).toEqual({
+      include_venice_system_prompt: false,
+      enable_web_search: "off",
+    });
+    expect(turn.usage).toMatchObject({ inputTokens: 120, cacheReadTokens: 100 });
+  });
+
+  it("adds no cache_control breakpoints for non-Claude models", async () => {
+    create.mockResolvedValueOnce(doneStream());
+    const driver = createGameDriver("venice", {
+      apiKey: "k",
+      model: "grok-4-7",
+      systemPrompt: "SYS",
+      maxTokens: 10,
+    });
+    driver.seed(undefined, "go");
+    await driver.runTurn();
+    const req = create.mock.calls[0][0] as VeniceRequest;
+    expect(JSON.stringify(req.messages)).not.toContain("cache_control");
+    expect(req.messages[0]).toEqual({ role: "system", content: "SYS" });
+  });
+
+  it("marks the system prompt and the newest message as cache breakpoints for Claude", async () => {
+    create.mockResolvedValueOnce(doneStream());
+    const driver = createGameDriver("venice", {
+      apiKey: "k",
+      model: "claude-opus-5-5",
+      systemPrompt: "SYS",
+      maxTokens: 10,
+    });
+    driver.seed([{ role: "assistant", text: "earlier" }], { text: "go", images: [PNG] });
+    await driver.runTurn();
+    const req = create.mock.calls[0][0] as VeniceRequest;
+    expect(req.messages[0]).toEqual({
+      role: "system",
+      content: [{ type: "text", text: "SYS", cache_control: { type: "ephemeral" } }],
+    });
+    // The middle (older) message stays unmarked.
+    expect(req.messages[1]).toEqual({ role: "assistant", content: "earlier" });
+    const lastParts = req.messages[2].content as Array<Record<string, unknown>>;
+    expect(lastParts[lastParts.length - 1]).toMatchObject({
+      type: "text",
+      text: "go",
+      cache_control: { type: "ephemeral" },
+    });
+    expect(lastParts.slice(0, -1).some((p) => "cache_control" in p)).toBe(false);
+    // Request-only: the stored transcript carries no markers.
+    expect(JSON.stringify(driver.snapshot())).not.toContain("cache_control");
+  });
+
+  it("snapshots as a venice transcript and refuses an xAI one", async () => {
+    const driver = createGameDriver("venice", {
+      apiKey: "k",
+      model: "grok-4-7",
+      systemPrompt: "SYS",
+      maxTokens: 10,
+    });
+    driver.seed(undefined, "go");
+    expect(driver.snapshot().provider).toBe("venice");
+    expect(() => driver.restore({ provider: "xai", messages: [] })).toThrow(/xai transcript/);
+  });
+
+  it("sends no venice_parameters on xAI requests", async () => {
+    create.mockResolvedValueOnce(doneStream());
+    const driver = createGameDriver("xai", {
+      apiKey: "k",
+      model: "grok-4.3",
+      systemPrompt: "SYS",
+      maxTokens: 10,
+    });
+    driver.seed(undefined, "go");
+    await driver.runTurn();
+    const req = create.mock.calls[0][0] as Record<string, unknown>;
+    expect(req).not.toHaveProperty("venice_parameters");
+  });
+});

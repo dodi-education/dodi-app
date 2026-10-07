@@ -135,6 +135,88 @@ export const AI_PROVIDERS: AIProviderDefinition[] = [
     ],
   },
   {
+    // Venice — OpenAI-compatible gateway (privacy-first, no prompt retention)
+    // for many upstream text and image models; no realtime voice. Curated
+    // list: tool-calling text models that can drive the game agent, newest
+    // and strongest first (the config UI seeds models[0] for a capability).
+    // Ids are Venice's own (hyphenated, e.g. `grok-4-3`, not xAI's `grok-4.3`).
+    // Output caps are Venice's `maxCompletionTokens`: several sit below the
+    // 64k fallback, and requesting more is a 400.
+    id: "venice",
+    name: "Venice",
+    supportsVoice: false,
+    supportsLiveStreaming: false,
+    supportsThinking: true,
+    supportsImage: true,
+    supportsAgentic: true,
+    models: [
+      {
+        id: "claude-opus-5-5",
+        name: "Claude Opus 5.5",
+        capabilities: ["text", "thinking", "agentic"],
+        maxOutputTokens: 128_000,
+      },
+      {
+        id: "claude-sonnet-5-5",
+        name: "Claude Sonnet 5.5",
+        capabilities: ["text", "thinking", "agentic"],
+        maxOutputTokens: 128_000,
+      },
+      {
+        id: "grok-4-7",
+        name: "Grok 4.7",
+        capabilities: ["text", "thinking", "agentic"],
+        maxOutputTokens: 128_000,
+      },
+      {
+        id: "grok-4-5",
+        name: "Grok 4.5",
+        capabilities: ["text", "thinking", "agentic"],
+        maxOutputTokens: 32_000,
+      },
+      {
+        id: "grok-4-3",
+        name: "Grok 4.3",
+        capabilities: ["text", "thinking", "agentic"],
+        maxOutputTokens: 32_000,
+      },
+      {
+        id: "kimi-k2-6",
+        name: "Kimi K2.6",
+        capabilities: ["text", "thinking", "agentic"],
+        maxOutputTokens: 65_536,
+      },
+      {
+        id: "zai-org-glm-5-2",
+        name: "GLM 5.2",
+        capabilities: ["text", "thinking", "agentic"],
+        maxOutputTokens: 128_000,
+      },
+      {
+        id: "deepseek-v4-flash",
+        name: "DeepSeek V4 Flash",
+        capabilities: ["text", "thinking", "agentic"],
+        maxOutputTokens: 32_768,
+      },
+      {
+        id: "grok-imagine-image",
+        name: "Grok Imagine",
+        capabilities: ["image"],
+      },
+      {
+        id: "grok-imagine-image-2-0",
+        name: "Grok Imagine 2.0",
+        capabilities: ["image"],
+      },
+      {
+        id: "z-image-turbo",
+        name: "Z-Image Turbo",
+        capabilities: ["image"],
+      },
+    ],
+    voices: [],
+  },
+  {
     // dodi AI — the managed meta-provider. Selectable per category like any
     // BYOK provider, but there is no vault key: resolvers map "dodi" to a real
     // provider + a dodi-minted inference key before any adapter runs, so it
@@ -160,15 +242,18 @@ export const AI_PROVIDERS: AIProviderDefinition[] = [
         name: "Grok Voice",
         capabilities: ["voice", "live"],
       },
+      // Text and image run on Venice (its model ids); voice stays on xAI.
       {
-        id: "grok-4.5",
-        name: "Grok 4.5",
+        id: "claude-opus-5-5",
+        name: "Claude Opus 5.5",
         capabilities: ["text", "thinking", "agentic"],
+        maxOutputTokens: 128_000,
       },
       {
-        id: "grok-4.3",
+        id: "grok-4-3",
         name: "Grok 4.3",
         capabilities: ["text", "thinking", "agentic"],
+        maxOutputTokens: 32_000,
       },
       {
         id: "grok-imagine-image",

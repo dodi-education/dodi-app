@@ -7,8 +7,10 @@
  * own format and executing a single model turn (with tool calling) against it.
  *
  * Anthropic uses content-block messages + explicit prompt-cache breakpoints;
- * xAI (Grok) uses the OpenAI-compatible chat/completions shape (role:"tool"
- * results, automatic prompt caching). Both run client-side with the vault key.
+ * xAI (Grok) and Venice use the OpenAI-compatible chat/completions shape
+ * (role:"tool" results). Grok caches prompts automatically; Claude behind Venice
+ * gets Anthropic-style `cache_control` breakpoints on the request. All run
+ * client-side with the vault key.
  */
 
 import Anthropic from "@anthropic-ai/sdk";
@@ -20,8 +22,10 @@ import type { TokenUsage } from "@dodi/types/usage";
 
 import { parseImageDataUrl } from "./data-url";
 import { AGENT_TOOLS, isWriteStreamTool } from "./game-agent-tools";
-import { anthropicUsage, xaiUsage } from "./usage-map";
-import { createXaiClient } from "./xai";
+import { createProviderClient, withExtraBody, type OpenAICompatibleProvider } from "./openai-compatible";
+import { anthropicUsage, veniceUsage, xaiUsage } from "./usage-map";
+import { VENICE_PROVIDER } from "./venice";
+import { XAI_PROVIDER } from "./xai";
 
 /** A resumed display turn — restored from a persisted conversation transcript. */
 export interface PriorTurn {
@@ -377,7 +381,7 @@ class AnthropicGameDriver implements GameCodeDriver {
 }
 
 // ---------------------------------------------------------------------------
-// xAI (Grok) driver — OpenAI-compatible chat/completions
+// OpenAI-compatible driver (xAI Grok, Venice) — chat/completions
 // ---------------------------------------------------------------------------
 
 /** Convert the Anthropic-format tool defs to OpenAI function tools. */
@@ -485,18 +489,54 @@ export function createXaiTurnAccumulator(
   };
 }
 
-class XaiGameDriver implements GameCodeDriver {
+type ChatMessage = OpenAI.Chat.Completions.ChatCompletionMessageParam;
+
+/** Anthropic-style prompt-cache marker, accepted on content parts by gateways
+ *  that front Claude with the OpenAI shape (Venice). Not in the SDK's types. */
+const EPHEMERAL_CACHE = { cache_control: { type: "ephemeral" } } as const;
+
+/** Mark the last content part of a message as a cache breakpoint. */
+function withCacheBreakpoint(message: ChatMessage): ChatMessage {
+  const content = message.content;
+  if (typeof content === "string") {
+    if (!content) return message;
+    return { ...message, content: [{ type: "text", text: content, ...EPHEMERAL_CACHE }] } as ChatMessage;
+  }
+  if (!Array.isArray(content) || content.length === 0) return message;
+  const parts = content.slice();
+  parts[parts.length - 1] = { ...parts[parts.length - 1], ...EPHEMERAL_CACHE };
+  return { ...message, content: parts } as ChatMessage;
+}
+
+/**
+ * Request-only cache breakpoints for Claude behind an OpenAI-compatible gateway
+ * (mirrors `messagesWithRollingCache`): one on the system prompt (stable across
+ * the run) and a rolling one on the newest message, so each turn reads the
+ * whole prior conversation from cache. The stored transcript stays unmarked.
+ */
+export function messagesWithCacheBreakpoints(messages: ChatMessage[]): ChatMessage[] {
+  if (messages.length === 0) return messages;
+  const out = messages.slice();
+  if (out[0].role === "system") out[0] = withCacheBreakpoint(out[0]);
+  const last = out.length - 1;
+  if (last > 0) out[last] = withCacheBreakpoint(out[last]);
+  return out;
+}
+
+class OpenAICompatibleGameDriver implements GameCodeDriver {
+  #provider: OpenAICompatibleProvider;
   #client: OpenAI;
   #model: string;
   #maxTokens: number;
   #systemPrompt: string;
   #tools: OpenAI.Chat.Completions.ChatCompletionTool[];
-  #messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
+  #messages: ChatMessage[] = [];
   #onActivity?: (event: AgentActivityEvent) => void;
   #signal?: AbortSignal;
 
-  constructor(opts: GameDriverOptions) {
-    this.#client = createXaiClient(opts.apiKey, true);
+  constructor(provider: OpenAICompatibleProvider, opts: GameDriverOptions) {
+    this.#provider = provider;
+    this.#client = createProviderClient(provider, opts.apiKey, true);
     this.#model = opts.model;
     this.#maxTokens = opts.maxTokens;
     this.#systemPrompt = opts.systemPrompt;
@@ -520,14 +560,12 @@ class XaiGameDriver implements GameCodeDriver {
   }
 
   snapshot(): DriverTranscript {
-    return { provider: "xai", messages: copyMessages(this.#messages) };
+    return { provider: this.#provider.id, messages: copyMessages(this.#messages) };
   }
 
   restore(transcript: DriverTranscript): void {
-    assertTranscriptProvider(transcript, "xai");
-    this.#messages = copyMessages(
-      transcript.messages,
-    ) as OpenAI.Chat.Completions.ChatCompletionMessageParam[];
+    assertTranscriptProvider(transcript, this.#provider.id);
+    this.#messages = copyMessages(transcript.messages) as ChatMessage[];
   }
 
   addUserMessage(content: string | UserContent): void {
@@ -537,19 +575,22 @@ class XaiGameDriver implements GameCodeDriver {
   async runTurn(): Promise<GameTurn> {
     // Stream the turn: keeps long code writes from sitting silent against HTTP
     // timeouts, feeds the live activity line, and lets Stop abort mid-write.
+    // Snapshot: we append the assistant reply to #messages right after, so the
+    // request must not alias the live array.
+    const messages = this.#provider.needsCacheBreakpoints?.(this.#model)
+      ? messagesWithCacheBreakpoints(this.#messages)
+      : [...this.#messages];
     const stream = await this.#client.chat.completions.create(
-      {
+      withExtraBody(this.#provider, {
         model: this.#model,
         max_tokens: this.#maxTokens,
-        // Snapshot: we append the assistant reply to #messages right after, so the
-        // request must not alias the live array.
-        messages: [...this.#messages],
+        messages,
         tools: this.#tools,
-        tool_choice: "auto",
-        stream: true,
+        tool_choice: "auto" as const,
+        stream: true as const,
         // Usage arrives on the stream's final chunk instead of a response envelope.
         stream_options: { include_usage: true },
-      },
+      }),
       { signal: this.#signal },
     );
 
@@ -582,7 +623,7 @@ class XaiGameDriver implements GameCodeDriver {
       hasText: turn.content.trim().length > 0,
       expectsToolResults: turn.finishReason === "tool_calls",
       stopReason: turn.finishReason,
-      usage: xaiUsage(turn.usage),
+      usage: this.#provider.id === "venice" ? veniceUsage(turn.usage) : xaiUsage(turn.usage),
     };
   }
 
@@ -618,7 +659,9 @@ export function createGameDriver(
     case "anthropic":
       return new AnthropicGameDriver(opts);
     case "xai":
-      return new XaiGameDriver(opts);
+      return new OpenAICompatibleGameDriver(XAI_PROVIDER, opts);
+    case "venice":
+      return new OpenAICompatibleGameDriver(VENICE_PROVIDER, opts);
     default:
       throw new Error(`Provider "${provider}" does not support game generation`);
   }

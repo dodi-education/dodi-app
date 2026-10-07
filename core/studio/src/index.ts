@@ -8,6 +8,7 @@ export * from "./build-manager";
 export * from "./screenshot-service";
 export * from "./telemetry";
 export * from "./age-range";
+export * from "./failure-reason";
 export * from "./code-diff";
 export * from "./plan-state";
 export * from "./settings-save";

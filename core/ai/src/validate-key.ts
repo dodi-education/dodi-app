@@ -10,7 +10,17 @@ import Anthropic from "@anthropic-ai/sdk";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 import type { AIProviderId } from "@dodi/types/ai";
+
+import { withExtraBody } from "./openai-compatible";
+import { createVeniceClient, VENICE_PROVIDER } from "./venice";
 import { createXaiClient } from "./xai";
+
+/**
+ * Cheap private Venice text model used to check a key: Venice keys are not
+ * model-scoped, so the picked config model doesn't matter for auth, and a tiny
+ * model keeps the 1-token probe at a fraction of a cent.
+ */
+const VENICE_VALIDATION_MODEL = "qwen3-5-9b";
 
 export async function validateProviderKey(
   providerId: AIProviderId,
@@ -42,6 +52,17 @@ export async function validateProviderKey(
         max_tokens: 1,
         messages: [{ role: "user", content: "ping" }],
       });
+      return { valid: true };
+    }
+    if (providerId === "venice") {
+      const client = createVeniceClient(apiKey, true);
+      await client.chat.completions.create(
+        withExtraBody(VENICE_PROVIDER, {
+          model: VENICE_VALIDATION_MODEL,
+          max_tokens: 1,
+          messages: [{ role: "user" as const, content: "ping" }],
+        }),
+      );
       return { valid: true };
     }
     return { valid: false, error: `Validation not supported for ${providerId}` };

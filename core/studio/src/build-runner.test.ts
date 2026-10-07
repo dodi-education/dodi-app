@@ -52,6 +52,7 @@ const TEXTS = {
   stopped: "Stopped.",
   paused: "Paused.",
   buildFailed: "Build failed.",
+  aiUnavailable: "dodi AI unavailable.",
   previewUpdated: "New preview.",
   previewUpdateFailed: "Preview failed.",
 };
@@ -279,6 +280,94 @@ describe("runStudioBuild", () => {
     expect(ports.telemetry.reportError).toHaveBeenCalledWith(
       expect.objectContaining({ context: "game_build", secrets: [KEY], meta: expect.objectContaining({ durationMs: 0 }) }),
     );
+  });
+});
+
+describe("runStudioBuild when the provider account is out of funds (402)", () => {
+  it("tells the parent dodi AI is unavailable when it ran on a dodi AI key", async () => {
+    agent.mockImplementation(async (params) => {
+      await params.onCheckpoint?.(AGENT_CHECKPOINT);
+      throw Object.assign(new Error("402 Insufficient USD or Diem balance"), { status: 402 });
+    });
+    ports.execution.resolveGame = async () => ({
+      provider: "venice",
+      model: "claude-opus-5-5",
+      apiKey: KEY,
+      isManaged: true,
+    });
+    const outcome = await runStudioBuild(input(), ports);
+    expect(outcome).toMatchObject({ kind: "failed", reason: "ai_unavailable", isResumable: true });
+    expect(outcome.transcript.at(-1)?.text).toBe("dodi AI unavailable.");
+  });
+
+  it("keeps the generic failure on the parent's own key (BYOK)", async () => {
+    agent.mockImplementation(async () => {
+      throw Object.assign(new Error("402 Payment required"), { status: 402 });
+    });
+    const outcome = await runStudioBuild(input(), ports);
+    expect(outcome).toMatchObject({ kind: "failed", reason: "failed" });
+    expect(outcome.transcript.at(-1)?.text).toBe("Build failed.");
+  });
+});
+
+describe("runStudioBuild after a provider 401", () => {
+  const unauthorized = () => Object.assign(new Error("401 Incorrect API key provided"), { status: 401 });
+
+  it("refreshes the managed key and resumes from the run's last checkpoint", async () => {
+    let calls = 0;
+    agent.mockImplementation(async (params) => {
+      calls += 1;
+      if (calls === 1) {
+        await params.onCheckpoint?.(AGENT_CHECKPOINT);
+        throw unauthorized();
+      }
+      return result();
+    });
+    let key = KEY;
+    const refreshKeys = vi.fn(async () => {
+      key = "sk-refreshed";
+    });
+    ports.execution = {
+      resolveGame: async () => ({ provider: "anthropic", model: "claude-test", apiKey: key }),
+      resolveImage: async () => null,
+      refreshKeys,
+    };
+
+    const outcome = await runStudioBuild(input(), ports);
+    expect(outcome.kind).toBe("built");
+    expect(refreshKeys).toHaveBeenCalledTimes(1);
+    const retry = agent.mock.calls[1][0] as RunGameAgentParams;
+    expect(retry.apiKey).toBe("sk-refreshed");
+    expect(retry.resumeFrom).toBe(AGENT_CHECKPOINT);
+  });
+
+  it("fails as before when the refreshed key is unchanged (e.g. a BYOK key)", async () => {
+    agent.mockImplementation(async () => {
+      throw unauthorized();
+    });
+    ports.execution = {
+      resolveGame: async () => ({ provider: "anthropic", model: "claude-test", apiKey: KEY }),
+      resolveImage: async () => null,
+      refreshKeys: vi.fn(async () => {}),
+    };
+    const outcome = await runStudioBuild(input(), ports);
+    expect(outcome.kind).toBe("failed");
+    expect(agent).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not retry other failures", async () => {
+    agent.mockImplementation(async () => {
+      throw Object.assign(new Error("Payment required"), { status: 402 });
+    });
+    const refreshKeys = vi.fn(async () => {});
+    ports.execution = {
+      resolveGame: async () => ({ provider: "anthropic", model: "claude-test", apiKey: KEY }),
+      resolveImage: async () => null,
+      refreshKeys,
+    };
+    const outcome = await runStudioBuild(input(), ports);
+    expect(outcome.kind).toBe("failed");
+    expect(refreshKeys).not.toHaveBeenCalled();
   });
 });
 

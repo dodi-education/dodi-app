@@ -16,6 +16,7 @@ import type { RenderGameInput, RenderGameOutput } from "@dodi/ai/game-agent-tool
 import { calculateChildAge, getLanguageDisplayName } from "@dodi/ai/dodi-context";
 import { buildLearningContext, measureLearningContext } from "@dodi/ai/learning-context";
 import { createClientImageProvider } from "@dodi/ai/image-providers/factory";
+import { isProviderAuthError } from "@dodi/ai/provider-errors";
 import { buildBackgroundPrompt } from "@dodi/ai/image-providers/background-prompt";
 import { buildPreviewPrompt } from "@dodi/ai/image-providers/preview-prompt";
 import { injectBackgroundImage } from "@dodi/games/background-image";
@@ -43,6 +44,7 @@ import {
   STUDIO_CHECKPOINT_VERSION,
   type StudioBuildCheckpoint,
 } from "./build-checkpoint";
+import { failureReason, type StudioFailureReason } from "./failure-reason";
 import { readError } from "./http";
 import type { BuildRenderer, ImageOps, ResolvedExecution, StudioPorts } from "./ports";
 import { sealTranscript, type StudioChatMessage, toPriorTurns } from "./transcript";
@@ -118,6 +120,8 @@ export interface StudioBuildTexts {
   stopped: string;
   paused: string;
   buildFailed: string;
+  /** dodi AI's provider account cannot serve requests (e.g. out of funds). */
+  aiUnavailable: string;
   previewUpdated: string;
   previewUpdateFailed: string;
 }
@@ -174,7 +178,12 @@ export type StudioBuildOutcome =
   /** The OS (or the app) paused the build; its checkpoint is kept for resume. */
   | { kind: "paused"; transcript: StudioChatMessage[] }
   /** `isResumable`: a checkpoint survived, so the build can continue from it. */
-  | { kind: "failed"; transcript: StudioChatMessage[]; isResumable: boolean };
+  | {
+      kind: "failed";
+      reason: StudioFailureReason;
+      transcript: StudioChatMessage[];
+      isResumable: boolean;
+    };
 
 /** Live progress, for whatever UI happens to be watching. */
 export interface BuildProgressSink {
@@ -210,6 +219,31 @@ export async function boundBackgroundImage(images: ImageOps, dataUrl: string): P
   }
   if (!scaled) throw new Error("Background image processing failed");
   return scaled;
+}
+
+/**
+ * After a provider 401 mid-build: refetch the managed keys and return the game
+ * key to resume with. Rethrows `err` when it is not an auth failure, keys
+ * cannot be refreshed, or the refreshed selection is a different provider or
+ * model (its transcript could not continue).
+ */
+async function refreshedGameKey(
+  ports: StudioPorts,
+  exec: ResolvedExecution,
+  err: unknown,
+): Promise<string> {
+  if (!isProviderAuthError(err) || !ports.execution.refreshKeys) throw err;
+  await ports.execution.refreshKeys();
+  const next = await ports.execution.resolveGame();
+  if (
+    !next ||
+    next.provider !== exec.provider ||
+    next.model !== exec.model ||
+    next.apiKey === exec.apiKey
+  ) {
+    throw err;
+  }
+  return next.apiKey;
 }
 
 async function resolveImageProvider(ports: StudioPorts) {
@@ -397,8 +431,12 @@ export async function runStudioBuild(
     const session = await ports.session();
 
     const { texts: _texts, ...storableInput } = input;
+    // The newest checkpoint of THIS run: a provider 401 mid-build (managed key
+    // rotated/expired) resumes from it with a refreshed key.
+    let lastAgentCheckpoint: AgentCheckpoint | undefined = resumeFrom?.agent;
     const onCheckpoint = ports.checkpoints
       ? async (agent: AgentCheckpoint): Promise<void> => {
+          lastAgentCheckpoint = agent;
           await saveBuildCheckpoint(ports.checkpoints!, session, {
             version: STUDIO_CHECKPOINT_VERSION,
             savedAt: now(),
@@ -420,60 +458,66 @@ export async function runStudioBuild(
         )
       : undefined;
 
-    const result = await runGameAgent({
-      provider: exec.provider,
-      apiKey: exec.apiKey,
-      model: exec.model,
-      task: buildAgentTask(input),
-      priorTurns: toPriorTurns(input.history),
-      signal: options.signal,
-      onStep: (step) => {
-        lastStep = step;
-        recorder.onStep(step);
-        options.onStep?.(step);
-      },
-      onActivity: (event) => {
-        recorder.onActivity(event);
-        options.onActivity?.(event);
-      },
-      // Narration is for the parent watching the studio — their UI language.
-      narrationLanguage: getLanguageDisplayName(input.narrationLocale),
-      onGenerateBackgroundImage: game.generateBackgroundImage
-        ? async (scene) => {
-            const provider = await resolveImageProvider(ports);
-            const generated = await provider.generateImage(
-              buildBackgroundPrompt(scene, game.perspective),
-              { aspectRatio: `${STAGE.aspectW}:${STAGE.aspectH}` },
-            );
-            return boundBackgroundImage(ports.images, generated.dataUrl);
-          }
-        : undefined,
-      // Independent of the generate toggle: "use my attached image as the
-      // background" needs no image provider, just the bundle-size bound.
-      onPrepareBackgroundImage: (dataUrl) => boundBackgroundImage(ports.images, dataUrl),
-      // The game's background (when one exists) rides along as a style
-      // reference; the result is cropped to the list-preview square here.
-      onGeneratePreviewImage: game.generatePreviewImage
-        ? async (scene, backgroundImage) => {
-            const provider = await resolveImageProvider(ports);
-            const generated = await provider.generateImage(
-              buildPreviewPrompt(scene, { hasStyleReference: Boolean(backgroundImage) }),
-              { aspectRatio: "1:1", referenceImages: backgroundImage ? [backgroundImage] : undefined },
-            );
-            const square = await ports.images.squareThumbnail(generated.dataUrl, PREVIEW_IMAGE_SIZE);
-            if (!square) {
-              gameDebugWarn("preview", "cropping the generated preview image failed");
-              throw new Error("Preview image processing failed");
+    const runAgent = (apiKey: string, resume: AgentCheckpoint | undefined) =>
+      runGameAgent({
+        provider: exec.provider,
+        apiKey,
+        model: exec.model,
+        task: buildAgentTask(input),
+        priorTurns: toPriorTurns(input.history),
+        signal: options.signal,
+        onStep: (step) => {
+          lastStep = step;
+          recorder.onStep(step);
+          options.onStep?.(step);
+        },
+        onActivity: (event) => {
+          recorder.onActivity(event);
+          options.onActivity?.(event);
+        },
+        // Narration is for the parent watching the studio — their UI language.
+        narrationLanguage: getLanguageDisplayName(input.narrationLocale),
+        onGenerateBackgroundImage: game.generateBackgroundImage
+          ? async (scene) => {
+              const provider = await resolveImageProvider(ports);
+              const generated = await provider.generateImage(
+                buildBackgroundPrompt(scene, game.perspective),
+                { aspectRatio: `${STAGE.aspectW}:${STAGE.aspectH}` },
+              );
+              return boundBackgroundImage(ports.images, generated.dataUrl);
             }
-            return square;
-          }
-        : undefined,
-      hasExistingPreviewImage: Boolean(game.previewImage),
-      // Only when a screenshot service resolves now: with none, the model
-      // never even sees the view_game tool.
-      onViewGame: viewGame,
-      onCheckpoint,
-      resumeFrom: resumeFrom?.agent,
+          : undefined,
+        // Independent of the generate toggle: "use my attached image as the
+        // background" needs no image provider, just the bundle-size bound.
+        onPrepareBackgroundImage: (dataUrl) => boundBackgroundImage(ports.images, dataUrl),
+        // The game's background (when one exists) rides along as a style
+        // reference; the result is cropped to the list-preview square here.
+        onGeneratePreviewImage: game.generatePreviewImage
+          ? async (scene, backgroundImage) => {
+              const provider = await resolveImageProvider(ports);
+              const generated = await provider.generateImage(
+                buildPreviewPrompt(scene, { hasStyleReference: Boolean(backgroundImage) }),
+                { aspectRatio: "1:1", referenceImages: backgroundImage ? [backgroundImage] : undefined },
+              );
+              const square = await ports.images.squareThumbnail(generated.dataUrl, PREVIEW_IMAGE_SIZE);
+              if (!square) {
+                gameDebugWarn("preview", "cropping the generated preview image failed");
+                throw new Error("Preview image processing failed");
+              }
+              return square;
+            }
+          : undefined,
+        hasExistingPreviewImage: Boolean(game.previewImage),
+        // Only when a screenshot service resolves now: with none, the model
+        // never even sees the view_game tool.
+        onViewGame: viewGame,
+        onCheckpoint,
+        resumeFrom: resume,
+      });
+    const result = await runAgent(exec.apiKey, resumeFrom?.agent).catch(async (err: unknown) => {
+      // Error reports below redact `execution.apiKey`: track the key in use.
+      execution = { ...exec, apiKey: await refreshedGameKey(ports, exec, err) };
+      return runAgent(execution.apiKey, lastAgentCheckpoint);
     });
     // The agent is done: nothing is left to resume, whatever the persist does.
     await clearCheckpoint();
@@ -650,9 +694,11 @@ export async function runStudioBuild(
           : {}),
       },
     });
+    const reason = failureReason(execution, err);
     return {
       kind: "failed",
-      transcript: reply(texts.buildFailed, "failed"),
+      reason,
+      transcript: reply(reason === "ai_unavailable" ? texts.aiUnavailable : texts.buildFailed, "failed"),
       isResumable: hasCheckpoint,
     };
   }

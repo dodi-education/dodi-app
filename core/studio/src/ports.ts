@@ -18,6 +18,8 @@ export interface ResolvedExecution {
   provider: Exclude<AIProviderId, "dodi">;
   model: string;
   apiKey: string;
+  /** A dodi AI key (dodi's provider account) rather than the parent's own. */
+  isManaged?: boolean;
 }
 
 export interface ImageBound {
@@ -39,6 +41,11 @@ export interface ImageOps {
 export interface ExecutionResolver {
   resolveGame(): Promise<ResolvedExecution | null>;
   resolveImage(): Promise<ResolvedExecution | null>;
+  /**
+   * Refetch managed (dodi AI) inference keys after a provider 401. Absent ⇒ a
+   * rejected key fails the build as before.
+   */
+  refreshKeys?(): Promise<void>;
 }
 
 /** One build's renderer for the visual check. */

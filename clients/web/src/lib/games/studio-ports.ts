@@ -13,6 +13,7 @@ import { createStudioTelemetry } from "@dodi/studio/telemetry";
 import { dodi } from "@/lib/api";
 import { resolveClientGame } from "@/lib/ai/resolve-client-game";
 import { resolveClientImage } from "@/lib/ai/resolve-client-image";
+import { clientState } from "@/lib/client-state";
 import { browserEnvironmentMeta } from "@/lib/errors/report-error-log";
 import { browserCheckpointStore } from "@/lib/games/build-checkpoint-store";
 import { downscaleDataUrl, squareThumbnailDataUrl } from "@/lib/games/thumbnail";
@@ -49,7 +50,11 @@ export function createWebStudioPorts(): StudioPorts {
       downscale: (dataUrl, bound) => downscaleDataUrl(dataUrl, bound),
       squareThumbnail: (dataUrl, size) => squareThumbnailDataUrl(dataUrl, size),
     },
-    execution: { resolveGame: resolveClientGame, resolveImage: resolveClientImage },
+    execution: {
+      resolveGame: resolveClientGame,
+      resolveImage: resolveClientImage,
+      refreshKeys: () => clientState.execution.refreshKeys(),
+    },
     screenshots: screenshotService,
     telemetry: webStudioTelemetry(),
     games: {
@@ -68,7 +73,11 @@ export function webStudioEditorPorts(): StudioEditorPorts {
     api: dodi,
     session: awaitSession,
     currentSession: () => useVaultStore.getState().session,
-    execution: { resolveGame: resolveClientGame, resolveImage: resolveClientImage },
+    execution: {
+      resolveGame: resolveClientGame,
+      resolveImage: resolveClientImage,
+      refreshKeys: () => clientState.execution.refreshKeys(),
+    },
     telemetry: webStudioTelemetry(),
     games: {
       put: (row) => useGameStore.getState().put(row),
