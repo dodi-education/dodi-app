@@ -1,5 +1,6 @@
+import { useRouter } from "expo-router";
 import type { ReactNode } from "react";
-import { View } from "react-native";
+import { Pressable, View } from "react-native";
 import { useTranslations } from "use-intl";
 import type { DiscoverGameDetail } from "@dodi/types/games";
 import { gamePreview as g } from "@dodi/ui-recipes";
@@ -13,6 +14,8 @@ import { tagStyle } from "./tag-style";
 /** The Infos tab: the studio's settings reduced to read-only text (web: game-preview). */
 export function PreviewInfos({ detail }: { detail: DiscoverGameDetail }) {
   const t = useTranslations("gameStudio");
+  const tReport = useTranslations("report");
+  const router = useRouter();
   return (
     <View className={g.infos}>
       <InfoRow label={t("learningGoal")}>
@@ -40,6 +43,18 @@ export function PreviewInfos({ detail }: { detail: DiscoverGameDetail }) {
           {detail.target_age_min}–{detail.target_age_max}
         </Text>
       </InfoRow>
+
+      <Pressable
+        accessibilityRole="link"
+        hitSlop={14}
+        onPress={() =>
+          router.push({ pathname: "/parent/report", params: { kind: "discover_game", game: detail.id } })
+        }
+        className="flex-row items-center gap-1.5 self-start active:opacity-70"
+      >
+        <Icon name="alert" size={14} color="muted-foreground" />
+        <Text className="text-[13px] font-semibold text-muted-foreground">{tReport("reportGame")}</Text>
+      </Pressable>
     </View>
   );
 }

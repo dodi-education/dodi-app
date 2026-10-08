@@ -1,6 +1,7 @@
 import { type Href, Link, useRouter } from "expo-router";
 import { Pressable, View } from "react-native";
 import { useTranslations } from "use-intl";
+import { activeCompanionOf, companionNameOf } from "@dodi/client-state/companions";
 import { kidInitial } from "@dodi/client-state/kid-profile";
 import { ageFromBirthdate } from "@dodi/intl/age";
 import { kidRowLink, sectionEmpty, sectionMessage } from "@dodi/ui-recipes";
@@ -19,7 +20,7 @@ import { useKids } from "@/lib/use-kids";
 
 /**
  * The kids list (web: parent/kids/page), as it renders on a phone: pending
- * friend approvals, then each kid with its friend code, persona and birthdate,
+ * friend approvals, then each kid with its friend code, active companion and birthdate,
  * and the Edit / Memory quick actions.
  */
 export default function KidsScreen() {
@@ -81,7 +82,7 @@ export default function KidsScreen() {
                       <RowMeta>
                         {kid.social_id}
                         <DotSep />
-                        {kid.active_persona?.name ?? t("default")}
+                        {companionNameOf(activeCompanionOf(kid))}
                         <DotSep />
                         {kid.birthdate
                           ? t("born", { date: formatDateOnly(kid.birthdate) ?? kid.birthdate })

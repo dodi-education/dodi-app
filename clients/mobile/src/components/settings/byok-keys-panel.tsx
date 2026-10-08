@@ -14,6 +14,7 @@ import type { AIProviderId } from "@dodi/types/ai";
 
 import { Row, RowMain, RowMeta, RowTitle, RowTitleText } from "@/components/parent/rows";
 import { Section } from "@/components/parent/section";
+import { AiSharingConsent } from "@/components/settings/ai-sharing-consent";
 import { Badge, Button, Dialog, Icon, Label, PasswordInput, Select, Text } from "@/components/ui";
 import { clientState, useProvidersStore } from "@/lib/client-state";
 import { cn } from "@/lib/cn";
@@ -45,6 +46,7 @@ export function ByokKeysPanel({
   const [status, setStatus] = useState<"idle" | "valid" | "invalid">("idle");
   const [validationError, setValidationError] = useState("");
   const [removeId, setRemoveId] = useState<AIProviderId | null>(null);
+  const [hasConsented, setHasConsented] = useState(false);
 
   function resetDialog(): void {
     setProviderId("");
@@ -52,6 +54,7 @@ export function ByokKeysPanel({
     setPhase("idle");
     setStatus("idle");
     setValidationError("");
+    setHasConsented(false);
   }
 
   function closeDialog(): void {
@@ -60,7 +63,7 @@ export function ByokKeysPanel({
   }
 
   async function validateAndSave(): Promise<void> {
-    if (!providerId || !apiKey) return;
+    if (!providerId || !apiKey || !hasConsented) return;
     setPhase("validating");
     setStatus("idle");
     setValidationError("");
@@ -150,7 +153,7 @@ export function ByokKeysPanel({
         footer={
           <Button
             isLoading={isBusy}
-            disabled={!providerId || !apiKey}
+            disabled={!providerId || !apiKey || !hasConsented}
             onPress={() => void validateAndSave()}
           >
             {isBusy ? t("validating") : t("validateAndSave")}
@@ -199,6 +202,11 @@ export function ByokKeysPanel({
               <Text className="min-w-0 flex-1 text-sm text-danger">{validationError || t("keyInvalid")}</Text>
             </View>
           ) : null}
+          <AiSharingConsent
+            checked={hasConsented}
+            onCheckedChange={setHasConsented}
+            providerName={available.find((p) => p.id === providerId)?.name ?? t("aiSharingConsentThisProvider")}
+          />
         </View>
       </Dialog>
 

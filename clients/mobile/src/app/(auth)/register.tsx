@@ -1,6 +1,6 @@
 import { Link, useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
-import { Pressable, View } from "react-native";
+import { type ReactNode, useEffect, useRef, useState } from "react";
+import { Linking, Pressable, View } from "react-native";
 import { useTranslations } from "use-intl";
 import {
   type FinishRegistrationOutcome,
@@ -11,6 +11,7 @@ import {
   validateRegistration,
   verifyRegistrationCode,
 } from "@dodi/client-state";
+import { legalUrl, type LegalPage } from "@dodi/client-state/legal-links";
 
 import { mobileAuthApi } from "@/adapters/auth";
 import { Captcha, type CaptchaHandle, requestCaptchaToken } from "@/components/auth/captcha";
@@ -31,6 +32,9 @@ import {
 } from "@/components/ui";
 import { authDeps, isNpubConflict } from "@/lib/auth-deps";
 import { clientState } from "@/lib/client-state";
+import { cn } from "@/lib/cn";
+import { SITE_URL } from "@/lib/env";
+import { useLocaleSetting } from "@/lib/intl";
 import { markSignedIn } from "@/lib/session";
 
 /**
@@ -41,6 +45,7 @@ import { markSignedIn } from "@/lib/session";
 export default function RegisterScreen() {
   const t = useTranslations("auth");
   const tc = useTranslations("common");
+  const { locale } = useLocaleSetting();
   const router = useRouter();
   const [mode, setMode] = useState<RegistrationMode | null>(null);
   const [email, setEmail] = useState("");
@@ -49,6 +54,7 @@ export default function RegisterScreen() {
   const [inviteCode, setInviteCode] = useState("");
   const [isImportingNsec, setIsImportingNsec] = useState(false);
   const [importedNsec, setImportedNsec] = useState("");
+  const [hasAcceptedTerms, setHasAcceptedTerms] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [step, setStep] = useState<"form" | "awaitingOtp">("form");
@@ -70,6 +76,7 @@ export default function RegisterScreen() {
       mode: mode ?? "open",
       inviteCode,
       importedNsec: isImportingNsec ? importedNsec : "",
+      hasAcceptedTerms,
     } as const;
     const invalid = validateRegistration(form);
     if (invalid) {
@@ -110,6 +117,20 @@ export default function RegisterScreen() {
     setStep("form");
     setError(null);
     setIsFinalizeRetry(false);
+  }
+
+  /** A policy link inside the consent sentence (nested text, so it wraps with it). */
+  function legalLink(page: LegalPage, chunks: ReactNode): ReactNode {
+    return (
+      <Text
+        key={page}
+        accessibilityRole="link"
+        onPress={() => void Linking.openURL(legalUrl(SITE_URL, page, locale))}
+        className="text-sm font-medium text-primary"
+      >
+        {chunks}
+      </Text>
+    );
   }
 
   const signInFooter = (
@@ -306,6 +327,33 @@ export default function RegisterScreen() {
                 </View>
               ) : null}
             </View>
+            <Pressable
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: hasAcceptedTerms }}
+              onPress={() => {
+                setError(null);
+                setHasAcceptedTerms((v) => !v);
+              }}
+              hitSlop={12}
+              className="flex-row items-start gap-2"
+            >
+              <View
+                className={cn(
+                  "mt-0.5 size-4 shrink-0 items-center justify-center rounded-[4px] border",
+                  hasAcceptedTerms ? "border-primary bg-primary" : "border-border-strong bg-card",
+                )}
+              >
+                {hasAcceptedTerms ? (
+                  <Icon name="check" size={12} stroke={3} color="primary-foreground" />
+                ) : null}
+              </View>
+              <Text className="flex-1 text-sm text-ink-2">
+                {t.rich("termsConsent", {
+                  terms: (chunks) => legalLink("terms", chunks),
+                  privacy: (chunks) => legalLink("privacy", chunks),
+                })}
+              </Text>
+            </Pressable>
             {error ? <Text className="text-sm text-destructive">{error}</Text> : null}
             <Captcha ref={captchaRef} action="sign-up" />
             <Button onPress={() => void submit()} disabled={isLoading} className="w-full">

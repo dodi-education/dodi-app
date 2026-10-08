@@ -59,13 +59,22 @@ export function buildCrumbs(
       return crumbs;
     }
 
+    // Personas are a tab of Companions (/parent/companions/personas/...);
+    // the old /parent/personas paths only redirect there.
+    case "companions":
     case "personas": {
       const crumbs: Crumb[] = [
-        { label: t("nav.personas"), href: "/parent/personas" },
+        { label: t("nav.companions"), href: "/parent/companions" },
       ];
-      const id = seg[1];
-      if (id === "new") crumbs.push({ label: t("breadcrumbs.newPersona") });
-      else if (id) crumbs.push({ label: opts.leafOverride || "…" });
+      const rest = section === "personas" ? ["personas", ...seg.slice(1)] : seg.slice(1);
+      if (rest[0] === "personas") {
+        crumbs.push({ label: t("nav.personas"), href: "/parent/companions?tab=personas" });
+        if (rest[1] === "new") crumbs.push({ label: t("breadcrumbs.newPersona") });
+        else if (rest[1]) crumbs.push({ label: opts.leafOverride || "…" });
+        return crumbs;
+      }
+      if (rest[0] === "new") crumbs.push({ label: t("breadcrumbs.newCompanion") });
+      else if (rest[0]) crumbs.push({ label: opts.leafOverride || "…" });
       return crumbs;
     }
 
@@ -116,6 +125,9 @@ export function buildCrumbs(
 
     case "usage":
       return [{ label: t("nav.usage") }];
+
+    case "report":
+      return [{ label: t("nav.report") }];
 
     default:
       return [];

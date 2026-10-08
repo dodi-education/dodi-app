@@ -8,6 +8,8 @@
  * caller's business: it hands in {@link VoiceSessionSources}
  * (`@dodi/client-state` wires them from its stores).
  */
+import { CHARACTER_MODELS } from "@dodi/character/character-catalog";
+import { sanitizeLook } from "@dodi/character/character-look";
 import type { Kid, Persona } from "@dodi/types/database";
 
 import {
@@ -74,6 +76,23 @@ export interface VoiceSessionSources {
   loadGameInfo(gameId: string, kidId?: string): Promise<ResolvedGameInfo>;
   /** Accepted friends' names (share_snapshot); best-effort, [] on failure. */
   loadFriendNames(kid: Kid): Promise<string[]>;
+  /**
+   * The tricks the kid's active companion knows (built-in and custom), or null
+   * when it has no 3D body to perform them. Optional: absent means no tricks.
+   */
+  loadTrickNames?(kid: Kid): Promise<string[] | null>;
+}
+
+/**
+ * The active companion's name: the kid's pick, else its avatar's stock name.
+ * Reads the decrypted kid (companions opened by decryptKid).
+ */
+export function activeCompanionName(kid: Kid): string {
+  const companions = kid.companions ?? [];
+  const companion = companions.find((c) => c.id === kid.active_companion_id) ?? companions[0];
+  const name = companion?.name?.trim();
+  if (name) return name;
+  return CHARACTER_MODELS[sanitizeLook(companion?.look).model].stockName;
 }
 
 /**
@@ -108,10 +127,13 @@ export async function buildHomeVoiceConfig(
   const voice = await sources.resolveVoice();
   const persona = await sources.getActivePersona(kid.active_persona?.id ?? null);
   const gameCatalog = await sources.loadGameCatalog(kidId);
+  const trickNames = (await sources.loadTrickNames?.(kid).catch(() => null)) ?? undefined;
 
   const { systemInstruction, tools } = buildHomeVoiceContext({
     personaSoul: persona.soul,
     personaName: persona.name,
+    companionName: activeCompanionName(kid),
+    ...(trickNames ? { trickNames } : {}),
     childName: kid.display_name,
     childBirthdate: kid.birthdate,
     childLanguage: kid.language,
@@ -154,6 +176,7 @@ export async function buildGameVoiceConfig(
   const { systemInstruction, tools } = buildGameVoiceContext({
     personaSoul: persona.soul,
     personaName: persona.name,
+    companionName: activeCompanionName(kid),
     childName: kid.display_name,
     childBirthdate: kid.birthdate,
     childLanguage: kid.language,

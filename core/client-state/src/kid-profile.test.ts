@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { generateKidFriendKeys, openFriendCard, publishedFriendKeys, wrapKidSecretKeys } from "@dodi/protocol/friend-card";
 import type { SealedEnvelope } from "@dodi/protocol/envelope";
-import type { FriendCard, Kid, Persona } from "@dodi/types/database";
+import type { FriendCard, Kid } from "@dodi/types/database";
 
 import { FlowError, flowErrorText, VAULT_LOCKED_MESSAGE } from "./flow-error";
 import {
@@ -19,7 +19,6 @@ import {
   parseStoredPin,
   saveKidDatePreferences,
   saveKidPin,
-  setKidPersona,
   updateKidProfile,
 } from "./kid-profile";
 import { bodyOf, json, lockedVault, routedApi, spyGames, spyKids, unlockedVault } from "./parent-pages.test-support";
@@ -97,6 +96,7 @@ describe("kid profile", () => {
       canBeAddedAsFriend: false,
       incomingApproval: true,
       outgoingApproval: true,
+      canChangeCompanionAvatar: false,
     });
   });
 
@@ -124,6 +124,7 @@ describe("kid profile", () => {
     expect(patch.birthdate).toBeNull();
     expect(patch.social_id).toBe("MIA-123");
     expect(patch.outgoing_friend_requests_require_parent_approval).toBe(true);
+    expect(patch.can_change_companion_avatar).toBe(false);
 
     const refresh = bodyOf(api, "/api/friends/refresh-cards") as {
       kidId: string;
@@ -192,29 +193,6 @@ describe("kid profile", () => {
     // No zone: no vault needed.
     await saveKidDatePreferences({ api, kids, vault: lockedVault() }, "k1", { dateStyle: "", timeStyle: "", timeZone: "" });
     expect(bodyOf(api, "/api/kids/k1", 1)).toEqual({ date_preferences: {} });
-  });
-
-  it("switches the persona and mirrors it into the cached kid", async () => {
-    const { vault } = unlockedVault();
-    const { kids, patchLocal } = spyKids();
-    const api = routedApi({ "/api/kids/k1": json({}) });
-    const personas = [
-      { id: "p1", name: "Explorer", account_id: "a1", is_system_default: false, soul: "…" },
-    ] as unknown as Persona[];
-
-    await expect(setKidPersona({ api, kids, vault }, "k1", "p1", personas)).resolves.toBe(true);
-    expect(bodyOf(api, "/api/kids/k1")).toEqual({ active_persona_id: "p1" });
-    expect(patchLocal).toHaveBeenCalledWith("k1", {
-      active_persona: { id: "p1", name: "Explorer", account_id: "a1", is_system_default: false },
-    });
-
-    await setKidPersona({ api, kids, vault }, "k1", null, personas);
-    expect(patchLocal).toHaveBeenLastCalledWith("k1", { active_persona: null });
-
-    const failing = routedApi({ "/api/kids/k1": json({}, 500) });
-    patchLocal.mockClear();
-    await expect(setKidPersona({ api: failing, kids, vault }, "k1", "p1", personas)).resolves.toBe(false);
-    expect(patchLocal).not.toHaveBeenCalled();
   });
 
   it("deletes a kid and drops the cache; a failure throws", async () => {

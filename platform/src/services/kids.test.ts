@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { createTestDb, type TestDatabase } from "@/test-support/pglite-db";
 
-import { createKid, getKid, updateKid } from "./kids";
+import { createKid, deleteKid, getKid, updateKid } from "./kids";
 
 /**
  * kids service against real PGlite. The focus here is the two independent
@@ -68,5 +68,75 @@ describe("companion presence columns", () => {
     row = await getKid(t.serviceDb, id);
     expect(row?.deafened_dodi_at).toBeNull();
     expect(row?.muted_dodi_at).not.toBeNull();
+  });
+});
+
+describe("deleteKid", () => {
+  /**
+   * A snapshot a kid sent to a friend lives in the friend family's account as a
+   * `received` row pointing back at the sender kid. Deleting the sender kid (or
+   * the whole sender account) must not be blocked by that row.
+   */
+  async function sentSnapshotToFriend(): Promise<{
+    senderAccount: string;
+    senderKid: string;
+    receivedId: string;
+  }> {
+    const senderAccount = await t.createAccount(`sender-${(seq += 1)}@example.com`);
+    const receiverAccount = await t.createAccount(`receiver-${(seq += 1)}@example.com`);
+    const senderKid = await kid(senderAccount);
+    const receiverKid = await kid(receiverAccount);
+    const friendship = await t.serviceDb
+      .insertInto("friendships")
+      .values({
+        requester_account_id: senderAccount,
+        requester_kid_id: senderKid,
+        addressee_account_id: receiverAccount,
+        addressee_kid_id: receiverKid,
+        status: "accepted",
+        addressee_accepted: true,
+      })
+      .returning("id")
+      .executeTakeFirstOrThrow();
+    const received = await t.serviceDb
+      .insertInto("game_snapshots")
+      .values({
+        account_id: receiverAccount,
+        kid_id: receiverKid,
+        origin: "received",
+        sender_kid_id: senderKid,
+        friendship_id: friendship.id,
+        info_enc: "sealed-info",
+        payload_enc: "sealed-payload",
+      })
+      .returning("id")
+      .executeTakeFirstOrThrow();
+    return { senderAccount, senderKid, receivedId: received.id };
+  }
+
+  async function snapshotExists(id: string): Promise<boolean> {
+    const row = await t.serviceDb
+      .selectFrom("game_snapshots")
+      .select("id")
+      .where("id", "=", id)
+      .executeTakeFirst();
+    return row !== undefined;
+  }
+
+  it("removes snapshots the kid sent to friends, so the delete is not blocked", async () => {
+    const { senderKid, receivedId } = await sentSnapshotToFriend();
+
+    await deleteKid(t.serviceDb, senderKid);
+
+    expect(await getKid(t.serviceDb, senderKid)).toBeNull();
+    expect(await snapshotExists(receivedId)).toBe(false);
+  });
+
+  it("does not block deleting the sender's whole account either", async () => {
+    const { senderAccount, receivedId } = await sentSnapshotToFriend();
+
+    await t.serviceDb.deleteFrom("auth_users").where("id", "=", senderAccount).execute();
+
+    expect(await snapshotExists(receivedId)).toBe(false);
   });
 });

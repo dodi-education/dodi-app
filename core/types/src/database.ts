@@ -47,10 +47,11 @@ export type ErrorLog = Row<"error_logs">;
 export type ErrorLogInsert = Insert<"error_logs">;
 /**
  * Slim persona projection embedded in kid read shapes ("data travels with the
- * row that owns it"): the API joins it server-side via the active_persona_id
- * FK so clients never fetch /api/personas just to label a kid. Excludes the
- * heavy `soul` doc — AI flows load the full persona at session start. `name`
- * is E2EE ciphertext for account personas (decrypted in decryptKid).
+ * row that owns it"): the API joins it server-side (through the companion's
+ * persona_id FK) so clients never fetch /api/personas just to label a kid.
+ * Excludes the heavy `soul` doc; AI flows load the full persona at session
+ * start. `name` is E2EE ciphertext for account personas (decrypted in
+ * decryptKid).
  */
 export interface KidActivePersona {
   id: string;
@@ -58,12 +59,41 @@ export interface KidActivePersona {
   account_id: string | null;
   is_system_default: boolean;
 }
+export type Companion = Row<"companions">;
+export type CompanionInsert = Insert<"companions">;
+export type CompanionUpdate = Update<"companions">;
+export type CustomTrick = Row<"custom_tricks">;
+/** An in-app report of an AI answer or a game (plaintext, sent to the operator). */
+export type ContentReport = Row<"content_reports">;
+export type ContentReportKind = ContentReport["content_kind"];
+export type ContentReportReason = ContentReport["reason"];
 /**
- * Kid API read shape: the raw active_persona_id FK is replaced by the embedded
- * `active_persona` object. Write shapes (Insert/Update) still take the id.
+ * A companion as embedded in the kid read shape. `name_enc` / `look_enc` are
+ * enc:v1 ciphertext on the wire (NULL = the catalog model's stock name /
+ * default look); `persona` is the slim persona projection (NULL = the system
+ * default persona). decryptKid opens it into a DecryptedKidCompanion.
  */
-export type Kid = Omit<Row<"kids">, "active_persona_id" | "avatar_config"> & {
+export interface KidCompanion {
+  id: string;
+  persona_id: string | null;
+  name_enc: string | null;
+  look_enc: string | null;
+  created_at: string;
+  persona: KidActivePersona | null;
+  /** Client-only: the opened name_enc (decryptKid). NULL = the stock name. */
+  name?: string | null;
+  /** Client-only: the opened look_enc JSON (decryptKid), unsanitized. NULL = defaults. */
+  look?: Json | null;
+}
+/**
+ * Kid API read shape: companions travel with the kid, oldest first.
+ * `active_persona` is derived through the active companion (kept so persona
+ * readers don't need to know about companions). Write shapes (Insert/Update)
+ * take plain FK ids.
+ */
+export type Kid = Omit<Row<"kids">, "avatar_config"> & {
   active_persona: KidActivePersona | null;
+  companions: KidCompanion[];
   /** enc:v1: ciphertext on the wire; the decrypted { color, avatar } object client-side. */
   avatar_config: Json | null;
 };

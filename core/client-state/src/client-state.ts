@@ -10,11 +10,13 @@ import { type CaptchaStore, createCaptchaStore } from "./captcha-store";
 import { awaitSession } from "./await-session";
 import { type CompanionVolumeStore, createCompanionVolumeStore } from "./companion-volume-store";
 import { type ConnectivityStore, createConnectivityStore } from "./connectivity-store";
-import { createDodiAIClient, type DodiAIClient } from "./dodi-ai";
+import { createDodiAIClient, type DodiAIClient, IS_DODI_AI_OFFERED } from "./dodi-ai";
 import { createDodiAIBillingStore, type DodiAIBillingStore } from "./dodi-ai-billing-store";
 import { createDodiAIDefaultsStore, type DodiAIDefaultsStore } from "./dodi-ai-defaults-store";
 import { createDodiAIKeyStore, type DodiAIKeyStore } from "./dodi-ai-key-store";
 import { createGameCrypto, createGameStore, type GameCrypto, type GameStore } from "./game-store";
+import { createCompanionStageStore, type CompanionStageStore } from "./companion-stage-store";
+import { createCustomTricksStore, type CustomTricksStore } from "./custom-tricks";
 import { createKidStore, type KidStore } from "./kid-store";
 import type { ClientPlatform } from "./platform";
 import { createProvidersStore, type ProvidersStore } from "./providers-store";
@@ -40,6 +42,10 @@ export interface ClientState {
   execution: ExecutionResolver;
   activeKid: ActiveKidStore;
   companionVolume: CompanionVolumeStore;
+  /** The companion on screen: Playground state and trick requests. */
+  companionStage: CompanionStageStore;
+  /** Each companion's custom tricks, opened. */
+  customTricks: CustomTricksStore;
   captcha: CaptchaStore;
 }
 
@@ -57,7 +63,8 @@ export function createClientState(platform: ClientPlatform): ClientState {
   const dataDeps = { api, offlineCache, vault, connectivity };
   const providers = createProvidersStore(api, vault);
   const dodiAI = createDodiAIClient({
-    url: platform.dodiAIUrl,
+    // Not offered (open beta): no URL, the self-host behaviour everywhere.
+    url: IS_DODI_AI_OFFERED ? platform.dodiAIUrl : null,
     fetch: platform.fetch,
     getAccessToken: platform.getAccessToken,
   });
@@ -80,6 +87,8 @@ export function createClientState(platform: ClientPlatform): ClientState {
     execution: createExecutionResolver({ api, dodiAI, dodiAIDefaults, dodiAIKeys, providers }),
     activeKid: createActiveKidStore(platform.activeKid),
     companionVolume: createCompanionVolumeStore(platform.preferences),
+    companionStage: createCompanionStageStore(),
+    customTricks: createCustomTricksStore({ api, vault }),
     captcha: createCaptchaStore(api),
   };
 }

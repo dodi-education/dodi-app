@@ -179,3 +179,21 @@ describe("standardCommandsDoc", () => {
     expect(doc).not.toContain("place_item");
   });
 });
+
+describe("home-only companion tools", () => {
+  it("perform_trick and teach_trick are host tools, never declarable or in a game", () => {
+    for (const name of ["perform_trick", "teach_trick"]) {
+      const tool = STANDARD_TOOLS_BY_NAME[name];
+      expect(tool.kind).toBe("host");
+      expect(tool.voiceExposed).toBe(true);
+      expect(tool.isHomeOnly).toBe(true);
+      expect(tool.meta).toBeFalsy();
+      expect(DECLARABLE_CAPABILITY_NAMES).not.toContain(name);
+      expect(META_TOOL_NAMES).not.toContain(name);
+    }
+    // Even a game that lists them gets neither.
+    const names = buildGameToolDeclarations(["perform_trick", "teach_trick"]).map((d) => d.name);
+    expect(names).not.toContain("perform_trick");
+    expect(names).not.toContain("teach_trick");
+  });
+});

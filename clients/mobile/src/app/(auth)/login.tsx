@@ -1,4 +1,4 @@
-import { Link, useRouter } from "expo-router";
+import { Link, useLocalSearchParams, useRouter } from "expo-router";
 import { useRef, useState } from "react";
 import { View } from "react-native";
 import { useTranslations } from "use-intl";
@@ -29,6 +29,8 @@ export default function LoginScreen() {
   const t = useTranslations("auth");
   const tc = useTranslations("common");
   const router = useRouter();
+  // Set by Settings > Delete account after the account is gone.
+  const isAccountDeleted = useLocalSearchParams<{ deleted?: string }>().deleted === "1";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -106,6 +108,11 @@ export default function LoginScreen() {
             </VerifyCodeForm>
           ) : (
             <View className="flex flex-col gap-4">
+              {isAccountDeleted ? (
+                <View accessibilityRole="alert" className="rounded-lg bg-success-soft px-3 py-2">
+                  <Text className="text-sm text-success">{t("accountDeleted")}</Text>
+                </View>
+              ) : null}
               <View className="flex flex-col gap-2">
                 <Label>{t("email")}</Label>
                 <Input

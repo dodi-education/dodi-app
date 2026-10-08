@@ -1,9 +1,12 @@
 import * as THREE from "three";
 
+import { ACCESSORIES, isAccessoryName } from "./character-catalog";
 import type { CharacterFile } from "./character-files";
+import { shadeFor } from "./character-look";
 import type { CharacterPose } from "./character-pose";
 import { CharacterView } from "./character-view";
 import { HullOutline, isOutlineHull } from "./hull-outline";
+import type { MotionRig } from "./motion-clip";
 import { OutlinePass } from "./outline-pass";
 import { characterMaterial } from "./toon-materials";
 
@@ -69,20 +72,27 @@ export interface StageOptions {
 interface CharacterManifest {
   outlineColor: string;
   jawOpenDegrees: number;
+  /** Model units from the feet to the top of the head. */
+  height: number;
 }
+
+// Where flips turn about, as a share of the height: about the belly.
+const CENTER_OF_HEIGHT = 0.45;
 
 function readManifest(root: THREE.Object3D): CharacterManifest {
   const raw: unknown = root.userData.character;
-  const fallback: CharacterManifest = { outlineColor: "#34506a", jawOpenDegrees: 14 };
+  const fallback: CharacterManifest = { outlineColor: "#34506a", jawOpenDegrees: 14, height: 1 };
   if (typeof raw !== "string") return fallback;
   try {
     const parsed: unknown = JSON.parse(raw);
     if (typeof parsed !== "object" || parsed === null) return fallback;
     const outline = (parsed as { outline?: { color?: unknown } }).outline;
     const jaw = (parsed as { jaw?: { open_degrees?: unknown } }).jaw;
+    const height = (parsed as { height?: unknown }).height;
     return {
       outlineColor: typeof outline?.color === "string" ? outline.color : fallback.outlineColor,
       jawOpenDegrees: typeof jaw?.open_degrees === "number" ? jaw.open_degrees : fallback.jawOpenDegrees,
+      height: typeof height === "number" && height > 0 ? height : fallback.height,
     };
   } catch {
     return fallback;
@@ -114,6 +124,32 @@ function isShown(obj: THREE.Object3D): boolean {
   return true;
 }
 
+/** How a trick ended: played through, cut short (another trick, reduced motion), or not played. */
+export type TrickOutcome = "done" | "interrupted" | "reduced-motion";
+
+/** What the kid made of the character: material base colors and worn accessories. */
+export interface StageLook {
+  /** Material name → base color (#rrggbb); the shadow tone is derived. */
+  colors: Readonly<Record<string, string>>;
+  accessories: readonly string[];
+}
+
+interface ToonColors {
+  base: THREE.Color;
+  shade: THREE.Color;
+}
+
+interface PlayingTrick {
+  action: THREE.AnimationAction;
+  resolve: (outcome: TrickOutcome) => void;
+}
+
+/** Bone names as authored: GLTFLoader suffixes duplicates (`head_1` when a mesh is also `head`). */
+function authoredBoneName(name: string, isTaken: (base: string) => boolean): string {
+  const match = /^(.*)_\d+$/.exec(name);
+  return match && !isTaken(match[1]) ? match[1] : name;
+}
+
 /** The result of `setPose`, for the clients' diagnostics. */
 export interface PoseChange {
   /** The clip now playing (null: the file has neither the clip nor `idle`). */
@@ -141,10 +177,17 @@ export class CharacterStage {
   private readonly raycaster = new THREE.Raycaster();
   private readonly voiceLevel: () => number;
 
+  private readonly toonMaterials = new Map<string, { materials: THREE.ShaderMaterial[]; original: ToonColors }>();
+  private readonly rig: MotionRig;
+
   private hull: HullOutline | null = null;
   private outlineMode: OutlineMode;
   private current: THREE.AnimationAction | null = null;
   private pose: CharacterPose | null = null;
+  private look: StageLook = { colors: {}, accessories: [] };
+  private trick: PlayingTrick | null = null;
+  /** Trick actions fading out after their end, uncached once silent. */
+  private readonly retiring = new Set<THREE.AnimationAction>();
   private isReducedMotion = false;
   private jawLevel = 0;
 
@@ -176,6 +219,7 @@ export class CharacterStage {
       const isFine = accessoryMeshes.has(obj);
       this.outline.add(obj, isFine);
       this.outlined.push({ mesh: obj, isFine });
+      if (!isFine) this.indexToonMaterial(obj.material);
     });
     let jaw: THREE.Bone | null = null;
     root.traverse((obj) => {
@@ -185,10 +229,161 @@ export class CharacterStage {
     this.scene.add(root);
     this.character = root;
 
+    this.rig = this.snapshotRig(root);
+
     this.mixer = new THREE.AnimationMixer(root);
     for (const clip of character.animations) this.actions.set(clip.name, this.mixer.clipAction(clip));
     this.clipNames = character.animations.map((clip) => clip.name);
+    this.mixer.addEventListener("finished", (event) => this.onActionFinished(event.action));
     this.setOutlineMode(this.outlineMode);
+  }
+
+  /** The rig as tricks see it (motion-clip.ts): bones by authored name, their rest pose, the face. */
+  get motionRig(): MotionRig {
+    return this.rig;
+  }
+
+  /** Rig bone names (as authored). */
+  get boneNames(): string[] {
+    return [...this.rig.bones.keys()];
+  }
+
+  private snapshotRig(root: THREE.Object3D): MotionRig {
+    const found: THREE.Bone[] = [];
+    let face: THREE.Mesh | null = null;
+    root.traverse((obj) => {
+      if (obj instanceof THREE.Bone) found.push(obj);
+      if (obj instanceof THREE.Mesh && obj.name === "face" && obj.morphTargetDictionary) face = obj;
+    });
+    const names = new Set(found.map((bone) => bone.name));
+    const bones = new Map<string, THREE.Object3D>();
+    const rest = new Map<string, { position: THREE.Vector3; quaternion: THREE.Quaternion }>();
+    for (const bone of found) {
+      const name = authoredBoneName(bone.name, (base) => names.has(base));
+      bones.set(name, bone);
+      rest.set(name, { position: bone.position.clone(), quaternion: bone.quaternion.clone() });
+    }
+    return { bones, rest, face, centerHeight: CENTER_OF_HEIGHT * readManifest(root).height };
+  }
+
+  private indexToonMaterial(material: THREE.Material | THREE.Material[]): void {
+    for (const mat of Array.isArray(material) ? material : [material]) {
+      if (!(mat instanceof THREE.ShaderMaterial) || !mat.uniforms.baseColor || !mat.uniforms.shadeColor) continue;
+      const entry = this.toonMaterials.get(mat.name);
+      if (entry) {
+        if (!entry.materials.includes(mat)) entry.materials.push(mat);
+        continue;
+      }
+      this.toonMaterials.set(mat.name, {
+        materials: [mat],
+        original: {
+          base: (mat.uniforms.baseColor.value as THREE.Color).clone(),
+          shade: (mat.uniforms.shadeColor.value as THREE.Color).clone(),
+        },
+      });
+    }
+  }
+
+  /**
+   * Show the kid's look: recolor materials (a material not in `colors` gets its
+   * own colors back) and wear accessories on top of the pose's own.
+   */
+  applyLook(look: StageLook): void {
+    this.look = { colors: { ...look.colors }, accessories: [...look.accessories] };
+    for (const [name, { materials, original }] of this.toonMaterials) {
+      const base = look.colors[name];
+      const baseColor = base ? new THREE.Color(base) : original.base;
+      const shadeColor = base
+        ? new THREE.Color(shadeFor(base, `#${original.base.getHexString()}`, `#${original.shade.getHexString()}`))
+        : original.shade;
+      for (const material of materials) {
+        (material.uniforms.baseColor.value as THREE.Color).copy(baseColor);
+        (material.uniforms.shadeColor.value as THREE.Color).copy(shadeColor);
+      }
+    }
+    this.showAccessories();
+  }
+
+  /** Base color in use per material, for tests and diagnostics. */
+  materialColor(name: string): string | null {
+    const entry = this.toonMaterials.get(name);
+    if (!entry) return null;
+    return `#${(entry.materials[0].uniforms.baseColor.value as THREE.Color).getHexString()}`;
+  }
+
+  /** Whether an accessory shows right now. */
+  isAccessoryShown(name: string): boolean {
+    return this.accessories.get(name)?.visible ?? false;
+  }
+
+  /** The pose's accessories plus the look's, minus those the pose's clip takes off. */
+  private showAccessories(): void {
+    const clip = this.pose?.clip ?? null;
+    for (const [name, accessory] of this.accessories) {
+      const isWorn = (this.pose?.accessories.includes(name) ?? false) || this.look.accessories.includes(name);
+      const isTakenOff =
+        clip !== null && isAccessoryName(name) && ACCESSORIES[name].hiddenDuringClips.includes(clip);
+      accessory.visible = isWorn && !isTakenOff;
+    }
+  }
+
+  /** A trick is playing. */
+  get isPlayingTrick(): boolean {
+    return this.trick !== null;
+  }
+
+  /**
+   * Play a trick clip once, cross-faded in from the pose's loop and back into
+   * it at the end. A trick cuts short the one before; reduced motion skips it.
+   * Resolves when it ends.
+   */
+  playOnce(clip: THREE.AnimationClip, isReducedMotion: boolean): Promise<TrickOutcome> {
+    if (isReducedMotion || this.isReducedMotion) return Promise.resolve("reduced-motion");
+    const action = this.mixer.clipAction(clip);
+    action.setLoop(THREE.LoopOnce, 1);
+    action.clampWhenFinished = true;
+    action.reset().setEffectiveWeight(1).play();
+
+    // Cut short: the trick before fades straight into this one (the loop stays out).
+    const previous = this.trick;
+    this.trick = null;
+    const from = previous?.action ?? this.current;
+    if (from && from !== action) from.crossFadeTo(action, CROSS_FADE_SECONDS, false);
+    if (previous) {
+      this.retiring.add(previous.action);
+      previous.resolve("interrupted");
+    }
+    return new Promise((resolve) => {
+      this.trick = { action, resolve };
+    });
+  }
+
+  private onActionFinished(action: THREE.AnimationAction): void {
+    if (this.trick?.action === action) this.endTrick("done");
+  }
+
+  /** Fade from the playing trick back into the pose's loop. */
+  private endTrick(outcome: TrickOutcome): void {
+    const trick = this.trick;
+    if (!trick) return;
+    this.trick = null;
+    const next = (this.pose && this.actions.get(this.pose.clip)) ?? this.actions.get("idle") ?? null;
+    if (next) {
+      next.reset().setEffectiveWeight(1).play();
+      if (outcome === "done") trick.action.crossFadeTo(next, CROSS_FADE_SECONDS, false);
+      this.current = next;
+    }
+    if (outcome === "done" && next) this.retiring.add(trick.action);
+    else this.retire(trick.action);
+    trick.resolve(outcome);
+  }
+
+  private retire(action: THREE.AnimationAction): void {
+    this.retiring.delete(action);
+    action.stop();
+    const clip = action.getClip();
+    this.mixer.uncacheAction(clip);
+    this.mixer.uncacheClip(clip);
   }
 
   get currentPose(): CharacterPose | null {
@@ -203,9 +398,9 @@ export class CharacterStage {
   setPose(pose: CharacterPose, isReducedMotion: boolean): PoseChange {
     const previous = this.pose;
     this.pose = pose;
-    for (const [name, accessory] of this.accessories) {
-      accessory.visible = pose.accessories.includes(name);
-    }
+    this.showAccessories();
+    // A trick plays on; it fades into this pose's clip when it ends.
+    if (this.trick) return { clip: this.currentClip, isChanged: false, unchangedBecause: "same-action" };
     if (previous?.clip === pose.clip && this.current) {
       return { clip: this.currentClip, isChanged: false, unchangedBecause: "same-pose" };
     }
@@ -232,6 +427,7 @@ export class CharacterStage {
   setReducedMotion(isReducedMotion: boolean): void {
     if (isReducedMotion === this.isReducedMotion) return;
     this.isReducedMotion = isReducedMotion;
+    if (isReducedMotion) this.endTrick("interrupted");
     if (isReducedMotion && this.current) {
       for (const action of this.actions.values()) if (action !== this.current) action.stop();
       this.current.reset().setEffectiveWeight(1).play();
@@ -243,6 +439,9 @@ export class CharacterStage {
   /** Advance the clips by `deltaSeconds` (capped at 0.1) and move the jaw with the voice. */
   update(deltaSeconds: number): void {
     this.mixer.update(Math.min(deltaSeconds, 0.1));
+    for (const action of this.retiring) {
+      if (!action.isRunning() || action.getEffectiveWeight() === 0) this.retire(action);
+    }
     this.applyVoiceJaw();
   }
 

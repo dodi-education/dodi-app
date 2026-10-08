@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 
+import { AiSharingConsent } from "@/components/parent/ai-sharing-consent";
 import { Icon } from "@/components/shared/icon";
 import { useDateFormat } from "@/components/providers/date-format-provider";
 import { Section } from "@/components/parent/section";
@@ -59,6 +60,7 @@ export function DodiAIPanel({ config, applyConfig, clearConfig }: DodiAIPanelPro
   const [enabling, setEnabling] = useState(false);
   const [justEnabled, setJustEnabled] = useState(false);
   const [enableError, setEnableError] = useState<string | null>(null);
+  const [hasConsented, setHasConsented] = useState(false);
 
   useEffect(() => {
     void useDodiAIBillingStore.getState().load();
@@ -70,7 +72,7 @@ export function DodiAIPanel({ config, applyConfig, clearConfig }: DodiAIPanelPro
   const needsCredits = needsDodiCredits(config, keyStatus, billing);
 
   async function handleEnable() {
-    if (enabling) return;
+    if (enabling || !hasConsented) return;
     setEnabling(true);
     setEnableError(null);
     // Mint keys, then write the recommended config. An empty balance renders
@@ -145,11 +147,25 @@ export function DodiAIPanel({ config, applyConfig, clearConfig }: DodiAIPanelPro
               {t("managedEnabling")}
             </div>
           ) : (
-            <Button onClick={() => void handleEnable()} className="cursor-pointer">
+            <Button
+              onClick={() => void handleEnable()}
+              disabled={!hasConsented}
+              className="cursor-pointer"
+            >
               {t("managedEnable")}
             </Button>
           )}
         </div>
+
+        {!enabled ? (
+          <div className="px-5 pb-4">
+            <AiSharingConsent
+              checked={hasConsented}
+              onCheckedChange={setHasConsented}
+              providerName={null}
+            />
+          </div>
+        ) : null}
 
         {needsCredits ? (
           <div className="flex items-start gap-2 px-5 py-3 text-[13px]">

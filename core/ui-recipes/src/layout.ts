@@ -171,6 +171,10 @@ export const authLayout = {
   logoHeadSize: 48,
   logoText: "text-2xl font-bold text-dodi-800",
   container: "w-full max-w-md",
+  /** Privacy policy, terms and imprint under the card, before anyone signs in. */
+  legal: "mt-6 flex-row flex-wrap items-center justify-center gap-x-4 gap-y-1",
+  legalLink: "text-xs text-muted-foreground",
+  webLegalLink: "hover:underline",
 } as const;
 
 /** The page background (web: body). */

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 
+import { AiSharingConsent } from "@/components/parent/ai-sharing-consent";
 import { Icon } from "@/components/shared/icon";
 import { useDateFormat } from "@/components/providers/date-format-provider";
 import { Row, RowMain, RowMeta, RowTitle } from "@/components/parent/rows";
@@ -67,6 +68,7 @@ export function ByokKeysPanel({ onFirstKeySeeded }: ByokKeysPanelProps) {
   const [validationStatus, setValidationStatus] = useState<"idle" | "valid" | "invalid">("idle");
   const [validationError, setValidationError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [hasConsented, setHasConsented] = useState(false);
 
   const providers = byokKeyRows(providersMap);
   const availableProviders = addableProviders(providersMap);
@@ -79,10 +81,11 @@ export function ByokKeysPanel({ onFirstKeySeeded }: ByokKeysPanelProps) {
     setValidationStatus("idle");
     setValidationError("");
     setSaving(false);
+    setHasConsented(false);
   }
 
   async function handleValidateAndSave() {
-    if (!selectedProvider || !apiKey) return;
+    if (!selectedProvider || !apiKey || !hasConsented) return;
 
     setValidating(true);
     setValidationStatus("idle");
@@ -214,12 +217,21 @@ export function ByokKeysPanel({ onFirstKeySeeded }: ByokKeysPanelProps) {
                     {validationError || t("keyInvalid")}
                   </div>
                 )}
+
+                <AiSharingConsent
+                  checked={hasConsented}
+                  onCheckedChange={setHasConsented}
+                  providerName={
+                    availableProviders.find((p) => p.id === selectedProvider)?.name ??
+                    t("aiSharingConsentThisProvider")
+                  }
+                />
               </div>
 
               <DialogFooter>
                 <Button
                   onClick={handleValidateAndSave}
-                  disabled={!selectedProvider || !apiKey || validating || saving}
+                  disabled={!selectedProvider || !apiKey || !hasConsented || validating || saving}
                   className="cursor-pointer"
                 >
                   {validating || saving ? (

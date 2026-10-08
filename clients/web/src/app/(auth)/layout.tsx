@@ -1,6 +1,8 @@
 import Image from "next/image";
 import Link from "next/link";
 
+import { AuthLegalLinks } from "@/components/auth/auth-legal-links";
+
 export default function AuthLayout({
   children,
 }: {
@@ -17,7 +19,10 @@ export default function AuthLayout({
         />
         <span className="text-2xl font-bold text-dodi-800">dodi</span>
       </Link>
-      <div className="w-full max-w-md">{children}</div>
+      <div className="w-full max-w-md">
+        {children}
+        <AuthLegalLinks />
+      </div>
     </div>
   );
 }

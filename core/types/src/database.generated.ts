@@ -125,7 +125,7 @@ export interface AiUsageLogs {
   cache_read_tokens: number | null;
   cache_write_tokens: number | null;
   created_at: Generated<Timestamp>;
-  event_type: "game_create" | "game_edit" | "game_plan" | "game_analysis" | "game_text_generation" | "game_translation" | "memory_update" | "voice_minutes";
+  event_type: "game_create" | "game_edit" | "game_plan" | "game_analysis" | "game_text_generation" | "game_translation" | "memory_update" | "custom_trick" | "voice_minutes";
   game_id: string | null;
   id: Generated<string>;
   input_tokens: number | null;
@@ -191,6 +191,56 @@ export interface AuthVerifications {
   identifier: string;
   updated_at: Generated<Timestamp>;
   value: string;
+}
+
+export interface Companions {
+  account_id: string;
+  created_at: Generated<Timestamp>;
+  id: Generated<string>;
+  kid_id: string;
+  /**
+   * enc:v1 sealed JSON CompanionLook {v, model, colors, accessories}. NULL = the catalog defaults. Never jsonb.
+   */
+  look_enc: string | null;
+  /**
+   * enc:v1 sealed companion name. NULL = the catalog model's stock name ("dodi").
+   */
+  name_enc: string | null;
+  /**
+   * Personality (personas row). NULL = the system default persona. Plaintext.
+   */
+  persona_id: string | null;
+  updated_at: Generated<Timestamp>;
+}
+
+export interface ContentReports {
+  account_id: string;
+  client_platform: "web" | "mobile";
+  content_kind: "companion_answer" | "game" | "discover_game";
+  created_at: Generated<Timestamp>;
+  /**
+   * The parent's own description, plaintext, at most 2000 characters.
+   */
+  details: string | null;
+  game_id: string | null;
+  id: Generated<string>;
+  kid_id: string | null;
+  reason: "inappropriate" | "upsetting" | "wrong" | "other";
+  /**
+   * When the operator handled the report; NULL while open.
+   */
+  resolved_at: Timestamp | null;
+}
+
+export interface CustomTricks {
+  account_id: string;
+  companion_id: string;
+  created_at: Generated<Timestamp>;
+  id: Generated<string>;
+  /**
+   * enc:v1 sealed JSON { v, name, description, model, requiredBones, script }. Server cannot decrypt.
+   */
+  trick_enc: string;
 }
 
 export interface Devices {
@@ -475,7 +525,10 @@ export interface InviteCodes {
 
 export interface Kids {
   account_id: string;
-  active_persona_id: string | null;
+  /**
+   * The companion the kid is with. NULL or stale = the kid's oldest companion.
+   */
+  active_companion_id: string | null;
   /**
    * E2EE enc:v1: JSON string { color, avatar } — the kid's chosen look, sealed under the account VMK. Server cannot decrypt.
    */
@@ -487,6 +540,10 @@ export interface Kids {
   birthdate: string | null;
   can_add_friends: Generated<boolean>;
   can_be_added_as_friend: Generated<boolean>;
+  /**
+   * Parent setting: the kid may swap a companion's avatar (catalog model) in the Playground. Colors, accessories, name and tricks are always open.
+   */
+  can_change_companion_avatar: Generated<boolean>;
   created_at: Generated<Timestamp>;
   /**
    * Plaintext per-kid date/time display override ({ dateStyle?, timeStyle?, timeZoneEnc? }); absent fields inherit the account default. An explicit timezone is sealed enc:v1: in timeZoneEnc.
@@ -633,6 +690,9 @@ export interface DB {
   auth_sessions: AuthSessions;
   auth_users: AuthUsers;
   auth_verifications: AuthVerifications;
+  companions: Companions;
+  content_reports: ContentReports;
+  custom_tricks: CustomTricks;
   devices: Devices;
   error_logs: ErrorLogs;
   friendships: Friendships;

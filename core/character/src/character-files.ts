@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader, type GLTFLoaderPlugin, type GLTFParser } from "three/examples/jsm/loaders/GLTFLoader.js";
 
+import { ACCESSORY_LIST } from "./character-catalog";
 import { decodePng } from "./png-decode";
 
 /**
@@ -12,8 +13,8 @@ import { decodePng } from "./png-decode";
  */
 
 /** The accessories every character can wear, by name (their files ship with the app). */
-export const ACCESSORY_NAMES = ["headphones"] as const;
-export type AccessoryName = (typeof ACCESSORY_NAMES)[number];
+export const ACCESSORY_NAMES = ACCESSORY_LIST;
+export type { AccessoryName } from "./character-catalog";
 
 /** What a loaded character file provides to the stage. */
 export interface CharacterFile {

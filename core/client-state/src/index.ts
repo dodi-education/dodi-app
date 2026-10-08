@@ -13,6 +13,7 @@ export * from "./dodi-ai-billing-store";
 export * from "./resolve-execution";
 export * from "./active-kid-store";
 export * from "./companion-volume-store";
+export * from "./companion-stage-store";
 export * from "./companion-audio";
 export * from "./companion-session";
 export * from "./client-state";

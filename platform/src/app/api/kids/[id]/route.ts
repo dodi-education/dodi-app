@@ -4,6 +4,12 @@ import { z } from "zod/v4";
 import { serverErrorResponse } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
 import {
+  CompanionError,
+  getActiveCompanion,
+  setActiveCompanion,
+  updateCompanion,
+} from "@/services/companions";
+import {
   deleteKid,
   getKid,
   updateKid,
@@ -21,7 +27,10 @@ const UpdateKidSchema = z.object({
     .optional(),
   birthdate: z.string().max(2000).nullable().optional(),
   language: z.string().min(2).max(5).optional(),
+  // Compatibility input for older clients: the persona now lives on the
+  // companion, so this sets the ACTIVE companion's persona.
   active_persona_id: z.string().uuid().nullable().optional(),
+  active_companion_id: z.string().uuid().optional(),
   memory: z.string().max(100000).nullable().optional(),
   parent_notes: z.string().max(200000).nullable().optional(),
   // avatar_config + avatar_pin arrive as opaque client-encrypted ciphertext
@@ -33,6 +42,7 @@ const UpdateKidSchema = z.object({
   // identity keys are published via POST /api/kids/[id]/friend-keys, not here.
   can_add_friends: z.boolean().optional(),
   can_be_added_as_friend: z.boolean().optional(),
+  can_change_companion_avatar: z.boolean().optional(),
   incoming_friend_requests_require_parent_approval: z.boolean().optional(),
   outgoing_friend_requests_require_parent_approval: z.boolean().optional(),
   // Persisted Dodi listening state (plaintext operational): an ISO timestamp
@@ -97,10 +107,26 @@ export async function PATCH(
     );
   }
 
+  const { active_persona_id, active_companion_id, ...kidUpdates } = result.data;
   try {
-    const kid = await updateKid(db, id, result.data);
+    if (active_companion_id !== undefined) {
+      await setActiveCompanion(db, accountId, id, active_companion_id);
+    }
+    if (active_persona_id !== undefined) {
+      const active = await getActiveCompanion(db, accountId, id);
+      if (active) {
+        await updateCompanion(db, accountId, active.id, { persona_id: active_persona_id });
+      }
+    }
+    const kid =
+      Object.keys(kidUpdates).length > 0
+        ? await updateKid(db, id, kidUpdates)
+        : await getKid(db, id);
     return NextResponse.json(kid);
   } catch (error) {
+    if (error instanceof CompanionError) {
+      return NextResponse.json({ error: error.code }, { status: 404 });
+    }
     return serverErrorResponse(error, "Failed to update kid", "api/kids/[id]#PATCH", {
       accountId,
     });

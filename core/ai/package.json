@@ -14,6 +14,7 @@
     "./validate-key": "./src/validate-key.ts",
     "./provider-errors": "./src/provider-errors.ts",
     "./memory-prompt": "./src/memory-prompt.ts",
+    "./custom-trick-prompt": "./src/custom-trick-prompt.ts",
     "./dodi-context": "./src/dodi-context.ts",
     "./learning-context": "./src/learning-context.ts",
     "./game-agent": "./src/game-agent.ts",
@@ -48,6 +49,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",
+    "@dodi/character": "workspace:*",
     "@dodi/games": "workspace:*",
     "@dodi/intl": "workspace:*",
     "@dodi/types": "workspace:*",

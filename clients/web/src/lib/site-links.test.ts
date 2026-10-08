@@ -12,6 +12,11 @@ describe("siteUrl", () => {
     );
   });
 
+  it("links the legal pages per locale", () => {
+    expect(siteUrl("privacy", "en")).toBe("https://www.dodi.app/privacy");
+    expect(siteUrl("terms", "de")).toBe("https://www.dodi.app/de/nutzungsbedingungen");
+  });
+
   it("falls back to the English path for an unknown locale", () => {
     expect(siteUrl("byok", "fr")).toBe(
       "https://www.dodi.app/blog/how-does-byok-work",

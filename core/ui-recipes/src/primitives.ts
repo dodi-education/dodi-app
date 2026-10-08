@@ -198,6 +198,14 @@ export const input = {
   placeholderColor: "#93A5B8",
 } as const;
 
+/** A multi-line text field, styled like the inputs (mobile: TextInput multiline). */
+export const textarea = {
+  box: "min-h-24 w-full rounded-md border border-input bg-card px-3 py-2 disabled:opacity-50",
+  text: "text-base text-foreground",
+  web: "outline-none placeholder:text-faint transition-[color,box-shadow,border-color] hover:border-faint focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary-soft-2 md:text-sm",
+  placeholderColor: "#93A5B8",
+} as const;
+
 /** A select styled like the inputs inside a FieldRow. */
 export const fieldSelect = {
   box: "h-9 w-full rounded-md border border-input bg-card px-3",

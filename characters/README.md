@@ -12,6 +12,7 @@ procedurally in Blender so it can be regenerated and tweaked from code.
 |---|---|
 | `blender/build_dodi.py` | Builds the stock dodi: meshes, rig, face, sockets, clips. The source of truth. |
 | `blender/build_headphones.py` | Builds the headphones accessory, fitted to dodi's head with ray casts. |
+| `blender/build_party_hat.py`, `build_glasses.py`, `build_scarf.py` | Build the party hat, glasses and scarf accessories, each fitted to dodi with ray casts. |
 | `blender/attach_preview.py` | Exports a character wearing accessories as one `.glb`, for review in a viewer. |
 | `blender/kit.py` | Modelling helpers: metaball blobs, face patches and morphs, painted regions, rig, clips. |
 | `blender/sdf.py` | Distance fields and a surface-nets mesher, for shapes metaballs cannot make (the head and beak). |
@@ -22,14 +23,15 @@ procedurally in Blender so it can be regenerated and tweaked from code.
 | `tests/face_morphs.py` | Imports the `.glb` and checks blended expressions never leave the face blank or cut by the skin. |
 | `tests/atlas_bleed.py` | Imports the `.glb` and checks no face picture picks up colour from a neighbouring atlas cell. |
 | `tests/mouth_open.py` | Imports the `.glb`, opens the jaw and checks the beak is see-through from the side, dark inside from the front and below, and never shows another part. |
-| `tests/accessory_fit.py` | Puts an accessory on its socket and checks it touches the head, isn't buried and clears the antennae, at rest and through the clips it is worn in. |
+| `tests/accessory_fit.py` | Puts each accessory on its socket and checks it touches the head, isn't buried, clears the antennae and keeps its marked parts off the skin, at rest, through every clip and with the jaw wide open. |
 | `dodi/dodi.glb` | The runtime asset. |
 | `dodi/face-atlas.png` | Every face state (also embedded in the `.glb`). |
 | `dodi/dodi.blend` | Built alongside the `.glb` for inspection in Blender (gitignored). |
-| `dodi/previews/dodi-headphones.glb` | dodi wearing the headphones, for gltf-viewer (gitignored, made by `preview-all.sh`). |
+| `dodi/previews/dodi-headphones.glb`, `dodi-dressed.glb` | dodi wearing the headphones, and the party hat, glasses and scarf together, for gltf-viewer (gitignored, made by `preview-all.sh`). |
 | `accessories/headphones/headphones.glb` | The headphones accessory (the "deaf" state). |
 | `accessories/headphones/note.png` | The note on the ear cups (also embedded in the `.glb`). |
-| `../clients/web/public/characters/`, `../clients/mobile/assets/characters/` | Copies the builds write for the apps to load (`dodi.glb`, `accessories/headphones.glb`); `core/character`'s tests fail when they drift. |
+| `accessories/party_hat/party_hat.glb`, `accessories/glasses/glasses.glb`, `accessories/scarf/scarf.glb` | The kid-selectable accessories. |
+| `../clients/web/public/characters/`, `../clients/mobile/assets/characters/` | Copies the builds write for the apps to load (`dodi.glb`, `accessories/<name>.glb`); `core/character`'s tests fail when they drift. |
 
 ## In the app
 
@@ -51,9 +53,13 @@ Needs Blender 5.2+ on the `PATH` (the scripts use its bundled numpy). From `dodi
 
 ```sh
 blender --background --python-exit-code 1 --python characters/blender/build_dodi.py         # ~10 s
-blender --background --python-exit-code 1 --python characters/blender/build_headphones.py   # after dodi: fits to it
+for a in headphones party_hat glasses scarf; do                                              # after dodi: fit to it
+  blender --background --python-exit-code 1 --python characters/blender/build_$a.py
+done
 python3 characters/validate.py characters/dodi/dodi.glb
-python3 characters/validate.py characters/accessories/headphones/headphones.glb
+for a in headphones party_hat glasses scarf; do
+  python3 characters/validate.py characters/accessories/$a/$a.glb
+done
 for t in face_morphs atlas_bleed mouth_open accessory_fit; do
   blender --background --python-exit-code 1 --python characters/tests/$t.py
 done
@@ -67,7 +73,8 @@ Generic glTF viewers such as gltf-viewer.donmccurdy.com play the clips with
 their expressions, and their morph target panel switches faces by hand. They
 draw plain PBR lighting without outlines: toon shading and outlines are the
 app renderer's job. Viewers open one file at a time, so to see the headphones
-on dodi open `dodi/previews/dodi-headphones.glb` and play `deaf`.
+on dodi open `dodi/previews/dodi-headphones.glb` and play `deaf`; the party
+hat, glasses and scarf are worn together in `dodi/previews/dodi-dressed.glb`.
 
 A single preview: `blender --background characters/dodi/dodi.blend --python characters/blender/preview.py -- --views hero --pose think:0 --suffix=-think` (`--face eyes:mouth` forces an expression, `--jaw 12` opens the mouth, `--accessory PATH.glb` puts an accessory on).
 
@@ -174,6 +181,17 @@ cut along a smooth contour. They sit flush with the surface; nothing bulges out.
   track on the face's shape keys. The exporter's NLA mode merges them into one
   glTF animation.
 
+### Tricks are not clips
+
+Tricks (the pirouette and the other one-shot moves, built-in or custom) are
+not glTF clips and are not in the `.glb`. They are motion scripts: small
+JSON-like data, a list of timed poses giving bone rotations in degrees (and
+root offsets) in the character's frame, plus the face state to show. They live
+in `core/character/src/tricks/<model>.ts` (`dodi.ts` for the stock dodi) and
+`core/character/src/motion-clip.ts` turns them into animation clips at
+runtime. A model needs nothing extra for tricks to work: its bones only have
+to follow the skeleton conventions above (names and identity rest rotations).
+
 ### Manifest
 
 The scene `extras.character` holds a JSON string. It is a string because
@@ -210,15 +228,24 @@ of a character's sockets.
   their socket hangs on. Materials follow the character rules (`shade_color`,
   or `unlit` for decals such as the note on the ear cups).
 - At most 8k triangles, 1 MB and 512 px per texture.
+- Optional: a part's node `extras.clearance` (metres) is the gap it must keep
+  from the character's skin; `tests/accessory_fit.py` checks it (the glasses'
+  rims and bridge use it). The runtime ignores it.
 - `fitted_to` names the character it was shaped for. The stock accessories
   are fitted to dodi's head; another character may need its own fit.
 
-The headphones are built by `build_headphones.py`, which imports the exported
-dodi and fits the cups and band to its hood with ray casts:
+Every stock accessory is built by its own `build_<name>.py`, which imports the
+exported dodi and fits the prop to its real surface with ray casts:
 
-- the cushions press a few millimetres into the hood so they read as touching;
-- the band runs over the middle of the head, leaning a little forward so it passes in front of the antennae (tilted back, it looked like it would slip off);
-- `tests/accessory_fit.py` keeps it that way.
+| Accessory | Socket | How it is fitted |
+|---|---|---|
+| `headphones` | `socket_ears` | The cushions press a few millimetres into the hood so they read as touching; the band runs over the middle of the head, leaning a little forward so it passes in front of the antennae (tilted back, it looked like it would slip off). |
+| `party_hat` | `socket_head_top` | A pink cone with spiral yellow stripes (a painted region, cut exactly along the stripes), a cream roll round the rim and a pompom. It stands on the crown in front of the antennae, tipped forward and to the character's right; its rim is dropped onto the hood ray by ray, so it sits on the curved head instead of on a flat base. |
+| `glasses` | `socket_eyes` | Round red frames, no lenses. dodi's eyes sit on the sides of the head, so each rim faces along its own eye (turned a little to the front) and is pushed out until the whole ring clears the face and beak by 3.5 mm; the bridge arches over the snout and the temples run back along the head to rest on the hood. The rims and bridge carry `clearance` in their extras so the test keeps them off the face. |
+| `scarf` | `socket_neck` | A chunky ribbed scarf with cream stripes, a knot and one short end with tassels hanging down the chest. The loop follows the tilted collar where the neck meets the body. It rides on the neck bone while the head, body and skinned hood move on their own, so it is fitted against the character in every pose of every clip (moved into the socket's frame), not just at rest. |
+
+`tests/accessory_fit.py` keeps them that way, for every clip and with the jaw
+wide open. Tricks (motion scripts played at runtime) are not checked by it.
 
 ### How app states map onto a character
 

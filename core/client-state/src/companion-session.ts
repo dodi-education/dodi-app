@@ -34,6 +34,7 @@ import {
 } from "@dodi/ai/voice/voice-client";
 import { defaultVoiceTransport, type VoiceTransport } from "@dodi/ai/voice/voice-socket";
 import { VoiceSocketPool, VoiceSocketPoolError } from "@dodi/ai/voice/voice-socket-pool";
+import { CHARACTER_MODELS, type CharacterModelId } from "@dodi/character/character-catalog";
 import { extractCommandMarkers } from "@dodi/games/command-markers";
 import { gameDebug, gameDebugWarn } from "@dodi/games/debug";
 import { STANDARD_TOOLS_BY_NAME } from "@dodi/games/toolbox";
@@ -44,6 +45,9 @@ import { type AudioPort, type AudioSpeaker, isMicrophoneError, type MicRecorder 
 import { createCompanionPresence } from "./companion-presence";
 import { createConversationRecap } from "./companion-recap";
 import { createCompanionSources } from "./companion-sources";
+import type { StageTrick } from "./companion-stage-store";
+import { activeCompanionOf, companionLookOf } from "./companions";
+import { canPerformTrick, teachTrick, trickLanguageName } from "./custom-tricks";
 import { readKidVolume } from "./companion-volume-store";
 import type { ClientState } from "./client-state";
 import { createGameTextAssistant, type GameTextAssistant } from "./game-text-assistant";
@@ -154,7 +158,8 @@ export interface CompanionSessionState {
   clearPendingNavigation: () => void;
 
   // Actions
-  setContext: (context: CompanionContext, kidId: string) => Promise<void>;
+  /** Switch context; `force` rebuilds the session even for the same context (e.g. a new companion). */
+  setContext: (context: CompanionContext, kidId: string, opts?: { force?: boolean }) => Promise<void>;
   setDisplayMode: (mode: CompanionDisplayMode) => void;
   connect: (kidId: string) => Promise<void>;
   /** Wake from deaf. `deliberate` false = an incidental page click, which never
@@ -250,7 +255,9 @@ export interface CompanionServices {
 export type CompanionStores = Pick<
   ClientState,
   "kids" | "games" | "vault" | "connectivity" | "companionVolume" | "execution"
->;
+> &
+  /** The companion's body: tricks it knows and plays (optional: no tricks without). */
+  Partial<Pick<ClientState, "account" | "companionStage" | "customTricks">>;
 
 export interface CompanionSessionDeps {
   /** The platform API (transcripts, presence toggles, activity, usage). */
@@ -318,6 +325,18 @@ const READ_ALOUD_FRAME =
   "clearly, with no introduction, no commentary, nothing added before or " +
   "after:\n\n";
 
+/** A trick by the name the voice model used: exact, then contained either way. */
+export function matchTrick<T extends { id: string; name: string }>(asked: string, tricks: readonly T[]): T | null {
+  const norm = (text: string): string => text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+  const wanted = norm(asked);
+  if (!wanted) return null;
+  return (
+    tricks.find((t) => norm(t.name) === wanted || norm(t.id) === wanted) ??
+    tricks.find((t) => norm(t.name).includes(wanted) || wanted.includes(norm(t.name))) ??
+    null
+  );
+}
+
 function isAbortError(err: unknown): boolean {
   return (
     typeof err === "object" &&
@@ -348,6 +367,8 @@ export function createCompanionSession(deps: CompanionSessionDeps): CompanionSes
     games: stores.games,
     vault: stores.vault,
     execution: stores.execution,
+    account: stores.account,
+    customTricks: stores.customTricks,
   });
   const services: CompanionServices = {
     transcripts:
@@ -1331,12 +1352,12 @@ export function createCompanionSession(deps: CompanionSessionDeps): CompanionSes
       }
     },
 
-    setContext: async (newContext, kidId) => {
+    setContext: async (newContext, kidId, opts) => {
       const current = getState();
       const oldContext = current.context;
 
       // If same context and same kid, just update gameState if needed
-      if (!contextRequiresReconnect(oldContext, newContext)) {
+      if (!opts?.force && !contextRequiresReconnect(oldContext, newContext)) {
         setState({ context: newContext });
         return;
       }
@@ -1928,6 +1949,95 @@ export function createCompanionSession(deps: CompanionSessionDeps): CompanionSes
   }
 
   /** analyze_game_state: offload complex state analysis to the thinking model. */
+  // -------------------------------------------------------------------------
+  // Tricks (home): the companion's 3D body performs and learns tricks
+  // -------------------------------------------------------------------------
+
+  /** The kid's active companion and the tricks its avatar can do, by name. */
+  async function knownTricks(kidId: string): Promise<{ companionId: string | null; model: CharacterModelId; tricks: StageTrick[] }> {
+    const kid = await stores.kids.getState().loadOne(kidId);
+    const companion = kid ? activeCompanionOf(kid) : null;
+    const model = companionLookOf(companion).model;
+    const builtIn = CHARACTER_MODELS[model].tricks.map((t) => ({ id: t.id, name: t.script.name, script: t.script }));
+    const custom =
+      companion && stores.customTricks
+        ? (await stores.customTricks.getState().load(companion.id).catch(() => []))
+            .filter((t) => canPerformTrick(t, model))
+            .map((t) => ({ id: t.id, name: t.name, script: t.script }))
+        : [];
+    return { companionId: companion?.id ?? null, model, tricks: [...builtIn, ...custom] };
+  }
+
+  function handlePerformTrick(event: Extract<VoiceEvent, { type: "toolCall" }>, kidId: string): void {
+    const respond = (response: Record<string, unknown>): void =>
+      client?.sendToolResponse(event.id, event.name, response);
+    const stage = stores.companionStage;
+    if (!stage?.getState().isCharacterShown) {
+      respond({ ok: false, error: "Your 3D body isn't showing right now, so you can't do tricks." });
+      return;
+    }
+    const asked = typeof event.args.trick === "string" ? event.args.trick : "";
+    void knownTricks(kidId).then(({ tricks }) => {
+      const trick = matchTrick(asked, tricks);
+      if (!trick) {
+        respond({
+          ok: false,
+          error: `You don't know "${asked}" yet.`,
+          known_tricks: tricks.map((t) => t.name),
+          hint: "Offer to learn it (teach_trick).",
+        });
+        return;
+      }
+      // Answer at once so the voice can cheer along while the body moves.
+      respond({ ok: true, performing: trick.name });
+      void stage.getState().requestTrick(trick);
+    });
+  }
+
+  async function handleTeachTrick(event: Extract<VoiceEvent, { type: "toolCall" }>, kidId: string): Promise<void> {
+    const respond = (response: Record<string, unknown>): void =>
+      client?.sendToolResponse(event.id, event.name, response);
+    const stage = stores.companionStage;
+    const description = typeof event.args.description === "string" ? event.args.description : "";
+    if (!stage?.getState().isCharacterShown || !stores.customTricks) {
+      respond({ ok: false, error: "Your 3D body isn't showing right now, so you can't learn tricks." });
+      return;
+    }
+    const kid = await stores.kids.getState().loadOne(kidId);
+    const { companionId, model } = await knownTricks(kidId);
+    if (!kid || !companionId) {
+      respond({ ok: false, error: "No companion to teach." });
+      return;
+    }
+    const result = await stage.getState().whileLearning(() =>
+      withAiActivity("thinking", () =>
+        teachTrick(
+          { resolveThinking: () => stores.execution.resolveThinking(), reportUsage },
+          { kidId, model, description, languageName: trickLanguageName(kid.language) },
+        ),
+      ),
+    );
+    if (!result.ok) {
+      respond({
+        ok: false,
+        error:
+          result.reason === "no_thinking"
+            ? "A grown-up needs to set up a thinking model before you can learn tricks."
+            : "You couldn't figure that trick out. Ask the child to describe it another way.",
+      });
+      return;
+    }
+    // Learned by voice: kept right away (the Playground previews before keeping).
+    let name = result.record.name;
+    try {
+      name = (await stores.customTricks.getState().save(companionId, result.record)).name;
+    } catch {
+      // Still performed; it just isn't kept (for example at the trick limit).
+    }
+    respond({ ok: true, learned: name });
+    void stage.getState().requestTrick({ id: "voice", name, script: result.script });
+  }
+
   function handleAnalyzeGameState(
     event: Extract<VoiceEvent, { type: "toolCall" }>,
     kidId: string,
@@ -2122,6 +2232,10 @@ export function createCompanionSession(deps: CompanionSessionDeps): CompanionSes
 
           if (event.name === "launch_game") {
             handleLaunchGame(event);
+          } else if (event.name === "perform_trick" && !isGameContext) {
+            handlePerformTrick(event, kidId);
+          } else if (event.name === "teach_trick" && !isGameContext) {
+            void handleTeachTrick(event, kidId);
           } else if (isGameContext && (toolKind === "bridge" || toolKind === "client")) {
             handleGameCommandTool(event);
           } else if (event.name === "read_game_state" && isGameContext) {
@@ -2234,6 +2348,29 @@ export function createCompanionSession(deps: CompanionSessionDeps): CompanionSes
 
   // Push live volume changes into the playing speaker's master gain. A null
   // speaker (idle) picks the level up at its next creation via createStreamer().
+  // A new active companion (switched, renamed, given another persona) speaks
+  // with another name and soul: rebuild a live session with it.
+  const companionSignature = (kidId: string | null): string | null => {
+    if (!kidId) return null;
+    const state = stores.kids.getState();
+    const kid = state.byId?.[kidId] ?? state.list?.find((k) => k.id === kidId);
+    if (!kid?.companions) return null;
+    const companion = activeCompanionOf(kid);
+    return companion ? `${kidId}|${companion.id}|${companion.name ?? ""}|${companion.persona_id ?? ""}` : null;
+  };
+  let lastCompanionSignature: string | null = null;
+  stores.kids.subscribe(() => {
+    const signature = companionSignature(currentKidId);
+    const previous = lastCompanionSignature;
+    lastCompanionSignature = signature;
+    if (previous === null || signature === null || signature === previous || !currentKidId) return;
+    // Another kid: connect() builds that session itself.
+    if (!previous.startsWith(`${currentKidId}|`)) return;
+    const { state: status, context } = store.getState();
+    if (status !== "active" && status !== "deaf") return;
+    void store.getState().setContext(context, currentKidId, { force: true });
+  });
+
   stores.companionVolume.subscribe((s) => {
     streamer?.setVolume(s.volume);
   });

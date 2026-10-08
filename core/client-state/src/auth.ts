@@ -50,7 +50,8 @@ export type AuthMessageKey =
   | "nsecTaken"
   | "unlockAfterLoginFailed"
   | "updatePasswordFailed"
-  | "finishSetupWrongPassword";
+  | "finishSetupWrongPassword"
+  | "termsRequired";
 
 export const MIN_PASSWORD_LENGTH = 8;
 export const RESEND_COOLDOWN_SECONDS = 60;
@@ -122,6 +123,8 @@ export interface RegistrationInput {
   inviteCode: string;
   /** Advanced: bring an existing Nostr key as the account key ("" = generate). */
   importedNsec: string;
+  /** The parent confirmed they are an adult guardian and accepted the terms and privacy policy. */
+  hasAcceptedTerms: boolean;
 }
 
 /** The form's own checks, before anything goes to the platform. */
@@ -130,6 +133,7 @@ export function validateRegistration(input: RegistrationInput): AuthMessageKey |
   if (input.password.length < MIN_PASSWORD_LENGTH) return "passwordTooShort";
   if (input.mode === "invite" && !input.inviteCode.trim()) return "inviteRequired";
   if (input.importedNsec.trim() && !isValidNsec(input.importedNsec)) return "invalidAccountKey";
+  if (!input.hasAcceptedTerms) return "termsRequired";
   return null;
 }
 

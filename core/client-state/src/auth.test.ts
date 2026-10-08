@@ -62,6 +62,7 @@ const REGISTRATION = {
   mode: "open" as const,
   inviteCode: "",
   importedNsec: "",
+  hasAcceptedTerms: true,
 };
 
 describe("sign-in", () => {
@@ -147,6 +148,9 @@ describe("registration", () => {
     expect(validateRegistration({ ...REGISTRATION, mode: "invite" })).toBe("inviteRequired");
     expect(validateRegistration({ ...REGISTRATION, importedNsec: "nsec1nope" })).toBe(
       "invalidAccountKey",
+    );
+    expect(validateRegistration({ ...REGISTRATION, hasAcceptedTerms: false })).toBe(
+      "termsRequired",
     );
     expect(validateRegistration(REGISTRATION)).toBeNull();
   });

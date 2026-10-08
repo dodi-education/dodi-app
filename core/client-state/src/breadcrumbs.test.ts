@@ -61,17 +61,32 @@ describe("buildCrumbs", () => {
     });
   });
 
-  it("handles personas (name + new)", () => {
+  it("handles companions and their personas tab (name + new)", () => {
+    expect(buildCrumbs("/parent/companions", t)).toEqual([
+      { label: "nav.companions", href: "/parent/companions" },
+    ]);
+    expect(buildCrumbs("/parent/companions/new", t)).toEqual([
+      { label: "nav.companions", href: "/parent/companions" },
+      { label: "breadcrumbs.newCompanion" },
+    ]);
+    expect(buildCrumbs("/parent/companions/c1", t, { leafOverride: "Pip" })).toEqual([
+      { label: "nav.companions", href: "/parent/companions" },
+      { label: "Pip" },
+    ]);
     expect(
-      buildCrumbs("/parent/personas/xyz", t, { leafOverride: "Explorer" }),
+      buildCrumbs("/parent/companions/personas/xyz", t, { leafOverride: "Explorer" }),
     ).toEqual([
-      { label: "nav.personas", href: "/parent/personas" },
+      { label: "nav.companions", href: "/parent/companions" },
+      { label: "nav.personas", href: "/parent/companions?tab=personas" },
       { label: "Explorer" },
     ]);
-    expect(buildCrumbs("/parent/personas/new", t)).toEqual([
-      { label: "nav.personas", href: "/parent/personas" },
+    expect(buildCrumbs("/parent/companions/personas/new", t)).toEqual([
+      { label: "nav.companions", href: "/parent/companions" },
+      { label: "nav.personas", href: "/parent/companions?tab=personas" },
       { label: "breadcrumbs.newPersona" },
     ]);
+    // Old links (redirect stubs) read the same.
+    expect(buildCrumbs("/parent/personas/new", t)).toEqual(buildCrumbs("/parent/companions/personas/new", t));
   });
 
   it("roots the studio at the games list and prefers the live leaf override", () => {

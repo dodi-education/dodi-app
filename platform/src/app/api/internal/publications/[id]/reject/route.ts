@@ -18,7 +18,8 @@ import {
 /**
  * Stamp a submission as rejected (admin override path; the security agent
  * rejects through the process worker). Ops m2m only — /api/internal auth, see
- * lib/internal-auth.
+ * lib/internal-auth. Unlike the worker, this also takes a live game down, which
+ * is how a reported Discover game leaves the catalogue.
  *
  * The outcome sequence mirrors services/publication-review exactly: stamp,
  * then tell the operator, then tell the publisher. `actor` is the staff member
@@ -94,7 +95,8 @@ export async function POST(
   const { kind, reasons, actor } = parsed.data;
 
   try {
-    const publication = await rejectPublication(serviceDb, id, { kind, reasons });
+    // Manual verdicts may also take down a live game (a reported Discover game).
+    const publication = await rejectPublication(serviceDb, id, { kind, reasons }, { allowLive: true });
     // Audit first: the decision is recorded even if mail is unavailable.
     logVerdict(
       "api/internal/publications/[id]/reject#POST",

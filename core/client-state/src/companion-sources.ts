@@ -17,6 +17,12 @@ import type { Kid, Persona } from "@dodi/types/database";
 import type { GameMetadata } from "@dodi/types/games";
 import { decryptPersona, type VaultSession } from "@dodi/vault";
 
+import { CHARACTER_MODELS } from "@dodi/character/character-catalog";
+
+import type { AccountStore } from "./account-store";
+import { is3dPreferenceOf } from "./account-store";
+import { activeCompanionOf, companionLookOf } from "./companions";
+import { canPerformTrick, type CustomTricksStore } from "./custom-tricks";
 import { decodeView, ensureFriendKeys, fetchFriends } from "./friends";
 import type { GameStore } from "./game-store";
 import type { KidStore } from "./kid-store";
@@ -30,6 +36,9 @@ export interface CompanionSourceDeps {
   games: Pick<GameStore, "getState">;
   vault: Pick<VaultStore, "getState">;
   execution: Pick<ExecutionResolver, "resolveExecution" | "resolveThinking">;
+  /** For the companion's tricks: the 3D setting and the custom tricks (optional: no tricks without). */
+  account?: Pick<AccountStore, "getState">;
+  customTricks?: Pick<CustomTricksStore, "getState">;
 }
 
 export interface CompanionSources extends VoiceSessionSources {
@@ -144,6 +153,26 @@ export function createCompanionSources(deps: CompanionSourceDeps): CompanionSour
       } catch {
         return [];
       }
+    },
+
+    /**
+     * The active companion's tricks its avatar can do: the built-in ones, then
+     * the kid's own. null when the 3D character is switched off (no body to
+     * perform them).
+     */
+    loadTrickNames: async (kid: Kid): Promise<string[] | null> => {
+      if (!deps.account || !deps.customTricks) return null;
+      if (is3dPreferenceOf(deps.account.getState()) === false) return null;
+      const companion = activeCompanionOf(kid);
+      const model = companionLookOf(companion).model;
+      const builtIn = CHARACTER_MODELS[model].tricks.map((trick) => trick.script.name);
+      const custom = companion
+        ? await deps.customTricks
+            .getState()
+            .load(companion.id)
+            .catch(() => [])
+        : [];
+      return [...builtIn, ...custom.filter((trick) => canPerformTrick(trick, model)).map((trick) => trick.name)];
     },
   };
 }

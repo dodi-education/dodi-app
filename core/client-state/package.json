@@ -19,6 +19,7 @@
   "dependencies": {
     "@dodi/ai": "workspace:*",
     "@dodi/billing-contract": "workspace:*",
+    "@dodi/character": "workspace:*",
     "@dodi/crypto": "workspace:*",
     "@dodi/games": "workspace:*",
     "@dodi/intl": "workspace:*",

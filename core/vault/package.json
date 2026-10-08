@@ -12,6 +12,8 @@
     "./session": "./src/session.ts",
     "./kid-crypto": "./src/kid-crypto.ts",
     "./persona-crypto": "./src/persona-crypto.ts",
+    "./companion-crypto": "./src/companion-crypto.ts",
+    "./custom-trick-crypto": "./src/custom-trick-crypto.ts",
     "./game-crypto": "./src/game-crypto.ts",
     "./api-keys-crypto": "./src/api-keys-crypto.ts"
   },

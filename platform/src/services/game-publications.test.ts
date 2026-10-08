@@ -661,6 +661,37 @@ describe("game publications", () => {
       ).rejects.toMatchObject({ status: 404 });
     });
 
+    it("takes a live copy down when the operator allows it", async () => {
+      const id = await submitted();
+      await approvePublication(t.serviceDb, id, "system");
+      vi.mocked(triggerLandingRebuild).mockClear();
+
+      const rejected = await rejectPublication(
+        t.serviceDb,
+        id,
+        { kind: "hard", reasons: [{ code: "hard_child_safety", note: "reported" }] },
+        { allowLive: true },
+      );
+
+      expect(rejected.published_at).toBeNull();
+      expect(rejected.rejection_kind).toBe("hard");
+      expect(triggerLandingRebuild).toHaveBeenCalledOnce();
+    });
+
+    it("does not rebuild the catalogue for a pending copy, even when live is allowed", async () => {
+      const id = await submitted();
+      vi.mocked(triggerLandingRebuild).mockClear();
+
+      await rejectPublication(
+        t.serviceDb,
+        id,
+        { kind: "soft", reasons: [{ code: "soft_quality_below_bar", note: "" }] },
+        { allowLive: true },
+      );
+
+      expect(triggerLandingRebuild).not.toHaveBeenCalled();
+    });
+
     it("404s for an already-published copy (reject can't unpublish)", async () => {
       const id = await submitted();
       await approvePublication(t.serviceDb, id, "system");

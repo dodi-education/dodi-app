@@ -45,6 +45,7 @@ import {
   IconLogout,
   IconLogs,
   IconMasksTheater,
+  IconWand,
   IconMathSymbols,
   IconMenu2,
   IconMicrophone,
@@ -134,6 +135,7 @@ export type IconName =
   | "menu"
   | "mic_off"
   | "mic_on"
+  | "palette"
   | "personas"
   | "play"
   | "kids"
@@ -146,6 +148,7 @@ export type IconName =
   | "show"
   | "sparkles"
   | "stop"
+  | "wand"
   | "success"
   | "switch_vertical"
   | "undo"
@@ -225,6 +228,7 @@ const ICONS: Record<IconName, ComponentType<TablerIconProps>> = {
   menu: IconMenu2,
   mic_off: IconMicrophoneOff,
   mic_on: IconMicrophone,
+  palette: IconPalette,
   personas: IconMasksTheater,
   play: IconPlayerPlayFilled,
   kids: IconUser,
@@ -237,6 +241,7 @@ const ICONS: Record<IconName, ComponentType<TablerIconProps>> = {
   show: IconEye,
   sparkles: IconSparkles,
   stop: IconSquare,
+  wand: IconWand,
   success: IconCircleCheck,
   switch_vertical: IconSwitchVertical,
   undo: IconArrowBackUp,

@@ -338,6 +338,81 @@ export const companionCharacter = {
   surface: "absolute",
 } as const;
 
+/**
+ * The Playground on kid home (web and app: components/kid/playground): the masks badge on the stage's side, and the tools
+ * panel that fades in around the character (a bottom sheet on phones, a card
+ * beside the character from md up).
+ */
+export const playground = {
+  badge:
+    "absolute right-3 top-1/2 z-20 h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full border border-dodi-200 bg-white",
+  webBadge: "flex shadow-sm transition-shadow hover:shadow-md md:right-6",
+  /** Open on a phone: the badge sits just above the panel's top right corner. */
+  badgeOpen: "top-auto bottom-1/2 mb-2 translate-y-0 border-dodi-500 bg-dodi-500",
+  /** From md up the panel is a side card, so the badge stays centred beside it. */
+  webBadgeOpen: "md:top-1/2 md:bottom-auto md:mb-0 md:-translate-y-1/2",
+  badgeIcon: 24,
+  badgeIconColor: "text-ink-2",
+  badgeIconOpenColor: "text-white",
+  /** On a phone the panel fills the stage's bottom half; the character keeps the top half. */
+  panel: "absolute inset-x-2 bottom-2 top-1/2 z-20 gap-3 rounded-3xl border border-dodi-200 bg-white p-4",
+  webPanel:
+    "flex flex-col overflow-y-auto shadow-lg animate-in fade-in slide-in-from-bottom-2 duration-200 motion-reduce:animate-none md:inset-x-auto md:bottom-auto md:right-24 md:top-1/2 md:max-h-[86%] md:w-[340px] md:-translate-y-1/2",
+  /** The stage's column while open on a phone: the character centred in the top half. */
+  stageOpen: "my-0 h-1/2 justify-center py-2",
+  webStageOpen: "max-md:my-0 max-md:h-1/2 max-md:justify-center max-md:py-2",
+  /** Share of the window height the character may take while open on a phone. */
+  mascotOpenVh: 0.3,
+  title: "text-base font-extrabold text-ink",
+  tagline: "text-xs font-semibold text-muted-foreground",
+  tabs: "flex-row gap-1 rounded-full bg-dodi-50 p-1",
+  webTabs: "flex",
+  tab: "min-h-11 flex-1 items-center justify-center rounded-full px-2",
+  webTab: "flex cursor-pointer transition-colors",
+  tabActive: "bg-white",
+  tabText: "text-[13px] font-extrabold text-ink-2",
+  tabTextActive: "text-dodi-500",
+  section: "gap-2",
+  webSection: "flex flex-col",
+  label: "text-[13px] font-bold text-ink-2",
+  hint: "text-[13px] font-semibold text-muted-foreground",
+  row: "flex-row flex-wrap gap-2",
+  webRow: "flex",
+  swatch: "h-11 w-11 rounded-full border-[3px] border-white",
+  webSwatch: "cursor-pointer shadow-sm ring-1 ring-dodi-200 transition-transform active:scale-95",
+  swatchSelected: "border-dodi-500",
+  chip: "min-h-11 flex-row items-center gap-2 rounded-full border border-dodi-200 bg-white px-4",
+  webChip: "flex cursor-pointer transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+  chipSelected: "border-dodi-500 bg-dodi-50",
+  chipText: "text-sm font-bold text-ink",
+  input: "min-h-11 rounded-2xl border border-dodi-200 bg-white px-4 text-base font-bold text-ink",
+  webInput: "w-full outline-none focus-visible:ring-2 focus-visible:ring-dodi-500",
+  trick: "min-h-11 flex-row items-center gap-2 rounded-2xl bg-dodi-50 px-3 py-1.5",
+  webTrick: "flex",
+  trickName: "flex-1 text-sm font-bold text-ink",
+  trickDisabled: "opacity-50",
+  status: "text-xs font-bold text-ink-2",
+} as const;
+
+/**
+ * Thought bubbles above the 3D character's head while it thinks (web:
+ * components/dodi/think-bubbles, app: the same): two small puffs rising to a
+ * round bubble with a turning gear. Positions are shares of the figure's box.
+ */
+export const thinkBubbles = {
+  root: "absolute left-[60%] top-[-10%] h-[34%] w-[38%]",
+  puffSmall: "absolute bottom-0 left-0 h-2.5 w-2.5 rounded-full border-2 border-dodi-700 bg-white",
+  puffMedium: "absolute bottom-[26%] left-[16%] h-4 w-4 rounded-full border-2 border-dodi-700 bg-white",
+  bubble: "absolute right-0 top-0 h-14 w-14 items-center justify-center rounded-full border-[2.5px] border-dodi-700 bg-white",
+  webBubble: "flex shadow-sm",
+  gearSize: 32,
+  gearColor: "text-dodi-700",
+  /** One turn of the gear. */
+  spinMs: 2400,
+  /** Delay between the puffs and the bubble appearing, in order. */
+  staggerMs: 140,
+} as const;
+
 /** The header's compact companion (web: components/dodi/dodi-compact). */
 export const companionCompact = {
   root: "min-w-0 shrink flex-row items-center gap-2.5",

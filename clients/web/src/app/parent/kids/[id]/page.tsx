@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
@@ -20,7 +21,6 @@ import { Icon } from "@/components/shared/icon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { PersonaSelector } from "@/components/parent/persona-selector";
 import { AvatarPinPuzzle } from "@/components/kid/avatar-pin-puzzle";
 import { readStoredDatePref } from "@/lib/date-prefs";
 import { generateSocialId } from "@dodi/crypto/social-id";
@@ -41,6 +41,7 @@ import {
   sectionFormError,
   socialIdRow,
 } from "@dodi/ui-recipes";
+import { activeCompanionOf, companionNameOf } from "@dodi/client-state/companions";
 import { flowErrorText } from "@dodi/client-state/flow-error";
 import {
   KID_LANGUAGE_OPTIONS,
@@ -65,7 +66,7 @@ import type { Kid } from "@dodi/types/database";
 export default function EditKidPage() {
   const t = useTranslations("kids");
   const tc = useTranslations("common");
-  const tp = useTranslations("personas");
+  const tco = useTranslations("companions");
   const tf = useTranslations("friends");
   const ts = useTranslations("settings");
   const locale = useLocale();
@@ -83,11 +84,11 @@ export default function EditKidPage() {
   const [invalidSocialId, setInvalidSocialId] = useState(false);
   const [birthdate, setBirthdate] = useState("");
   const [language, setLanguage] = useState<string>("en");
-  const [activePersonaId, setActivePersonaId] = useState<string | null>(null);
   const [canInitiate, setCanInitiate] = useState(true);
   const [canBeAdded, setCanBeAdded] = useState(true);
   const [incomingApproval, setIncomingApproval] = useState(true);
   const [outgoingApproval, setOutgoingApproval] = useState(false);
+  const [canChangeAvatar, setCanChangeAvatar] = useState(false);
   const [pinEnabled, setPinEnabled] = useState(false);
   const [pinSlots, setPinSlots] = useState<PinSlots>(emptyPinSlots);
   const [pinSaving, setPinSaving] = useState(false);
@@ -132,11 +133,11 @@ export default function EditKidPage() {
         setSocialId(form.socialId);
         setBirthdate(form.birthdate);
         setLanguage(form.language);
-        setActivePersonaId(data.active_persona?.id ?? null);
         setCanInitiate(form.canAddFriends);
         setCanBeAdded(form.canBeAddedAsFriend);
         setIncomingApproval(form.incomingApproval);
         setOutgoingApproval(form.outgoingApproval);
+        setCanChangeAvatar(form.canChangeCompanionAvatar);
         const storedPin = parseStoredPin(data.avatar_pin);
         setPinEnabled(storedPin != null);
         setPinSlots(storedPin ?? emptyPinSlots());
@@ -181,6 +182,7 @@ export default function EditKidPage() {
         canBeAddedAsFriend: canBeAdded,
         incomingApproval,
         outgoingApproval,
+        canChangeCompanionAvatar: canChangeAvatar,
       });
     } catch (err) {
       setError(flowErrorText(err, t("failedToUpdate")));
@@ -342,16 +344,17 @@ export default function EditKidPage() {
               ))}
             </select>
           </FieldRow>
-          <FieldRow
-            label={tp("selectorLabel")}
-            hint={tp("selectorHint")}
-            htmlFor="persona"
-          >
-            <PersonaSelector
-              kidId={params.id}
-              value={activePersonaId}
-              onChange={setActivePersonaId}
-            />
+          <FieldRow label={tco("kidRowLabel")} hint={tco("kidRowHint")}>
+            <Button asChild type="button" variant="outline">
+              <Link href="/parent/companions">
+                {companionNameOf(activeCompanionOf(kid))}
+                {kid.companions.length > 1 ? ` +${kid.companions.length - 1}` : ""}
+                <Icon name="chevron_right" size={14} />
+              </Link>
+            </Button>
+          </FieldRow>
+          <FieldRow label={tco("canChangeAvatar")} hint={tco("canChangeAvatarHint")}>
+            <Switch checked={canChangeAvatar} onCheckedChange={setCanChangeAvatar} />
           </FieldRow>
           <FieldRow label={tf("canInitiate")} hint={tf("canInitiateHint")}>
             <Switch checked={canInitiate} onCheckedChange={setCanInitiate} />

@@ -35,7 +35,7 @@ features:
 
   - id: auth.register
     area: auth
-    title: Register, with the vault sealed until the emailed code confirms
+    title: Register (adult guardian + terms consent), with the vault sealed until the emailed code confirms
     web: done
     mobile: done
     core: [client-state, vault]
@@ -126,20 +126,33 @@ features:
     mobile_paths:
       - "clients/mobile/src/app/parent/kids/[id]/memory.tsx"
 
-  - id: parent.personas
+  - id: parent.companions
     area: parent
-    title: Companion personas (soul documents)
+    title: Companions per kid (name, persona, active one) and personas (soul documents)
     web: done
     mobile: done
-    core: [vault]
+    core: [client-state, vault]
     web_paths:
+      - "clients/web/src/app/parent/companions/page.tsx"
+      - "clients/web/src/app/parent/companions/new/page.tsx"
+      - "clients/web/src/app/parent/companions/[id]/page.tsx"
+      - "clients/web/src/app/parent/companions/personas/new/page.tsx"
+      - "clients/web/src/app/parent/companions/personas/[id]/page.tsx"
       - "clients/web/src/app/parent/personas/page.tsx"
       - "clients/web/src/app/parent/personas/new/page.tsx"
       - "clients/web/src/app/parent/personas/[id]/page.tsx"
     mobile_paths:
+      - "clients/mobile/src/app/parent/companions/index.tsx"
+      - "clients/mobile/src/app/parent/companions/new.tsx"
+      - "clients/mobile/src/app/parent/companions/[id].tsx"
+      - "clients/mobile/src/app/parent/companions/personas/new.tsx"
+      - "clients/mobile/src/app/parent/companions/personas/[id].tsx"
       - "clients/mobile/src/app/parent/personas/index.tsx"
       - "clients/mobile/src/app/parent/personas/new.tsx"
       - "clients/mobile/src/app/parent/personas/[id].tsx"
+    notes: >-
+      The old /parent/personas routes are redirects to their new place under
+      Companions, kept for links and bookmarks.
 
   - id: parent.games
     area: parent
@@ -234,6 +247,17 @@ features:
     mobile_paths:
       - "clients/mobile/src/app/parent/usage.tsx"
 
+  - id: parent.report
+    area: parent
+    title: Report a problem (AI answers, library and Discover games)
+    web: done
+    mobile: done
+    core: [client-state]
+    web_paths: ["clients/web/src/app/parent/report/page.tsx"]
+    mobile_paths:
+      - "clients/mobile/src/app/parent/report.tsx"
+    notes: In-app flagging required by Google Play (AI-generated content) and the App Store (UGC). POST /api/reports, emailed to SYSTEM_NOTIFICATION_EMAIL.
+
   - id: parent.event-logs
     area: parent
     title: Event logs
@@ -258,6 +282,30 @@ features:
       - "clients/mobile/src/app/parent/settings/index.tsx"
       - "clients/mobile/src/app/parent/settings/_layout.tsx"
       - "clients/mobile/src/app/parent/settings/general.tsx"
+
+  - id: settings.legal
+    area: settings
+    title: Legal links (privacy policy, terms, imprint) in General settings
+    web: done
+    mobile: done
+    core: [client-state]
+    web_paths: ["clients/web/src/components/parent/legal-links.tsx"]
+    mobile_paths: ["clients/mobile/src/components/settings/legal-links.tsx"]
+    notes: Pages live on the marketing site (dodi-com/landing); paths in core/client-state/src/legal-links.ts.
+
+  - id: settings.delete-account
+    area: settings
+    title: Delete account (password re-check, erases all family data, wipes the device)
+    web: done
+    mobile: done
+    core: [client-state]
+    web_paths:
+      - "clients/web/src/components/parent/delete-account.tsx"
+      - "clients/web/src/lib/auth/end-session.ts"
+    mobile_paths:
+      - "clients/mobile/src/components/settings/delete-account.tsx"
+      - "clients/mobile/src/adapters/device-wipe.ts"
+    notes: Required by Google Play and the App Store. DELETE /api/account (platform/src/services/account-deletion.ts).
 
   - id: settings.security
     area: settings
@@ -289,6 +337,9 @@ features:
       Venice (OpenAI-compatible, text + image, no voice) is a BYOK provider
       and backs dodi AI's thinking, game and image categories; voice stays on
       xAI. Core-only change (registry + adapters), so both clients pick it up.
+      Open beta: dodi AI is switched off (IS_DODI_AI_OFFERED in
+      core/client-state/src/dodi-ai.ts), so both clients show own keys only,
+      untabbed, as in self-host mode.
     web_paths: ["clients/web/src/app/parent/settings/ai-providers/page.tsx"]
     mobile_paths:
       - "clients/mobile/src/app/parent/settings/ai-providers.tsx"
@@ -392,6 +443,35 @@ features:
     notes: >-
       The app renders with expo-gl (no supersampling, no pinch zoom) and falls
       back to an inverted-hull outline where the edge pass can't run.
+
+  - id: kid.playground
+    area: kid
+    title: Playground on kid home (companion look, accessories, avatar, tricks)
+    web: done
+    mobile: done
+    core: [client-state, character, ui-recipes]
+    web_paths:
+      - "clients/web/src/components/kid/playground/playground.tsx"
+      - "clients/web/src/components/kid/playground/look-panel.tsx"
+      - "clients/web/src/components/kid/playground/tricks-panel.tsx"
+      - "clients/web/src/components/kid/playground/companion-switcher.tsx"
+    mobile_paths:
+      - "clients/mobile/src/components/kid/playground/playground.tsx"
+      - "clients/mobile/src/components/kid/playground/look-panel.tsx"
+      - "clients/mobile/src/components/kid/playground/tricks-panel.tsx"
+      - "clients/mobile/src/components/kid/playground/companion-switcher.tsx"
+    notes: >-
+      The tools open as a bottom panel at phone width on both clients; Android's
+      back button closes it on the app (the web's Escape).
+
+  - id: kid.custom-tricks
+    area: kid
+    title: Teach the companion a trick (AI-written motion, kept per companion)
+    web: done
+    mobile: done
+    core: [client-state, character, ai]
+    web_paths: ["clients/web/src/components/kid/playground/teach-trick-panel.tsx"]
+    mobile_paths: ["clients/mobile/src/components/kid/playground/teach-trick-panel.tsx"]
 
   - id: kid.offline
     area: kid

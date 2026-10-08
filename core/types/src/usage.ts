@@ -26,6 +26,8 @@ export type UsageEventType =
   | "game_text_generation"
   | "game_translation"
   | "memory_update"
+  /** Playground "Teach a trick": the thinking-model call that writes a custom trick. */
+  | "custom_trick"
   | "voice_minutes";
 
 /**

@@ -1,38 +1,88 @@
-import type { ExpressionBuilder } from "kysely";
-import { jsonObjectFrom } from "kysely/helpers/postgres";
+import { sql, type ExpressionBuilder } from "kysely";
+import { jsonArrayFrom, jsonObjectFrom } from "kysely/helpers/postgres";
 
 import type { Database, Kid, KidInsert, KidUpdate } from "@dodi/types/database";
 
 import type { Db } from "@/lib/db";
 
+type KidsBuilder = ExpressionBuilder<Database, "kids">;
+
+/** Slim persona projection: no heavy `soul` doc (AI flows load it on demand). */
+const PERSONA_EMBED_COLUMNS = [
+  "personas.id",
+  "personas.name",
+  "personas.account_id",
+  "personas.is_system_default",
+] as const;
+
 /**
- * Kid read shape: the active persona travels with the kid ("data travels with
- * the row that owns it") as a slim embed via the active_persona_id FK, so
- * clients never fetch /api/personas just to label a kid. The heavy `soul` doc
- * is deliberately excluded — AI flows load the full persona at session start.
+ * The kid's active companion id: kids.active_companion_id when it still points
+ * at one of the kid's companions, else the oldest companion. Matches
+ * activeCompanionOf() on the client.
  */
-function activePersona(eb: ExpressionBuilder<Database, "kids">) {
+function activeCompanionId(eb: KidsBuilder) {
+  return eb
+    .selectFrom("companions")
+    .select("companions.id")
+    .whereRef("companions.kid_id", "=", "kids.id")
+    .orderBy(sql`companions.id = kids.active_companion_id`, "desc")
+    .orderBy("companions.created_at", "asc")
+    .orderBy("companions.id", "asc")
+    .limit(1);
+}
+
+/**
+ * Companions travel with the kid ("data travels with the row that owns it"),
+ * oldest first, each with its slim persona. name_enc / look_enc stay sealed.
+ */
+function companions(eb: KidsBuilder) {
+  return jsonArrayFrom(
+    eb
+      .selectFrom("companions")
+      .select((cb) => [
+        "companions.id",
+        "companions.persona_id",
+        "companions.name_enc",
+        "companions.look_enc",
+        "companions.created_at",
+        jsonObjectFrom(
+          cb
+            .selectFrom("personas")
+            .select(PERSONA_EMBED_COLUMNS)
+            .whereRef("personas.id", "=", "companions.persona_id"),
+        ).as("persona"),
+      ])
+      .whereRef("companions.kid_id", "=", "kids.id")
+      .orderBy("companions.created_at", "asc")
+      .orderBy("companions.id", "asc"),
+  ).as("companions");
+}
+
+/**
+ * The active companion's persona, derived so persona readers (voice session,
+ * memory, dashboard) keep a single `active_persona` field. NULL = the system
+ * default persona.
+ */
+function activePersona(eb: KidsBuilder) {
   return jsonObjectFrom(
     eb
-      .selectFrom("personas")
-      .select([
-        "personas.id",
-        "personas.name",
-        "personas.account_id",
-        "personas.is_system_default",
-      ])
-      .whereRef("personas.id", "=", "kids.active_persona_id"),
+      .selectFrom("companions")
+      .innerJoin("personas", "personas.id", "companions.persona_id")
+      .select(PERSONA_EMBED_COLUMNS)
+      .where("companions.id", "=", activeCompanionId(eb)),
   ).as("active_persona");
 }
 
-/** Strip the raw FK — the read shape carries the embedded object instead. */
-function toKid(row: Record<string, unknown>): Kid {
-  const { active_persona_id: _fk, ...kid } = row;
-  return kid as Kid;
+function selectKid(db: Db) {
+  return db
+    .selectFrom("kids")
+    .selectAll("kids")
+    .select(companions)
+    .select(activePersona);
 }
 
-function selectKid(db: Db) {
-  return db.selectFrom("kids").selectAll("kids").select(activePersona);
+function toKid(row: object): Kid {
+  return row as Kid;
 }
 
 export async function listKids(db: Db, accountId: string): Promise<Kid[]> {
@@ -48,12 +98,31 @@ export async function getKid(db: Db, kidId: string): Promise<Kid | null> {
   return row ? toKid(row) : null;
 }
 
+/**
+ * Inserts the kid with its default companion (stock avatar and name, system
+ * default persona) and makes that companion active. The server cannot seal, so
+ * name_enc / look_enc stay NULL ("catalog defaults").
+ */
 export async function createKid(db: Db, kid: KidInsert): Promise<Kid> {
-  const { id } = await db
-    .insertInto("kids")
-    .values(kid)
-    .returning("id")
-    .executeTakeFirstOrThrow();
+  const run = async (trx: Db): Promise<string> => {
+    const { id } = await trx
+      .insertInto("kids")
+      .values(kid)
+      .returning("id")
+      .executeTakeFirstOrThrow();
+    const companion = await trx
+      .insertInto("companions")
+      .values({ account_id: kid.account_id, kid_id: id })
+      .returning("id")
+      .executeTakeFirstOrThrow();
+    await trx
+      .updateTable("kids")
+      .set({ active_companion_id: companion.id })
+      .where("id", "=", id)
+      .execute();
+    return id;
+  };
+  const id = db.isTransaction ? await run(db) : await db.transaction().execute(run);
   const created = await getKid(db, id);
   if (!created) throw new Error(`Kid ${id} vanished after insert`);
   return created;

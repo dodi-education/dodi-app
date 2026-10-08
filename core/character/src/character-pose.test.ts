@@ -33,3 +33,11 @@ describe("characterPoseFor", () => {
     }
   });
 });
+
+describe("learning a trick", () => {
+  it("thinks over every voice state, deaf and asleep included", () => {
+    for (const state of ["disconnected", "connecting", "active", "deaf", "sleep"] as const) {
+      expect(characterPoseFor({ state, isThinking: false, isSpeaking: true, isLearning: true }).clip).toBe("think");
+    }
+  });
+});

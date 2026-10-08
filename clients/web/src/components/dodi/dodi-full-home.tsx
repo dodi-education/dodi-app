@@ -8,6 +8,10 @@ import { Button } from "@/components/ui/button";
 import { DodiFigure } from "@/components/dodi/dodi-figure";
 import { SpeechBubble } from "@/components/dodi/speech-bubble";
 import { ListeningPulse } from "@/components/kid/listening-pulse";
+import { Playground } from "@/components/kid/playground/playground";
+import { playground } from "@dodi/ui-recipes";
+import { cn } from "@/lib/utils";
+import { useCompanionStageStore } from "@/stores/companion-stage-store";
 import { useDodiSessionStore } from "@/stores/dodi-session-store";
 import { useDodiContext } from "@/hooks/use-dodi-context";
 import { useKids } from "@/hooks/use-kids";
@@ -21,14 +25,25 @@ interface DodiFullHomeProps {
 /**
  * Shared stage wrapper: vertically centered column with mascot sizing. It
  * fills the page, which is where the 3D character can be turned and zoomed
- * (`data-character-area`, see lib/character/character-gestures.ts).
+ * (`data-character-area`, see lib/character/character-gestures.ts). It also
+ * holds the Playground; while that is open only the character stays (the
+ * speech bubble and hints step aside for the tools).
  */
 function Stage({ children }: { children: React.ReactNode }) {
+  const isPlaygroundOpen = useCompanionStageStore((s) => s.isPlaygroundOpen);
   return (
-    <div data-character-area className="flex w-full flex-1 flex-col items-center">
-      <div className="my-auto flex flex-col items-center gap-5 py-4">
+    <div data-character-area className="relative flex w-full flex-1 flex-col items-center">
+      {/* Open on a phone, the character takes the top half above the panel. */}
+      <div
+        className={cn(
+          "my-auto flex flex-col items-center gap-5 py-4",
+          isPlaygroundOpen && "[&>*:not(:first-child)]:hidden",
+          isPlaygroundOpen && playground.webStageOpen,
+        )}
+      >
         {children}
       </div>
+      <Playground />
     </div>
   );
 }
@@ -41,9 +56,16 @@ function MascotWrap({
   children: React.ReactNode;
 }) {
   // The figure is 76% of this box: 300px on desktop (395px box), unless the
-  // window is too short for it.
+  // window is too short for it. With the Playground open on a phone it fits
+  // the top half of the screen.
+  const isPlaygroundOpen = useCompanionStageStore((s) => s.isPlaygroundOpen);
   return (
-    <div className="relative flex aspect-square w-[clamp(170px,38vh,300px)] items-center justify-center md:w-[min(395px,55vh)]">
+    <div
+      className={cn(
+        "relative flex aspect-square w-[clamp(170px,38vh,300px)] items-center justify-center md:w-[min(395px,55vh)]",
+        isPlaygroundOpen && "max-md:w-[min(300px,30vh)]",
+      )}
+    >
       {listening ? <ListeningPulse /> : null}
       {children}
     </div>

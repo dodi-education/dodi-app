@@ -279,3 +279,39 @@ describe("addressing / intent awareness (voice only)", () => {
     expect(sys).toContain("not a request");
   });
 });
+
+describe("companion name and tricks (home)", () => {
+  it("states a custom companion name over the persona's and listens for it", () => {
+    const sys = buildHomeVoiceContext({ ...homeBase, companionName: "Pip" }).systemInstruction;
+    expect(sys).toContain("## Your Name");
+    expect(sys).toContain("Your name is Pip.");
+    expect(sys).toContain('They say your name, "Pip"');
+    expect(sys).not.toContain('"Dodie"');
+  });
+
+  it("adds nothing for the stock name", () => {
+    const sys = buildHomeVoiceContext({ ...homeBase, companionName: "Dodi" }).systemInstruction;
+    expect(sys).not.toContain("## Your Name");
+    expect(sys).toContain('"Dodie"');
+  });
+
+  it("lists tricks and offers the trick tools only with a 3D body", () => {
+    const withTricks = buildHomeVoiceContext({ ...homeBase, trickNames: ["Pirouette", "Happy dance"] });
+    expect(withTricks.systemInstruction).toContain("## Your Tricks");
+    expect(withTricks.systemInstruction).toContain("- Happy dance");
+    expect(withTricks.tools.map((t) => t.name)).toEqual(
+      expect.arrayContaining(["perform_trick", "teach_trick", "launch_game"]),
+    );
+
+    const without = buildHomeVoiceContext(homeBase);
+    expect(without.systemInstruction).not.toContain("## Your Tricks");
+    expect(without.tools.map((t) => t.name)).not.toContain("perform_trick");
+  });
+
+  it("never offers the trick tools in a game", () => {
+    const names = buildGameVoiceContext({ ...base, capabilities: ["perform_trick"], companionName: "Pip" }).tools.map(
+      (t) => t.name,
+    );
+    expect(names).not.toContain("perform_trick");
+  });
+});

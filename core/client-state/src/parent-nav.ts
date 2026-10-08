@@ -17,7 +17,8 @@ export type ParentNavIcon =
   | "bell"
   | "lock"
   | "sparkles"
-  | "qrcode";
+  | "qrcode"
+  | "alert";
 
 export interface ParentNavItem {
   href: string;
@@ -39,7 +40,8 @@ export const PARENT_NAV_GROUPS: ParentNavGroup[] = [
     items: [
       { href: "/parent/dashboard", labelKey: "nav.dashboard", icon: "dashboard" },
       { href: "/parent/kids", labelKey: "nav.kids", icon: "kids" },
-      { href: "/parent/personas", labelKey: "nav.personas", icon: "personas" },
+      // Personas live inside Companions (a tab); old /parent/personas links redirect.
+      { href: "/parent/companions", labelKey: "nav.companions", icon: "personas", aliases: ["/parent/personas"] },
       // Creating/editing a game lives under /parent/game-studio; keep Games active there.
       { href: "/parent/games", labelKey: "nav.gameStudio", icon: "games", aliases: ["/parent/game-studio"] },
       { href: "/parent/snapshots", labelKey: "nav.parentSnapshots", icon: "camera" },
@@ -50,6 +52,8 @@ export const PARENT_NAV_GROUPS: ParentNavGroup[] = [
     items: [
       { href: "/parent/activities", labelKey: "nav.activities", icon: "activities" },
       { href: "/parent/usage", labelKey: "nav.usage", icon: "usage" },
+      // In-app flagging of AI answers and games (Google Play / App Store requirement).
+      { href: "/parent/report", labelKey: "nav.report", icon: "alert" },
     ],
   },
 ];

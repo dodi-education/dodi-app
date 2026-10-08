@@ -477,3 +477,18 @@ describe("companion session over fake ports", () => {
     });
   });
 });
+
+describe("matchTrick", () => {
+  it("finds a trick by exact name or id, then by containment, ignoring case and punctuation", async () => {
+    const { matchTrick } = await import("./companion-session");
+    const tricks = [
+      { id: "pirouette", name: "Pirouette" },
+      { id: "t1", name: "Happy dance" },
+    ];
+    expect(matchTrick("pirouette", tricks)?.id).toBe("pirouette");
+    expect(matchTrick("HAPPY-DANCE!", tricks)?.id).toBe("t1");
+    expect(matchTrick("the happy dance please", tricks)?.id).toBe("t1");
+    expect(matchTrick("backflip", tricks)).toBeNull();
+    expect(matchTrick("", tricks)).toBeNull();
+  });
+});

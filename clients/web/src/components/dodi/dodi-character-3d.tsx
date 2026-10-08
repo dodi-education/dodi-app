@@ -1,15 +1,19 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import type { CharacterModelId } from "@dodi/character/character-catalog";
 import type { FigureModeInput } from "@dodi/character/figure-mode";
 import { companionCharacter } from "@dodi/ui-recipes";
 
+import { useActiveCompanion } from "@/hooks/use-active-companion";
 import { characterPoseFor } from "@/lib/character/character-pose";
 import { useAccountStore } from "@/stores/account-store";
+import { useCompanionStageStore } from "@/stores/companion-stage-store";
 import { useDodiSessionStore } from "@/stores/dodi-session-store";
 
 import type { DodiFigureProps } from "./dodi-figure";
 import { SleepZzz } from "./sleep-zzz";
+import { ThinkBubbles } from "./think-bubbles";
 import { useFigureMode } from "./use-figure-mode";
 
 type StageModule = typeof import("@/lib/character/character-stage");
@@ -25,10 +29,10 @@ interface DodiCharacter3dProps extends DodiFigureProps {
 // in their first render instead of waiting.
 let stageModule: StageModule | null = null;
 
-function loadStage(): Promise<StageModule> {
+function loadStage(model: CharacterModelId): Promise<StageModule> {
   return import("@/lib/character/character-stage")
     .then(async (mod) => {
-      await mod.loadCharacterStage();
+      await mod.loadCharacterStage(model);
       stageModule = mod;
       return mod;
     })
@@ -49,13 +53,19 @@ function loadStage(): Promise<StageModule> {
  */
 export function DodiCharacter3d({ state, isThinking, alt, is3dEnabled, fallback }: DodiCharacter3dProps) {
   const isSpeaking = useDodiSessionStore((s) => s.dodiSpeaking);
+  const isLearning = useCompanionStageStore((s) => s.isLearningTrick);
   const pose = useMemo(
-    () => characterPoseFor({ state, isThinking: isThinking ?? false, isSpeaking }),
-    [state, isThinking, isSpeaking],
+    () => characterPoseFor({ state, isThinking: isThinking ?? false, isSpeaking, isLearning }),
+    [state, isThinking, isSpeaking, isLearning],
   );
+  const { look } = useActiveCompanion();
+  const model = look.model;
   const hostRef = useRef<HTMLDivElement>(null);
   const [load, setLoad] = useState<FigureModeInput["load"]>(() =>
-    stageModule?.isCharacterStageReady() ? "ready" : "loading",
+    stageModule?.isCharacterStageReady(model) ? "ready" : "loading",
+  );
+  const [loadedModel, setLoadedModel] = useState<CharacterModelId | null>(() =>
+    stageModule?.isCharacterStageReady(model) ? model : null,
   );
   const loadAccount = useAccountStore((s) => s.load);
 
@@ -65,11 +75,13 @@ export function DodiCharacter3d({ state, isThinking, alt, is3dEnabled, fallback 
   }, [loadAccount]);
 
   useEffect(() => {
-    if (load !== "loading" || is3dEnabled !== true) return;
+    if (is3dEnabled !== true || load === "failed" || loadedModel === model) return;
     let cancelled = false;
-    loadStage().then(
+    loadStage(model).then(
       () => {
-        if (!cancelled) setLoad("ready");
+        if (cancelled) return;
+        setLoadedModel(model);
+        setLoad("ready");
       },
       () => {
         // No WebGL or the model failed to load: the 2D figure.
@@ -79,7 +91,7 @@ export function DodiCharacter3d({ state, isThinking, alt, is3dEnabled, fallback 
     return () => {
       cancelled = true;
     };
-  }, [load, is3dEnabled]);
+  }, [load, is3dEnabled, model, loadedModel]);
 
   const mode = useFigureMode(is3dEnabled, load);
   const isShown3d = mode === "3d";
@@ -87,13 +99,40 @@ export function DodiCharacter3d({ state, isThinking, alt, is3dEnabled, fallback 
   // Layout effects, pose first: the canvas moves between views within one
   // commit and its first frame there already shows the new pose.
   useLayoutEffect(() => {
+    // DEBUG(sleep-eyes): temporary. Shows a pose the stage never hears about.
+    console.info("[character] pose effect", { clip: pose.clip, state, isShown3d, hasStageModule: stageModule !== null });
     if (isShown3d) stageModule?.setCharacterPose(pose);
-  }, [isShown3d, pose]);
+  }, [isShown3d, pose]); // eslint-disable-line react-hooks/exhaustive-deps -- DEBUG(sleep-eyes): `state` is logged only
 
   useLayoutEffect(() => {
-    if (!isShown3d || !stageModule || !hostRef.current) return;
-    return stageModule.mountCharacterStage(hostRef.current);
-  }, [isShown3d]);
+    if (isShown3d) stageModule?.setCharacterLook(look);
+  }, [isShown3d, look, loadedModel]);
+
+  // While a new avatar loads, the one before stays on screen.
+  useLayoutEffect(() => {
+    if (!isShown3d || !stageModule || !hostRef.current || !loadedModel) return;
+    return stageModule.mountCharacterStage(hostRef.current, loadedModel);
+  }, [isShown3d, loadedModel]);
+
+  // Tricks: the Playground and the voice ask through the stage store.
+  const trickRequest = useCompanionStageStore((s) => s.trickRequest);
+  const setCharacterShown = useCompanionStageStore((s) => s.setCharacterShown);
+  const settleTrick = useCompanionStageStore((s) => s.settleTrick);
+  useEffect(() => {
+    setCharacterShown(isShown3d && loadedModel !== null);
+    return () => setCharacterShown(false);
+  }, [isShown3d, loadedModel, setCharacterShown]);
+  const playedNonce = useRef(0);
+  useEffect(() => {
+    if (!trickRequest || trickRequest.nonce <= playedNonce.current) return;
+    playedNonce.current = trickRequest.nonce;
+    const { nonce, trick } = trickRequest;
+    if (!stageModule || !loadedModel) {
+      settleTrick(nonce, "unavailable");
+      return;
+    }
+    void stageModule.playCharacterTrick(loadedModel, trick.script).then((outcome) => settleTrick(nonce, outcome));
+  }, [trickRequest, loadedModel, settleTrick]);
 
   if (mode === "2d") return fallback;
   // Pending: the figure's box, labelled, with nothing drawn in it yet.
@@ -102,6 +141,7 @@ export function DodiCharacter3d({ state, isThinking, alt, is3dEnabled, fallback 
     <>
       <div ref={hostRef} role="img" aria-label={alt} className={companionCharacter.host} />
       {pose.clip === "sleep" ? <SleepZzz /> : null}
+      {pose.clip === "think" ? <ThinkBubbles /> : null}
     </>
   );
 }

@@ -32,6 +32,11 @@ export interface DodiContextInput {
    *  name). Weighted very strongly in voice modes as the "you are being
    *  addressed" signal. */
   personaName: string;
+  /**
+   * The companion's own name, when the child or parent gave it one (or the
+   * avatar's stock name). Overrides any name the persona soul uses.
+   */
+  companionName?: string;
   childName: string;
   childBirthdate: string | null;
   childLanguage: string;
@@ -49,6 +54,11 @@ export interface GameCatalogEntry {
 
 export interface HomeVoiceInput extends DodiContextInput {
   gameCatalog: GameCatalogEntry[];
+  /**
+   * The tricks the companion's 3D body knows, by name. Absent when there is no
+   * 3D body to perform them (3D off), which also leaves out the trick tools.
+   */
+  trickNames?: string[];
 }
 
 export interface GameContextInput extends DodiContextInput {
@@ -159,10 +169,27 @@ function buildBirthdaySectionLight(name: string): string[] {
  * utterance as a command and acts on it. Being addressed by name is weighted as
  * the strongest possible signal, robust to transcription mangling.
  */
+/** The name the companion answers to. */
+function companionNameOf(input: DodiContextInput): string {
+  return input.companionName?.trim() || input.personaName;
+}
+
+/** The companion's own name, stated above the persona's (which may use another). */
+function buildNameSection(input: DodiContextInput): string[] {
+  const name = input.companionName?.trim();
+  if (!name || name === input.personaName) return [];
+  return [
+    "",
+    "## Your Name",
+    `Your name is ${name}. If your personality description above uses another name, ${name} is your name now: introduce yourself and answer as ${name}.`,
+  ];
+}
+
 function buildAddressingSection(input: DodiContextInput): string[] {
-  const name = input.personaName;
+  const name = companionNameOf(input);
+  const isStockName = /^dodi$/i.test(name);
   const germanHint =
-    input.childLanguage === "de"
+    isStockName && input.childLanguage === "de"
       ? ` The child speaks German, so your name may be transcribed with shifted vowels or German spelling (e.g. "Dodie", "Dodi", "Doti") — accept those too.`
       : "";
 
@@ -172,7 +199,7 @@ function buildAddressingSection(input: DodiContextInput): string[] {
     `Your microphone is always on, so you hear EVERYTHING near the device: ${input.childName} talking to you, but also ${input.childName} narrating their play, thinking out loud, reading, counting, singing, or talking to other people in the room. Much of what you hear is NOT meant for you.`,
     "",
     "The child IS talking to you when:",
-    `- They say your name, "${name}". Speech transcription often mangles it (for example "Dody", "Dodie", "Dodee", "Dohdi", or a very similar-sounding word).${germanHint} Treat anything that sounds like your name as your name: hearing it is the strongest possible sign the child is addressing you, and you should respond.`,
+    `- They say your name, "${name}". Speech transcription often mangles it (${isStockName ? 'for example "Dody", "Dodie", "Dodee", "Dohdi", or a very similar-sounding word' : "a very similar-sounding word"}).${germanHint} Treat anything that sounds like your name as your name: hearing it is the strongest possible sign the child is addressing you, and you should respond.`,
     "- They answer a question you just asked, or clearly continue a back-and-forth with you.",
     "- They give a clear instruction for something only you can do.",
     "",
@@ -186,8 +213,19 @@ function buildAddressingSection(input: DodiContextInput): string[] {
 // Mode 1: Home/browse voice
 // ---------------------------------------------------------------------------
 
+function buildTricksSection(trickNames: string[]): string[] {
+  return [
+    "",
+    "## Your Tricks",
+    "You have a 3D body on the child's screen and can do tricks with it:",
+    ...trickNames.map((name) => `- ${name}`),
+    "When the child clearly asks you to do one of these (or something that matches one), call `perform_trick` with its name, and enjoy it together. When they ask for a trick you don't know yet, offer to learn it, and if they want that, call `teach_trick` with their description; it takes a few seconds, so say you're trying first. Don't perform tricks unasked or several in a row.",
+  ];
+}
+
 export function buildHomeVoiceContext(input: HomeVoiceInput): DodiVoiceContext {
   const sections: string[] = [input.personaSoul];
+  sections.push(...buildNameSection(input));
 
   sections.push(...buildMemorySection(input.memory));
   sections.push(...buildParentNotesSection(input.parentNotes));
@@ -215,9 +253,14 @@ export function buildHomeVoiceContext(input: HomeVoiceInput): DodiVoiceContext {
     );
   }
 
+  if (input.trickNames) sections.push(...buildTricksSection(input.trickNames));
+
   const tools: GeminiLiveToolDeclaration[] = [];
   if (input.gameCatalog.length > 0) {
     tools.push(toDeclaration(STANDARD_TOOLS_BY_NAME.launch_game));
+  }
+  if (input.trickNames) {
+    tools.push(toDeclaration(STANDARD_TOOLS_BY_NAME.perform_trick), toDeclaration(STANDARD_TOOLS_BY_NAME.teach_trick));
   }
 
   return {
@@ -233,6 +276,7 @@ export function buildHomeVoiceContext(input: HomeVoiceInput): DodiVoiceContext {
 function buildGameSharedInstruction(input: GameContextInput): string {
   const lines: string[] = [
     input.personaSoul,
+    ...buildNameSection(input),
     "",
     "## In-Game Companion Context",
     ...buildChildContextLines(input),

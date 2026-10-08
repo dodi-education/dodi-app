@@ -19,6 +19,7 @@ import {
 import { type DraftModelConfig, formatEurCents, usesDodiAI } from "@dodi/client-state/model-config";
 
 import { Section } from "@/components/parent/section";
+import { AiSharingConsent } from "@/components/settings/ai-sharing-consent";
 import { Badge, Button, Icon, Switch, Text } from "@/components/ui";
 import {
   clientState,
@@ -55,6 +56,7 @@ export function DodiAIPanel({
   const defaults = useDodiAIDefaultsStore((s) => s.defaults);
   const [isEnabling, setIsEnabling] = useState(false);
   const [isJustEnabled, setIsJustEnabled] = useState(false);
+  const [hasConsented, setHasConsented] = useState(false);
   const [enableError, setEnableError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -81,7 +83,7 @@ export function DodiAIPanel({
   const needsCredits = needsDodiCredits(config, keyStatus, billing);
 
   async function enable(): Promise<void> {
-    if (isEnabling) return;
+    if (isEnabling || !hasConsented) return;
     setIsEnabling(true);
     setEnableError(null);
     try {
@@ -139,9 +141,17 @@ export function DodiAIPanel({
               <Text className="text-sm text-muted-foreground">{t("managedEnabling")}</Text>
             </View>
           ) : (
-            <Button onPress={() => void enable()}>{t("managedEnable")}</Button>
+            <Button disabled={!hasConsented} onPress={() => void enable()}>
+              {t("managedEnable")}
+            </Button>
           )}
         </View>
+
+        {!isEnabled ? (
+          <View className="px-5 pb-4">
+            <AiSharingConsent checked={hasConsented} onCheckedChange={setHasConsented} providerName={null} />
+          </View>
+        ) : null}
 
         {needsCredits ? (
           <View className="flex-row items-start gap-2 px-5 py-3">

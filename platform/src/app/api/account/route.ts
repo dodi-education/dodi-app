@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
 import { z } from "zod/v4";
 
+import { verifySessionPassword } from "@/lib/auth";
+import { serviceDb } from "@/lib/db";
 import { serverErrorResponse } from "@/lib/error-logs";
+import { triggerLandingRebuild } from "@/lib/landing-rebuild";
 import { requireAuth } from "@/lib/resolve-auth";
+import { deleteAccount } from "@/services/account-deletion";
 import {
   getAccount,
   updateAccountDatePreferences,
@@ -12,6 +16,7 @@ import {
   updateAccountNotificationPreferences,
   updateAccountParentPin,
 } from "@/services/accounts";
+import { consumeRateLimit } from "@/services/rate-limits";
 import { GameScreenshotServiceSettingsSchema } from "@dodi/games/screenshot-contract";
 import { DATE_STYLE_IDS } from "@dodi/intl";
 
@@ -119,6 +124,72 @@ export async function PATCH(request: Request): Promise<Response> {
   } catch (error) {
     return serverErrorResponse(error, "Failed to update account", "api/account#PATCH", {
       accountId,
+    });
+  }
+}
+
+/** Re-authentication for DELETE: the account password, checked server-side. */
+const DeleteAccountSchema = z.object({
+  password: z.string().min(1).max(1024),
+});
+
+/** Password attempts per account before DELETE answers 429 (in-process checks skip Better Auth's limit). */
+const DELETE_ATTEMPT_LIMIT = { bucket: "account_delete", limit: 5, windowMs: 15 * 60 * 1000 };
+
+/**
+ * User-authed: permanently delete the caller's account and all family data
+ * (see services/account-deletion). Requires the account password, and only a
+ * signed-in parent session can do it: device tokens (headless agents) cannot.
+ * Every session ends with the account, so clients sign out locally afterwards.
+ */
+export async function DELETE(request: Request): Promise<Response> {
+  const auth = await requireAuth(request);
+  if (auth instanceof Response) return auth;
+  const { accountId, via } = auth;
+  if (via !== "user") {
+    return NextResponse.json(
+      { error: "Only a signed-in parent can delete the account" },
+      { status: 403 },
+    );
+  }
+
+  const body: unknown = await request.json().catch(() => null);
+  const result = DeleteAccountSchema.safeParse(body);
+  if (!result.success) {
+    return NextResponse.json(
+      { error: "Validation failed", issues: result.error.issues },
+      { status: 400 },
+    );
+  }
+
+  try {
+    const attempt = await consumeRateLimit(serviceDb, { accountId, ...DELETE_ATTEMPT_LIMIT });
+    if (!attempt.allowed) {
+      const retryAfter = Math.max(1, Math.ceil((attempt.resetAt.getTime() - Date.now()) / 1000));
+      return NextResponse.json(
+        { error: "Too many attempts", code: "RATE_LIMITED" },
+        { status: 429, headers: { "Retry-After": String(retryAfter) } },
+      );
+    }
+
+    if (!(await verifySessionPassword(request.headers, result.data.password))) {
+      return NextResponse.json(
+        { error: "Wrong password", code: "WRONG_PASSWORD" },
+        { status: 403 },
+      );
+    }
+
+    const deleted = await deleteAccount(serviceDb, accountId);
+    if (!deleted) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    // A live game left the public catalogue: the marketing site lists it.
+    if (deleted.hadLivePublications) await triggerLandingRebuild();
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    return serverErrorResponse(error, "Failed to delete account", "api/account#DELETE", {
+      accountId,
+      expose: false,
     });
   }
 }

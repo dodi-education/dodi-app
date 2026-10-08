@@ -91,6 +91,17 @@ export function PublicFooter({ locale }: { locale: string }) {
         </div>
         <div className="mt-12 flex flex-wrap items-center justify-between gap-3.5 border-t border-white/10 pt-6 text-sm text-mist-3">
           <span>{t("footerCopyright", { year })}</span>
+          <nav aria-label={t("footerCompany")} className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            <a href={siteUrl("privacy", locale)} className="text-mist transition-colors hover:text-white">
+              {t("footerPrivacyPolicy")}
+            </a>
+            <a href={siteUrl("terms", locale)} className="text-mist transition-colors hover:text-white">
+              {t("footerTerms")}
+            </a>
+            <a href={siteUrl("imprint", locale)} className="text-mist transition-colors hover:text-white">
+              {t("footerImprint")}
+            </a>
+          </nav>
           <span className="flex items-center gap-4">
             <span className="flex items-center gap-1.5">
               <Icon name="code" size={16} stroke={2} />

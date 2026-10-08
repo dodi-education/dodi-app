@@ -8,6 +8,8 @@ export * from "./device-keystore";
 export * from "./session";
 export * from "./kid-crypto";
 export * from "./persona-crypto";
+export * from "./companion-crypto";
+export * from "./custom-trick-crypto";
 export * from "./game-crypto";
 export * from "./api-keys-crypto";
 export * from "./memory-crypto";

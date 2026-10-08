@@ -34,6 +34,8 @@ export interface StandardTool {
   voiceExposed: boolean;
   /** Always registered in game voice context (host/agent tool, not game-implemented). */
   meta?: boolean;
+  /** Only registered in the home (browse) context, never for a game, whatever it declares. */
+  isHomeOnly?: boolean;
   /** A game may list this in `metadata.capabilities` (drives tool registration + docs). */
   declarable: boolean;
   /**
@@ -60,6 +62,48 @@ const HEX_COLOR_NOTE =
   "A CSS/hex color (e.g. #e53935). The game maps it to its own palette if constrained.";
 
 export const STANDARD_TOOLS: StandardTool[] = [
+  // ── Home tools (the companion itself, on kid home; never in a game) ──
+  {
+    name: "perform_trick",
+    kind: "host",
+    voiceExposed: true,
+    declarable: false,
+    isHomeOnly: true,
+    description:
+      "Make your 3D body perform one of the tricks you know (listed under 'Your Tricks'). Use it " +
+      "when the child clearly asks you to do a trick, show a move, or dance. Pass the trick's " +
+      "name as listed. If you don't know the trick, the response says so: offer to learn it.",
+    parameters: {
+      type: "object",
+      properties: {
+        trick: { type: "string", description: "The trick's name, as listed under 'Your Tricks'" },
+      },
+      required: ["trick"],
+    },
+    implementationNote: "Host tool — do not implement.",
+  },
+  {
+    name: "teach_trick",
+    kind: "host",
+    voiceExposed: true,
+    declarable: false,
+    isHomeOnly: true,
+    description:
+      "Learn a NEW trick the child describes (for example 'a happy dance' or 'jump like a frog') " +
+      "and perform it. Takes a few seconds: tell the child you're trying, then call it. The " +
+      "trick is kept, so you can perform it again later with perform_trick.",
+    parameters: {
+      type: "object",
+      properties: {
+        description: {
+          type: "string",
+          description: "What the trick should look like, in the child's words",
+        },
+      },
+      required: ["description"],
+    },
+    implementationNote: "Host tool — do not implement.",
+  },
   // ── Meta tools (always registered in game context; not game-implemented) ──
   {
     name: "read_game_state",
@@ -521,7 +565,7 @@ export function toDeclaration(tool: StandardTool): GeminiLiveToolDeclaration {
 export function buildGameToolDeclarations(capabilities: string[]): GeminiLiveToolDeclaration[] {
   const caps = new Set(capabilities);
   const gameTools = STANDARD_TOOLS.filter(
-    (t) => t.voiceExposed && !t.meta && caps.has(t.requiresCapability ?? t.name),
+    (t) => t.voiceExposed && !t.meta && !t.isHomeOnly && caps.has(t.requiresCapability ?? t.name),
   );
   const metaTools = STANDARD_TOOLS.filter((t) => t.meta && t.voiceExposed);
   return [...gameTools, ...metaTools].map(toDeclaration);

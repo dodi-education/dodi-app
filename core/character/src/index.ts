@@ -24,8 +24,14 @@ export {
   type OutlineMode,
   type PoseChange,
   type StageLayout,
+  type StageLook,
   type StageOptions,
+  type TrickOutcome,
 } from "./character-stage";
+export * from "./character-catalog";
+export * from "./character-look";
+export * from "./motion-script";
+export { MOTION_FPS, buildMotionClip, motionRotation, type MotionRig } from "./motion-clip";
 export { CharacterView, VIEW_TARGET } from "./character-view";
 export { rendererForContext } from "./context-renderer";
 export {

@@ -8,6 +8,11 @@ export interface CompanionPose {
   isThinking: boolean;
   /** Voice audio is playing. */
   isSpeaking: boolean;
+  /**
+   * Learning a trick: thinks whatever the voice is doing (the Playground is
+   * often used with the voice asleep or deaf), so the kid sees it working.
+   */
+  isLearning?: boolean;
 }
 
 /** A clip of the character format (characters/README.md) plus what rides on it. */
@@ -26,7 +31,8 @@ const HEADPHONES: readonly string[] = ["headphones"];
 export const IDLE_POSE: CharacterPose = { clip: "idle", accessories: NONE, hasVoiceJaw: false };
 
 /** The state table in characters/README.md ("How app states map onto a character"). */
-export function characterPoseFor({ state, isThinking, isSpeaking }: CompanionPose): CharacterPose {
+export function characterPoseFor({ state, isThinking, isSpeaking, isLearning }: CompanionPose): CharacterPose {
+  if (isLearning) return { clip: "think", accessories: NONE, hasVoiceJaw: false };
   if (state === "deaf") return { clip: "deaf", accessories: HEADPHONES, hasVoiceJaw: false };
   if (state === "sleep" || state === "disconnected") {
     return { clip: "sleep", accessories: NONE, hasVoiceJaw: false };

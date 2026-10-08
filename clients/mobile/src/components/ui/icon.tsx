@@ -38,6 +38,8 @@ const ICONS = {
   memory: T.IconBrain,
   menu: T.IconMenu2,
   personas: T.IconMasksTheater,
+  palette: T.IconPalette,
+  wand: T.IconWand,
   qrcode: T.IconQrcode,
   refresh: T.IconRefresh,
   settings: T.IconSettings,

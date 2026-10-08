@@ -82,7 +82,10 @@
     "unlockAfterLoginFailed": "Angemeldet, aber wir konnten deine verschlüsselten Daten nicht entsperren. Falls du kürzlich dein Passwort geändert hast, brauchst du deinen Kontoschlüssel (nsec).",
     "updatePassword": "Passwort aktualisieren",
     "updatingPassword": "Wird aktualisiert...",
-    "updatePasswordFailed": "Wir konnten dein Passwort nicht aktualisieren. Bitte versuche es erneut."
+    "updatePasswordFailed": "Wir konnten dein Passwort nicht aktualisieren. Bitte versuche es erneut.",
+    "termsConsent": "Ich bin Elternteil oder erziehungsberechtigt, mindestens 18 Jahre alt und akzeptiere die <terms>Nutzungsbedingungen</terms>. Die <privacy>Datenschutzerklärung</privacy> habe ich gelesen.",
+    "termsRequired": "Bitte bestätige, dass du erziehungsberechtigt bist und die Nutzungsbedingungen akzeptierst.",
+    "accountDeleted": "Dein Konto und alle Daten deiner Familie wurden gelöscht."
   },
   "vault": {
     "saveKeyTitle": "Sichere deinen Kontoschlüssel",
@@ -340,7 +343,32 @@
     "deviceRevoked": "Gerät widerrufen",
     "revokeFailed": "Wir konnten dieses Gerät nicht widerrufen. Bitte versuche es erneut.",
     "showApiKey": "API-Schlüssel anzeigen",
-    "hideApiKey": "API-Schlüssel verbergen"
+    "hideApiKey": "API-Schlüssel verbergen",
+    "legalTitle": "Rechtliches",
+    "legalDescription": "Wie die Daten deiner Familie verarbeitet werden und welche Regeln für die Nutzung gelten.",
+    "legalPrivacy": "Datenschutzerklärung",
+    "legalTerms": "Nutzungsbedingungen",
+    "legalImprint": "Impressum",
+    "deleteAccountTitle": "Konto löschen",
+    "deleteAccountRowTitle": "Dein Konto löschen",
+    "deleteAccountRowMeta": "Entfernt dein Konto, alle Kinderprofile und alle Daten deiner Familie unwiderruflich.",
+    "deleteAccountButton": "Konto löschen",
+    "deleteAccountDialogTitle": "Konto endgültig löschen?",
+    "deleteAccountDialogDescription": "Dein Konto und alles, was deine Familie gespeichert hat, werden sofort von unseren Servern gelöscht, und alle Geräte werden abgemeldet.",
+    "deleteAccountConsequenceData": "Alle Kinderprofile, Erinnerungen, Gespräche, Spiele, Schnappschüsse und Einstellungen werden gelöscht.",
+    "deleteAccountConsequenceDiscover": "Veröffentlichte Spiele verschwinden von Discover. Remix-Kopien anderer Familien bleiben bei ihnen.",
+    "deleteAccountConsequenceFriends": "Freundschaften enden, und Schnappschüsse, die deine Kinder Freund:innen geschickt haben, werden entfernt.",
+    "deleteAccountConsequenceCredits": "Verbleibendes dodi AI Guthaben verfällt.",
+    "deleteAccountPasswordLabel": "Gib zur Bestätigung dein Passwort ein",
+    "deleteAccountConfirm": "Endgültig löschen",
+    "deleteAccountDeleting": "Wird gelöscht…",
+    "deleteAccountPasswordRequired": "Gib zur Bestätigung dein Passwort ein.",
+    "deleteAccountWrongPassword": "Das Passwort ist nicht korrekt.",
+    "deleteAccountRateLimited": "Zu viele Versuche. Bitte warte ein paar Minuten und versuche es erneut.",
+    "deleteAccountFailed": "Dein Konto konnte nicht gelöscht werden. Bitte versuche es erneut oder schreib uns, wenn es weiterhin nicht klappt.",
+    "aiSharingConsent": "Ich stimme zu, dass die KI-Anfragen meiner Familie an {provider} gehen: die Stimme meiner Kinder, wenn sie mit dem Begleiter sprechen, ihre Vornamen, ihr Alter und ihre Erinnerungen, meine Notizen zu ihnen sowie die Spiele und Eingaben, die ich erstelle. Details in der <privacy>Datenschutzerklärung</privacy>.",
+    "aiSharingConsentManaged": "Ich stimme zu, dass die KI-Anfragen meiner Familie an die Anbieter hinter dodi AI gehen (derzeit xAI und Venice.ai): die Stimme meiner Kinder, wenn sie mit dem Begleiter sprechen, ihre Vornamen, ihr Alter und ihre Erinnerungen, meine Notizen zu ihnen sowie die Spiele und Eingaben, die ich erstelle. Details in der <privacy>Datenschutzerklärung</privacy>.",
+    "aiSharingConsentThisProvider": "diesen Anbieter"
   },
   "parentPin": {
     "settingsTitle": "Eltern-PIN",
@@ -409,6 +437,101 @@
     "dangerZoneDescription": "Diese Persona unwiderruflich löschen. Kinder, die sie verwenden, werden auf die Standard-dodi-Persona zurückgesetzt.",
     "deletePersona": "Persona löschen",
     "confirmDelete": "Bist du sicher, dass du diese Persona löschen möchtest? Kinder, die sie verwenden, werden auf die Standard-Persona zurückgesetzt."
+  },
+  "companions": {
+    "tabCompanions": "Begleiter",
+    "tabPersonas": "Personas",
+    "kidCompanions": "Begleiter von {name}",
+    "addCompanion": "Begleiter hinzufügen",
+    "active": "Aktiv",
+    "personaLine": "Persona: {persona}",
+    "noKids": "Lege zuerst ein Kind an. Jedes Kind startet mit dodi als Begleiter.",
+    "createTitle": "Neuer Begleiter",
+    "createDescription": "Ein neuer Freund für dein Kind. Im Spielplatz kann es ihn gestalten und ihm Tricks beibringen.",
+    "editTitle": "Begleiter",
+    "editDescription": "Einer der Begleiter von {name}",
+    "kidLabel": "Kind",
+    "nameLabel": "Name",
+    "nameHint": "Leer lassen, um den Namen des Avatars zu nutzen. Kinder können ihn im Spielplatz umbenennen.",
+    "personaHint": "Die Persönlichkeit, mit der dieser Begleiter spricht.",
+    "activeLabel": "Aktiver Begleiter",
+    "activeHint": "Der Begleiter, den {name} gerade sieht und mit dem es spricht.",
+    "isActive": "Das ist der aktive Begleiter",
+    "makeActive": "Aktivieren",
+    "notFound": "Begleiter nicht gefunden",
+    "failedToCreate": "Begleiter konnte nicht hinzugefügt werden",
+    "failedToUpdate": "Begleiter konnte nicht gespeichert werden",
+    "failedToDelete": "Begleiter konnte nicht gelöscht werden",
+    "dangerZone": "Gefahrenzone",
+    "deleteCompanion": "Begleiter löschen",
+    "dangerZoneDescription": "Löscht diesen Begleiter mit seinem Aussehen und seinen eigenen Tricks.",
+    "lastCompanionHint": "Jedes Kind behält mindestens einen Begleiter.",
+    "confirmDelete": "Diesen Begleiter mit Aussehen und eigenen Tricks löschen?",
+    "kidRowLabel": "Begleiter",
+    "kidRowHint": "Mit wem dein Kind spricht und spielt. Verwalte Begleiter und ihre Personas.",
+    "canChangeAvatar": "Darf den Avatar wechseln",
+    "canChangeAvatarHint": "Erlaubt deinem Kind, im Spielplatz den Avatar eines Begleiters zu tauschen. Farben, Accessoires, Namen und Tricks sind immer frei."
+  },
+  "playground": {
+    "open": "Spielplatz öffnen",
+    "close": "Spielplatz schließen",
+    "title": "Spielplatz",
+    "tagline": "Spiel mit deinem Freund",
+    "panelLook": "Aussehen",
+    "panelTricks": "Tricks",
+    "panelTeach": "Trick beibringen",
+    "colors": "Farben",
+    "accessories": "Accessoires",
+    "avatar": "Avatar",
+    "name": "Name",
+    "namePlaceholder": "Gib deinem Freund einen Namen",
+    "switchCompanion": "Deine Begleiter",
+    "reset": "Neu anfangen",
+    "saved": "Gespeichert",
+    "saveFailed": "Das hat nicht geklappt. Nochmal?",
+    "colorFor": "Farbe: {part}",
+    "trickNeedsBones": "Dieser Avatar kann den Trick nicht",
+    "noCustomTricks": "Noch keine eigenen Tricks. Bring deinem Freund einen bei!",
+    "yourTricks": "Deine Tricks",
+    "builtInTricks": "Tricks, die jeder kann",
+    "deleteTrick": "Trick vergessen",
+    "confirmDeleteTrick": "„{name}“ vergessen?",
+    "teachPrompt": "Was soll dein Freund lernen?",
+    "teachPlaceholder": "Einen fröhlichen Tanz",
+    "teachButton": "Beibringen",
+    "teaching": "Lernt…",
+    "keepIt": "Behalten",
+    "tryAgain": "Nochmal",
+    "teachFailed": "Das hat dein Freund nicht verstanden. Sag es mal anders.",
+    "teachNoThinking": "Bitte einen Erwachsenen, zuerst ein Denk-Modell einzurichten.",
+    "teachLimit": "Dein Freund kann schon so viele Tricks! Vergiss einen, um einen neuen zu lernen.",
+    "noCharacter": "Schalte die 3D-Figur ein, um hier zu spielen.",
+    "suggestions": {
+      "spin": "Eine Drehung",
+      "jump": "Ein großer Sprung",
+      "bow": "Eine Verbeugung",
+      "dance": "Ein kleiner Tanz",
+      "flap": "Flattern wie ein Vogel"
+    },
+    "parts": {
+      "skin": "Körper",
+      "suit": "Kapuze & Flügel",
+      "beak": "Schnabel"
+    },
+    "accessoryNames": {
+      "headphones": "Kopfhörer",
+      "partyHat": "Partyhut",
+      "glasses": "Brille",
+      "scarf": "Schal"
+    },
+    "avatars": {
+      "dodi": "dodi"
+    },
+    "tricks": {
+      "pirouette": "Pirouette",
+      "backflip": "Rückwärtssalto",
+      "wave": "Winken"
+    }
   },
   "memory": {
     "title": "{name}s Erinnerungen",
@@ -1070,11 +1193,13 @@
   },
   "breadcrumbs": {
     "memory": "Erinnerung",
-    "newPersona": "Neue Persona"
+    "newPersona": "Neue Persona",
+    "newCompanion": "Neuer Begleiter"
   },
   "nav": {
     "dashboard": "Dashboard",
     "kids": "Kinder",
+    "companions": "Begleiter",
     "personas": "Personas",
     "gameStudio": "Spiele",
     "activities": "Aktivitäten",
@@ -1095,7 +1220,8 @@
     "closeMenu": "Menü schließen",
     "snapshots": "Knipser",
     "parentSnapshots": "Knipser",
-    "switchToParentView": "Zur Elternansicht wechseln"
+    "switchToParentView": "Zur Elternansicht wechseln",
+    "report": "Problem melden"
   },
   "usage": {
     "title": "Nutzung",
@@ -1235,7 +1361,10 @@
     "footerPrivacy": "Datenschutz & Daten",
     "footerCopyright": "© {year} dodi. Mit Sorgfalt für neugierige Kinder gemacht.",
     "footerOpenSource": "Open Source",
-    "footerPrivacyFirst": "Datenschutz zuerst"
+    "footerPrivacyFirst": "Datenschutz zuerst",
+    "footerPrivacyPolicy": "Datenschutzerklärung",
+    "footerTerms": "Nutzungsbedingungen",
+    "footerImprint": "Impressum"
   },
   "buildActivity": {
     "building": "dodi baut ein Spiel",
@@ -1251,5 +1380,36 @@
     "pausedBody": "Öffne die App und der Build geht dort weiter, wo er aufgehört hat.",
     "failedTitle": "Build fehlgeschlagen",
     "failedBody": "Öffne das Game Studio, um es erneut zu versuchen."
+  },
+  "report": {
+    "title": "Problem melden",
+    "description": "Sag uns Bescheid, wenn etwas, das die KI gesagt oder erstellt hat, nicht in Ordnung für deine Kinder ist. Wir lesen jede Meldung und nutzen sie, um den Begleiter und das Spielestudio sicherer zu machen.",
+    "kindLabel": "Was möchtest du melden?",
+    "kinds": {
+      "companion_answer": "Etwas, das der Begleiter gesagt hat",
+      "game": "Ein Spiel in deiner Bibliothek",
+      "discover_game": "Ein Spiel auf Discover"
+    },
+    "kidLabel": "Welches Kind war es?",
+    "kidNone": "Betrifft kein bestimmtes Kind",
+    "reasonLabel": "Was war nicht in Ordnung?",
+    "reasons": {
+      "inappropriate": "Nicht kindgerecht",
+      "upsetting": "Beängstigend oder verstörend",
+      "wrong": "Falsch oder irreführend",
+      "other": "Etwas anderes"
+    },
+    "detailsLabel": "Was ist passiert? (optional)",
+    "detailsPlaceholder": "Zum Beispiel, was der Begleiter gesagt oder was das Spiel gezeigt hat.",
+    "detailsHint": "Anders als die verschlüsselten Daten deiner Familie erreicht eine Meldung unser Team lesbar. Lass alles weg, was wir nicht sehen sollen.",
+    "gameAttached": "Diese Meldung betrifft das Spiel, das du geöffnet hast.",
+    "submit": "Meldung senden",
+    "sending": "Wird gesendet…",
+    "sent": "Danke. Deine Meldung ist bei unserem Team angekommen, und wir nutzen sie, um die KI für Kinder sicherer zu machen.",
+    "sendAnother": "Etwas anderes melden",
+    "reasonRequired": "Wähle aus, was nicht in Ordnung war.",
+    "rateLimited": "Du hast in kurzer Zeit viele Meldungen gesendet. Bitte versuche es später erneut.",
+    "failed": "Die Meldung konnte nicht gesendet werden. Bitte versuche es erneut.",
+    "reportGame": "Dieses Spiel melden"
   }
 }

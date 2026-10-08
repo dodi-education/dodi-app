@@ -82,7 +82,10 @@
     "unlockAfterLoginFailed": "Signed in, but we couldn't unlock your encrypted data. If you recently changed your password, you'll need your account key (nsec).",
     "updatePassword": "Update password",
     "updatingPassword": "Updating...",
-    "updatePasswordFailed": "We couldn't update your password. Please try again."
+    "updatePasswordFailed": "We couldn't update your password. Please try again.",
+    "termsConsent": "I am a parent or legal guardian, at least 18 years old, and I accept the <terms>Terms of service</terms>. I have read the <privacy>Privacy policy</privacy>.",
+    "termsRequired": "Please confirm that you are a parent or guardian and accept the terms of service.",
+    "accountDeleted": "Your account and all of your family's data have been deleted."
   },
   "vault": {
     "saveKeyTitle": "Save your account key",
@@ -340,7 +343,32 @@
     "deviceRevoked": "Device revoked",
     "revokeFailed": "We couldn't revoke that device. Please try again.",
     "showApiKey": "Show API key",
-    "hideApiKey": "Hide API key"
+    "hideApiKey": "Hide API key",
+    "legalTitle": "Legal",
+    "legalDescription": "How your family's data is handled and the rules for using the service.",
+    "legalPrivacy": "Privacy policy",
+    "legalTerms": "Terms of service",
+    "legalImprint": "Imprint",
+    "deleteAccountTitle": "Delete account",
+    "deleteAccountRowTitle": "Delete your account",
+    "deleteAccountRowMeta": "Permanently removes your account, every kid profile and all of your family's data. This cannot be undone.",
+    "deleteAccountButton": "Delete account",
+    "deleteAccountDialogTitle": "Delete your account permanently?",
+    "deleteAccountDialogDescription": "Your account and everything your family stored are erased from our servers right away, and every device is signed out.",
+    "deleteAccountConsequenceData": "All kid profiles, memories, conversations, games, snapshots and settings are deleted.",
+    "deleteAccountConsequenceDiscover": "Games you published leave Discover. Copies other families remixed stay with them.",
+    "deleteAccountConsequenceFriends": "Friendships end, and snapshots your kids sent to friends are removed.",
+    "deleteAccountConsequenceCredits": "Any remaining dodi AI credits are lost.",
+    "deleteAccountPasswordLabel": "Enter your password to confirm",
+    "deleteAccountConfirm": "Delete permanently",
+    "deleteAccountDeleting": "Deleting…",
+    "deleteAccountPasswordRequired": "Enter your password to confirm.",
+    "deleteAccountWrongPassword": "That password is not correct.",
+    "deleteAccountRateLimited": "Too many attempts. Please wait a few minutes and try again.",
+    "deleteAccountFailed": "Your account could not be deleted. Please try again, or write to us if it keeps failing.",
+    "aiSharingConsent": "I agree that my family's AI requests go to {provider}: my kids' voice while they talk to the companion, their first names, ages and memories, my notes about them, and the games and prompts I create. Details in the <privacy>privacy policy</privacy>.",
+    "aiSharingConsentManaged": "I agree that my family's AI requests go to the providers behind dodi AI (currently xAI and Venice.ai): my kids' voice while they talk to the companion, their first names, ages and memories, my notes about them, and the games and prompts I create. Details in the <privacy>privacy policy</privacy>.",
+    "aiSharingConsentThisProvider": "this provider"
   },
   "parentPin": {
     "settingsTitle": "Parent PIN",
@@ -409,6 +437,101 @@
     "dangerZoneDescription": "Permanently delete this persona. Kids using it will revert to the default dodi persona.",
     "deletePersona": "Delete persona",
     "confirmDelete": "Are you sure you want to delete this persona? Kids using it will revert to the default."
+  },
+  "companions": {
+    "tabCompanions": "Companions",
+    "tabPersonas": "Personas",
+    "kidCompanions": "{name}'s companions",
+    "addCompanion": "Add companion",
+    "active": "Active",
+    "personaLine": "Persona: {persona}",
+    "noKids": "Add a kid first. Every kid starts with a dodi companion.",
+    "createTitle": "New companion",
+    "createDescription": "A new friend for your kid. They can style it and teach it tricks in the Playground.",
+    "editTitle": "Companion",
+    "editDescription": "One of {name}'s companions",
+    "kidLabel": "Kid",
+    "nameLabel": "Name",
+    "nameHint": "Leave empty to use the avatar's own name. Kids can rename it in the Playground.",
+    "personaHint": "The personality this companion talks with.",
+    "activeLabel": "Active companion",
+    "activeHint": "The companion {name} sees and talks to right now.",
+    "isActive": "This is the active companion",
+    "makeActive": "Make active",
+    "notFound": "Companion not found",
+    "failedToCreate": "Failed to add the companion",
+    "failedToUpdate": "Failed to update the companion",
+    "failedToDelete": "Failed to delete the companion",
+    "dangerZone": "Danger zone",
+    "deleteCompanion": "Delete companion",
+    "dangerZoneDescription": "Deletes this companion with its look and its custom tricks.",
+    "lastCompanionHint": "Every kid keeps at least one companion.",
+    "confirmDelete": "Delete this companion with its look and custom tricks?",
+    "kidRowLabel": "Companions",
+    "kidRowHint": "Who your kid talks and plays with. Manage companions and their personas.",
+    "canChangeAvatar": "Can change the avatar",
+    "canChangeAvatarHint": "Lets your kid swap a companion's avatar in the Playground. Colors, accessories, names and tricks are always open."
+  },
+  "playground": {
+    "open": "Open the Playground",
+    "close": "Close the Playground",
+    "title": "Playground",
+    "tagline": "Play with your buddy",
+    "panelLook": "Look",
+    "panelTricks": "Tricks",
+    "panelTeach": "Teach a trick",
+    "colors": "Colors",
+    "accessories": "Accessories",
+    "avatar": "Avatar",
+    "name": "Name",
+    "namePlaceholder": "Give your buddy a name",
+    "switchCompanion": "Your companions",
+    "reset": "Start over",
+    "saved": "Saved",
+    "saveFailed": "That didn't save. Try again?",
+    "colorFor": "{part} color",
+    "trickNeedsBones": "This avatar can't do this trick",
+    "noCustomTricks": "No tricks of your own yet. Teach your buddy one!",
+    "yourTricks": "Your tricks",
+    "builtInTricks": "Tricks everyone knows",
+    "deleteTrick": "Forget this trick",
+    "confirmDeleteTrick": "Forget \"{name}\"?",
+    "teachPrompt": "What should your buddy learn?",
+    "teachPlaceholder": "A happy dance",
+    "teachButton": "Teach it",
+    "teaching": "Learning…",
+    "keepIt": "Keep it",
+    "tryAgain": "Try again",
+    "teachFailed": "Your buddy couldn't figure that one out. Try saying it another way.",
+    "teachNoThinking": "Ask a grown-up to set up a thinking model first.",
+    "teachLimit": "Your buddy knows so many tricks! Forget one to learn a new one.",
+    "noCharacter": "Turn on the 3D character to play here.",
+    "suggestions": {
+      "spin": "A spin",
+      "jump": "A big jump",
+      "bow": "A bow",
+      "dance": "A little dance",
+      "flap": "Flap like a bird"
+    },
+    "parts": {
+      "skin": "Body",
+      "suit": "Hood & wings",
+      "beak": "Beak"
+    },
+    "accessoryNames": {
+      "headphones": "Headphones",
+      "partyHat": "Party hat",
+      "glasses": "Glasses",
+      "scarf": "Scarf"
+    },
+    "avatars": {
+      "dodi": "dodi"
+    },
+    "tricks": {
+      "pirouette": "Pirouette",
+      "backflip": "Backflip",
+      "wave": "Wave"
+    }
   },
   "memory": {
     "title": "{name}'s Memory",
@@ -1070,11 +1193,13 @@
   },
   "breadcrumbs": {
     "memory": "Memory",
-    "newPersona": "New persona"
+    "newPersona": "New persona",
+    "newCompanion": "New companion"
   },
   "nav": {
     "dashboard": "Dashboard",
     "kids": "Kids",
+    "companions": "Companions",
     "personas": "Personas",
     "gameStudio": "Games",
     "activities": "Activities",
@@ -1095,7 +1220,8 @@
     "closeMenu": "Close menu",
     "snapshots": "Snapshots",
     "parentSnapshots": "Snapshots",
-    "switchToParentView": "Switch to parent view"
+    "switchToParentView": "Switch to parent view",
+    "report": "Report a problem"
   },
   "usage": {
     "title": "Usage",
@@ -1235,7 +1361,10 @@
     "footerPrivacy": "Privacy & data",
     "footerCopyright": "© {year} dodi. Made with care for curious kids.",
     "footerOpenSource": "Open Source",
-    "footerPrivacyFirst": "Privacy first"
+    "footerPrivacyFirst": "Privacy first",
+    "footerPrivacyPolicy": "Privacy policy",
+    "footerTerms": "Terms of service",
+    "footerImprint": "Imprint"
   },
   "buildActivity": {
     "building": "dodi is building a game",
@@ -1251,5 +1380,36 @@
     "pausedBody": "Open the app and the build continues where it stopped.",
     "failedTitle": "Build failed",
     "failedBody": "Open the Game Studio to try again."
+  },
+  "report": {
+    "title": "Report a problem",
+    "description": "Tell us when something the AI said or made is not okay for your kids. We read every report and use it to make the companion and Game Studio safer.",
+    "kindLabel": "What do you want to report?",
+    "kinds": {
+      "companion_answer": "Something the companion said",
+      "game": "A game in your library",
+      "discover_game": "A game on Discover"
+    },
+    "kidLabel": "Which kid was it?",
+    "kidNone": "Not about a specific kid",
+    "reasonLabel": "What was wrong?",
+    "reasons": {
+      "inappropriate": "Not okay for kids",
+      "upsetting": "Scary or upsetting",
+      "wrong": "Wrong or misleading",
+      "other": "Something else"
+    },
+    "detailsLabel": "What happened? (optional)",
+    "detailsPlaceholder": "For example what the companion said, or what the game showed.",
+    "detailsHint": "Unlike your family's encrypted data, a report reaches our team in readable form. Leave out anything you don't want us to see.",
+    "gameAttached": "This report is about the game you opened.",
+    "submit": "Send report",
+    "sending": "Sending…",
+    "sent": "Thank you. Your report reached our team, and we use it to make the AI safer for kids.",
+    "sendAnother": "Report something else",
+    "reasonRequired": "Choose what was wrong.",
+    "rateLimited": "You sent many reports in a short time. Please try again later.",
+    "failed": "The report could not be sent. Please try again.",
+    "reportGame": "Report this game"
   }
 }

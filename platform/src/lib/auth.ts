@@ -253,3 +253,23 @@ export const auth = betterAuth({
 });
 
 export type AuthSession = typeof auth.$Infer.Session;
+
+/**
+ * Re-authentication for destructive operations (account deletion): true when
+ * `password` is the password of the session in `headers`. Same check as
+ * POST /api/auth/password/verify, but in-process, so Better Auth's rate limit
+ * does not apply and the caller must limit attempts itself.
+ */
+export async function verifySessionPassword(
+  headers: Headers,
+  password: string,
+): Promise<boolean> {
+  try {
+    const result = await auth.api.verifyAccountPassword({ body: { password }, headers });
+    return result.ok;
+  } catch (error) {
+    // No session, or an account without a password: not a match.
+    if (error instanceof APIError) return false;
+    throw error;
+  }
+}

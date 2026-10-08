@@ -45,3 +45,9 @@ export function listCheckpointGameIds(): string[] {
     .filter((entry): entry is File => entry instanceof File && entry.name.endsWith(".sealed"))
     .map((file) => file.name.slice(0, -".sealed".length));
 }
+
+/** Remove every stored checkpoint (account deletion: they belong to the deleted vault). */
+export function clearAllCheckpoints(): void {
+  const dir = new Directory(Paths.document, "build-checkpoints");
+  if (dir.exists) dir.delete();
+}

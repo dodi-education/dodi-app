@@ -26,6 +26,7 @@ import { Button } from "@/components/ui/button";
 import { useDateFormat } from "@/components/providers/date-format-provider";
 import { useKids } from "@/hooks/use-kids";
 import { cn } from "@/lib/utils";
+import { activeCompanionOf, companionNameOf } from "@dodi/client-state/companions";
 import { ageFromBirthdate } from "@dodi/intl";
 
 /** Shared with the app (@dodi/ui-recipes). */
@@ -112,7 +113,7 @@ export default function KidsPage() {
                     <RowMeta>
                       {kid.social_id}
                       <DotSep />
-                      {kid.active_persona?.name ?? t("default")}
+                      {companionNameOf(activeCompanionOf(kid))}
                       <DotSep />
                       {kid.birthdate
                         ? t("born", {

@@ -6,8 +6,11 @@ import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { ACCESSORY_NAMES, parseCharacterFile, type CharacterFile } from "./character-files";
+import { CHARACTER_MODELS } from "./character-catalog";
 import { characterPoseFor, IDLE_POSE } from "./character-pose";
 import { CharacterStage } from "./character-stage";
+import { buildMotionClip } from "./motion-clip";
+import { fitMotionScript } from "./motion-script";
 import { isOutlineHull } from "./hull-outline";
 
 // The runtime files as the pipeline builds them (characters/README.md), and the
@@ -188,3 +191,101 @@ describe("CharacterStage", () => {
     });
   });
 });
+
+describe("CharacterStage looks", () => {
+  it("recolors every mesh of a material and gives it back its own colors", () => {
+    const stage = newStage();
+    const original = stage.materialColor("skin");
+    const dark = stage.materialColor("dark");
+    stage.applyLook({ colors: { skin: "#ff8a5c" }, accessories: [] });
+    expect(stage.materialColor("skin")).toBe("#ff8a5c");
+    expect(stage.materialColor("dark")).toBe(dark);
+    let skinned = 0;
+    stage.character.traverse((obj) => {
+      if (!(obj instanceof THREE.Mesh) || isOutlineHull(obj)) return;
+      const mat = obj.material as THREE.ShaderMaterial;
+      if (mat.name !== "skin") return;
+      skinned++;
+      expect(`#${(mat.uniforms.baseColor.value as THREE.Color).getHexString()}`).toBe("#ff8a5c");
+    });
+    expect(skinned).toBeGreaterThan(1);
+    stage.applyLook({ colors: {}, accessories: [] });
+    expect(stage.materialColor("skin")).toBe(original);
+  });
+
+  it("wears look accessories on top of the pose's own", () => {
+    const stage = newStage();
+    stage.setPose(characterPoseFor({ state: "active", isThinking: false, isSpeaking: false }), false);
+    expect(stage.isAccessoryShown("headphones")).toBe(false);
+    stage.applyLook({ colors: {}, accessories: ["headphones"] });
+    expect(stage.isAccessoryShown("headphones")).toBe(true);
+    stage.applyLook({ colors: {}, accessories: [] });
+    expect(stage.isAccessoryShown("headphones")).toBe(false);
+  });
+});
+
+describe("CharacterStage tricks", () => {
+  function trickClip(stage: CharacterStage, id: string): THREE.AnimationClip {
+    const trick = CHARACTER_MODELS.dodi.tricks.find((t) => t.id === id)!;
+    return buildMotionClip(fitMotionScript(trick.script, CHARACTER_MODELS.dodi).script, stage.motionRig);
+  }
+
+  it("finds every rig bone by its authored name", () => {
+    const stage = newStage();
+    expect(stage.boneNames.sort()).toEqual([...CHARACTER_MODELS.dodi.bones].sort());
+    expect(stage.motionRig.face?.name).toBe("face");
+  });
+
+  it("plays a trick once and fades back into the pose's clip", async () => {
+    const stage = newStage();
+    const listen = characterPoseFor({ state: "active", isThinking: false, isSpeaking: false });
+    stage.setPose(listen, false);
+    const clip = trickClip(stage, "wave");
+    const outcome = stage.playOnce(clip, false);
+    expect(stage.isPlayingTrick).toBe(true);
+
+    // A pose change mid-trick waits for the trick.
+    const thinking = characterPoseFor({ state: "active", isThinking: true, isSpeaking: false });
+    expect(stage.setPose(thinking, false).isChanged).toBe(false);
+
+    for (let t = 0; t < clip.duration + 1; t += 1 / 30) stage.update(1 / 30);
+    await expect(outcome).resolves.toBe("done");
+    expect(stage.isPlayingTrick).toBe(false);
+    expect(stage.currentClip).toBe(thinking.clip);
+  });
+
+  it("moves the bones while it plays and puts them back after", () => {
+    const stage = newStage();
+    stage.setPose(IDLE_POSE, false);
+    const clip = trickClip(stage, "pirouette");
+    void stage.playOnce(clip, false);
+    const root = stage.motionRig.bones.get("root")!;
+    let maxTurn = 0;
+    for (let t = 0; t < clip.duration; t += 1 / 30) {
+      stage.update(1 / 30);
+      maxTurn = Math.max(maxTurn, Math.abs(new THREE.Euler().setFromQuaternion(root.quaternion, "YXZ").y));
+    }
+    expect(maxTurn).toBeGreaterThan(Math.PI / 2);
+    for (let t = 0; t < 1; t += 1 / 30) stage.update(1 / 30);
+    expect(root.quaternion.angleTo(new THREE.Quaternion())).toBeLessThan(0.05);
+  });
+
+  it("cuts a trick short for the next one, and skips tricks under reduced motion", async () => {
+    const stage = newStage();
+    stage.setPose(IDLE_POSE, false);
+    const first = stage.playOnce(trickClip(stage, "wave"), false);
+    for (let i = 0; i < 10; i++) stage.update(1 / 30);
+    const second = stage.playOnce(trickClip(stage, "backflip"), false);
+    await expect(first).resolves.toBe("interrupted");
+    // The loop stays out while the next trick plays: it alone holds the pose.
+    for (let i = 0; i < 20; i++) stage.update(1 / 30);
+    const running = (stage.debugSnapshot().actions as { name: string; isRunning: boolean; weight: number }[]).filter(
+      (a) => a.isRunning && a.weight > 0,
+    );
+    expect(running).toEqual([]);
+    await expect(stage.playOnce(trickClip(stage, "wave"), true)).resolves.toBe("reduced-motion");
+    stage.setReducedMotion(true);
+    await expect(second).resolves.toBe("interrupted");
+  });
+});
+

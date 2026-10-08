@@ -20,7 +20,10 @@ function LoginCard() {
   const tc = useTranslations("common");
   // Deep-link target appended by middleware when an unauthenticated visitor
   // hits a protected route; validated inside LoginForm before navigating.
-  const next = useSearchParams().get("next");
+  const searchParams = useSearchParams();
+  const next = searchParams.get("next");
+  // Set by Settings > Delete account after the account is gone.
+  const isAccountDeleted = searchParams.get("deleted") === "1";
 
   return (
     <Card>
@@ -29,6 +32,11 @@ function LoginCard() {
         <CardDescription>{t("signInDescription")}</CardDescription>
       </CardHeader>
       <CardContent>
+        {isAccountDeleted && (
+          <p role="status" className="mb-4 rounded-lg bg-success-soft px-3 py-2 text-sm text-success">
+            {t("accountDeleted")}
+          </p>
+        )}
         <LoginForm next={next} />
       </CardContent>
       <CardFooter className="flex flex-col gap-2 text-sm">

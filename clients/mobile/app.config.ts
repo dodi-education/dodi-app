@@ -36,6 +36,13 @@ const config: ExpoConfig = {
       foregroundImage: "./assets/images/adaptive-icon.png",
       backgroundColor: "#F5F8FB",
     },
+    // Merged in by dependencies but unused, and questioned in Play review of
+    // an app children use: drawing over other apps and the install-referrer
+    // (attribution) service.
+    blockedPermissions: [
+      "android.permission.SYSTEM_ALERT_WINDOW",
+      "com.google.android.finsky.permission.BIND_GET_INSTALL_REFERRER_SERVICE",
+    ],
   },
   plugins: [
     "expo-router",

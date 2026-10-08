@@ -1,3 +1,5 @@
+import { LEGAL_PATHS, type LegalPage } from "@dodi/client-state/legal-links";
+
 /**
  * Absolute, locale-aware links from the app to the marketing site (dodi.app).
  * The landing is a separate static deployment (dodi-com/landing); its route
@@ -19,9 +21,11 @@ export type SitePage =
   | "pricing"
   | "about"
   | "games"
-  | "byok";
+  | "byok"
+  | LegalPage;
 
 const SITE_PATHS: Record<SitePage, { en: string; de: string }> = {
+  ...LEGAL_PATHS,
   home: { en: "/", de: "/de" },
   app: { en: "/app", de: "/de/app" },
   companion: { en: "/companion", de: "/de/companion" },

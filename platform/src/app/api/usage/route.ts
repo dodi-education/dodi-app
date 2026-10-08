@@ -39,6 +39,7 @@ const UsageReportSchema = z.object({
     "game_text_generation",
     "game_translation",
     "memory_update",
+    "custom_trick",
     "voice_minutes",
   ]),
   kidId: z.string().uuid().nullable().optional(),

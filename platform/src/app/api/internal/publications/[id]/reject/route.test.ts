@@ -134,10 +134,13 @@ describe("POST /api/internal/publications/[id]/reject", () => {
         rejectionKind: "soft",
       },
     });
-    expect(rejectPublication).toHaveBeenCalledWith({}, ID, {
-      kind: "soft",
-      reasons: SOFT_BODY.reasons,
-    });
+    // The manual path may also take a live (reported) game down.
+    expect(rejectPublication).toHaveBeenCalledWith(
+      {},
+      ID,
+      { kind: "soft", reasons: SOFT_BODY.reasons },
+      { allowLive: true },
+    );
     expect(order).toEqual(["operator", "publisher"]);
   });
 

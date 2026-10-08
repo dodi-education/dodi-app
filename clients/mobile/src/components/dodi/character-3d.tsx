@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, View, type LayoutChangeEvent } from "react-native";
 import { GLView, type ExpoWebGLRenderingContext } from "expo-gl";
 import { useIsFocused } from "expo-router";
+import type { CharacterModelId } from "@dodi/character/character-catalog";
+import type { CompanionLook } from "@dodi/character/character-look";
 import { canvasScaleFor, type CharacterStage } from "@dodi/character/character-stage";
 import { characterPoseFor, IDLE_POSE, type CompanionState } from "@dodi/character/character-pose";
 import type { FigureModeInput } from "@dodi/character/figure-mode";
@@ -11,9 +13,14 @@ import {
   createCharacterRenderer,
   loadCharacterStage,
   loadedCharacterStage,
+  playCharacterTrick,
   routeVoiceLevel,
+  setCharacterLook,
   type CharacterRenderer,
 } from "@/adapters/character-gl";
+import { useCompanionStageStore } from "@/lib/client-state";
+
+import { ThinkBubbles } from "./think-bubbles";
 import { useIsAppActive } from "@/lib/use-app-active";
 import { useReduceMotion } from "@/lib/use-reduce-motion";
 
@@ -22,6 +29,10 @@ import { useCharacterGestures, type CharacterGestureTarget } from "./use-charact
 export interface Character3dProps {
   /** The loaded stage (useCharacterStage); null keeps the figure's box empty while the figure is decided. */
   stage: CharacterStage | null;
+  /** The stage's avatar model (tricks are fitted to it). */
+  model: CharacterModelId;
+  /** The companion's look to wear (a look being tried on, else the saved one). */
+  look: CompanionLook;
   /** GL setup failed: the view falls back to the 2D figure. */
   onFailed: () => void;
   /** The voice session's state; unset, the character stands by (idle). */
@@ -54,25 +65,30 @@ const FRAME_INTERVAL_MS = 1000 / 30;
 
 export interface CharacterStageLoad {
   stage: CharacterStage | null;
+  /** The model `stage` shows (the one before stays while a new avatar loads). */
+  model: CharacterModelId;
   load: FigureModeInput["load"];
   /** Mark the character unavailable (GL setup failed). */
   fail: () => void;
 }
 
 /**
- * The app's one character stage for a view: at once if an earlier view loaded
- * it, else loaded while `isWanted` (the account's 3D setting is on or not
- * known yet).
+ * The app's character stage of `model` for a view: at once if an earlier view
+ * loaded it, else loaded while `isWanted` (the account's 3D setting is on or
+ * not known yet). While a new avatar loads, the one before stays on screen.
  */
-export function useCharacterStage(isWanted: boolean): CharacterStageLoad {
-  const [stage, setStage] = useState<CharacterStage | null>(loadedCharacterStage);
+export function useCharacterStage(isWanted: boolean, model: CharacterModelId): CharacterStageLoad {
+  const [loaded, setLoaded] = useState<{ stage: CharacterStage; model: CharacterModelId } | null>(() => {
+    const ready = loadedCharacterStage(model);
+    return ready ? { stage: ready, model } : null;
+  });
   const [hasFailed, setHasFailed] = useState(false);
 
   useEffect(() => {
-    if (stage || !isWanted) return;
+    if (!isWanted || hasFailed || loaded?.model === model) return;
     let isCurrent = true;
-    loadCharacterStage().then(
-      (loaded) => isCurrent && setStage(loaded),
+    loadCharacterStage(model).then(
+      (stage) => isCurrent && setLoaded({ stage, model }),
       (err: unknown) => {
         console.warn("[character] 3D character unavailable, showing the 2D figure:", err);
         if (isCurrent) setHasFailed(true);
@@ -81,11 +97,19 @@ export function useCharacterStage(isWanted: boolean): CharacterStageLoad {
     return () => {
       isCurrent = false;
     };
-  }, [stage, isWanted]);
+  }, [loaded, model, isWanted, hasFailed]);
 
   const fail = useCallback(() => setHasFailed(true), []);
-  return { stage, load: hasFailed ? "failed" : stage ? "ready" : "loading", fail };
+  return {
+    stage: loaded?.stage ?? null,
+    model: loaded?.model ?? model,
+    load: hasFailed ? "failed" : loaded ? "ready" : "loading",
+    fail,
+  };
 }
+
+// Each trick request plays once, on whichever view shows the character.
+let playedTrickNonce = 0;
 
 // The views showing the character, latest last: only the latest draws and
 // advances the clips (one stage, shared, as the web's one canvas).
@@ -100,6 +124,8 @@ const owners: object[] = [];
  */
 export function Character3d({
   stage,
+  model,
+  look,
   onFailed,
   state,
   isThinking = false,
@@ -109,9 +135,13 @@ export function Character3d({
   alt,
   stateLabel,
 }: Character3dProps) {
+  const isLearning = useCompanionStageStore((s) => s.isLearningTrick);
   const pose = useMemo(
-    () => (state ? characterPoseFor({ state, isThinking, isSpeaking }) : IDLE_POSE),
-    [state, isThinking, isSpeaking],
+    () =>
+      state || isLearning
+        ? characterPoseFor({ state: state ?? "active", isThinking, isSpeaking, isLearning })
+        : IDLE_POSE,
+    [state, isThinking, isSpeaking, isLearning],
   );
   const [box, setBox] = useState<Box | null>(null);
   const isReducedMotion = useReduceMotion();
@@ -138,6 +168,28 @@ export function Character3d({
     stage?.setReducedMotion(isReducedMotion);
   }, [stage, isReducedMotion]);
   useEffect(() => (voiceLevel ? routeVoiceLevel(voiceLevel) : undefined), [voiceLevel]);
+  useEffect(() => {
+    if (stage) setCharacterLook(look);
+  }, [stage, look]);
+
+  // Tricks: the Playground and the voice ask through the stage store.
+  const trickRequest = useCompanionStageStore((s) => s.trickRequest);
+  const setCharacterShown = useCompanionStageStore((s) => s.setCharacterShown);
+  const settleTrick = useCompanionStageStore((s) => s.settleTrick);
+  useEffect(() => {
+    setCharacterShown(stage !== null);
+    return () => setCharacterShown(false);
+  }, [stage, setCharacterShown]);
+  useEffect(() => {
+    if (!trickRequest || trickRequest.nonce <= playedTrickNonce) return;
+    playedTrickNonce = trickRequest.nonce;
+    const { nonce, trick } = trickRequest;
+    if (!stage) {
+      settleTrick(nonce, "unavailable");
+      return;
+    }
+    void playCharacterTrick(stage, model, trick.script, isReducedMotion).then((outcome) => settleTrick(nonce, outcome));
+  }, [trickRequest, stage, model, isReducedMotion, settleTrick]);
 
   // The frame loop: only while shown, and only for the view that owns the character.
   useEffect(() => {
@@ -237,6 +289,7 @@ export function Character3d({
           />
         </View>
       ) : null}
+      {stage && pose.clip === "think" ? <ThinkBubbles /> : null}
     </View>
   );
 }

@@ -1,9 +1,19 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
-import { ACCESSORY_NAMES, type AccessoryName, type CharacterFile } from "@dodi/character/character-files";
+import {
+  ACCESSORIES,
+  ACCESSORY_LIST,
+  CHARACTER_MODELS,
+  DEFAULT_CHARACTER_MODEL,
+  type CharacterModelId,
+} from "@dodi/character/character-catalog";
+import type { CharacterFile } from "@dodi/character/character-files";
+import type { CompanionLook } from "@dodi/character/character-look";
 import type { CharacterPose } from "@dodi/character/character-pose";
-import { CharacterStage, canvasScaleFor } from "@dodi/character/character-stage";
+import { CharacterStage, canvasScaleFor, type TrickOutcome } from "@dodi/character/character-stage";
+import { buildMotionClip } from "@dodi/character/motion-clip";
+import { fitMotionScript, type MotionScript } from "@dodi/character/motion-script";
 
 import { dodiOutputLevel } from "@/stores/dodi-session-store";
 
@@ -18,10 +28,8 @@ import { attachCharacterGestures } from "./character-gestures";
  * loading the files by URL. Format: characters/README.md.
  */
 
-const CHARACTER_URL = "/characters/dodi.glb";
-const ACCESSORY_URLS: Record<AccessoryName, string> = {
-  headphones: "/characters/accessories/headphones.glb",
-};
+// The catalog's files, served from public/characters (kit.publish_to_web).
+const assetUrl = (file: string): string => `/characters/${file}`;
 
 // Rendered at SUPERSAMPLE x the device resolution and scaled down by the
 // browser, which smooths the outline's pixel steps; device ratio capped at 2.
@@ -43,6 +51,9 @@ class CanvasStage {
   private host: HTMLElement | null = null;
   private frame = 0;
   private canvasScale = 0;
+  // DEBUG(sleep-eyes): temporary.
+  private debugFrames = 0;
+  private debugLastFrameAt = 0;
 
   constructor(private readonly stage: CharacterStage) {
     this.renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
@@ -54,11 +65,18 @@ class CanvasStage {
     debugStageCount += 1;
     console.info("[character] stage created", { stageNumber: debugStageCount, clips: [...stage.clipNames] });
     (window as unknown as { characterDebug?: () => unknown }).characterDebug = () => this.debugSnapshot();
+    this.renderer.domElement.addEventListener("webglcontextlost", () =>
+      console.warn("[character] WebGL context lost", { stageNumber: debugStageCount, frames: this.debugFrames }),
+    );
+    this.renderer.domElement.addEventListener("webglcontextrestored", () =>
+      console.warn("[character] WebGL context restored", { stageNumber: debugStageCount }),
+    );
 
     this.resizeObserver = new ResizeObserver(() => this.resize());
   }
 
   mount(host: HTMLElement): () => void {
+    console.info("[character] mount", { hadHost: this.host !== null, frame: this.frame }); // DEBUG(sleep-eyes)
     this.host = host;
     host.appendChild(this.renderer.domElement);
     this.resizeObserver.observe(host);
@@ -83,12 +101,23 @@ class CanvasStage {
     this.frame = requestAnimationFrame(this.tick);
     return () => {
       detachGestures();
+      console.info("[character] unmount", { isCurrentHost: this.host === host }); // DEBUG(sleep-eyes)
       if (this.host !== host) return; // another view has taken over already
       this.resizeObserver.unobserve(host);
       cancelAnimationFrame(this.frame);
+      this.frame = 0; // DEBUG(sleep-eyes): so the snapshot's isTicking is truthful
       this.renderer.domElement.remove();
       this.host = null;
     };
+  }
+
+  applyLook(look: CompanionLook): void {
+    this.stage.applyLook(look);
+  }
+
+  playTrick(script: MotionScript): Promise<TrickOutcome> {
+    const clip = buildMotionClip(script, this.stage.motionRig);
+    return this.stage.playOnce(clip, prefersReducedMotion());
   }
 
   setPose(pose: CharacterPose): void {
@@ -114,11 +143,34 @@ class CanvasStage {
 
   /** DEBUG(sleep-eyes): temporary. Call `characterDebug()` in the console. */
   private debugSnapshot(): unknown {
-    return { ...this.stage.debugSnapshot(), isMounted: this.host !== null, isTicking: this.frame !== 0 };
+    const canvas = this.renderer.domElement;
+    return {
+      ...this.stage.debugSnapshot(),
+      isMounted: this.host !== null,
+      isTicking: this.frame !== 0,
+      framesRendered: this.debugFrames,
+      msSinceLastFrame: Math.round(performance.now() - this.debugLastFrameAt),
+      isContextLost: this.renderer.getContext().isContextLost(),
+      isCanvasConnected: canvas.isConnected,
+      canvasSize: `${canvas.width}x${canvas.height}`,
+      canvasesInPage: document.querySelectorAll("canvas").length,
+      visibility: document.visibilityState,
+    };
   }
 
   private readonly tick = (): void => {
     this.frame = requestAnimationFrame(this.tick);
+    // DEBUG(sleep-eyes): temporary. A gap means the loop was paused (hidden tab) or stalled.
+    const now = performance.now();
+    if (this.debugLastFrameAt !== 0 && now - this.debugLastFrameAt > 1000) {
+      console.info("[character] frame loop resumed", {
+        gapMs: Math.round(now - this.debugLastFrameAt),
+        pose: this.stage.currentPose?.clip ?? null,
+        current: this.stage.currentClip,
+      });
+    }
+    this.debugLastFrameAt = now;
+    this.debugFrames += 1;
     this.renderFrame();
   };
 
@@ -175,45 +227,81 @@ class CanvasStage {
 // Controls of the page whose presses are theirs, not a gesture.
 const OTHER_CONTROLS = "button, a, input, textarea, select, label, [role='button']";
 
-let stage: CanvasStage | null = null;
+// One stage per avatar model, loaded when first shown.
+const stages = new Map<CharacterModelId, CanvasStage>();
 let debugStageCount = 0; // DEBUG(sleep-eyes): temporary.
-let loading: Promise<void> | null = null;
+const loading = new Map<CharacterModelId, Promise<void>>();
+let lastPose: CharacterPose | null = null;
+let lastLook: CompanionLook | null = null;
 
-/** Load the character and its accessories once; rejects if WebGL or the files fail. */
-export function loadCharacterStage(): Promise<void> {
-  loading ??= (async () => {
+/**
+ * Load a model and the accessories once; rejects if WebGL or the model fails.
+ * An accessory that fails to load is left out rather than failing the stage.
+ */
+export function loadCharacterStage(model: CharacterModelId = DEFAULT_CHARACTER_MODEL): Promise<void> {
+  const existing = loading.get(model);
+  if (existing) return existing;
+  const promise = (async () => {
     const loader = new GLTFLoader();
     const [character, ...accessories] = await Promise.all([
-      loader.loadAsync(CHARACTER_URL),
-      ...ACCESSORY_NAMES.map((name) => loader.loadAsync(ACCESSORY_URLS[name])),
+      loader.loadAsync(assetUrl(CHARACTER_MODELS[model].file)),
+      ...ACCESSORY_LIST.map((name) =>
+        loader.loadAsync(assetUrl(ACCESSORIES[name].file)).catch((err: unknown) => {
+          console.warn(`[character] accessory ${name} unavailable:`, err);
+          return null;
+        }),
+      ),
     ]);
     // Each glTF scene group carries its file's manifest (scene extras) in userData.
-    const accessoryFiles = new Map<string, CharacterFile>(
-      accessories.map((gltf, i) => [ACCESSORY_NAMES[i], { scene: gltf.scene, animations: gltf.animations }]),
-    );
+    const accessoryFiles = new Map<string, CharacterFile>();
+    accessories.forEach((gltf, i) => {
+      if (gltf) accessoryFiles.set(ACCESSORY_LIST[i], { scene: gltf.scene, animations: gltf.animations });
+    });
     const scene = new CharacterStage(
       { scene: character.scene, animations: character.animations },
       accessoryFiles,
       { voiceLevel: dodiOutputLevel },
     );
-    stage = new CanvasStage(scene);
+    const canvasStage = new CanvasStage(scene);
+    if (lastPose) canvasStage.setPose(lastPose);
+    if (lastLook?.model === model) canvasStage.applyLook(lastLook);
+    stages.set(model, canvasStage);
   })();
-  loading.catch(() => {
-    loading = null; // a later mount may retry
+  loading.set(model, promise);
+  promise.catch(() => {
+    loading.delete(model); // a later mount may retry
   });
-  return loading;
+  return promise;
 }
 
-export function isCharacterStageReady(): boolean {
-  return stage !== null;
+export function isCharacterStageReady(model: CharacterModelId = DEFAULT_CHARACTER_MODEL): boolean {
+  return stages.has(model);
 }
 
 /** Show the character in `host` (replacing wherever it was); returns the unmount. */
-export function mountCharacterStage(host: HTMLElement): () => void {
-  if (!stage) throw new Error("character stage not loaded");
+export function mountCharacterStage(host: HTMLElement, model: CharacterModelId = DEFAULT_CHARACTER_MODEL): () => void {
+  const stage = stages.get(model);
+  if (!stage) throw new Error(`character stage ${model} not loaded`);
   return stage.mount(host);
 }
 
 export function setCharacterPose(pose: CharacterPose): void {
-  stage?.setPose(pose);
+  lastPose = pose;
+  for (const stage of stages.values()) stage.setPose(pose);
+}
+
+/** The companion's look (its model's stage wears it). */
+export function setCharacterLook(look: CompanionLook): void {
+  lastLook = look;
+  stages.get(look.model)?.applyLook(look);
+}
+
+/** Play a trick on a model's stage; resolves when it ends. */
+export function playCharacterTrick(
+  model: CharacterModelId,
+  script: MotionScript,
+): Promise<TrickOutcome | "unavailable"> {
+  const stage = stages.get(model);
+  // Fitted to this model: bones it lacks drop out, values stay in its limits.
+  return stage ? stage.playTrick(fitMotionScript(script, CHARACTER_MODELS[model]).script) : Promise.resolve("unavailable");
 }

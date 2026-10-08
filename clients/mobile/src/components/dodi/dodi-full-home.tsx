@@ -1,17 +1,19 @@
-import { type ReactNode, useEffect } from "react";
+import { Children, type ReactNode, useEffect } from "react";
 import { ActivityIndicator, Image, Pressable, useWindowDimensions, View } from "react-native";
 import { useTranslations } from "use-intl";
 import { COLORS } from "@dodi/design-tokens";
 import { is3dPreferenceOf } from "@dodi/client-state/account-store";
-import { kidHomeStage, kidHomeTalk, speechBubble } from "@dodi/ui-recipes";
+import { kidHomeStage, kidHomeTalk, playground, speechBubble } from "@dodi/ui-recipes";
 
 import { KidText } from "@/components/kid/kid-text";
 import { ListeningPulse } from "@/components/kid/listening-pulse";
+import { Playground } from "@/components/kid/playground/playground";
 import { Button, Icon } from "@/components/ui";
 import { useAnnounceOnIos } from "@/lib/announce";
 import { cn } from "@/lib/cn";
-import { useAccountStore, useConnectivityStore } from "@/lib/client-state";
+import { useAccountStore, useCompanionStageStore, useConnectivityStore } from "@/lib/client-state";
 import { type DodiState, dodiOutputLevel, selectDodiThinking, useDodiSessionStore } from "@/lib/dodi-session-store";
+import { useActiveCompanion } from "@/lib/use-active-companion";
 import { useIsAppActive } from "@/lib/use-app-active";
 import { useDodiContext } from "@/lib/use-dodi-context";
 import { useKids } from "@/lib/use-kids";
@@ -28,11 +30,18 @@ interface DodiFullHomeProps {
   hasProvider: boolean;
 }
 
-/** Vertically centered column (web: the 3D character's turn/zoom area). */
+/**
+ * Vertically centered column (web: the 3D character's turn/zoom area). It
+ * also holds the Playground; while that is open only the character stays (the
+ * speech bubble and hints step aside for the tools).
+ */
 function Stage({ children }: { children: ReactNode }) {
+  const isPlaygroundOpen = useCompanionStageStore((s) => s.isPlaygroundOpen);
+  const shown = isPlaygroundOpen ? Children.toArray(children).slice(0, 1) : children;
   return (
     <View className={kidHomeStage.root}>
-      <View className={kidHomeStage.inner}>{children}</View>
+      <View className={cn(kidHomeStage.inner, isPlaygroundOpen && playground.stageOpen)}>{shown}</View>
+      <Playground />
     </View>
   );
 }
@@ -40,7 +49,10 @@ function Stage({ children }: { children: ReactNode }) {
 /** The mascot box: clamp(170px, 38vh, 300px) square; the figure fills 76%. */
 function MascotWrap({ listening, children }: { listening?: boolean; children: ReactNode }) {
   const { height } = useWindowDimensions();
-  const size = Math.min(kidHomeStage.mascotMax, Math.max(kidHomeStage.mascotMin, height * kidHomeStage.mascotVh));
+  const isPlaygroundOpen = useCompanionStageStore((s) => s.isPlaygroundOpen);
+  const full = Math.min(kidHomeStage.mascotMax, Math.max(kidHomeStage.mascotMin, height * kidHomeStage.mascotVh));
+  // With the Playground open the character shares the screen: it fits the top half.
+  const size = isPlaygroundOpen ? Math.min(full, height * playground.mascotOpenVh) : full;
   return (
     <View className={kidHomeStage.mascot} style={{ width: size }}>
       {listening ? <ListeningPulse /> : null}
@@ -68,7 +80,8 @@ function Figure({ state, alt, onPress, pressLabel }: FigureProps) {
   // Unknown (null) until the account has loaded: wait for it, don't guess.
   const is3dEnabled = useAccountStore(is3dPreferenceOf);
   const loadAccount = useAccountStore((s) => s.load);
-  const character = useCharacterStage(is3dEnabled !== false);
+  const { look } = useActiveCompanion();
+  const character = useCharacterStage(is3dEnabled !== false, look.model);
   const mode = useFigureMode(is3dEnabled, character.load);
   const isSpeaking = useDodiSessionStore((s) => s.dodiSpeaking);
   const isThinking = useDodiSessionStore(selectDodiThinking);
@@ -94,6 +107,8 @@ function Figure({ state, alt, onPress, pressLabel }: FigureProps) {
       <View className={cn(kidHomeStage.figure, kidHomeTalk.mascotButton)}>
         <Character3d
           stage={mode === "3d" ? character.stage : null}
+          model={character.model}
+          look={look}
           onFailed={character.fail}
           state={state}
           isThinking={isThinking}

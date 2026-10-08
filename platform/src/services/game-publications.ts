@@ -418,30 +418,45 @@ export async function approvePublication(
  * Stamp a submission as rejected. Hard rejections additionally flag the
  * account for review and, via the request log, which outlives the copy row,
  * permanently block resubmission of the source game.
+ *
+ * `allowLive` (the operator's manual path, never the review worker) also
+ * takes a LIVE game down: it leaves Discover (published_at cleared, so other
+ * families' shares stop resolving) and the marketing catalogue rebuilds. The
+ * copy stays as a rejected row, the evidence a moderator reviews.
  */
 export async function rejectPublication(
   db: Db,
   publicationId: string,
   rejection: { kind: RejectionKind; reasons: PublicationRejectionReason[] },
+  options: { allowLive?: boolean } = {},
 ): Promise<Game> {
   // Pre-encode: pg binds a JS array as a Postgres array literal, not JSON, and
   // jsonb rejects it ("invalid input syntax for type json"). See lib/db-json.
   const reasonsJson = JSON.stringify(rejection.reasons) as unknown as Json;
-  const publication = await db
+  const wasLive = options.allowLive
+    ? (await db
+        .selectFrom("games")
+        .select("published_at")
+        .where("id", "=", publicationId)
+        .executeTakeFirst())?.published_at != null
+    : false;
+  let update = db
     .updateTable("games")
     .set({
       rejected_at: new Date().toISOString(),
       rejection_kind: rejection.kind,
       rejection_reasons: reasonsJson,
+      ...(options.allowLive ? { published_at: null } : {}),
     })
     .where("id", "=", publicationId)
-    .where("publication_requested_at", "is not", null)
-    .where("published_at", "is", null)
-    .returningAll()
-    .executeTakeFirst();
+    .where("publication_requested_at", "is not", null);
+  if (!options.allowLive) update = update.where("published_at", "is", null);
+  const publication = await update.returningAll().executeTakeFirst();
   // Withdrawn (or already published) between claim and verdict: nothing to
   // stamp; the caller treats the 404 as a harmless skip.
   if (!publication) throw new PublicationError("Publication not found", 404);
+  // A live game left the public catalogue: the marketing site lists it.
+  if (wasLive) await triggerLandingRebuild();
 
   await db
     .updateTable("game_publication_requests")

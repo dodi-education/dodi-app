@@ -5,12 +5,14 @@ import { mobileAuthApi } from "@/adapters/auth";
 import { FieldRow } from "@/components/parent/rows";
 import { Section } from "@/components/parent/section";
 import { DateTimeSettings } from "@/components/settings/date-time-settings";
+import { DeleteAccount } from "@/components/settings/delete-account";
 import { InterfaceSettings } from "@/components/settings/interface-settings";
 import { LanguageSwitcher } from "@/components/settings/language-switcher";
+import { LegalLinks } from "@/components/settings/legal-links";
 import { Badge, Text } from "@/components/ui";
 import { useAccountStore } from "@/lib/client-state";
 
-/** General settings (web: parent/settings/general/page): account, interface, date and time. */
+/** General settings (web: parent/settings/general/page): account, interface, date and time, legal, account deletion. */
 export default function GeneralSettingsScreen() {
   const t = useTranslations("settings");
   const tier = useAccountStore((s) => s.account?.subscribed_plan ?? "egg");
@@ -57,6 +59,10 @@ export default function GeneralSettingsScreen() {
       <InterfaceSettings />
 
       <DateTimeSettings />
+
+      <LegalLinks />
+
+      <DeleteAccount />
     </>
   );
 }

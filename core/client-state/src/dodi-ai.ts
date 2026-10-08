@@ -10,6 +10,15 @@ import { API_VERSION, VERSION_HEADER } from "@dodi/billing-contract";
  * ever made (PROJECT.md: "Self-host / no cloud AI URL → hide top-up and dodi
  * AI; BYOK only").
  */
+/**
+ * Whether the apps offer dodi AI at all. The open beta launches with the
+ * parent's own keys only, so this is off: the client behaves as in self-host
+ * mode (no dodi AI tab, card or picker option, no request to ai.dodi.app)
+ * even where the control-plane URL is configured. Turn it on when dodi AI
+ * launches.
+ */
+export const IS_DODI_AI_OFFERED = false;
+
 export interface DodiAIClient {
   isConfigured(): boolean;
   request(path: string, init?: RequestInit): Promise<Response>;

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 
 import {
   Captcha,
@@ -35,12 +35,14 @@ import {
 import { NpubConflictError } from "@dodi/protocol/client";
 import { webAuthApi } from "@/lib/auth/auth-api";
 import { clientState } from "@/lib/client-state";
+import { siteUrl } from "@/lib/site-links";
 
 const isNpubConflict = (error: unknown): boolean => error instanceof NpubConflictError;
 
 export default function RegisterPage() {
   const t = useTranslations("auth");
   const tc = useTranslations("common");
+  const locale = useLocale();
   const router = useRouter();
   // null = still loading the registration mode from the platform.
   const [mode, setMode] = useState<RegistrationMode | null>(null);
@@ -50,6 +52,7 @@ export default function RegisterPage() {
   const [inviteCode, setInviteCode] = useState("");
   // Advanced: bring an existing Nostr key as the account key (empty = generate).
   const [importedNsec, setImportedNsec] = useState("");
+  const [hasAcceptedTerms, setHasAcceptedTerms] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -97,6 +100,7 @@ export default function RegisterPage() {
       mode: mode ?? "open",
       inviteCode,
       importedNsec,
+      hasAcceptedTerms,
     } as const;
     // The challenge only runs once the form itself is valid.
     const invalid = validateRegistration(form);
@@ -395,6 +399,41 @@ export default function RegisterPage() {
               </p>
             </div>
           </details>
+          <label className="flex items-start gap-2 text-sm text-ink-2">
+            <input
+              type="checkbox"
+              checked={hasAcceptedTerms}
+              onChange={(e) => {
+                setError(null);
+                setHasAcceptedTerms(e.target.checked);
+              }}
+              className="mt-0.5 size-4 shrink-0 accent-primary"
+            />
+            <span>
+              {t.rich("termsConsent", {
+                terms: (chunks) => (
+                  <a
+                    href={siteUrl("terms", locale)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-medium text-primary hover:underline"
+                  >
+                    {chunks}
+                  </a>
+                ),
+                privacy: (chunks) => (
+                  <a
+                    href={siteUrl("privacy", locale)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-medium text-primary hover:underline"
+                  >
+                    {chunks}
+                  </a>
+                ),
+              })}
+            </span>
+          </label>
           {error && <p className="text-sm text-destructive">{error}</p>}
           <Captcha ref={captchaRef} action="sign-up" />
           <Button type="submit" disabled={loading} className="w-full">

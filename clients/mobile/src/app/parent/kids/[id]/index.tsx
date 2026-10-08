@@ -4,6 +4,7 @@ import { View } from "react-native";
 import { useTranslations } from "use-intl";
 import { generateSocialId } from "@dodi/crypto/social-id";
 import { readStoredDatePref } from "@dodi/client-state/date-preferences";
+import { activeCompanionOf, companionNameOf } from "@dodi/client-state/companions";
 import { flowErrorText } from "@dodi/client-state/flow-error";
 import { settleAll } from "@dodi/client-state/pull-refresh";
 import {
@@ -24,20 +25,19 @@ import {
 } from "@dodi/client-state/kid-profile";
 import { type DateStyleId, resolvePref, type StoredDatePreferences, type TimeStyleId } from "@dodi/intl/prefs";
 import type { Kid } from "@dodi/types/database";
-import { pinPuzzleBlock, socialIdRow } from "@dodi/ui-recipes";
+import { button, buttonIconColor, pinPuzzleBlock, socialIdRow } from "@dodi/ui-recipes";
 
 import { AvatarPinPuzzle } from "@/components/kid/avatar-pin-puzzle";
 import { SectionFormError } from "@/components/parent/form-error";
 import { KidLanguageSelect } from "@/components/kids/language-select";
 import { PageMessage } from "@/components/parent/page-message";
-import { PersonaSelector } from "@/components/kids/persona-selector";
 import { DateField } from "@/components/parent/date-field";
 import { DateTimeFields } from "@/components/parent/date-time-fields";
 import { FieldRow, Row, RowMain, RowMeta, RowTitle } from "@/components/parent/rows";
 import { SaveRow } from "@/components/parent/save-row";
 import { Section } from "@/components/parent/section";
 import { ShellContent } from "@/components/shared/shell-content";
-import { Button, Dialog, Input, Switch, Text } from "@/components/ui";
+import { Button, Dialog, Icon, Input, Switch, Text } from "@/components/ui";
 import { useAccountStore, useKidStore, useVaultStore } from "@/lib/client-state";
 import { cn } from "@/lib/cn";
 import { useLocaleSetting } from "@/lib/intl";
@@ -48,14 +48,14 @@ const SAVED_NOTE_MS = 2500;
 
 /**
  * Edit a kid (web: parent/kids/[id]/page): profile and friend settings, the
- * persona, the avatar-PIN puzzle, the per-kid date/time override and the
+ * companions link, the avatar-PIN puzzle, the per-kid date/time override and the
  * danger zone. Personal fields are sealed on the device; a profile save
  * re-seals the kid's friend cards.
  */
 export default function EditKidScreen() {
   const t = useTranslations("kids");
   const tc = useTranslations("common");
-  const tp = useTranslations("personas");
+  const tco = useTranslations("companions");
   const tf = useTranslations("friends");
   const ts = useTranslations("settings");
   const { locale } = useLocaleSetting();
@@ -74,11 +74,11 @@ export default function EditKidScreen() {
   const [isSocialIdInvalid, setIsSocialIdInvalid] = useState(false);
   const [birthdate, setBirthdate] = useState("");
   const [language, setLanguage] = useState<string>("en");
-  const [activePersonaId, setActivePersonaId] = useState<string | null>(null);
   const [canInitiate, setCanInitiate] = useState(true);
   const [canBeAdded, setCanBeAdded] = useState(true);
   const [incomingApproval, setIncomingApproval] = useState(true);
   const [outgoingApproval, setOutgoingApproval] = useState(false);
+  const [canChangeAvatar, setCanChangeAvatar] = useState(false);
   const [isPinEnabled, setIsPinEnabled] = useState(false);
   const [pinSlots, setPinSlots] = useState<PinSlots>(emptyPinSlots);
   const [isPinSaving, setIsPinSaving] = useState(false);
@@ -111,11 +111,11 @@ export default function EditKidScreen() {
     setSocialId(form.socialId);
     setBirthdate(form.birthdate);
     setLanguage(form.language);
-    setActivePersonaId(data.active_persona?.id ?? null);
     setCanInitiate(form.canAddFriends);
     setCanBeAdded(form.canBeAddedAsFriend);
     setIncomingApproval(form.incomingApproval);
     setOutgoingApproval(form.outgoingApproval);
+    setCanChangeAvatar(form.canChangeCompanionAvatar);
     const storedPin = parseStoredPin(data.avatar_pin);
     setIsPinEnabled(storedPin != null);
     setPinSlots(storedPin ?? emptyPinSlots());
@@ -185,6 +185,7 @@ export default function EditKidScreen() {
         canBeAddedAsFriend: canBeAdded,
         incomingApproval,
         outgoingApproval,
+        canChangeCompanionAvatar: canChangeAvatar,
       });
     } catch (err) {
       setError(flowErrorText(err, t("failedToUpdate")));
@@ -307,8 +308,20 @@ export default function EditKidScreen() {
         <FieldRow label={t("language")} hint={t("languageHint")}>
           <KidLanguageSelect value={language} onChange={setLanguage} />
         </FieldRow>
-        <FieldRow label={tp("selectorLabel")} hint={tp("selectorHint")}>
-          <PersonaSelector kidId={id} value={activePersonaId} onChange={setActivePersonaId} />
+        <FieldRow label={tco("kidRowLabel")} hint={tco("kidRowHint")}>
+          <Button variant="outline" onPress={() => router.push("/parent/companions" as Href)}>
+            <Text className={button.text({ variant: "outline" })} numberOfLines={1}>
+              {`${companionNameOf(activeCompanionOf(kid))}${kid.companions.length > 1 ? ` +${kid.companions.length - 1}` : ""}`}
+            </Text>
+            <Icon name="chevron_right" size={14} color={buttonIconColor.outline} />
+          </Button>
+        </FieldRow>
+        <FieldRow label={tco("canChangeAvatar")} hint={tco("canChangeAvatarHint")}>
+          <Switch
+            checked={canChangeAvatar}
+            onCheckedChange={setCanChangeAvatar}
+            accessibilityLabel={tco("canChangeAvatar")}
+          />
         </FieldRow>
         <FieldRow label={tf("canInitiate")} hint={tf("canInitiateHint")}>
           <Switch checked={canInitiate} onCheckedChange={setCanInitiate} accessibilityLabel={tf("canInitiate")} />

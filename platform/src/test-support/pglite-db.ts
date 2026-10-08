@@ -36,7 +36,20 @@ export interface TestDatabase {
     email: string,
     options?: { inviteCode?: string; emailVerified?: boolean },
   ) => Promise<string>;
+  /**
+   * Apply the remaining migrations (and the seed) on a database created with
+   * `upTo`. A no-op on a fully migrated one.
+   */
+  migrateToLatest: () => Promise<void>;
   close: () => Promise<void>;
+}
+
+export interface CreateTestDbOptions {
+  /**
+   * Stop after this migration (file name without `.sql`) and skip the seed,
+   * to test a data migration: seed old-shape rows, then `migrateToLatest()`.
+   */
+  upTo?: string;
 }
 
 /** Sets role + account on the single PGlite connection for the scoped handle. */
@@ -84,16 +97,29 @@ class ScopedTestDriver implements Driver {
   }
 }
 
-export async function createTestDb(): Promise<TestDatabase> {
+export async function createTestDb(
+  options: CreateTestDbOptions = {},
+): Promise<TestDatabase> {
   const client = await createPGlite();
   const dialect = pgliteDialect(client);
   const serviceDb = new Kysely<Database>({ dialect });
+  const migrator = createMigrator(serviceDb as unknown as Kysely<unknown>);
 
-  const { error } = await createMigrator(
-    serviceDb as unknown as Kysely<unknown>,
-  ).migrateToLatest();
-  if (error) throw error;
-  await runSeeds(serviceDb as unknown as Kysely<unknown>);
+  let isSeeded = false;
+  const migrateToLatest = async (): Promise<void> => {
+    const { error } = await migrator.migrateToLatest();
+    if (error) throw error;
+    if (isSeeded) return;
+    await runSeeds(serviceDb as unknown as Kysely<unknown>);
+    isSeeded = true;
+  };
+
+  if (options.upTo) {
+    const { error } = await migrator.migrateTo(options.upTo);
+    if (error) throw error;
+  } else {
+    await migrateToLatest();
+  }
 
   const scopedDb = (accountId: string): TestDb =>
     new Kysely<Database>({
@@ -124,6 +150,7 @@ export async function createTestDb(): Promise<TestDatabase> {
     serviceDb,
     scopedDb,
     createAccount,
+    migrateToLatest,
     close: async () => {
       await serviceDb.destroy();
       await client.close();

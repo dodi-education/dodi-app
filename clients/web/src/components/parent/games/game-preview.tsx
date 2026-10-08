@@ -15,6 +15,7 @@
  * In place of the studio's active/inactive switch, the header offers
  * "Share with kids" (play-in-place — the same flow as the Discover list).
  */
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 
@@ -48,6 +49,7 @@ export function GamePreview({
   sharing: initialSharing,
 }: GamePreviewProps) {
   const t = useTranslations("gameStudio");
+  const tReport = useTranslations("report");
   const locale = useLocale();
   const [view, setView] = useState<PreviewView>("preview");
   const [shareOpen, setShareOpen] = useState(false);
@@ -172,6 +174,14 @@ export function GamePreview({
                   {detail.target_age_min}–{detail.target_age_max}
                 </p>
               </InfoRow>
+
+              <Link
+                href={`/parent/report?kind=discover_game&game=${detail.id}`}
+                className="inline-flex items-center gap-1.5 self-start text-[13px] font-semibold text-muted-foreground hover:text-danger hover:underline"
+              >
+                <Icon name="alert" size={14} />
+                {tReport("reportGame")}
+              </Link>
             </div>
           )}
         </div>

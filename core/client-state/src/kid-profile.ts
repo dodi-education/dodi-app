@@ -1,6 +1,7 @@
 /**
  * The parent's kid pages (/parent/kids, /new, /{id}): create, edit, delete a
- * kid, its avatar-PIN puzzle, its date/time override and its persona.
+ * kid, its avatar-PIN puzzle and its date/time override. Companions (and their
+ * personas) are companions.ts.
  *
  * E2EE: name, birthdate and the PIN sequence are sealed with the vault before
  * they leave the device (`encryptKidFields`); an explicit timezone is sealed
@@ -10,7 +11,7 @@
  */
 import { SUPPORTED_LOCALES, type Locale } from "@dodi/intl/locales";
 import type { DateStyleId, StoredDatePreferences, TimeStyleId } from "@dodi/intl/prefs";
-import type { Kid, Persona } from "@dodi/types/database";
+import type { Kid } from "@dodi/types/database";
 import { encryptKidFields } from "@dodi/vault/kid-crypto";
 import type { VaultSession } from "@dodi/vault";
 
@@ -112,6 +113,7 @@ export interface KidProfileForm {
   canBeAddedAsFriend: boolean;
   incomingApproval: boolean;
   outgoingApproval: boolean;
+  canChangeCompanionAvatar: boolean;
 }
 
 /** The edit form's initial values from a DECRYPTED kid. */
@@ -125,6 +127,7 @@ export function kidProfileFormOf(kid: Kid): KidProfileForm {
     canBeAddedAsFriend: kid.can_be_added_as_friend ?? true,
     incomingApproval: kid.incoming_friend_requests_require_parent_approval ?? true,
     outgoingApproval: kid.outgoing_friend_requests_require_parent_approval ?? false,
+    canChangeCompanionAvatar: kid.can_change_companion_avatar ?? false,
   };
 }
 
@@ -155,6 +158,7 @@ export async function updateKidProfile(
       can_be_added_as_friend: form.canBeAddedAsFriend,
       incoming_friend_requests_require_parent_approval: form.incomingApproval,
       outgoing_friend_requests_require_parent_approval: form.outgoingApproval,
+      can_change_companion_avatar: form.canChangeCompanionAvatar,
     }),
   );
   if (!res.ok) throw new FlowError("request_failed", await serverErrorOf(res));
@@ -259,36 +263,6 @@ export async function saveKidDatePreferences(
   );
   if (!res.ok) throw new FlowError("request_failed", await serverErrorOf(res));
   deps.kids.getState().invalidate();
-}
-
-// ----- Persona ------------------------------------------------------------------
-
-/**
- * Switch the kid's active persona (null = the default) and mirror it into the
- * cached kid rows, which embed the active persona. `personas` are the
- * DECRYPTED options the selector shows (names match the cached kid shape).
- * Resolves false when the save failed.
- */
-export async function setKidPersona(
-  deps: KidProfileDeps,
-  kidId: string,
-  personaId: string | null,
-  personas: Persona[],
-): Promise<boolean> {
-  const res = await deps.api.request(`/api/kids/${kidId}`, jsonInit("PATCH", { active_persona_id: personaId }));
-  if (!res.ok) return false;
-  const picked = personaId ? (personas.find((p) => p.id === personaId) ?? null) : null;
-  deps.kids.getState().patchLocal(kidId, {
-    active_persona: picked
-      ? {
-          id: picked.id,
-          name: picked.name,
-          account_id: picked.account_id,
-          is_system_default: picked.is_system_default,
-        }
-      : null,
-  });
-  return true;
 }
 
 // ----- List ---------------------------------------------------------------------

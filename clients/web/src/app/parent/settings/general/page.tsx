@@ -4,7 +4,9 @@ import { useTranslations } from "next-intl";
 import { useEffect } from "react";
 
 import { DateTimeSettings } from "@/components/parent/date-time-settings";
+import { DeleteAccount } from "@/components/parent/delete-account";
 import { InterfaceSettings } from "@/components/parent/interface-settings";
+import { LegalLinks } from "@/components/parent/legal-links";
 import { FieldRow } from "@/components/parent/rows";
 import { Section } from "@/components/parent/section";
 import { LanguageSwitcher } from "@/components/shared/language-switcher";
@@ -49,6 +51,10 @@ export default function GeneralSettingsPage() {
       <InterfaceSettings />
 
       <DateTimeSettings />
+
+      <LegalLinks />
+
+      <DeleteAccount />
     </div>
   );
 }

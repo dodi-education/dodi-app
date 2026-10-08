@@ -187,4 +187,23 @@ describe.skipIf(!DB_URL)("Better Auth on Postgres", () => {
       auth.api.verifyAccountPassword({ body: { password }, headers: new Headers() }),
     ).rejects.toMatchObject({ statusCode: 401 });
   });
+
+  it("verifySessionPassword re-checks the password, then account deletion ends the session", async () => {
+    const { verifySessionPassword } = await import("./auth");
+    const { deleteAccount } = await import("../services/account-deletion");
+    const h = new Headers({ authorization: `Bearer ${token}` });
+
+    expect(await verifySessionPassword(h, "new password 123")).toBe(true);
+    expect(await verifySessionPassword(h, "wrong-password")).toBe(false);
+    expect(await verifySessionPassword(new Headers(), "new password 123")).toBe(false);
+
+    expect(await deleteAccount(serviceDb, userId)).toEqual({ hadLivePublications: false });
+    expect(await auth.api.getSession({ headers: h })).toBeNull();
+    const account = await serviceDb
+      .selectFrom("accounts")
+      .select("id")
+      .where("id", "=", userId)
+      .executeTakeFirst();
+    expect(account).toBeUndefined();
+  });
 });
