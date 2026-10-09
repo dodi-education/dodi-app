@@ -26,8 +26,9 @@ export type AccessResult = "allowed" | "allowedAgent" | "declined";
 
 /**
  * Settings > Access (web: access/access-settings): everything that can open
- * the family vault, each with its status and a one-step Revoke. Revoking this
- * very app signs it out.
+ * the family vault, in the web's order (agents and access keys with Get
+ * started, robot, this device, browsers and apps), each with its status and a
+ * one-step Revoke. Revoking this very app signs it out.
  */
 export function AccessSettings({ result }: { result: AccessResult | null }) {
   const t = useTranslations("access");
@@ -86,6 +87,31 @@ export function AccessSettings({ result }: { result: AccessResult | null }) {
         </Text>
       ) : null}
       <ClientSection
+        title={t("agentsTitle")}
+        desc={t("agentsDesc")}
+        clients={groups?.agents ?? null}
+        emptyText={t("agentsEmpty")}
+        action={
+          <Button variant="outline" size="sm" icon="add" onPress={() => setIsKeyDialogOpen(true)}>
+            {t("keyTitle")}
+          </Button>
+        }
+        {...rowProps}
+      >
+        <ConnectCodeForm label={t("connectAgent")} />
+      </ClientSection>
+      <AccessKeyDialog isOpen={isKeyDialogOpen} onClose={() => setIsKeyDialogOpen(false)} onCreated={() => void reload()} />
+      <AgentStarter />
+      <ClientSection
+        title={t("robotTitle")}
+        desc={t("robotDesc")}
+        clients={groups?.robots ?? null}
+        emptyText={t("robotEmpty")}
+        {...rowProps}
+      >
+        <ConnectCodeForm label={t("connectRobot")} />
+      </ClientSection>
+      <ClientSection
         title={t("thisDeviceTitle")}
         clients={groups ? (groups.current ? [groups.current] : []) : null}
         emptyText={t("thisDeviceUnlisted")}
@@ -104,31 +130,6 @@ export function AccessSettings({ result }: { result: AccessResult | null }) {
         emptyText={t("browsersEmpty")}
         {...rowProps}
       />
-      <ClientSection
-        title={t("robotTitle")}
-        desc={t("robotDesc")}
-        clients={groups?.robots ?? null}
-        emptyText={t("robotEmpty")}
-        {...rowProps}
-      >
-        <ConnectCodeForm label={t("connectRobot")} />
-      </ClientSection>
-      <ClientSection
-        title={t("agentsTitle")}
-        desc={t("agentsDesc")}
-        clients={groups?.agents ?? null}
-        emptyText={t("agentsEmpty")}
-        action={
-          <Button variant="outline" size="sm" icon="add" onPress={() => setIsKeyDialogOpen(true)}>
-            {t("keyTitle")}
-          </Button>
-        }
-        {...rowProps}
-      >
-        <ConnectCodeForm label={t("connectAgent")} />
-      </ClientSection>
-      <AccessKeyDialog isOpen={isKeyDialogOpen} onClose={() => setIsKeyDialogOpen(false)} onCreated={() => void reload()} />
-      <AgentStarter />
 
       {/* web: window.confirm(confirmRevoke) */}
       <Dialog

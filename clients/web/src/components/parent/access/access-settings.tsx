@@ -26,9 +26,10 @@ import { access } from "@dodi/ui-recipes";
 export type AccessResult = "allowed" | "allowedAgent" | "declined";
 
 /**
- * Settings > Access: everything that can open the family vault (this browser,
- * other browsers and the app, the robot, agents and access keys), each with
- * its status and a one-step Revoke. Revoking this very browser signs it out.
+ * Settings > Access: everything that can open the family vault, in this order:
+ * agents and access keys (with Get started), the robot, this browser, other
+ * browsers and the app. Each entry has its status and a one-step Revoke.
+ * Revoking this very browser signs it out.
  */
 export function AccessSettings({ result }: { result: AccessResult | null }) {
   const t = useTranslations("access");
@@ -87,6 +88,32 @@ export function AccessSettings({ result }: { result: AccessResult | null }) {
         </p>
       ) : null}
       <ClientSection
+        title={t("agentsTitle")}
+        desc={t("agentsDesc")}
+        clients={groups?.agents ?? null}
+        emptyText={t("agentsEmpty")}
+        action={
+          <Button variant="outline" size="sm" onClick={() => setIsKeyDialogOpen(true)}>
+            <Icon name="add" size={14} />
+            {t("keyTitle")}
+          </Button>
+        }
+        {...rowProps}
+      >
+        <ConnectCodeForm id="agent" label={t("connectAgent")} />
+      </ClientSection>
+      <AccessKeyDialog isOpen={isKeyDialogOpen} onOpenChange={setIsKeyDialogOpen} onCreated={() => void load()} />
+      <AgentStarter />
+      <ClientSection
+        title={t("robotTitle")}
+        desc={t("robotDesc")}
+        clients={groups?.robots ?? null}
+        emptyText={t("robotEmpty")}
+        {...rowProps}
+      >
+        <ConnectCodeForm id="robot" label={t("connectRobot")} />
+      </ClientSection>
+      <ClientSection
         title={t("thisDeviceTitle")}
         clients={groups ? (groups.current ? [groups.current] : []) : null}
         emptyText={t("thisDeviceUnlisted")}
@@ -106,32 +133,6 @@ export function AccessSettings({ result }: { result: AccessResult | null }) {
         emptyText={t("browsersEmpty")}
         {...rowProps}
       />
-      <ClientSection
-        title={t("robotTitle")}
-        desc={t("robotDesc")}
-        clients={groups?.robots ?? null}
-        emptyText={t("robotEmpty")}
-        {...rowProps}
-      >
-        <ConnectCodeForm id="robot" label={t("connectRobot")} />
-      </ClientSection>
-      <ClientSection
-        title={t("agentsTitle")}
-        desc={t("agentsDesc")}
-        clients={groups?.agents ?? null}
-        emptyText={t("agentsEmpty")}
-        action={
-          <Button variant="outline" size="sm" onClick={() => setIsKeyDialogOpen(true)}>
-            <Icon name="add" size={14} />
-            {t("keyTitle")}
-          </Button>
-        }
-        {...rowProps}
-      >
-        <ConnectCodeForm id="agent" label={t("connectAgent")} />
-      </ClientSection>
-      <AccessKeyDialog isOpen={isKeyDialogOpen} onOpenChange={setIsKeyDialogOpen} onCreated={() => void load()} />
-      <AgentStarter />
     </>
   );
 }
