@@ -125,25 +125,22 @@ describe("Access", () => {
     expect(await claimAccessRequest({ api: routedApi({ "/api/authorized-clients/claim": json({}, 429) }).api }, "x")).toBe("rate_limited");
   });
 
-  it("wraps the vault, then activates with the password and the grant", async () => {
+  it("wraps the vault, then activates with the grant", async () => {
     const { vault, addDevice } = fakeVault();
     const { api, calls } = routedApi({ "/api/authorized-clients/row-1/activate": json({}) });
     const outcome = await allowAccessRequest({ api, vault }, { ...CLAIMED_AGENT, kind: "agent" }, {
-      password: "pw",
       grant: { scopes: ["games"], expiresInDays: 30 },
     });
     expect(outcome).toBe("ok");
     expect(addDevice).toHaveBeenCalledWith({ deviceId: "dev-1", deviceKemPublicKey: "kem" });
-    expect(calls[0].body).toEqual({ password: "pw", scopes: ["games"], expiresInDays: 30 });
+    expect(calls[0].body).toEqual({ scopes: ["games"], expiresInDays: 30 });
   });
 
-  it("drops the wrap again on a wrong password", async () => {
+  it("drops the wrap again when activation fails", async () => {
     const { vault, removeDevice } = fakeVault();
-    const { api } = routedApi({
-      "/api/authorized-clients/row-1/activate": json({ code: "WRONG_PASSWORD" }, 403),
-    });
-    const outcome = await allowAccessRequest({ api, vault }, { ...CLAIMED_AGENT, kind: "robot" }, { password: "no" });
-    expect(outcome).toBe("wrong_password");
+    const { api } = routedApi({ "/api/authorized-clients/row-1/activate": json({}, 400) });
+    const outcome = await allowAccessRequest({ api, vault }, { ...CLAIMED_AGENT, kind: "robot" });
+    expect(outcome).toBe("failed");
     expect(removeDevice).toHaveBeenCalledWith("dev-1");
   });
 

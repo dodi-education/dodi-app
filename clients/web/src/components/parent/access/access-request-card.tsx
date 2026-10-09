@@ -5,7 +5,6 @@ import { useState } from "react";
 
 import { accessDeps } from "@/components/parent/access/access-deps";
 import { AgentGrantFields } from "@/components/parent/access/agent-grant-fields";
-import { PasswordConfirmField } from "@/components/parent/access/password-confirm-field";
 import { FieldRow } from "@/components/parent/rows";
 import { Icon } from "@/components/shared/icon";
 import { Button } from "@/components/ui/button";
@@ -29,7 +28,7 @@ interface AccessRequestCardProps {
 /**
  * "Allow access" for a claimed robot or agent: who asks (name + fingerprint
  * to compare with the client), for an agent what it may do and for how long,
- * and the account password. Allowing wraps the vault key to the client here.
+ * then Allow. Allowing wraps the vault key to the client here.
  */
 export function AccessRequestCard({ request, onDone }: AccessRequestCardProps) {
   const t = useTranslations("access");
@@ -38,7 +37,6 @@ export function AccessRequestCard({ request, onDone }: AccessRequestCardProps) {
     initialAgentScopes(request.requestedScopes),
   );
   const [expiresInDays, setExpiresInDays] = useState<number | null>(DEFAULT_AGENT_EXPIRY_DAYS);
-  const [password, setPassword] = useState("");
   const [busy, setBusy] = useState<"allow" | "decline" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const name = request.name || (isAgent ? t("unnamedAgent") : t("unknownDevice"));
@@ -48,7 +46,6 @@ export function AccessRequestCard({ request, onDone }: AccessRequestCardProps) {
     setError(null);
     setBusy("allow");
     const outcome = await allowAccessRequest(accessDeps(), request, {
-      password,
       grant: isAgent ? { scopes: selected, expiresInDays } : undefined,
     });
     setBusy(null);
@@ -94,12 +91,6 @@ export function AccessRequestCard({ request, onDone }: AccessRequestCardProps) {
       <div className={cn("flex", access.block)}>
         <p className={access.note}>{t(isAgent ? "decryptNote" : "robotNote")}</p>
         {isAgent && selected.length === 0 ? <p className={access.note}>{t("noScopes")}</p> : null}
-        <PasswordConfirmField
-          id="allow-password"
-          value={password}
-          onChange={setPassword}
-          hint={t("passwordHint")}
-        />
         {error ? (
           <p role="alert" className={access.error}>
             {error}
@@ -118,7 +109,7 @@ export function AccessRequestCard({ request, onDone }: AccessRequestCardProps) {
           <Button
             type="submit"
             className="min-h-11"
-            disabled={busy !== null || !password || (isAgent && selected.length === 0)}
+            disabled={busy !== null || (isAgent && selected.length === 0)}
           >
             {busy === "allow" ? t("allowing") : t("allow")}
           </Button>

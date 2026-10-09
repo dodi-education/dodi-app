@@ -1,12 +1,15 @@
 import { type NextRequest, NextResponse } from "next/server";
 
+import { CLIENT_REQUEST_HEADERS } from "@dodi/protocol/client-headers";
+
 import { isInternalAuthorized } from "@/lib/internal-auth";
 
 /**
  * CORS for the platform.dodi.app API. Clients (dodi.app, native apps, the agent)
  * authenticate with a bearer token — no cookies — so we allow the
- * `Authorization` header from an allow-list of origins. The allow-list is
- * env-driven (CORS_ALLOWED_ORIGINS, comma-separated); defaults to local dev.
+ * `Authorization` header (plus every custom client header, see ALLOWED_HEADERS)
+ * from an allow-list of origins. The allow-list is env-driven
+ * (CORS_ALLOWED_ORIGINS, comma-separated); defaults to local dev.
  *
  * `/api/internal/**` is the ops↔platform m2m surface: the whole subtree is
  * gated here (see lib/internal-auth), so a newly added internal route is
@@ -20,17 +23,21 @@ const ALLOWED_ORIGINS = (
   .map((o) => o.trim())
   .filter(Boolean);
 
+/**
+ * Request headers a browser may send cross-origin. The custom ones come from
+ * CLIENT_REQUEST_HEADERS (@dodi/protocol/client-headers: the device id for the
+ * Access list, the Turnstile token on the auth front doors, ...), so a new
+ * client header is allowed by adding it there, not by remembering this list.
+ */
+const ALLOWED_HEADERS = ["authorization", "content-type", ...CLIENT_REQUEST_HEADERS].join(",");
+
 function corsHeaders(origin: string | null): Headers {
   const headers = new Headers();
   if (origin && ALLOWED_ORIGINS.includes(origin)) {
     headers.set("access-control-allow-origin", origin);
   }
   headers.set("access-control-allow-methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
-  // x-captcha-response carries the Turnstile token on the auth front doors.
-  headers.set(
-    "access-control-allow-headers",
-    "authorization,content-type,x-captcha-response",
-  );
+  headers.set("access-control-allow-headers", ALLOWED_HEADERS);
   // The Better Auth bearer plugin returns the session token in this header.
   headers.set("access-control-expose-headers", "set-auth-token");
   headers.set("access-control-max-age", "86400");

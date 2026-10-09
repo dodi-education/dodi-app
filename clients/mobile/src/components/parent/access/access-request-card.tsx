@@ -17,7 +17,6 @@ import { cn } from "@/lib/cn";
 
 import { accessDeps } from "./access-deps";
 import { AgentGrantFields } from "./agent-grant-fields";
-import { PasswordConfirmField } from "./password-confirm-field";
 
 interface AccessRequestCardProps {
   request: AccessRequest;
@@ -28,14 +27,13 @@ interface AccessRequestCardProps {
 /**
  * "Allow access" for a claimed robot or agent (web: access/access-request-card):
  * who asks (name + fingerprint), for an agent what it may do and for how long,
- * and the account password. Allowing wraps the vault key to it on this phone.
+ * then Allow. Allowing wraps the vault key to it on this phone.
  */
 export function AccessRequestCard({ request, onDone }: AccessRequestCardProps) {
   const t = useTranslations("access");
   const isAgent = request.kind === "agent";
   const [selected, setSelected] = useState<AgentScope[]>(() => initialAgentScopes(request.requestedScopes));
   const [expiresInDays, setExpiresInDays] = useState<number | null>(DEFAULT_AGENT_EXPIRY_DAYS);
-  const [password, setPassword] = useState("");
   const [busy, setBusy] = useState<"allow" | "decline" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const name = request.name || (isAgent ? t("unnamedAgent") : t("unknownDevice"));
@@ -44,7 +42,6 @@ export function AccessRequestCard({ request, onDone }: AccessRequestCardProps) {
     setError(null);
     setBusy("allow");
     const outcome = await allowAccessRequest(accessDeps(), request, {
-      password,
       grant: isAgent ? { scopes: selected, expiresInDays } : undefined,
     });
     setBusy(null);
@@ -92,7 +89,6 @@ export function AccessRequestCard({ request, onDone }: AccessRequestCardProps) {
       <View className={cn(access.block, section.divider)}>
         <Text className={access.note}>{t(isAgent ? "decryptNote" : "robotNote")}</Text>
         {isAgent && selected.length === 0 ? <Text className={access.note}>{t("noScopes")}</Text> : null}
-        <PasswordConfirmField value={password} onChange={setPassword} hint={t("passwordHint")} />
         {error ? (
           <Text className={access.error} accessibilityRole="alert">
             {error}
@@ -103,7 +99,7 @@ export function AccessRequestCard({ request, onDone }: AccessRequestCardProps) {
             {busy === "decline" ? t("declining") : t("decline")}
           </Button>
           <Button
-            disabled={busy !== null || !password || (isAgent && selected.length === 0)}
+            disabled={busy !== null || (isAgent && selected.length === 0)}
             onPress={() => void allow()}
           >
             {busy === "allow" ? t("allowing") : t("allow")}

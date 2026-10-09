@@ -5,7 +5,7 @@
  *    (`watchClientRegistration`), so they show up and can be revoked.
  *  - A robot or an agent (the dodi CLI) pairs: it prints a code, the parent
  *    opens /authorize?code=…, sees who asks (name, fingerprint and, for an
- *    agent, the scopes) and allows it with the account password. Allowing
+ *    agent, the scopes) and allows it. Allowing
  *    wraps the in-memory vault key to the client's KEM key (client-side) and
  *    activates it; the server never sees the vault key.
  *  - Revoking is one server call: wrap, status and login session together.
@@ -14,6 +14,7 @@
  */
 import { randomBytes, toBase64Url } from "@dodi/crypto";
 import { agentKeyPairs, deviceFingerprint, formatAgentAccessKey } from "@dodi/protocol/agent-key";
+import { CURRENT_DEVICE_HEADER } from "@dodi/protocol/client-headers";
 import {
   AGENT_EXPIRY_DAYS,
   SENSITIVE_AGENT_SCOPES,
@@ -74,10 +75,10 @@ export interface AgentGrant {
 }
 
 export type AccessRequestError = "not_found" | "rate_limited" | "failed";
-export type AllowOutcome = "ok" | "wrong_password" | "rate_limited" | "failed";
+export type AllowOutcome = "ok" | "failed";
 
 /** The header that tells the list which client is asking (marks `is_current`). */
-export const CURRENT_DEVICE_HEADER = "x-dodi-device-id";
+export { CURRENT_DEVICE_HEADER };
 
 // ----- Reading ---------------------------------------------------------------
 
@@ -156,14 +157,13 @@ export async function claimAccessRequest(
 }
 
 /**
- * Allow a claimed robot or agent: wrap the vault to it, then activate it with
- * the account password (re-authentication) and, for an agent, the grant. A
- * failed activation drops the wrap again.
+ * Allow a claimed robot or agent: wrap the vault to it, then activate it
+ * (for an agent, with the grant). A failed activation drops the wrap again.
  */
 export async function allowAccessRequest(
   deps: AccessDeps,
   request: Pick<AccessRequest, "id" | "deviceId" | "kemPublicKey" | "kind">,
-  input: { password: string; grant?: AgentGrant },
+  input: { grant?: AgentGrant } = {},
 ): Promise<AllowOutcome> {
   try {
     await deps.vault.getState().addDevice({
@@ -173,18 +173,15 @@ export async function allowAccessRequest(
     const res = await deps.api.request(`/api/authorized-clients/${request.id}/activate`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        password: input.password,
-        ...(request.kind === "agent" && input.grant
+      body: JSON.stringify(
+        request.kind === "agent" && input.grant
           ? { scopes: input.grant.scopes, expiresInDays: input.grant.expiresInDays }
-          : {}),
-      }),
+          : {},
+      ),
     });
     if (res.ok) return "ok";
     await deps.vault.getState().removeDevice(request.deviceId);
-    if (res.status === 429) return "rate_limited";
-    const body = (await res.json().catch(() => ({}))) as { code?: string };
-    return body.code === "WRONG_PASSWORD" ? "wrong_password" : "failed";
+    return "failed";
   } catch {
     return "failed";
   }
@@ -373,8 +370,6 @@ export const ACCESS_REQUEST_ERROR_KEYS: Record<AccessRequestError, string> = {
   failed: "errorFailed",
 };
 export const ALLOW_ERROR_KEYS: Record<Exclude<AllowOutcome, "ok">, string> = {
-  wrong_password: "errorWrongPassword",
-  rate_limited: "errorRateLimited",
   failed: "errorAllowFailed",
 };
 

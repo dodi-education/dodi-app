@@ -18,7 +18,7 @@ Tell your agent:
 
 The link opens **Allow access** in the dodi app. Check that the fingerprint
 matches what your agent shows, choose what it may do and for how long, and
-confirm with your password. **Settings > Access** lists every browser, app,
+allow it. **Settings > Access** lists every browser, app,
 robot and agent that can open your family's data; revoke any of them there.
 
 Scopes you can grant:

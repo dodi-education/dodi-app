@@ -115,12 +115,8 @@ async function main(): Promise<void> {
   assert(claimed.requestedScopes.join() === "games,kids:basic,assets,assets:publish", "claim shows the requested scopes");
   storedKeys = addDeviceToVault(storedKeys, created.vmk, { deviceId: claimed.deviceId, deviceKemPublicKey: claimed.kemPublicKey });
   assert((await parent(token, "/api/vault/keys", { method: "PUT", body: storedKeys })).ok, "wrap stored");
-  const wrongPassword = await parent(token, `/api/authorized-clients/${claimed.id}/activate`, {
-    body: { password: "wrong", scopes: ["games"], expiresInDays: 7 },
-  });
-  assert(wrongPassword.status === 403, "allowing access needs the account password");
   const activate = await parent(token, `/api/authorized-clients/${claimed.id}/activate`, {
-    body: { password: PASSWORD, scopes: ["games", "kids:basic", "kids:memory", "assets", "assets:publish"], expiresInDays: 7 },
+    body: { scopes: ["games", "kids:basic", "kids:memory", "assets", "assets:publish"], expiresInDays: 7 },
   });
   assert(activate.ok, "activated");
 
@@ -274,7 +270,7 @@ async function main(): Promise<void> {
   });
   assert((await parent(token, "/api/vault/keys", { method: "PUT", body: storedKeys })).ok, "access key wrap stored");
   assert(
-    (await parent(token, `/api/authorized-clients/${keyClaim.id}/activate`, { body: { password: PASSWORD, scopes: ["games", "games:publish"], expiresInDays: null } })).ok,
+    (await parent(token, `/api/authorized-clients/${keyClaim.id}/activate`, { body: { scopes: ["games", "games:publish"], expiresInDays: null } })).ok,
     "access key activated",
   );
 
