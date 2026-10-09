@@ -325,9 +325,14 @@ const READ_ALOUD_FRAME =
   "clearly, with no introduction, no commentary, nothing added before or " +
   "after:\n\n";
 
+/** Trick names and descriptions compared loosely: case, spaces and punctuation ignored. */
+function normalizeTrickText(text: string): string {
+  return text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+}
+
 /** A trick by the name the voice model used: exact, then contained either way. */
 export function matchTrick<T extends { id: string; name: string }>(asked: string, tricks: readonly T[]): T | null {
-  const norm = (text: string): string => text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+  const norm = normalizeTrickText;
   const wanted = norm(asked);
   if (!wanted) return null;
   return (
@@ -1994,6 +1999,14 @@ export function createCompanionSession(deps: CompanionSessionDeps): CompanionSes
     });
   }
 
+  // Kids whose companion is learning a trick by voice right now (marked before
+  // the first await, so a repeat call can't slip in), and the tricks learned by
+  // voice this session per companion and description, kept even when saving
+  // failed. Together they stop a model that re-calls teach_trick from learning
+  // and storing the same trick over and over.
+  const teachingKids = new Set<string>();
+  const voiceLearnedTricks = new Map<string, StageTrick>();
+
   async function handleTeachTrick(event: Extract<VoiceEvent, { type: "toolCall" }>, kidId: string): Promise<void> {
     const respond = (response: Record<string, unknown>): void =>
       client?.sendToolResponse(event.id, event.name, response);
@@ -2003,12 +2016,59 @@ export function createCompanionSession(deps: CompanionSessionDeps): CompanionSes
       respond({ ok: false, error: "Your 3D body isn't showing right now, so you can't learn tricks." });
       return;
     }
+    if (teachingKids.has(kidId)) {
+      gameDebug("voice", "teach_trick: already learning, repeat call answered");
+      respond({
+        ok: false,
+        error:
+          "You're still learning the trick from before. Wait for that answer and don't call teach_trick again; tell the child it's almost ready.",
+      });
+      return;
+    }
+    teachingKids.add(kidId);
+    try {
+      await teachTrickByVoice(respond, stage, stores.customTricks, kidId, description);
+    } finally {
+      teachingKids.delete(kidId);
+    }
+  }
+
+  async function teachTrickByVoice(
+    respond: (response: Record<string, unknown>) => void,
+    stage: NonNullable<CompanionStores["companionStage"]>,
+    customTricks: NonNullable<CompanionStores["customTricks"]>,
+    kidId: string,
+    description: string,
+  ): Promise<void> {
     const kid = await stores.kids.getState().loadOne(kidId);
     const { companionId, model } = await knownTricks(kidId);
     if (!kid || !companionId) {
       respond({ ok: false, error: "No companion to teach." });
       return;
     }
+
+    // Already known (stored, or learned earlier this session): perform it again.
+    const wanted = normalizeTrickText(description);
+    const learnedKey = `${companionId}:${wanted}`;
+    const stored = wanted
+      ? (await customTricks.getState().load(companionId).catch(() => [])).find(
+          (t) => normalizeTrickText(t.description) === wanted && canPerformTrick(t, model),
+        )
+      : undefined;
+    const known = stored ? { id: stored.id, name: stored.name, script: stored.script } : voiceLearnedTricks.get(learnedKey);
+    if (known) {
+      gameDebug("voice", `teach_trick: "${known.name}" already known, performing it`);
+      respond({
+        ok: true,
+        already_known: known.name,
+        hint: "You already know this trick and are doing it now. Next time use perform_trick; don't teach it again.",
+      });
+      void stage.getState().requestTrick(known);
+      return;
+    }
+
+    gameDebug("voice", "teach_trick: learning started");
+    const startedAt = Date.now();
     const result = await stage.getState().whileLearning(() =>
       withAiActivity("thinking", () =>
         teachTrick(
@@ -2016,6 +2076,10 @@ export function createCompanionSession(deps: CompanionSessionDeps): CompanionSes
           { kidId, model, description, languageName: trickLanguageName(kid.language) },
         ),
       ),
+    );
+    gameDebug(
+      "voice",
+      `teach_trick: learning finished in ${Date.now() - startedAt}ms (${result.ok ? "ok" : result.reason})`,
     );
     if (!result.ok) {
       respond({
@@ -2028,14 +2092,21 @@ export function createCompanionSession(deps: CompanionSessionDeps): CompanionSes
       return;
     }
     // Learned by voice: kept right away (the Playground previews before keeping).
-    let name = result.record.name;
+    let trick: StageTrick = { id: "voice", name: result.record.name, script: result.script };
     try {
-      name = (await stores.customTricks.getState().save(companionId, result.record)).name;
-    } catch {
+      const view = await customTricks.getState().save(companionId, result.record);
+      trick = { id: view.id, name: view.name, script: view.script };
+    } catch (err) {
       // Still performed; it just isn't kept (for example at the trick limit).
+      gameDebugWarn("voice", `teach_trick: saving failed: ${err instanceof Error ? err.message : String(err)}`);
     }
-    respond({ ok: true, learned: name });
-    void stage.getState().requestTrick({ id: "voice", name, script: result.script });
+    if (wanted) voiceLearnedTricks.set(learnedKey, trick);
+    respond({
+      ok: true,
+      learned: trick.name,
+      next: "You know this trick now and are doing it right away. Tell the child! To do it again, use perform_trick, never teach_trick.",
+    });
+    void stage.getState().requestTrick(trick);
   }
 
   function handleAnalyzeGameState(
