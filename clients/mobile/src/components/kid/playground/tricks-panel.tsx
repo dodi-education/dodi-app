@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { View } from "react-native";
 import { useTranslations } from "use-intl";
-import { CHARACTER_MODELS } from "@dodi/character/character-catalog";
+import { characterModelFor } from "@dodi/character/character-catalog";
 import type { StageTrick } from "@dodi/client-state/companion-stage-store";
 import { canPerformTrick, type CustomTrickView } from "@dodi/client-state/custom-tricks";
 import { playground as p } from "@dodi/ui-recipes";
@@ -48,7 +48,7 @@ export function TricksPanel() {
   const loadTricks = useCustomTricksStore((s) => s.load);
   const removeTrick = useCustomTricksStore((s) => s.remove);
   const [deleting, setDeleting] = useState<CustomTrickView | null>(null);
-  const model = CHARACTER_MODELS[look.model];
+  const model = characterModelFor(look.model);
 
   useEffect(() => {
     if (companion) void loadTricks(companion.id).catch(() => {});

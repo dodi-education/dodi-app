@@ -9,7 +9,7 @@ import { createStore, type StoreApi } from "zustand/vanilla";
 
 import { createClientThinkingProvider } from "@dodi/ai/client-thinking";
 import { buildCustomTrickInstruction, buildCustomTrickPrompt } from "@dodi/ai/custom-trick-prompt";
-import { CHARACTER_MODELS, type CharacterModelId } from "@dodi/character/character-catalog";
+import { characterModelFor, type CharacterModelRef } from "@dodi/character/character-catalog";
 import { MotionScriptSchema, parseMotionScript, type MotionScript } from "@dodi/character/motion-script";
 import type { CustomTrick, Json } from "@dodi/types/database";
 import { openCustomTrick, sealCustomTrick, type CustomTrickRecord } from "@dodi/vault/custom-trick-crypto";
@@ -49,8 +49,8 @@ function viewOf(id: string, record: CustomTrickRecord): CustomTrickView | null {
 }
 
 /** Whether an avatar can perform a trick (it has every bone the trick moves). */
-export function canPerformTrick(trick: Pick<CustomTrickView, "requiredBones">, model: CharacterModelId): boolean {
-  const bones = new Set(CHARACTER_MODELS[model].bones);
+export function canPerformTrick(trick: Pick<CustomTrickView, "requiredBones">, model: CharacterModelRef): boolean {
+  const bones = new Set(characterModelFor(model).bones);
   return trick.requiredBones.every((bone) => bones.has(bone));
 }
 
@@ -137,7 +137,7 @@ export interface TeachTrickDeps {
 
 export interface TeachTrickInput {
   kidId: string;
-  model: CharacterModelId;
+  model: CharacterModelRef;
   description: string;
   /** The kid's language in English ("German"), for the trick's name. */
   languageName: string;
@@ -167,7 +167,7 @@ export async function teachTrick(deps: TeachTrickDeps, input: TeachTrickInput): 
   const resolved = await deps.resolveThinking();
   if (!resolved) return { ok: false, reason: "no_thinking" };
 
-  const model = CHARACTER_MODELS[input.model];
+  const model = characterModelFor(input.model);
   const instruction = buildCustomTrickInstruction(model, input.languageName);
   const provider = createClientThinkingProvider(resolved.provider, resolved.apiKey, resolved.model, (usage) =>
     deps.reportUsage({

@@ -6,6 +6,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 
+import { ANTHROPIC_SIMPLE_TASK_MAX_TOKENS } from "../providers";
 import type { ThinkingProvider } from "./factory";
 
 export class AnthropicThinkingProvider implements ThinkingProvider {
@@ -23,7 +24,7 @@ export class AnthropicThinkingProvider implements ThinkingProvider {
   ): Promise<Record<string, unknown>> {
     const response = await this.client.messages.create({
       model: this.model,
-      max_tokens: 4096,
+      max_tokens: ANTHROPIC_SIMPLE_TASK_MAX_TOKENS,
       system: system + "\n\nYou MUST respond with valid JSON only. No markdown fences, no preamble.",
       messages: [{ role: "user", content: prompt }],
     });
@@ -48,7 +49,7 @@ export class AnthropicThinkingProvider implements ThinkingProvider {
   async generateText(system: string, prompt: string): Promise<string> {
     const response = await this.client.messages.create({
       model: this.model,
-      max_tokens: 4096,
+      max_tokens: ANTHROPIC_SIMPLE_TASK_MAX_TOKENS,
       system,
       messages: [{ role: "user", content: prompt }],
     });

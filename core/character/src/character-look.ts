@@ -1,30 +1,43 @@
 import {
   ACCESSORIES,
-  CHARACTER_MODELS,
   COLOR_SWATCHES,
   DEFAULT_CHARACTER_MODEL,
+  characterModelFor,
+  customAssetIdOf,
   isAccessoryName,
   isCharacterModelId,
-  type AccessoryName,
-  type CharacterModelId,
+  isCustomAssetRef,
+  type AccessoryRef,
+  type CharacterModelRef,
 } from "./character-catalog";
 
 /**
- * A companion's look: which catalog avatar it wears, its colors and its
- * accessories. Sealed as JSON in companions.look_enc; the server never sees it.
- * Pure (no three.js).
+ * A companion's look: which avatar it wears (a catalog one, or the family's
+ * own as `custom:<asset id>`), its colors and its accessories (catalog names
+ * or `custom:<asset id>`). Sealed as JSON in companions.look_enc; the server
+ * never sees it. Pure (no three.js).
  */
 export interface CompanionLook {
   v: 1;
-  model: CharacterModelId;
+  model: CharacterModelRef;
   /** Customizable material name → base color (#rrggbb). Absent = the model's own. */
   colors: Record<string, string>;
-  accessories: AccessoryName[];
+  accessories: AccessoryRef[];
+}
+
+export interface SanitizeLookOptions {
+  /**
+   * The family's own assets that exist (character_assets ids). Given, custom
+   * refs to anything else are dropped (a deleted asset: the avatar falls back
+   * to the default). Absent, well-formed custom refs are kept as they are:
+   * the caller can't tell yet, and saving must not lose them.
+   */
+  customAssetIds?: ReadonlySet<string>;
 }
 
 const HEX = /^#[0-9a-f]{6}$/i;
 
-export function defaultLook(model: CharacterModelId = DEFAULT_CHARACTER_MODEL): CompanionLook {
+export function defaultLook(model: CharacterModelRef = DEFAULT_CHARACTER_MODEL): CompanionLook {
   return { v: 1, model, colors: {}, accessories: [] };
 }
 
@@ -33,11 +46,17 @@ export function defaultLook(model: CharacterModelId = DEFAULT_CHARACTER_MODEL): 
  * older clients may know fewer models): unknown models fall back to the
  * default, and colors or accessories the model doesn't offer are dropped.
  */
-export function sanitizeLook(raw: unknown): CompanionLook {
+export function sanitizeLook(raw: unknown, options: SanitizeLookOptions = {}): CompanionLook {
   if (typeof raw !== "object" || raw === null) return defaultLook();
   const record = raw as Record<string, unknown>;
-  const model = isCharacterModelId(record.model) ? record.model : DEFAULT_CHARACTER_MODEL;
-  const customizable = new Set(CHARACTER_MODELS[model].customizable.map((p) => p.material));
+  const isKnownCustom = (value: unknown): value is AccessoryRef & CharacterModelRef => {
+    if (!isCustomAssetRef(value)) return false;
+    const id = customAssetIdOf(value);
+    return id !== null && (options.customAssetIds?.has(id) ?? true);
+  };
+  const model: CharacterModelRef =
+    isCharacterModelId(record.model) || isKnownCustom(record.model) ? record.model : DEFAULT_CHARACTER_MODEL;
+  const customizable = new Set(characterModelFor(model).customizable.map((p) => p.material));
 
   const colors: Record<string, string> = {};
   if (typeof record.colors === "object" && record.colors !== null) {
@@ -48,10 +67,11 @@ export function sanitizeLook(raw: unknown): CompanionLook {
     }
   }
 
-  const accessories: AccessoryName[] = [];
+  const accessories: AccessoryRef[] = [];
   if (Array.isArray(record.accessories)) {
     for (const name of record.accessories) {
-      if (isAccessoryName(name) && ACCESSORIES[name].isKidSelectable && !accessories.includes(name)) {
+      const isCatalog = isAccessoryName(name) && ACCESSORIES[name].isKidSelectable;
+      if ((isCatalog || isKnownCustom(name)) && !accessories.includes(name)) {
         accessories.push(name);
       }
     }

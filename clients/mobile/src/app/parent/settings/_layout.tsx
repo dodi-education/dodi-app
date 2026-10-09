@@ -21,7 +21,7 @@ export default function SettingsLayout() {
 
   // Pull to refresh on every tab: the account (plan, interface, date/time,
   // notifications, parent PIN, screenshot service); tabs with more data
-  // (devices, AI providers) register their own reloads.
+  // (access, AI providers) register their own reloads.
   return (
     <ShellContent onRefresh={() => clientState.account.getState().load(true)}>
       <View className="mb-5">

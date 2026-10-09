@@ -23,6 +23,11 @@ import { utf8ToBytes } from "./encoding";
 
 export { randomBytes };
 
+/** SHA-256 digest (fingerprints, not secrets). */
+export function sha256Digest(bytes: Uint8Array): Uint8Array {
+  return sha256(bytes);
+}
+
 export const SYM_KEY_LENGTH = 32;
 export const XCHACHA_NONCE_LENGTH = 24;
 
@@ -158,8 +163,9 @@ export interface KemSealedBytes {
 
 const KEM_WRAP_INFO = "dodi/kem-wrap/v1";
 
-export function generateKemKeyPair(): KemKeyPair {
-  return ml_kem768.keygen();
+/** A fresh ML-KEM keypair; pass a 64-byte `seed` to derive it deterministically. */
+export function generateKemKeyPair(seed?: Uint8Array): KemKeyPair {
+  return ml_kem768.keygen(seed);
 }
 
 /** Encrypt `payload` to a recipient's ML-KEM public key (post-quantum). */
@@ -200,8 +206,9 @@ export interface SignKeyPair {
   secretKey: Uint8Array;
 }
 
-export function generateSignKeyPair(): SignKeyPair {
-  return ml_dsa65.keygen();
+/** A fresh ML-DSA keypair; pass a 32-byte `seed` to derive it deterministically. */
+export function generateSignKeyPair(seed?: Uint8Array): SignKeyPair {
+  return ml_dsa65.keygen(seed);
 }
 
 export function sign(secretKey: Uint8Array, message: Uint8Array): Uint8Array {

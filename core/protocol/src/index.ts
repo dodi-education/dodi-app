@@ -10,3 +10,6 @@ export * from "./schemas";
 export * from "./client";
 export * from "./publication-handle";
 export * from "./publication-review";
+export * from "./agent-scopes";
+export * from "./agent-key";
+export * from "./client-label";

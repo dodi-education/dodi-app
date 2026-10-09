@@ -5,7 +5,7 @@ import { logServerError, serverErrorResponse } from "@/lib/error-logs";
 import { requireAuth } from "@/lib/resolve-auth";
 import { getAccount } from "@/services/accounts";
 import { shareSystemGamesWithKid } from "@/services/games";
-import { createKid, listKids } from "@/services/kids";
+import { createKid, listKids, listKidsForAgent } from "@/services/kids";
 import { generateSocialId } from "@dodi/crypto/social-id";
 
 const CreateKidSchema = z.object({
@@ -16,11 +16,16 @@ const CreateKidSchema = z.object({
 });
 
 export async function GET(request: Request): Promise<NextResponse> {
-  const auth = await requireAuth(request);
+  // Agents get a projection (ids, plus sealed name/birthdate with kids:basic).
+  const auth = await requireAuth(request, { agentScope: "any" });
   if (auth instanceof Response) return auth;
   const { accountId, db } = auth;
 
   try {
+    if (auth.via === "agent") {
+      const includeBasic = auth.scopes?.has("kids:basic") ?? false;
+      return NextResponse.json(await listKidsForAgent(db, accountId, { includeBasic }));
+    }
     const kids = await listKids(db, accountId);
     return NextResponse.json(kids);
   } catch (error) {

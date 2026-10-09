@@ -9,6 +9,7 @@ import { DodiFigure } from "@/components/dodi/dodi-figure";
 import { SpeechBubble } from "@/components/dodi/speech-bubble";
 import { ListeningPulse } from "@/components/kid/listening-pulse";
 import { Playground } from "@/components/kid/playground/playground";
+import { companionErrorKind } from "@dodi/client-state/companion-error";
 import { playground } from "@dodi/ui-recipes";
 import { cn } from "@/lib/utils";
 import { useCompanionStageStore } from "@/stores/companion-stage-store";
@@ -63,7 +64,7 @@ function MascotWrap({
     <div
       className={cn(
         "relative flex aspect-square w-[clamp(170px,38vh,300px)] items-center justify-center md:w-[min(395px,55vh)]",
-        isPlaygroundOpen && "max-md:w-[min(300px,30vh)]",
+        isPlaygroundOpen && "max-md:w-[min(300px,28dvh)]",
       )}
     >
       {listening ? <ListeningPulse /> : null}
@@ -91,7 +92,6 @@ export function DodiFullHome({
 
   const dodiState = useDodiSessionStore((s) => s.state);
   const dodiSpeaking = useDodiSessionStore((s) => s.dodiSpeaking);
-  const gestureNeeded = useDodiSessionStore((s) => s.gestureNeeded);
   const error = useDodiSessionStore((s) => s.error);
   const connect = useDodiSessionStore((s) => s.connect);
   const toggleActive = useDodiSessionStore((s) => s.toggleActive);
@@ -229,33 +229,25 @@ export function DodiFullHome({
             />
           </button>
         </MascotWrap>
-        <div className="flex w-full max-w-xs flex-col items-center gap-3">
-          <SpeechBubble className="w-full text-center">
-            {dodiState === "deaf" && gestureNeeded ? (
-              <p className="text-sm font-bold text-ink-2">{t("tapToTalk")}</p>
-            ) : dodiState === "deaf" ? (
-              <p className="text-sm font-bold text-ink-2">{t("tapToStart")}</p>
-            ) : dodiSpeaking ? (
-              <div className="flex items-center justify-center gap-2">
-                <div className="flex gap-1">
-                  <span className="animate-kdot inline-block h-2 w-2 rounded-full bg-primary" />
-                  <span className="animate-kdot inline-block h-2 w-2 rounded-full bg-primary [animation-delay:200ms]" />
-                  <span className="animate-kdot inline-block h-2 w-2 rounded-full bg-primary [animation-delay:400ms]" />
-                </div>
-                <p className="text-sm font-bold text-ink-2">{t("dodiSpeaking")}</p>
-              </div>
-            ) : showMicError ? (
-              <p className="text-sm font-bold text-ink-2">
-                {t(error as "micPermissionNeeded" | "secureContextRequired")}
-              </p>
-            ) : (
-              <p className="text-sm font-bold text-ink-2">{t("listening")}</p>
-            )}
-          </SpeechBubble>
-          <p className="text-sm font-bold text-faint">
-            {dodiState === "active" && !showMicError ? t("tapToTalk") : " "}
-          </p>
-        </div>
+        <SpeechBubble className="w-full max-w-xs text-center">
+          {dodiState === "deaf" ? (
+            <p className="text-sm font-bold text-ink-2">{t("tapToTalk")}</p>
+          ) : dodiSpeaking ? (
+            // dodi's voice already says it: the dots are enough to see.
+            <div className="flex items-center justify-center gap-1 py-1.5">
+              <span className="animate-kdot inline-block h-2 w-2 rounded-full bg-primary" />
+              <span className="animate-kdot inline-block h-2 w-2 rounded-full bg-primary [animation-delay:200ms]" />
+              <span className="animate-kdot inline-block h-2 w-2 rounded-full bg-primary [animation-delay:400ms]" />
+              <span className="sr-only">{t("dodiSpeaking")}</span>
+            </div>
+          ) : showMicError ? (
+            <p className="text-sm font-bold text-ink-2">
+              {t(error as "micPermissionNeeded" | "secureContextRequired")}
+            </p>
+          ) : (
+            <p className="text-sm font-bold text-ink-2">{t("listening")}</p>
+          )}
+        </SpeechBubble>
       </Stage>
     );
   }
@@ -269,31 +261,30 @@ export function DodiFullHome({
             type="button"
             onClick={() => void connect(kidId)}
             className={mascotButtonClass}
-            aria-label={t("tapToStart")}
+            aria-label={tVoice("voiceAriaWake")}
           >
             <DodiFigure
               canRender3d
               state="sleep"
-              alt="dodi sleeping — tap to wake"
+              alt="dodi sleeping"
               className="object-contain"
               priority
             />
           </button>
         </MascotWrap>
         <SpeechBubble className="w-full max-w-xs text-center">
-          <p className="text-sm font-bold text-ink-2">{t("tapToStart")}</p>
+          <p className="text-sm font-bold text-ink-2">{t("tapToWake")}</p>
         </SpeechBubble>
       </Stage>
     );
   }
 
-  // Disconnected (idle or error)
+  // Disconnected after an error. The raw message is technical (and English):
+  // the kid gets what it means instead. A setup problem gets no retry button,
+  // as retrying cannot help until a grown-up fixes it (coming back to the
+  // home after that connects again on its own).
   if (error) {
-    const knownErrors = ["micPermissionNeeded", "secureContextRequired"] as const;
-    const isKnownError = knownErrors.some((key) => error === key);
-    const errorMessage = isKnownError
-      ? t(error as (typeof knownErrors)[number])
-      : t("connectionError");
+    const errorKind = companionErrorKind(error);
 
     return (
       <Stage>
@@ -310,20 +301,21 @@ export function DodiFullHome({
         </MascotWrap>
         <div className="flex w-full max-w-xs flex-col items-center gap-3">
           <SpeechBubble className="w-full text-center">
-            <p className="text-sm font-bold text-ink-2">{errorMessage}</p>
-            {error && !isKnownError && (
-              <p className="mt-1 text-xs font-semibold text-muted-foreground">{error}</p>
-            )}
+            <p className="text-sm font-bold text-ink-2">
+              {t(errorKind === "connection" ? "connectionError" : errorKind)}
+            </p>
           </SpeechBubble>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void connect(kidId)}
-            className="cursor-pointer rounded-full font-bold"
-          >
-            <Icon name="refresh" className="mr-2 h-4 w-4" />
-            {t("tapToRetry")}
-          </Button>
+          {errorKind !== "needsSetup" && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void connect(kidId)}
+              className="cursor-pointer rounded-full font-bold"
+            >
+              <Icon name="refresh" className="mr-2 h-4 w-4" />
+              {t("retry")}
+            </Button>
+          )}
         </div>
       </Stage>
     );
@@ -337,12 +329,12 @@ export function DodiFullHome({
           type="button"
           onClick={() => void connect(kidId)}
           className={mascotButtonClass}
-          aria-label={t("tapToStart")}
+          aria-label={tVoice("voiceAriaStart")}
         >
           <DodiFigure
             canRender3d
             state="disconnected"
-            alt="dodi sleeping — tap to wake"
+            alt="dodi sleeping"
             className="object-contain"
             priority
           />
@@ -352,7 +344,7 @@ export function DodiFullHome({
         <p className="text-lg font-extrabold text-ink">
           {t("greetingWithName", { name: kidName })}
         </p>
-        <p className="mt-1 text-sm font-bold text-ink-2">{t("tapToStart")}</p>
+        <p className="mt-1 text-sm font-bold text-ink-2">{t("tapToTalk")}</p>
       </SpeechBubble>
     </Stage>
   );

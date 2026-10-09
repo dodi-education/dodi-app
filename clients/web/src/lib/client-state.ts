@@ -10,6 +10,7 @@
 // derivation during unlock/wrap never blocks the UI thread.
 import "@/lib/argon2-worker";
 import { createClientState, type ClientPlatform } from "@dodi/client-state";
+import { clientLabelFromUserAgent } from "@dodi/protocol/client-label";
 import { createIndexedDbDeviceKeystore } from "@dodi/vault";
 
 import { readActiveKidCookie, writeActiveKidCookies } from "@/lib/active-kid";
@@ -83,6 +84,10 @@ const webPlatform: ClientPlatform = {
   // Only an explicit `false` means offline — node (tests/SSR) has a navigator
   // without `onLine`, and "no signal" must default to online.
   isInitiallyOnline: typeof navigator === "undefined" || navigator.onLine !== false,
+  describeClient: () => ({
+    kind: "browser",
+    label: clientLabelFromUserAgent(typeof navigator === "undefined" ? null : navigator.userAgent),
+  }),
 };
 
 export const clientState = createClientState(webPlatform);

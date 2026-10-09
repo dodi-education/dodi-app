@@ -171,6 +171,27 @@ features:
       picker (the web downloads a file and uses a file input); row menus open as
       a bottom sheet.
 
+  - id: parent.discover-character-assets
+    area: parent
+    title: Discover for avatars and accessories (share your own for review, add other families' ones)
+    web: done
+    mobile: done
+    core: [client-state, vault, ui-recipes, intl]
+    web_paths:
+      - "clients/web/src/components/parent/discover-asset-list.tsx"
+      - "clients/web/src/components/parent/character-asset-share-dialog.tsx"
+      - "clients/web/src/components/parent/character-asset-share-fields.tsx"
+      - "clients/web/src/stores/discover-asset-store.ts"
+    mobile_paths:
+      - "clients/mobile/src/components/parent/discover-asset-list.tsx"
+      - "clients/mobile/src/components/parent/character-asset-share-dialog.tsx"
+      - "clients/mobile/src/components/parent/character-asset-share-fields.tsx"
+    notes: >-
+      Sharing posts a plaintext copy of the opened file for human review (no
+      preview image yet: cards show the kind's icon). Added assets are
+      play-in-place: the family's asset store lists them next to its own and
+      the Companions list removes them.
+
   - id: parent.game-studio
     area: parent
     title: Game Studio (plan, build, edit, versions)
@@ -317,15 +338,44 @@ features:
     mobile_paths:
       - "clients/mobile/src/app/parent/settings/security.tsx"
 
-  - id: settings.devices
+  - id: settings.access
     area: settings
-    title: Paired devices
+    title: "Access: the browsers, app, robot, agents and access keys that can open the vault, with one-step revoke"
     web: done
     mobile: done
-    core: [client-state, vault]
-    web_paths: ["clients/web/src/app/parent/settings/devices/page.tsx"]
+    core: [client-state, protocol, vault]
+    notes: >-
+      One list from GET /api/authorized-clients, grouped by groupAccess (this
+      device, browsers and apps, robot, agents). Revoking this client signs it
+      out. "Connect a robot" / "Connect an agent" open parent.authorize; access
+      keys are created here after the account password. The old Devices and
+      Agents pages redirect here (an old ?code= link to /parent/authorize).
+      Logic in core/client-state/src/authorized-clients.ts.
+    web_paths:
+      - "clients/web/src/app/parent/settings/access/page.tsx"
+      - "clients/web/src/app/parent/settings/devices/page.tsx"
+      - "clients/web/src/app/parent/settings/agents/page.tsx"
     mobile_paths:
-      - "clients/mobile/src/app/parent/settings/devices.tsx"
+      - "clients/mobile/src/app/parent/settings/access.tsx"
+
+  - id: parent.authorize
+    area: parent
+    title: Allow access (approve a robot or agent from its code, with the account password)
+    web: done
+    mobile: done
+    core: [client-state, protocol, vault]
+    notes: >-
+      Robots and the dodi CLI print <app>/authorize?code=...; that short path
+      redirects to /parent/authorize (behind the vault and PIN gates), and the
+      web middleware keeps ?code= through login. The card shows name and
+      fingerprint, and for an agent the scopes (kids:memory off by default) and
+      expiry.
+    web_paths:
+      - "clients/web/src/app/parent/authorize/page.tsx"
+      - "clients/web/src/app/authorize/page.tsx"
+    mobile_paths:
+      - "clients/mobile/src/app/parent/authorize.tsx"
+      - "clients/mobile/src/app/authorize.tsx"
 
   - id: settings.ai-providers
     area: settings
@@ -472,6 +522,24 @@ features:
     core: [client-state, character, ai]
     web_paths: ["clients/web/src/components/kid/playground/teach-trick-panel.tsx"]
     mobile_paths: ["clients/mobile/src/components/kid/playground/teach-trick-panel.tsx"]
+
+  - id: companions.custom-assets
+    area: kid
+    title: The family's own avatars and accessories (made with the dodi CLI, E2EE), worn in the Playground; parents delete them under Companions
+    web: done
+    mobile: done
+    core: [character, client-state, vault, types]
+    web_paths:
+      - "clients/web/src/components/parent/character-asset-list.tsx"
+      - "clients/web/src/hooks/use-worn-look.ts"
+      - "clients/web/src/stores/character-asset-store.ts"
+    mobile_paths:
+      - "clients/mobile/src/components/parent/character-asset-list.tsx"
+      - "clients/mobile/src/lib/use-worn-look.ts"
+    notes: >-
+      No upload in the apps yet: assets come from the CLI. Custom avatars offer
+      no recolorable parts. Sharing them on Discover and adding other families'
+      ones is parent.discover-character-assets.
 
   - id: kid.offline
     area: kid

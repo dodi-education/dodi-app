@@ -7,6 +7,7 @@ import { personaAvatar } from "@dodi/ui-recipes";
 import { Row, RowMain, RowMeta, RowTitle, RowTitleText } from "@/components/parent/rows";
 import { Section } from "@/components/parent/section";
 import { PersonaList } from "@/components/personas/persona-list";
+import { CharacterAssetList } from "@/components/parent/character-asset-list";
 import { ShellContent } from "@/components/shared/shell-content";
 import { Badge, Button, Icon, TabsLabel, TabsList, TabsTrigger } from "@/components/ui";
 import { clientState } from "@/lib/client-state";
@@ -79,6 +80,7 @@ function CompanionsTab() {
           </Section>
         );
       })}
+      <CharacterAssetList />
     </View>
   );
 }

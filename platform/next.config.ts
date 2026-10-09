@@ -10,6 +10,7 @@ const nextConfig: NextConfig = {
   outputFileTracingRoot: path.join(__dirname, ".."),
   transpilePackages: [
     "@dodi/ai",
+    "@dodi/character",
     "@dodi/crypto",
     "@dodi/games",
     "@dodi/protocol",

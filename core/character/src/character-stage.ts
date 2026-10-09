@@ -311,6 +311,38 @@ export class CharacterStage {
     return `#${(entry.materials[0].uniforms.baseColor.value as THREE.Color).getHexString()}`;
   }
 
+  /**
+   * Put on an accessory loaded after the stage was made (a family's own, from
+   * its decrypted bytes: `custom:<id>`). It hangs on its manifest's socket and
+   * shows when the look or the pose wears it. False when the character has no
+   * such socket or the name is taken.
+   */
+  addAccessory(name: string, accessory: CharacterFile): boolean {
+    if (this.accessories.has(name)) return false;
+    const socketName = readAccessorySocket(accessory.scene);
+    const socket = socketName ? this.character.getObjectByName(socketName) : undefined;
+    if (!socket) return false;
+    accessory.scene.visible = false;
+    socket.add(accessory.scene);
+    this.accessories.set(name, accessory.scene);
+    accessory.scene.traverse((obj) => {
+      if (!(obj instanceof THREE.Mesh)) return;
+      obj.material = characterMaterial(obj.material as THREE.Material);
+      obj.frustumCulled = false;
+      this.outline.add(obj, true);
+      this.outlined.push({ mesh: obj, isFine: true });
+      this.hull?.add(obj, true);
+    });
+    this.hull?.setVisible(this.outlineMode === "hull");
+    this.showAccessories();
+    return true;
+  }
+
+  /** Whether the stage has an accessory (catalog or added) by name. */
+  hasAccessory(name: string): boolean {
+    return this.accessories.has(name);
+  }
+
   /** Whether an accessory shows right now. */
   isAccessoryShown(name: string): boolean {
     return this.accessories.get(name)?.visible ?? false;

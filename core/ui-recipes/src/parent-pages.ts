@@ -216,3 +216,30 @@ export const loadMoreRow = {
 
 /** The usage page's stat strip, framed as a card. */
 export const usageStats = "mb-8 overflow-hidden rounded-lg border border-border bg-card shadow-card";
+
+// ----- Access (settings/access, /parent/authorize) --------------------------------------------
+
+/** Access screens: the subtitle, a padded block inside a Section, mono values and notes. */
+export const access = {
+  /** "Everything that can open your family's data." above the first Section. */
+  subtitle: "mb-6 text-[13px] text-muted-foreground",
+  /** A padded block inside a Section card (forms, notes, buttons). */
+  block: "flex-col gap-3 px-5 py-4",
+  /** Buttons at the end of a block (stacked on phones, a row from sm up on the web). */
+  actions: "flex-col gap-2",
+  webActions: "flex sm:flex-row sm:justify-end",
+  /** A fingerprint. */
+  code: "rounded-md bg-muted px-2.5 py-1.5 font-mono text-sm tracking-wider",
+  /** A copyable value (starter prompt, access key). */
+  copyText: "rounded-md bg-muted px-3 py-2.5 font-mono text-[13px] leading-relaxed",
+  /** A row's kind icon circle (icon in primary). */
+  icon: "size-[34px] shrink-0 items-center justify-center rounded-full bg-primary-soft",
+  webIcon: "flex text-primary",
+  /** A request card's header (icon + title). */
+  header: "flex-row items-center gap-3 px-5 py-4",
+  title: "flex-1 text-[15px] font-semibold",
+  note: "text-sm text-muted-foreground",
+  error: "text-sm text-destructive",
+  success: "text-sm text-success",
+  warning: "text-sm text-warning",
+} as const;

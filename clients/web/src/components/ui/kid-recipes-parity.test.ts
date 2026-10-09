@@ -91,7 +91,7 @@ describe("kid components keep their classes after moving to @dodi/ui-recipes", (
   });
 
   it("chrome: header, Parent link, main, bottom nav, gates", () => {
-    expectSameClasses(kidChrome.webRoot, "flex min-h-screen flex-col font-kid");
+    expectSameClasses(kidChrome.webRoot, "flex min-h-dvh flex-col font-kid");
     expectSameClasses(
       cn(kidChrome.header, kidChrome.webHeader),
       "flex items-center justify-between px-4 py-3 md:px-6 md:py-4",

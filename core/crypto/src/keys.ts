@@ -24,6 +24,7 @@ import {
   type KemKeyPair,
   type SignKeyPair,
   DEFAULT_ARGON2_PARAMS,
+  deriveKey,
   deriveKeyFromPassword,
   generateKemKeyPair,
   generateSignKeyPair,
@@ -56,6 +57,25 @@ export interface DeviceKeyPairs {
 
 export function generateDeviceKeyPairs(): DeviceKeyPairs {
   return { kem: generateKemKeyPair(), sign: generateSignKeyPair() };
+}
+
+/** Length of the secret a device identity can be rebuilt from (an agent access key). */
+export const DEVICE_SEED_LENGTH = 32;
+
+/**
+ * Rebuild a device identity from a 32-byte secret: the same seed always gives
+ * the same KEM and DSA keypairs. This lets an agent access key carry only the
+ * seed (the browser enrolls the derived public keys, the CLI re-derives the
+ * secret keys) instead of kilobytes of post-quantum secret keys.
+ */
+export function deriveDeviceKeyPairsFromSeed(seed: Uint8Array): DeviceKeyPairs {
+  if (seed.length !== DEVICE_SEED_LENGTH) {
+    throw new Error(`Device seed must be ${DEVICE_SEED_LENGTH} bytes`);
+  }
+  return {
+    kem: generateKemKeyPair(deriveKey(seed, "dodi/device-seed/kem/v1", undefined, 64)),
+    sign: generateSignKeyPair(deriveKey(seed, "dodi/device-seed/sign/v1", undefined, 32)),
+  };
 }
 
 // ---------------------------------------------------------------------------

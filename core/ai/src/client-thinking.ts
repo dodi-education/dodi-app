@@ -17,6 +17,7 @@ import type { AIProviderId } from "@dodi/types/ai";
 import type { TokenUsage } from "@dodi/types/usage";
 
 import { createProviderClient, withExtraBody, type OpenAICompatibleProvider } from "./openai-compatible";
+import { ANTHROPIC_SIMPLE_TASK_MAX_TOKENS } from "./providers";
 import { anthropicUsage, geminiUsage, veniceUsage, xaiUsage } from "./usage-map";
 import { VENICE_PROVIDER } from "./venice";
 import { XAI_PROVIDER } from "./xai";
@@ -85,7 +86,7 @@ class AnthropicClientThinking implements ThinkingProvider {
   async #text(system: string, prompt: string): Promise<string> {
     const res = await this.#client.messages.create({
       model: this.#model,
-      max_tokens: 4096,
+      max_tokens: ANTHROPIC_SIMPLE_TASK_MAX_TOKENS,
       system,
       messages: [{ role: "user", content: prompt }],
     });

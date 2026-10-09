@@ -1,6 +1,6 @@
 /**
- * Gemini ImageProvider (Nano Banana family: gemini-3.1-flash-image /
- * gemini-3-pro-image).
+ * Gemini ImageProvider (Nano Banana family: gemini-nano-banana-2.1 /
+ * gemini-3.1-flash-image / gemini-3-pro-image).
  *
  * Calls the Gemini `generateContent` REST endpoint directly with `fetch` — the
  * same transport the Live client already uses — so it runs entirely in the

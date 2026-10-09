@@ -38,3 +38,6 @@ export const useCaptchaStore = bindStore(clientState.captcha);
 export const useCompanionVolumeStore = bindStore(clientState.companionVolume);
 export const useCompanionStageStore = bindStore(clientState.companionStage);
 export const useCustomTricksStore = bindStore(clientState.customTricks);
+export const useCharacterAssetStore = bindStore(clientState.characterAssets);
+export const useAssetPublicationStore = bindStore(clientState.assetPublications);
+export const useDiscoverAssetStore = bindStore(clientState.discoverAssets);

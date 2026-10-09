@@ -16,6 +16,7 @@ import { requireAuth } from "@/lib/resolve-auth";
 import { createLogger } from "@/logger";
 import { claimAccountNpub } from "@/services/accounts";
 import {
+  agentVaultKeys,
   getStoredVaultKeys,
   setStoredVaultKeys,
 } from "@/services/vault-keys";
@@ -24,12 +25,15 @@ import type { StoredVaultKeys } from "@dodi/vault";
 const log = createLogger("vault-keys");
 
 export async function GET(request: Request): Promise<NextResponse> {
-  const auth = await requireAuth(request);
+  // Agents read only their own wrap (see agentVaultKeys); PUT stays user-only.
+  const auth = await requireAuth(request, { agentScope: "any" });
   if (auth instanceof Response) return auth;
   const { accountId, db } = auth;
 
   try {
-    const vaultKeys = await getStoredVaultKeys(db, accountId);
+    const stored = await getStoredVaultKeys(db, accountId);
+    const vaultKeys =
+      auth.via === "agent" ? agentVaultKeys(stored, auth.deviceId ?? "") : stored;
     return NextResponse.json({ vaultKeys });
   } catch (error) {
     logServerError("api/vault/keys#GET", error, {

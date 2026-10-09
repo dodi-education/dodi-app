@@ -34,7 +34,7 @@ import {
 } from "@dodi/ai/voice/voice-client";
 import { defaultVoiceTransport, type VoiceTransport } from "@dodi/ai/voice/voice-socket";
 import { VoiceSocketPool, VoiceSocketPoolError } from "@dodi/ai/voice/voice-socket-pool";
-import { CHARACTER_MODELS, type CharacterModelId } from "@dodi/character/character-catalog";
+import { characterModelFor, type CharacterModelRef } from "@dodi/character/character-catalog";
 import { extractCommandMarkers } from "@dodi/games/command-markers";
 import { gameDebug, gameDebugWarn } from "@dodi/games/debug";
 import { STANDARD_TOOLS_BY_NAME } from "@dodi/games/toolbox";
@@ -1954,11 +1954,11 @@ export function createCompanionSession(deps: CompanionSessionDeps): CompanionSes
   // -------------------------------------------------------------------------
 
   /** The kid's active companion and the tricks its avatar can do, by name. */
-  async function knownTricks(kidId: string): Promise<{ companionId: string | null; model: CharacterModelId; tricks: StageTrick[] }> {
+  async function knownTricks(kidId: string): Promise<{ companionId: string | null; model: CharacterModelRef; tricks: StageTrick[] }> {
     const kid = await stores.kids.getState().loadOne(kidId);
     const companion = kid ? activeCompanionOf(kid) : null;
     const model = companionLookOf(companion).model;
-    const builtIn = CHARACTER_MODELS[model].tricks.map((t) => ({ id: t.id, name: t.script.name, script: t.script }));
+    const builtIn = characterModelFor(model).tricks.map((t) => ({ id: t.id, name: t.script.name, script: t.script }));
     const custom =
       companion && stores.customTricks
         ? (await stores.customTricks.getState().load(companion.id).catch(() => []))

@@ -4,8 +4,10 @@
  *  - challenge nonce: `{ t: "chal", deviceId, exp }` — returned by /challenge,
  *    signed by the device's ML-DSA key, and checked at /token.
  *  - device bearer:  `dodidev_<payload>.<mac>` with `{ t: "dev", accountId,
- *    deviceId, exp }` — issued by /token and accepted by resolveAuth. Verified
- *    statelessly (no DB), so it carries the account it resolves to.
+ *    deviceId, k, exp }` — issued by /token and accepted by resolveAuth. A robot
+ *    bearer is verified statelessly (no DB), so it carries the account it
+ *    resolves to; `k: "agent"` marks an agent (dodi CLI) bearer, which
+ *    resolveAuth re-checks against the device row for its scopes.
  */
 import crypto from "node:crypto";
 
@@ -71,19 +73,36 @@ export function verifyChallenge(nonce: string, deviceId: string): boolean {
   return !!p && p.t === "chal" && p.deviceId === deviceId;
 }
 
-export function issueDeviceBearer(accountId: string, deviceId: string): string {
+export type DeviceKind = "robot" | "agent";
+
+export function issueDeviceBearer(
+  accountId: string,
+  deviceId: string,
+  kind: DeviceKind = "robot",
+): string {
   return (
     BEARER_PREFIX +
-    sign({ t: "dev", accountId, deviceId, exp: Date.now() + BEARER_TTL_MS })
+    sign({
+      t: "dev",
+      accountId,
+      deviceId,
+      k: kind,
+      exp: Date.now() + BEARER_TTL_MS,
+    })
   );
 }
 
 /** Parse + verify a device bearer; null if not a device token (e.g. a user JWT). */
 export function verifyDeviceBearer(
   token: string,
-): { accountId: string; deviceId: string } | null {
+): { accountId: string; deviceId: string; kind: DeviceKind } | null {
   if (!token.startsWith(BEARER_PREFIX)) return null;
   const p = open(token.slice(BEARER_PREFIX.length));
   if (!p || p.t !== "dev") return null;
-  return { accountId: String(p.accountId), deviceId: String(p.deviceId) };
+  return {
+    accountId: String(p.accountId),
+    deviceId: String(p.deviceId),
+    // Bearers issued before agents existed carry no kind: they are robots.
+    kind: p.k === "agent" ? "agent" : "robot",
+  };
 }

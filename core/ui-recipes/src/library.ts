@@ -26,6 +26,12 @@ export const libraryRow = {
   /** Colored tag tile when there is no preview image (colors from tagStyle). */
   thumbFallback: "h-15 w-15 shrink-0 items-center justify-center rounded-xl",
   webThumbFallback: "flex",
+  /** Discover avatars and accessories: the row's body (no preview page to open). */
+  body: "min-w-0 flex-1 flex-row items-center gap-3",
+  webBody: "flex",
+  /** Their thumb without a preview image: the kind's icon on a soft tint. */
+  thumbKind: "bg-primary-soft",
+  webThumbKind: "text-primary",
   main: "min-w-0 flex-1",
   titleRow: "flex-row items-center gap-2",
   webTitleRow: "flex",

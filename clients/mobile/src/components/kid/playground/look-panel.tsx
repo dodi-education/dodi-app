@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, TextInput, View } from "react-native";
 import { useTranslations } from "use-intl";
 import {
@@ -6,15 +6,20 @@ import {
   ACCESSORY_LIST,
   CHARACTER_MODELS,
   COLOR_SWATCHES,
-  type AccessoryName,
-  type CharacterModelId,
+  accessorySocketOf,
+  characterModelFor,
+  customAssetRef,
+  type AccessoryRef,
+  type CharacterModelRef,
 } from "@dodi/character/character-catalog";
 import { defaultLook } from "@dodi/character/character-look";
+import { customSocketsOf } from "@dodi/client-state/character-asset-store";
 import { COMPANION_NAME_MAX_LENGTH, renameCompanion } from "@dodi/client-state/companions";
 import { input as inputRecipe, playground as p } from "@dodi/ui-recipes";
 
 import { KidText } from "@/components/kid/kid-text";
 import { cn } from "@/lib/cn";
+import { useCharacterAssetStore } from "@/lib/client-state";
 import { companionFlowDeps } from "@/lib/companion-flow-deps";
 import { fontFamilyFor } from "@/lib/fonts";
 import { useActiveCompanion } from "@/lib/use-active-companion";
@@ -69,21 +74,32 @@ export function LookPanel() {
   const t = useTranslations("playground");
   const { kid, companion, name } = useActiveCompanion();
   const { look, change, status } = useLookEditor();
-  const model = CHARACTER_MODELS[look.model];
+  const model = characterModelFor(look.model);
+  // The family's own avatars and accessories (from the dodi CLI), after the catalog's.
+  const assets = useCharacterAssetStore((s) => s.assets);
+  const loadAssets = useCharacterAssetStore((s) => s.load);
+  useEffect(() => {
+    void loadAssets().catch(() => {});
+  }, [loadAssets]);
+  const customAvatars = (assets ?? []).filter((a) => a.kind === "avatar");
+  const customAccessories = (assets ?? []).filter((a) => a.kind === "accessory");
 
   function setColor(material: string, base: string): void {
     change({ ...look, colors: { ...look.colors, [material]: base } });
   }
 
-  function toggleAccessory(accessory: AccessoryName): void {
+  function toggleAccessory(accessory: AccessoryRef): void {
     const isWorn = look.accessories.includes(accessory);
     // One accessory per socket: a new hat replaces the old one.
-    const socket = ACCESSORIES[accessory].socket;
-    const others = look.accessories.filter((a) => a !== accessory && ACCESSORIES[a].socket !== socket);
+    const sockets = customSocketsOf(assets);
+    const socket = accessorySocketOf(accessory, sockets);
+    const others = look.accessories.filter(
+      (a) => a !== accessory && (socket === null || accessorySocketOf(a, sockets) !== socket),
+    );
     change({ ...look, accessories: isWorn ? others : [...others, accessory] });
   }
 
-  function setModel(id: CharacterModelId): void {
+  function setModel(id: CharacterModelRef): void {
     if (id !== look.model) change({ ...defaultLook(id), accessories: look.accessories });
   }
 
@@ -143,10 +159,23 @@ export function LookPanel() {
               {t(`accessoryNames.${ACCESSORIES[accessory].labelKey}`)}
             </PlaygroundChip>
           ))}
+          {customAccessories.map((asset) => {
+            const ref = customAssetRef(asset.id);
+            return (
+              <PlaygroundChip
+                key={asset.id}
+                accessibilityRole="togglebutton"
+                isSelected={look.accessories.includes(ref)}
+                onPress={() => toggleAccessory(ref)}
+              >
+                {asset.name}
+              </PlaygroundChip>
+            );
+          })}
         </View>
       </View>
 
-      {kid?.can_change_companion_avatar && MODELS.length > 1 ? (
+      {kid?.can_change_companion_avatar && MODELS.length + customAvatars.length > 1 ? (
         <View className={p.section}>
           <KidText className={p.label}>{t("avatar")}</KidText>
           <View className={p.row}>
@@ -160,6 +189,19 @@ export function LookPanel() {
                 {t(`avatars.${m.labelKey}`)}
               </PlaygroundChip>
             ))}
+            {customAvatars.map((asset) => {
+              const ref = customAssetRef(asset.id);
+              return (
+                <PlaygroundChip
+                  key={asset.id}
+                  accessibilityRole="togglebutton"
+                  isSelected={look.model === ref}
+                  onPress={() => setModel(ref)}
+                >
+                  {asset.name}
+                </PlaygroundChip>
+              );
+            })}
           </View>
         </View>
       ) : null}

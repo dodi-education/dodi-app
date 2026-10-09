@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/shared/icon";
 import { GameStudioList } from "@/components/parent/games/game-studio-list";
 import { DiscoverList } from "@/components/parent/games/discover-list";
+import { DiscoverAssetList } from "@/components/parent/discover-asset-list";
 import { GameImportDialog } from "@/components/parent/games/game-import-dialog";
 import { useAccountGames } from "@/hooks/use-games";
 import { useKids } from "@/hooks/use-kids";
@@ -91,6 +92,8 @@ export default function ParentGamesPage() {
       <Section title={t("discoverTitle")} desc={t("discoverSubtitle")}>
         <DiscoverList />
       </Section>
+
+      <DiscoverAssetList />
     </div>
   );
 }

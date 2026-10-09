@@ -29,7 +29,7 @@ describe("BYOK keys", () => {
 
   it("validates with a non-live model", () => {
     const gemini = AI_PROVIDERS.find((p) => p.id === "gemini");
-    expect(validationModelFor(gemini)).toBe("gemini-3.5-flash");
+    expect(validationModelFor(gemini)).toBe("gemini-3.8-flash");
   });
 
   it("seals a valid first key and returns the voice config it seeds", async () => {
@@ -37,7 +37,7 @@ describe("BYOK keys", () => {
     const validateKey = vi.fn(async () => ({ valid: true }));
     const onValidated = vi.fn();
     const outcome = await addProviderKey({ providers, validateKey }, { providerId: "xai", apiKey: "k" }, onValidated);
-    expect(validateKey).toHaveBeenCalledWith("xai", "k", "grok-4.6");
+    expect(validateKey).toHaveBeenCalledWith("xai", "k", "grok-4.7");
     expect(onValidated).toHaveBeenCalled();
     expect(addKey).toHaveBeenCalledWith("xai", "k");
     expect(outcome).toEqual({

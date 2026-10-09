@@ -1,5 +1,6 @@
-import { DevicesSection } from "@/components/parent/devices-section";
+import { redirect } from "next/navigation";
 
-export default function DevicesSettingsPage() {
-  return <DevicesSection />;
+/** Legacy path: Devices → Access. */
+export default function DevicesRedirectPage() {
+  redirect("/parent/settings/access");
 }

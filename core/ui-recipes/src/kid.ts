@@ -116,7 +116,8 @@ export const kidButtonIconColor = {
 
 /** The kid view's frame (web: components/kid/kid-chrome). */
 export const kidChrome = {
-  webRoot: "flex min-h-screen flex-col font-kid",
+  /** dvh, not vh: phone browsers' 100vh reaches under the URL bar, pushing the page bottom behind the fixed nav. */
+  webRoot: "flex min-h-dvh flex-col font-kid",
   /** The non-sticky header: switcher + compact dodi on the left, Parent on the right. */
   header: "flex-row items-center justify-between px-4 py-3",
   webHeader: "flex md:px-6 md:py-4",
@@ -348,21 +349,26 @@ export const playground = {
     "absolute right-3 top-1/2 z-20 h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full border border-dodi-200 bg-white",
   webBadge: "flex shadow-sm transition-shadow hover:shadow-md md:right-6",
   /** Open on a phone: the badge sits just above the panel's top right corner. */
-  badgeOpen: "top-auto bottom-1/2 mb-2 translate-y-0 border-dodi-500 bg-dodi-500",
+  badgeOpen: "top-auto bottom-[60%] mb-2 translate-y-0 border-dodi-500 bg-dodi-500",
   /** From md up the panel is a side card, so the badge stays centred beside it. */
   webBadgeOpen: "md:top-1/2 md:bottom-auto md:mb-0 md:-translate-y-1/2",
   badgeIcon: 24,
   badgeIconColor: "text-ink-2",
   badgeIconOpenColor: "text-white",
-  /** On a phone the panel fills the stage's bottom half; the character keeps the top half. */
-  panel: "absolute inset-x-2 bottom-2 top-1/2 z-20 gap-3 rounded-3xl border border-dodi-200 bg-white p-4",
+  /**
+   * On a phone the panel fills the stage below its top 40% (the character
+   * stands right above it) and reaches down over the bottom nav: the page
+   * keeps 96px (+ the app's safe area) free for the nav, so -88px lands 8px
+   * above the screen's edge. z-50 lifts it over the nav's z-40.
+   */
+  panel: "absolute inset-x-2 -bottom-[88px] top-[40%] z-50 gap-3 rounded-3xl border border-dodi-200 bg-white p-4",
   webPanel:
-    "flex flex-col overflow-y-auto shadow-lg animate-in fade-in slide-in-from-bottom-2 duration-200 motion-reduce:animate-none md:inset-x-auto md:bottom-auto md:right-24 md:top-1/2 md:max-h-[86%] md:w-[340px] md:-translate-y-1/2",
+    "flex flex-col overflow-y-auto shadow-lg animate-in fade-in slide-in-from-bottom-2 duration-200 motion-reduce:animate-none max-md:bottom-[calc(env(safe-area-inset-bottom,0px)-88px)] md:inset-x-auto md:bottom-auto md:right-24 md:top-1/2 md:max-h-[86%] md:w-[340px] md:-translate-y-1/2",
   /** The stage's column while open on a phone: the character centred in the top half. */
-  stageOpen: "my-0 h-1/2 justify-center py-2",
-  webStageOpen: "max-md:my-0 max-md:h-1/2 max-md:justify-center max-md:py-2",
+  stageOpen: "my-0 h-[40%] justify-end py-0",
+  webStageOpen: "max-md:my-0 max-md:h-[40%] max-md:justify-end max-md:py-0",
   /** Share of the window height the character may take while open on a phone. */
-  mascotOpenVh: 0.3,
+  mascotOpenVh: 0.28,
   title: "text-base font-extrabold text-ink",
   tagline: "text-xs font-semibold text-muted-foreground",
   tabs: "flex-row gap-1 rounded-full bg-dodi-50 p-1",
@@ -503,8 +509,8 @@ export const kidHomeTalk = {
   status: "text-sm font-bold text-ink-2",
   statusRow: "flex-row items-center justify-center gap-2",
   webStatusRow: "flex",
-  /** The "tap to talk" hint below the bubble (kept as a spacer when empty). */
-  tapHint: "text-sm font-bold text-faint",
+  /** The speaking dots alone, as tall as a status line (no jump between states). */
+  speakingRow: "py-1.5",
   retry: "rounded-full font-bold",
   webRetry: "cursor-pointer",
 } as const;

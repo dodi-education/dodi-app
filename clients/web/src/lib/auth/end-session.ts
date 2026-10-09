@@ -2,6 +2,8 @@ import { signOut } from "@/lib/auth/client";
 import { offlineCache } from "@/lib/offline/offline-cache";
 import { clearParentUnlocked } from "@/lib/parent-lock";
 import { useAccountStore } from "@/stores/account-store";
+import { useAssetPublicationStore, useCharacterAssetStore } from "@/stores/character-asset-store";
+import { useDiscoverAssetStore } from "@/stores/discover-asset-store";
 import { useDodiAIBillingStore } from "@/stores/dodi-ai-billing-store";
 import { useDodiAIKeyStore } from "@/stores/dodi-ai-key-store";
 import { useKidStore } from "@/stores/kid-store";
@@ -16,6 +18,10 @@ export async function endSession(): Promise<void> {
   clearParentUnlocked();
   useAccountStore.getState().reset();
   useKidStore.getState().invalidate();
+  // Decrypted avatar/accessory names and files, and their Discover state.
+  useCharacterAssetStore.getState().invalidate();
+  useAssetPublicationStore.getState().reset();
+  useDiscoverAssetStore.getState().invalidate();
   // dodi AI session credentials live in memory only: drop them with the session.
   useDodiAIKeyStore.getState().clear();
   useDodiAIBillingStore.getState().clear();

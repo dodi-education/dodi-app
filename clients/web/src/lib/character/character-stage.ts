@@ -4,17 +4,21 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import {
   ACCESSORIES,
   ACCESSORY_LIST,
-  CHARACTER_MODELS,
   DEFAULT_CHARACTER_MODEL,
-  type CharacterModelId,
+  characterModelFor,
+  isCustomAssetRef,
+  withRigBones,
+  type CharacterModelRef,
 } from "@dodi/character/character-catalog";
 import type { CharacterFile } from "@dodi/character/character-files";
+import { addCustomAccessories, loadCustomAvatar } from "@dodi/character/custom-assets";
 import type { CompanionLook } from "@dodi/character/character-look";
 import type { CharacterPose } from "@dodi/character/character-pose";
 import { CharacterStage, canvasScaleFor, type TrickOutcome } from "@dodi/character/character-stage";
 import { buildMotionClip } from "@dodi/character/motion-clip";
 import { fitMotionScript, type MotionScript } from "@dodi/character/motion-script";
 
+import { useCharacterAssetStore } from "@/stores/character-asset-store";
 import { dodiOutputLevel } from "@/stores/dodi-session-store";
 
 import { attachCharacterGestures } from "./character-gestures";
@@ -30,6 +34,9 @@ import { attachCharacterGestures } from "./character-gestures";
 
 // The catalog's files, served from public/characters (kit.publish_to_web).
 const assetUrl = (file: string): string => `/characters/${file}`;
+// A family's own avatars and accessories: fetched and opened by the store, loaded from bytes.
+const customAssetBytes = (assetId: string): Promise<Uint8Array> =>
+  useCharacterAssetStore.getState().getBytes(assetId);
 
 // Rendered at SUPERSAMPLE x the device resolution and scaled down by the
 // browser, which smooths the outline's pixel steps; device ratio capped at 2.
@@ -49,6 +56,7 @@ class CanvasStage {
   private readonly resizeObserver: ResizeObserver;
 
   private host: HTMLElement | null = null;
+  private look: CompanionLook | null = null;
   private frame = 0;
   private canvasScale = 0;
   // DEBUG(sleep-eyes): temporary.
@@ -112,7 +120,18 @@ class CanvasStage {
   }
 
   applyLook(look: CompanionLook): void {
+    this.look = look;
     this.stage.applyLook(look);
+    if (!look.accessories.some(isCustomAssetRef)) return;
+    // The family's own accessories load on first wear, then show (if still worn).
+    void addCustomAccessories(this.stage, look.accessories, customAssetBytes).then(() => {
+      if (this.look === look) this.stage.applyLook(look);
+    });
+  }
+
+  /** The loaded rig's bones (a custom avatar's tricks are fitted to them). */
+  get rigBones(): string[] {
+    return this.stage.boneNames;
   }
 
   playTrick(script: MotionScript): Promise<TrickOutcome> {
@@ -228,9 +247,9 @@ class CanvasStage {
 const OTHER_CONTROLS = "button, a, input, textarea, select, label, [role='button']";
 
 // One stage per avatar model, loaded when first shown.
-const stages = new Map<CharacterModelId, CanvasStage>();
+const stages = new Map<CharacterModelRef, CanvasStage>();
 let debugStageCount = 0; // DEBUG(sleep-eyes): temporary.
-const loading = new Map<CharacterModelId, Promise<void>>();
+const loading = new Map<CharacterModelRef, Promise<void>>();
 let lastPose: CharacterPose | null = null;
 let lastLook: CompanionLook | null = null;
 
@@ -238,13 +257,17 @@ let lastLook: CompanionLook | null = null;
  * Load a model and the accessories once; rejects if WebGL or the model fails.
  * An accessory that fails to load is left out rather than failing the stage.
  */
-export function loadCharacterStage(model: CharacterModelId = DEFAULT_CHARACTER_MODEL): Promise<void> {
+export function loadCharacterStage(model: CharacterModelRef = DEFAULT_CHARACTER_MODEL): Promise<void> {
   const existing = loading.get(model);
   if (existing) return existing;
   const promise = (async () => {
     const loader = new GLTFLoader();
+    // A catalog avatar by URL; a family's own from its decrypted bytes.
+    const characterFile: Promise<CharacterFile> = isCustomAssetRef(model)
+      ? loadCustomAvatar(model, customAssetBytes)
+      : loader.loadAsync(assetUrl(characterModelFor(model).file));
     const [character, ...accessories] = await Promise.all([
-      loader.loadAsync(assetUrl(CHARACTER_MODELS[model].file)),
+      characterFile,
       ...ACCESSORY_LIST.map((name) =>
         loader.loadAsync(assetUrl(ACCESSORIES[name].file)).catch((err: unknown) => {
           console.warn(`[character] accessory ${name} unavailable:`, err);
@@ -274,12 +297,12 @@ export function loadCharacterStage(model: CharacterModelId = DEFAULT_CHARACTER_M
   return promise;
 }
 
-export function isCharacterStageReady(model: CharacterModelId = DEFAULT_CHARACTER_MODEL): boolean {
+export function isCharacterStageReady(model: CharacterModelRef = DEFAULT_CHARACTER_MODEL): boolean {
   return stages.has(model);
 }
 
 /** Show the character in `host` (replacing wherever it was); returns the unmount. */
-export function mountCharacterStage(host: HTMLElement, model: CharacterModelId = DEFAULT_CHARACTER_MODEL): () => void {
+export function mountCharacterStage(host: HTMLElement, model: CharacterModelRef = DEFAULT_CHARACTER_MODEL): () => void {
   const stage = stages.get(model);
   if (!stage) throw new Error(`character stage ${model} not loaded`);
   return stage.mount(host);
@@ -298,10 +321,14 @@ export function setCharacterLook(look: CompanionLook): void {
 
 /** Play a trick on a model's stage; resolves when it ends. */
 export function playCharacterTrick(
-  model: CharacterModelId,
+  model: CharacterModelRef,
   script: MotionScript,
 ): Promise<TrickOutcome | "unavailable"> {
   const stage = stages.get(model);
+  if (!stage) return Promise.resolve("unavailable");
   // Fitted to this model: bones it lacks drop out, values stay in its limits.
-  return stage ? stage.playTrick(fitMotionScript(script, CHARACTER_MODELS[model]).script) : Promise.resolve("unavailable");
+  // A custom avatar is fitted to the bones its file really has.
+  const described = characterModelFor(model);
+  const target = isCustomAssetRef(model) ? withRigBones(described, stage.rigBones) : described;
+  return stage.playTrick(fitMotionScript(script, target).script);
 }

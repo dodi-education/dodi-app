@@ -2,9 +2,11 @@
  * The app's platform ports for the shared client state (`@dodi/client-state`).
  */
 import { Storage } from "expo-sqlite/kv-store";
+import { Platform } from "react-native";
 import type { ClientPlatform } from "@dodi/client-state";
 import { SEALED_SECRET_TTL_MS } from "@dodi/client-state/platform";
 import { DodiClient } from "@dodi/protocol";
+import { appClientLabel } from "@dodi/protocol/client-label";
 
 import { API_URL, DODI_AI_URL } from "@/lib/env";
 
@@ -88,4 +90,5 @@ export const mobilePlatform: ClientPlatform = {
     setItem: (key, value) => Storage.setItemSync(key, value),
   },
   isInitiallyOnline: true,
+  describeClient: () => ({ kind: "app", label: appClientLabel(Platform.OS) }),
 };

@@ -147,3 +147,50 @@ export async function updateKid(
 export async function deleteKid(db: Db, kidId: string): Promise<void> {
   await db.deleteFrom("kids").where("id", "=", kidId).execute();
 }
+
+/** What a connected agent sees of a kid: never notes, friend keys or settings. */
+export interface AgentKid {
+  id: string;
+  language: string;
+  /** Sealed; only with the `kids:basic` scope. */
+  display_name?: string;
+  /** Sealed; only with the `kids:basic` scope. */
+  birthdate?: string | null;
+}
+
+/**
+ * The account's kids as an agent may see them. Without `kids:basic` the agent
+ * gets ids (in creation order) and languages only, enough to pick the kid a
+ * game belongs to. Names and birthdates stay sealed: the agent decrypts them.
+ */
+export async function listKidsForAgent(
+  db: Db,
+  accountId: string,
+  { includeBasic }: { includeBasic: boolean },
+): Promise<AgentKid[]> {
+  const rows = await db
+    .selectFrom("kids")
+    .select(["id", "language", "display_name", "birthdate"])
+    .where("account_id", "=", accountId)
+    .orderBy("created_at", "asc")
+    .execute();
+  return rows.map((row) =>
+    includeBasic
+      ? { id: row.id, language: row.language, display_name: row.display_name, birthdate: row.birthdate }
+      : { id: row.id, language: row.language },
+  );
+}
+
+/** A kid's sealed memory dossier (kids.memory), or undefined when the kid isn't the account's. */
+export async function getKidMemoryDossier(
+  db: Db,
+  accountId: string,
+  kidId: string,
+): Promise<{ memory: string | null } | undefined> {
+  return db
+    .selectFrom("kids")
+    .select("memory")
+    .where("id", "=", kidId)
+    .where("account_id", "=", accountId)
+    .executeTakeFirst();
+}

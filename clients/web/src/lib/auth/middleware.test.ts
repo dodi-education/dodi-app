@@ -70,6 +70,22 @@ describe("updateSession", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("keeps the deep link's query in next= (the agent approval link)", async () => {
+    mockPlatform({});
+    const res = await updateSession(request("/parent/settings/agents?code=KPLX-4821"));
+    const location = new URL(res.headers.get("location")!);
+    expect(location.searchParams.get("next")).toBe("/parent/settings/agents?code=KPLX-4821");
+  });
+
+  it("keeps the code of the short approval link (/authorize?code=) through login", async () => {
+    mockPlatform({});
+    const res = await updateSession(request("/authorize?code=KPLX-4821"));
+    expect(res.status).toBe(307);
+    const location = new URL(res.headers.get("location")!);
+    expect(location.pathname).toBe("/login");
+    expect(location.searchParams.get("next")).toBe("/authorize?code=KPLX-4821");
+  });
+
   it("passes a public route through anonymously with the x-dodi-anon marker", async () => {
     mockPlatform({});
     const res = await updateSession(request("/login"));

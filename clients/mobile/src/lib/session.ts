@@ -43,6 +43,9 @@ export async function signOut(): Promise<void> {
   clientState.games.getState().invalidate();
   clientState.account.getState().reset();
   clientState.providers.getState().invalidate();
+  clientState.characterAssets.getState().invalidate();
+  clientState.assetPublications.getState().reset();
+  clientState.discoverAssets.getState().invalidate();
   clientState.dodiAIKeys.getState().clear();
   sessionStore.setState({ isSignedIn: false });
 }

@@ -20,9 +20,12 @@
     "newsletter_signups.status": "Generated<'confirmed' | 'unsubscribed'>",
     "transcript_entries.role": "'dodi' | 'kid'",
     "transcripts.status": "Generated<'open' | 'processed'>",
-    "devices.status": "Generated<'pending' | 'active' | 'revoked'>",
     "content_reports.content_kind": "'companion_answer' | 'game' | 'discover_game'",
     "content_reports.reason": "'inappropriate' | 'upsetting' | 'wrong' | 'other'",
-    "content_reports.client_platform": "'web' | 'mobile'"
+    "content_reports.client_platform": "'web' | 'mobile'",
+    "character_assets.kind": "'avatar' | 'accessory'",
+    "published_character_assets.kind": "'avatar' | 'accessory'",
+    "authorized_clients.kind": "'browser' | 'app' | 'robot' | 'agent'",
+    "authorized_clients.status": "Generated<'pending' | 'active' | 'revoked'>"
   }
 }

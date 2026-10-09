@@ -1,0 +1,21 @@
+# dodi
+
+> dodi is an open source, end-to-end encrypted learning platform for kids: an AI companion, learning games and a 3D companion character. Families can let their own AI agent (Claude Code, Cursor, Codex, a local model, any agent that can run shell commands or speak MCP) build learning games, companion avatars and accessories for them with the dodi CLI.
+
+## For agents: build for a family
+
+Use the dodi CLI. It runs on Node 20+ and seals everything on your machine, so the dodi server never sees a family's content. Install it with `npm install -g @dodi-education/cli`.
+
+1. `dodi login` prints an approval link. Send it to the parent. If it exits with code 3, run `dodi login --resume` after they approved.
+2. `dodi docs` explains the workflow; `dodi docs games` is the full game authoring guide. Read it before writing a game.
+3. `dodi games new <folder>`, edit game.html and game.md, loop `dodi games check <folder>` until it reports ok, then `dodi games push <folder>`.
+4. Optional: `dodi games publish <folder>` submits the game to dodi Discover for every family (reviewed before it goes live).
+
+Every command takes `--json` and exits with a meaningful code (0 ok, 3 waiting for approval, 4 check failed, 5 log in again, 6 missing permission). `dodi mcp` runs the same commands as a local MCP server over stdio.
+
+Rules: never put a kid's real name or personal details into a game. Games run in a sandbox with no network access, under 200 KB, in every platform language (en, de) if published.
+
+## Links
+
+- [Source code](https://github.com/dodi-education/dodi-app): the platform, the apps and the CLI (AGPL-3.0)
+- [Web app](https://app.dodi.app): where parents allow agents (Settings > Access)

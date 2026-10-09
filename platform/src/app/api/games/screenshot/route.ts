@@ -42,7 +42,7 @@ const MAX_BODY_BYTES = SCREENSHOT_LIMITS.MAX_DOCUMENT_BYTES + 64_000;
  * document: it forwards, answers, and forgets.
  */
 export async function POST(request: Request): Promise<NextResponse> {
-  const auth = await requireAuth(request);
+  const auth = await requireAuth(request, { agentScope: "games" });
   if (auth instanceof Response) return auth;
   const { accountId, db } = auth;
 

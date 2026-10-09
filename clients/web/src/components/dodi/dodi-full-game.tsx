@@ -3,6 +3,8 @@
 import { useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
 
+import { companionErrorKind } from "@dodi/client-state/companion-error";
+
 import { DodiFigure } from "@/components/dodi/dodi-figure";
 import { Icon, type IconName } from "@/components/shared/icon";
 import { ListeningPulse } from "@/components/kid/listening-pulse";
@@ -35,6 +37,7 @@ export function DodiFullGame({
   actions?: GameAssistantAction[];
 }) {
   const t = useTranslations("games");
+  const tKid = useTranslations("kid");
 
   const dodiState = useDodiSessionStore((s) => s.state);
   const kidId = useDodiSessionStore((s) => s.kidId);
@@ -43,6 +46,7 @@ export function DodiFullGame({
   const activityKind = useDodiSessionStore(selectDodiActivityKind);
   const toggleActive = useDodiSessionStore((s) => s.toggleActive);
   const connect = useDodiSessionStore((s) => s.connect);
+  const error = useDodiSessionStore((s) => s.error);
   const chatMessages = useDodiSessionStore((s) => s.chatMessages);
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -73,7 +77,13 @@ export function DodiFullGame({
               ? dodiSpeaking
                 ? t("voiceSpeaking")
                 : t("voiceListening")
-              : t("tapToReconnect");
+              : dodiState === "deaf"
+                ? tKid("tapToTalk")
+                : dodiState === "sleep"
+                  ? tKid("tapToWake")
+                  : error && companionErrorKind(error) === "needsSetup"
+                    ? tKid("needsSetup")
+                    : t("tapToReconnect");
 
   return (
     // Content-sized (not stretched to the stage height): with the action chips
@@ -98,12 +108,14 @@ export function DodiFullGame({
           )}
           aria-label={
             isConnecting
-              ? "dodi connecting"
+              ? t("voiceAriaConnecting")
               : dodiState === "active"
-                ? "Mute dodi"
+                ? t("voiceAriaStopListening")
                 : dodiState === "deaf"
-                  ? "Unmute dodi"
-                  : "Tap to reconnect dodi"
+                  ? t("voiceAriaStartListening")
+                  : dodiState === "sleep"
+                    ? t("voiceAriaWake")
+                    : t("voiceAriaReconnect")
           }
         >
           {dodiState === "active" && !dodiSpeaking && !isThinking && (

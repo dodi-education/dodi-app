@@ -33,6 +33,7 @@ import { flushPendingAutosaves, snapshotDeps } from "@/lib/snapshots";
 import { useActiveKid } from "@/lib/use-active-kid";
 
 import { KidAvatar } from "./kid-avatar";
+import { PlaygroundPanelHost } from "./playground/playground-panel-host";
 import { kidShadowStyle } from "./kid-shadow";
 import { KidSwitcher } from "./kid-switcher";
 import { KidText } from "./kid-text";
@@ -274,6 +275,8 @@ export function KidChrome({ children }: { children: ReactNode }) {
 
       {/* The snapshot flash's full-window layer, above the page and the nav. */}
       <SnapshotFlashHost />
+      {/* The Playground panel covers the nav, so it is drawn after it. */}
+      <PlaygroundPanelHost />
     </PageBackground>
   );
 }

@@ -73,7 +73,7 @@ export async function GET(
 ): Promise<NextResponse> {
   const { id } = await context.params;
 
-  const auth = await requireAuth(request);
+  const auth = await requireAuth(request, { agentScope: "games" });
   if (auth instanceof Response) return auth;
   const { accountId, db } = auth;
 
@@ -120,7 +120,7 @@ export async function PATCH(
 ): Promise<NextResponse> {
   const { id } = await context.params;
 
-  const auth = await requireAuth(request);
+  const auth = await requireAuth(request, { agentScope: "games" });
   if (auth instanceof Response) return auth;
   const { accountId, db } = auth;
 

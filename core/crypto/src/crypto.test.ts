@@ -262,3 +262,25 @@ describe("Argon2id implementation compatibility", () => {
     expect(toBase64Url(restored)).toBe(toBase64Url(reference));
   });
 });
+
+describe("deriveDeviceKeyPairsFromSeed", () => {
+  it("rebuilds the same device identity from the same seed", async () => {
+    const { deriveDeviceKeyPairsFromSeed, wrapKeyForDevice, unwrapKeyWithDevice, sign, verify, randomBytes } =
+      await import("./index");
+    const seed = randomBytes(32);
+    const a = deriveDeviceKeyPairsFromSeed(seed);
+    const b = deriveDeviceKeyPairsFromSeed(seed);
+    expect(b.kem.publicKey).toEqual(a.kem.publicKey);
+    expect(b.sign.publicKey).toEqual(a.sign.publicKey);
+    const vmk = randomBytes(32);
+    expect(unwrapKeyWithDevice(b.kem.secretKey, wrapKeyForDevice(a.kem.publicKey, vmk))).toEqual(vmk);
+    const msg = new TextEncoder().encode("nonce");
+    expect(verify(a.sign.publicKey, msg, sign(b.sign.secretKey, msg))).toBe(true);
+    expect(deriveDeviceKeyPairsFromSeed(randomBytes(32)).kem.publicKey).not.toEqual(a.kem.publicKey);
+  });
+
+  it("refuses a seed of the wrong length", async () => {
+    const { deriveDeviceKeyPairsFromSeed } = await import("./index");
+    expect(() => deriveDeviceKeyPairsFromSeed(new Uint8Array(16))).toThrow();
+  });
+});

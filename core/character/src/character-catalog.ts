@@ -30,7 +30,8 @@ export interface BuiltInTrick {
 }
 
 export interface CharacterModel {
-  id: CharacterModelId;
+  /** A catalog id, or `custom:<uuid>` for a family's own avatar (characterModelFor). */
+  id: CharacterModelRef;
   /** The companion's name until the kid picks one. */
   stockName: string;
   /** Path under the apps' `characters/` asset folder. */
@@ -166,3 +167,63 @@ export const COLOR_SWATCHES: readonly ColorSwatch[] = [
   { base: "#a5784f", shade: "#82593a" }, // cocoa
   { base: "#4a5568", shade: "#353e4d" }, // midnight
 ];
+
+// ----- Custom assets ---------------------------------------------------------
+//
+// A family's own avatars and accessories (character_assets, sealed) are not in
+// the catalog. A look refers to one as `custom:<asset id>`.
+
+export const CUSTOM_ASSET_PREFIX = "custom:";
+
+/** A reference to a family's own avatar or accessory: `custom:<uuid>`. */
+export type CustomAssetRef = `custom:${string}`;
+/** What a look's `model` holds: a catalog avatar or a custom one. */
+export type CharacterModelRef = CharacterModelId | CustomAssetRef;
+/** What a look's `accessories` hold: catalog accessories or custom ones. */
+export type AccessoryRef = AccessoryName | CustomAssetRef;
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isCustomAssetRef(value: unknown): value is CustomAssetRef {
+  return (
+    typeof value === "string" &&
+    value.startsWith(CUSTOM_ASSET_PREFIX) &&
+    UUID.test(value.slice(CUSTOM_ASSET_PREFIX.length))
+  );
+}
+
+export function customAssetRef(assetId: string): CustomAssetRef {
+  return `${CUSTOM_ASSET_PREFIX}${assetId.toLowerCase()}`;
+}
+
+/** The asset id of a custom ref; null for a catalog id. */
+export function customAssetIdOf(ref: string): string | null {
+  return isCustomAssetRef(ref) ? ref.slice(CUSTOM_ASSET_PREFIX.length).toLowerCase() : null;
+}
+
+/**
+ * What the app knows about a model without loading it. A custom avatar follows
+ * the format's skeleton conventions (characters/README.md), so it is described
+ * as the stock rig: tricks are fitted to its real bones once it has loaded
+ * (`withRigBones`). It offers no recolorable parts.
+ */
+export function characterModelFor(ref: CharacterModelRef): CharacterModel {
+  if (isCharacterModelId(ref)) return CHARACTER_MODELS[ref];
+  const stock = CHARACTER_MODELS[DEFAULT_CHARACTER_MODEL];
+  return { ...stock, id: ref, file: "", labelKey: "custom", customizable: [] };
+}
+
+/** A model description narrowed to the bones a loaded rig really has. */
+export function withRigBones(model: CharacterModel, bones: readonly string[]): CharacterModel {
+  return { ...model, bones: [...bones] };
+}
+
+/** The socket an accessory rides on: the catalog's, or a custom one's (from its sealed meta). */
+export function accessorySocketOf(
+  ref: AccessoryRef,
+  customSockets?: ReadonlyMap<string, string>,
+): string | null {
+  if (isAccessoryName(ref)) return ACCESSORIES[ref].socket;
+  const id = customAssetIdOf(ref);
+  return id === null ? null : (customSockets?.get(id) ?? null);
+}

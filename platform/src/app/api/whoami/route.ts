@@ -5,8 +5,8 @@ import { resolveAuth, unauthorizedResponse } from "@/lib/resolve-auth";
 
 export async function GET(request: Request): Promise<Response> {
   try {
-    const { accountId, via } = await resolveAuth(request);
-    return NextResponse.json({ accountId, via });
+    const { accountId, via, scopes } = await resolveAuth(request, { agentScope: "any" });
+    return NextResponse.json({ accountId, via, scopes: scopes ? [...scopes] : null });
   } catch (error) {
     return (
       unauthorizedResponse(error) ??

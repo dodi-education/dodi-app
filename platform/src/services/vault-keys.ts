@@ -43,3 +43,40 @@ export async function setStoredVaultKeys(
     );
   }
 }
+
+/**
+ * Drop one device's wrap from the stored blob. Structural only: the server
+ * removes an entry from `deviceWraps` without reading any key material. Used
+ * when an agent disconnects itself (it cannot rewrite the whole blob, and
+ * should not be trusted to).
+ */
+export async function removeDeviceWrap(
+  db: Db,
+  accountId: string,
+  deviceId: string,
+): Promise<void> {
+  const keys = await getStoredVaultKeys(db, accountId);
+  if (!keys) return;
+  const deviceWraps = keys.deviceWraps.filter(
+    (wrap) => wrap.deviceId !== deviceId,
+  );
+  if (deviceWraps.length === keys.deviceWraps.length) return;
+  await setStoredVaultKeys(db, accountId, { ...keys, deviceWraps });
+}
+
+/**
+ * The part of the vault-keys blob an agent device may see: its own wrap and
+ * the check record. Never the password wrap (an offline guessing target) or
+ * the other devices' wraps.
+ */
+export function agentVaultKeys(
+  keys: StoredVaultKeys | null,
+  deviceId: string,
+): StoredVaultKeys | null {
+  if (!keys) return null;
+  return {
+    deviceWraps: keys.deviceWraps.filter((wrap) => wrap.deviceId === deviceId),
+    passwordWrap: null,
+    vmkCheck: keys.vmkCheck,
+  };
+}

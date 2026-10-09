@@ -30,7 +30,10 @@ export default function LoginScreen() {
   const tc = useTranslations("common");
   const router = useRouter();
   // Set by Settings > Delete account after the account is gone.
-  const isAccountDeleted = useLocalSearchParams<{ deleted?: string }>().deleted === "1";
+  const params = useLocalSearchParams<{ deleted?: string; next?: string }>();
+  const isAccountDeleted = params.deleted === "1";
+  // Deep link to return to after sign-in (e.g. an agent approval link); same-app paths only.
+  const next = typeof params.next === "string" && /^\/(parent|authorize)(\/|\?|$)/.test(params.next) ? params.next : null;
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -52,7 +55,7 @@ export default function LoginScreen() {
       return outcome.key ? t(outcome.key) : (outcome.message ?? "");
     }
     // The account's saved language is applied by the locale provider.
-    router.replace(outcome.isNewVault ? "/vault-setup" : "/parent/dashboard");
+    router.replace(outcome.isNewVault ? "/vault-setup" : ((next ?? "/parent/dashboard") as "/parent/dashboard"));
     markSignedIn();
     return null;
   }

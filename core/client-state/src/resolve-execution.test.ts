@@ -189,7 +189,7 @@ describe("resolveExecution — BYOK passthrough", () => {
       provider: "anthropic",
       category: "game",
     });
-    expect(resolved?.model).toBe("claude-opus-4-8");
+    expect(resolved?.model).toBe("claude-opus-5-5");
   });
 
   it("fails closed without a vault key", async () => {

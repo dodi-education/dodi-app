@@ -13,6 +13,9 @@
     "./schemas": "./src/schemas.ts",
     "./publication-handle": "./src/publication-handle.ts",
     "./publication-review": "./src/publication-review.ts",
+    "./agent-scopes": "./src/agent-scopes.ts",
+    "./agent-key": "./src/agent-key.ts",
+    "./client-label": "./src/client-label.ts",
     "./client": "./src/client.ts"
   },
   "main": "./src/index.ts",

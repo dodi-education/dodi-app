@@ -18,7 +18,8 @@ export type ParentNavIcon =
   | "lock"
   | "sparkles"
   | "qrcode"
-  | "alert";
+  | "alert"
+  | "ai";
 
 export interface ParentNavItem {
   href: string;
@@ -65,7 +66,8 @@ export const SETTINGS_NAV: ParentNavItem[] = [
   { href: "/parent/settings/security", labelKey: "settings.navSecurity", icon: "lock" },
   { href: "/parent/settings/ai-providers", labelKey: "settings.navAiProviders", icon: "sparkles" },
   { href: "/parent/settings/game-studio", labelKey: "settings.navGameStudio", icon: "games" },
-  { href: "/parent/settings/devices", labelKey: "settings.navDevices", icon: "qrcode" },
+  // Everything that can open the vault: browsers, the app, the robot, agents.
+  { href: "/parent/settings/access", labelKey: "settings.navAccess", icon: "qrcode" },
 ];
 
 /** True when the current path falls under a nav item (its href or an alias). */

@@ -1,8 +1,9 @@
-import { Children, type ReactNode, useEffect } from "react";
+import { Children, type ReactNode, useEffect, useRef } from "react";
 import { ActivityIndicator, Image, Pressable, useWindowDimensions, View } from "react-native";
 import { useTranslations } from "use-intl";
 import { COLORS } from "@dodi/design-tokens";
 import { is3dPreferenceOf } from "@dodi/client-state/account-store";
+import { companionErrorKind } from "@dodi/client-state/companion-error";
 import { kidHomeStage, kidHomeTalk, playground, speechBubble } from "@dodi/ui-recipes";
 
 import { KidText } from "@/components/kid/kid-text";
@@ -13,6 +14,7 @@ import { useAnnounceOnIos } from "@/lib/announce";
 import { cn } from "@/lib/cn";
 import { useAccountStore, useCompanionStageStore, useConnectivityStore } from "@/lib/client-state";
 import { type DodiState, dodiOutputLevel, selectDodiThinking, useDodiSessionStore } from "@/lib/dodi-session-store";
+import { usePlaygroundFrameStore } from "@/lib/playground-frame-store";
 import { useActiveCompanion } from "@/lib/use-active-companion";
 import { useIsAppActive } from "@/lib/use-app-active";
 import { useDodiContext } from "@/lib/use-dodi-context";
@@ -37,14 +39,26 @@ interface DodiFullHomeProps {
  */
 function Stage({ children }: { children: ReactNode }) {
   const isPlaygroundOpen = useCompanionStageStore((s) => s.isPlaygroundOpen);
+  const setPanelTop = usePlaygroundFrameStore((s) => s.setPanelTop);
+  const ref = useRef<View>(null);
   const shown = isPlaygroundOpen ? Children.toArray(children).slice(0, 1) : children;
+  // The panel (drawn by the kid chrome over the nav) starts at the stage's 40% line.
+  const measure = (): void =>
+    ref.current?.measureInWindow((_x, y, _width, height) => {
+      if (height > 0) setPanelTop(y + height * PANEL_TOP_SHARE);
+    });
+  useEffect(() => () => setPanelTop(null), [setPanelTop]);
   return (
-    <View className={kidHomeStage.root}>
+    <View ref={ref} className={kidHomeStage.root} onLayout={measure}>
       <View className={cn(kidHomeStage.inner, isPlaygroundOpen && playground.stageOpen)}>{shown}</View>
       <Playground />
     </View>
   );
 }
+
+// Where the Playground panel starts, as a share of the stage's height (the
+// recipe's top-[40%] for layouts that draw the panel inside the stage).
+const PANEL_TOP_SHARE = 0.4;
 
 /** The mascot box: clamp(170px, 38vh, 300px) square; the figure fills 76%. */
 function MascotWrap({ listening, children }: { listening?: boolean; children: ReactNode }) {
@@ -169,7 +183,6 @@ export function DodiFullHome({ kidId, hasProvider }: DodiFullHomeProps) {
 
   const dodiState = useDodiSessionStore((s) => s.state);
   const dodiSpeaking = useDodiSessionStore((s) => s.dodiSpeaking);
-  const gestureNeeded = useDodiSessionStore((s) => s.gestureNeeded);
   const error = useDodiSessionStore((s) => s.error);
   const connect = useDodiSessionStore((s) => s.connect);
   const toggleActive = useDodiSessionStore((s) => s.toggleActive);
@@ -180,6 +193,7 @@ export function DodiFullHome({ kidId, hasProvider }: DodiFullHomeProps) {
   // region). Listening and talking are left out: the conversation itself says
   // so, and a screen reader speaking into the open microphone would be heard.
   const micError = error === "micPermissionNeeded" || error === "secureContextRequired" ? error : null;
+  const errorKind = error ? companionErrorKind(error) : null;
   const announcement = !isOnline
     ? `${t("offline")} ${t("offlineHint")}`
     : !hasProvider
@@ -187,18 +201,16 @@ export function DodiFullHome({ kidId, hasProvider }: DodiFullHomeProps) {
       : dodiState === "connecting"
         ? t("connecting")
         : dodiState === "deaf"
-          ? t(gestureNeeded ? "tapToTalk" : "tapToStart")
+          ? t("tapToTalk")
           : dodiState === "active"
             ? micError
               ? t(micError)
               : null
             : dodiState === "sleep"
-              ? t("tapToStart")
-              : error
-                ? micError
-                  ? t(micError)
-                  : t("connectionError")
-                : t("tapToStart");
+              ? t("tapToWake")
+              : errorKind
+                ? t(errorKind === "connection" ? "connectionError" : errorKind)
+                : t("tapToTalk");
   useAnnounceOnIos(announcement);
 
   // Auto-connect with a provider, online and in the foreground; each flip
@@ -274,27 +286,24 @@ export function DodiFullHome({ kidId, hasProvider }: DodiFullHomeProps) {
             }
           />
         </MascotWrap>
-        <View className={kidHomeTalk.column}>
-          <SpeechBubble className={kidHomeTalk.bubble} isLive={announcement !== null}>
-            {dodiState === "deaf" && gestureNeeded ? (
-              <Status>{t("tapToTalk")}</Status>
-            ) : dodiState === "deaf" ? (
-              <Status>{t("tapToStart")}</Status>
-            ) : dodiSpeaking ? (
-              <View className={kidHomeTalk.statusRow}>
-                <SpeakingDots />
-                <Status>{t("dodiSpeaking")}</Status>
-              </View>
-            ) : showMicError ? (
-              <Status>{t(error as "micPermissionNeeded" | "secureContextRequired")}</Status>
-            ) : (
-              <Status>{t("listening")}</Status>
-            )}
-          </SpeechBubble>
-          <KidText className={cn(kidHomeTalk.tapHint, kidHomeStage.textAlign)}>
-            {dodiState === "active" && !showMicError ? t("tapToTalk") : " "}
-          </KidText>
-        </View>
+        <SpeechBubble className={kidHomeStage.bubbleWrap} isLive={announcement !== null}>
+          {dodiState === "deaf" ? (
+            <Status>{t("tapToTalk")}</Status>
+          ) : dodiSpeaking ? (
+            // dodi's voice already says it: the dots are enough to see.
+            <View
+              className={cn(kidHomeTalk.statusRow, kidHomeTalk.speakingRow)}
+              accessible
+              accessibilityLabel={t("dodiSpeaking")}
+            >
+              <SpeakingDots />
+            </View>
+          ) : showMicError ? (
+            <Status>{t(error as "micPermissionNeeded" | "secureContextRequired")}</Status>
+          ) : (
+            <Status>{t("listening")}</Status>
+          )}
+        </SpeechBubble>
       </Stage>
     );
   }
@@ -304,20 +313,19 @@ export function DodiFullHome({ kidId, hasProvider }: DodiFullHomeProps) {
     return (
       <Stage>
         <MascotWrap>
-          <Figure state="sleep" alt="dodi" onPress={() => void connect(kidId)} pressLabel={t("tapToStart")} />
+          <Figure state="sleep" alt="dodi" onPress={() => void connect(kidId)} pressLabel={tVoice("voiceAriaWake")} />
         </MascotWrap>
         <SpeechBubble className={kidHomeStage.bubbleWrap}>
-          <Status>{t("tapToStart")}</Status>
+          <Status>{t("tapToWake")}</Status>
         </SpeechBubble>
       </Stage>
     );
   }
 
-  // Disconnected after an error
-  if (error) {
-    const knownErrors = ["micPermissionNeeded", "secureContextRequired"] as const;
-    const isKnownError = knownErrors.some((key) => error === key);
-    const errorMessage = isKnownError ? t(error as (typeof knownErrors)[number]) : t("connectionError");
+  // Disconnected after an error: what it means for the kid, never the raw
+  // (technical, English) message. A setup problem gets no retry button, as
+  // retrying cannot help until a grown-up fixes it.
+  if (errorKind) {
     return (
       <Stage>
         <MascotWrap>
@@ -325,21 +333,20 @@ export function DodiFullHome({ kidId, hasProvider }: DodiFullHomeProps) {
         </MascotWrap>
         <View className={kidHomeTalk.column}>
           <SpeechBubble className={kidHomeTalk.bubble}>
-            <Status>{errorMessage}</Status>
-            {!isKnownError ? (
-              <KidText className={cn(kidHomeStage.hint, kidHomeStage.textAlign)}>{error}</KidText>
-            ) : null}
+            <Status>{t(errorKind === "connection" ? "connectionError" : errorKind)}</Status>
           </SpeechBubble>
-          <Button
-            variant="outline"
-            size="sm"
-            icon="refresh"
-            onPress={() => void connect(kidId)}
-            className={kidHomeTalk.retry}
-            textClassName="font-bold"
-          >
-            {t("tapToRetry")}
-          </Button>
+          {errorKind !== "needsSetup" ? (
+            <Button
+              variant="outline"
+              size="sm"
+              icon="refresh"
+              onPress={() => void connect(kidId)}
+              className={kidHomeTalk.retry}
+              textClassName="font-bold"
+            >
+              {t("retry")}
+            </Button>
+          ) : null}
         </View>
       </Stage>
     );
@@ -349,13 +356,13 @@ export function DodiFullHome({ kidId, hasProvider }: DodiFullHomeProps) {
   return (
     <Stage>
       <MascotWrap>
-        <Figure state="disconnected" alt="dodi" onPress={() => void connect(kidId)} pressLabel={t("tapToStart")} />
+        <Figure state="disconnected" alt="dodi" onPress={() => void connect(kidId)} pressLabel={tVoice("voiceAriaStart")} />
       </MascotWrap>
       <SpeechBubble className={kidHomeStage.bubbleWrap}>
         <KidText className={cn(kidHomeStage.greeting, kidHomeStage.textAlign)}>
           {t("greetingWithName", { name: kidName })}
         </KidText>
-        <KidText className={cn(kidHomeStage.line, kidHomeStage.textAlign)}>{t("tapToStart")}</KidText>
+        <KidText className={cn(kidHomeStage.line, kidHomeStage.textAlign)}>{t("tapToTalk")}</KidText>
       </SpeechBubble>
     </Stage>
   );

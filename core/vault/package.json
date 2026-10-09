@@ -14,6 +14,7 @@
     "./persona-crypto": "./src/persona-crypto.ts",
     "./companion-crypto": "./src/companion-crypto.ts",
     "./custom-trick-crypto": "./src/custom-trick-crypto.ts",
+    "./character-asset-crypto": "./src/character-asset-crypto.ts",
     "./game-crypto": "./src/game-crypto.ts",
     "./api-keys-crypto": "./src/api-keys-crypto.ts"
   },

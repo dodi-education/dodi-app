@@ -107,12 +107,21 @@ export function buildCrumbs(
         general: t("settings.navGeneral"),
         security: t("settings.navSecurity"),
         "ai-providers": t("settings.navAiProviders"),
-        devices: t("settings.navDevices"),
+        access: t("settings.navAccess"),
       };
       const sub = seg[1];
       if (sub && subLabel[sub]) crumbs.push({ label: subLabel[sub] });
       return crumbs;
     }
+
+    // The approval page for a robot or agent sits outside settings but
+    // belongs to Access.
+    case "authorize":
+      return [
+        { label: t("nav.settings"), href: "/parent/settings/general" },
+        { label: t("settings.navAccess"), href: "/parent/settings/access" },
+        { label: t("access.authorizeTitle") },
+      ];
 
     case "snapshots":
       return [{ label: t("nav.parentSnapshots") }];

@@ -214,7 +214,7 @@ export interface KidHomeRefreshDeps {
   companion: CompanionRetryTarget;
 }
 
-/** dodi is disconnected after an error: the home shows "Tap to retry". */
+/** dodi is disconnected after an error: the home shows "Try again". */
 export function isCompanionInError(
   session: Pick<CompanionSessionState, "state" | "error" | "fatalError">,
 ): boolean {
@@ -223,7 +223,7 @@ export function isCompanionInError(
 
 /**
  * A pull on the kid home: reload the (E2EE) provider keys past the cache and,
- * when dodi is stuck in its connection error, retry the way "Tap to retry"
+ * when dodi is stuck in its connection error, retry the way "Try again"
  * does (`connect`, which also clears a fatal error). Not awaited: the voice
  * bring-up has its own "connecting" state, the spinner shouldn't wait for it.
  *

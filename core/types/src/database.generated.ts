@@ -162,6 +162,41 @@ export interface AuthAccounts {
   user_id: string;
 }
 
+export interface AuthorizedClients {
+  account_id: string | null;
+  created_at: Generated<Timestamp>;
+  device_id: string;
+  enrolled_at: Timestamp | null;
+  /**
+   * Agent only. The connection stops working after this instant; NULL = no expiry.
+   */
+  expires_at: Timestamp | null;
+  id: Generated<string>;
+  kem_public_key: string;
+  /**
+   * browser | app (signed in, registered when adding its own wrap) | robot | agent (paired via enroll/claim/activate; agents are scoped).
+   */
+  kind: "browser" | "app" | "robot" | "agent";
+  /**
+   * Coarse, non-identifying description built by the client ("Firefox on Linux"). NULL = unknown.
+   */
+  label: string | null;
+  last_seen_at: Timestamp | null;
+  name: string | null;
+  pairing_code: string | null;
+  /**
+   * Agent only. Pending: the scopes the CLI requested. Active: the scopes the parent granted. Values: games, games:publish, kids:basic, kids:memory, assets, assets:publish.
+   */
+  scopes: Generated<string[]>;
+  /**
+   * Browser/app only: its login session. Revoking the client deletes the session too.
+   */
+  session_id: string | null;
+  sign_public_key: string | null;
+  status: Generated<"pending" | "active" | "revoked">;
+  updated_at: Generated<Timestamp>;
+}
+
 export interface AuthSessions {
   created_at: Generated<Timestamp>;
   expires_at: Timestamp;
@@ -191,6 +226,39 @@ export interface AuthVerifications {
   identifier: string;
   updated_at: Generated<Timestamp>;
   value: string;
+}
+
+export interface CharacterAssets {
+  account_id: string;
+  /**
+   * Plaintext .glb size in bytes, for the per-kind limits (avatar 3 MiB, accessory 1 MiB).
+   */
+  byte_size: number;
+  created_at: Generated<Timestamp>;
+  /**
+   * enc:v1 sealed base64 of the .glb bytes, validated on the client before sealing. Server cannot decrypt or check it.
+   */
+  glb_enc: string;
+  id: Generated<string>;
+  /**
+   * avatar (a whole character) or accessory (a prop on a socket). Plaintext.
+   */
+  kind: "avatar" | "accessory";
+  /**
+   * enc:v1 sealed JSON CharacterAssetMeta { v: 1, description?, socket? }. NULL = none. Never jsonb.
+   */
+  meta_enc: string | null;
+  /**
+   * enc:v1 sealed display name. Server cannot decrypt.
+   */
+  name_enc: string;
+  updated_at: Generated<Timestamp>;
+}
+
+export interface CharacterAssetSharings {
+  account_id: string;
+  created_at: Generated<Timestamp>;
+  published_asset_id: string;
 }
 
 export interface Companions {
@@ -241,21 +309,6 @@ export interface CustomTricks {
    * enc:v1 sealed JSON { v, name, description, model, requiredBones, script }. Server cannot decrypt.
    */
   trick_enc: string;
-}
-
-export interface Devices {
-  account_id: string | null;
-  created_at: Generated<Timestamp>;
-  device_id: string;
-  enrolled_at: Timestamp | null;
-  id: Generated<string>;
-  kem_public_key: string;
-  last_seen_at: Timestamp | null;
-  name: string | null;
-  pairing_code: string | null;
-  sign_public_key: string;
-  status: Generated<"pending" | "active" | "revoked">;
-  updated_at: Generated<Timestamp>;
 }
 
 export interface ErrorLogs {
@@ -654,6 +707,37 @@ export interface PlatformPlanTranslations {
   updated_at: Generated<Timestamp>;
 }
 
+export interface PublishedCharacterAssets {
+  /**
+   * The publishing family. Never exposed; the Discover byline is accounts.publication_handle.
+   */
+  account_id: string;
+  byte_size: number;
+  created_at: Generated<Timestamp>;
+  description: Generated<string>;
+  /**
+   * Base64 of the .glb, plaintext (public once published). Re-validated server-side on submit.
+   */
+  glb_base64: string;
+  id: Generated<string>;
+  kind: "avatar" | "accessory";
+  name: string;
+  /**
+   * Optional picture for the Discover card (data: URL).
+   */
+  preview_image: string | null;
+  published_at: Timestamp | null;
+  rejected_at: Timestamp | null;
+  rejection_reason: string | null;
+  /**
+   * For an accessory: the socket it rides on, from the validated file.
+   */
+  socket: string | null;
+  source_asset_id: string | null;
+  submitted_at: Generated<Timestamp>;
+  updated_at: Generated<Timestamp>;
+}
+
 export interface TranscriptEntries {
   account_id: string;
   content_enc: string;
@@ -690,10 +774,12 @@ export interface DB {
   auth_sessions: AuthSessions;
   auth_users: AuthUsers;
   auth_verifications: AuthVerifications;
+  authorized_clients: AuthorizedClients;
+  character_asset_sharings: CharacterAssetSharings;
+  character_assets: CharacterAssets;
   companions: Companions;
   content_reports: ContentReports;
   custom_tricks: CustomTricks;
-  devices: Devices;
   error_logs: ErrorLogs;
   friendships: Friendships;
   game_favorites: GameFavorites;
@@ -714,6 +800,7 @@ export interface DB {
   platform_config: PlatformConfig;
   platform_plan_translations: PlatformPlanTranslations;
   platform_plans: PlatformPlans;
+  published_character_assets: PublishedCharacterAssets;
   transcript_entries: TranscriptEntries;
   transcripts: Transcripts;
 }

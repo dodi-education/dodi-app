@@ -8,7 +8,7 @@
  * caller's business: it hands in {@link VoiceSessionSources}
  * (`@dodi/client-state` wires them from its stores).
  */
-import { CHARACTER_MODELS } from "@dodi/character/character-catalog";
+import { characterModelFor } from "@dodi/character/character-catalog";
 import { sanitizeLook } from "@dodi/character/character-look";
 import type { Kid, Persona } from "@dodi/types/database";
 
@@ -92,7 +92,7 @@ export function activeCompanionName(kid: Kid): string {
   const companion = companions.find((c) => c.id === kid.active_companion_id) ?? companions[0];
   const name = companion?.name?.trim();
   if (name) return name;
-  return CHARACTER_MODELS[sanitizeLook(companion?.look).model].stockName;
+  return characterModelFor(sanitizeLook(companion?.look).model).stockName;
 }
 
 /**

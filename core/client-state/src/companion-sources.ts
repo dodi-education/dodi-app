@@ -17,7 +17,7 @@ import type { Kid, Persona } from "@dodi/types/database";
 import type { GameMetadata } from "@dodi/types/games";
 import { decryptPersona, type VaultSession } from "@dodi/vault";
 
-import { CHARACTER_MODELS } from "@dodi/character/character-catalog";
+import { characterModelFor } from "@dodi/character/character-catalog";
 
 import type { AccountStore } from "./account-store";
 import { is3dPreferenceOf } from "./account-store";
@@ -165,7 +165,7 @@ export function createCompanionSources(deps: CompanionSourceDeps): CompanionSour
       if (is3dPreferenceOf(deps.account.getState()) === false) return null;
       const companion = activeCompanionOf(kid);
       const model = companionLookOf(companion).model;
-      const builtIn = CHARACTER_MODELS[model].tricks.map((trick) => trick.script.name);
+      const builtIn = characterModelFor(model).tricks.map((trick) => trick.script.name);
       const custom = companion
         ? await deps.customTricks
             .getState()

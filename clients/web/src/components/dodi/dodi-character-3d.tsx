@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import type { CharacterModelId } from "@dodi/character/character-catalog";
+import { DEFAULT_CHARACTER_MODEL, type CharacterModelRef } from "@dodi/character/character-catalog";
 import type { FigureModeInput } from "@dodi/character/figure-mode";
 import { companionCharacter } from "@dodi/ui-recipes";
 
 import { useActiveCompanion } from "@/hooks/use-active-companion";
+import { useWornLook } from "@/hooks/use-worn-look";
 import { characterPoseFor } from "@/lib/character/character-pose";
 import { useAccountStore } from "@/stores/account-store";
 import { useCompanionStageStore } from "@/stores/companion-stage-store";
@@ -29,7 +30,7 @@ interface DodiCharacter3dProps extends DodiFigureProps {
 // in their first render instead of waiting.
 let stageModule: StageModule | null = null;
 
-function loadStage(model: CharacterModelId): Promise<StageModule> {
+function loadStage(model: CharacterModelRef): Promise<StageModule> {
   return import("@/lib/character/character-stage")
     .then(async (mod) => {
       await mod.loadCharacterStage(model);
@@ -58,13 +59,22 @@ export function DodiCharacter3d({ state, isThinking, alt, is3dEnabled, fallback 
     () => characterPoseFor({ state, isThinking: isThinking ?? false, isSpeaking, isLearning }),
     [state, isThinking, isSpeaking, isLearning],
   );
-  const { look } = useActiveCompanion();
-  const model = look.model;
+  const { look: chosenLook } = useActiveCompanion();
+  // The family's own avatar or accessories wait for the asset list (a deleted one falls back).
+  const wornLook = useWornLook(chosenLook);
+  const isLookPending = wornLook === null;
+  // A custom avatar whose file fails to load gives way to the default one (not to 2D).
+  const [brokenModels, setBrokenModels] = useState<ReadonlySet<string>>(() => new Set());
+  const look = useMemo(() => {
+    const worn = wornLook ?? chosenLook;
+    return brokenModels.has(worn.model) ? { ...worn, model: DEFAULT_CHARACTER_MODEL, colors: {} } : worn;
+  }, [wornLook, chosenLook, brokenModels]);
+  const model = isLookPending ? DEFAULT_CHARACTER_MODEL : look.model;
   const hostRef = useRef<HTMLDivElement>(null);
   const [load, setLoad] = useState<FigureModeInput["load"]>(() =>
     stageModule?.isCharacterStageReady(model) ? "ready" : "loading",
   );
-  const [loadedModel, setLoadedModel] = useState<CharacterModelId | null>(() =>
+  const [loadedModel, setLoadedModel] = useState<CharacterModelRef | null>(() =>
     stageModule?.isCharacterStageReady(model) ? model : null,
   );
   const loadAccount = useAccountStore((s) => s.load);
@@ -75,7 +85,7 @@ export function DodiCharacter3d({ state, isThinking, alt, is3dEnabled, fallback 
   }, [loadAccount]);
 
   useEffect(() => {
-    if (is3dEnabled !== true || load === "failed" || loadedModel === model) return;
+    if (is3dEnabled !== true || load === "failed" || loadedModel === model || isLookPending) return;
     let cancelled = false;
     loadStage(model).then(
       () => {
@@ -84,14 +94,16 @@ export function DodiCharacter3d({ state, isThinking, alt, is3dEnabled, fallback 
         setLoad("ready");
       },
       () => {
+        if (cancelled) return;
+        if (model !== DEFAULT_CHARACTER_MODEL) setBrokenModels((broken) => new Set(broken).add(model));
         // No WebGL or the model failed to load: the 2D figure.
-        if (!cancelled) setLoad("failed");
+        else setLoad("failed");
       },
     );
     return () => {
       cancelled = true;
     };
-  }, [load, is3dEnabled, model, loadedModel]);
+  }, [load, is3dEnabled, model, loadedModel, isLookPending]);
 
   const mode = useFigureMode(is3dEnabled, load);
   const isShown3d = mode === "3d";
@@ -105,8 +117,8 @@ export function DodiCharacter3d({ state, isThinking, alt, is3dEnabled, fallback 
   }, [isShown3d, pose]); // eslint-disable-line react-hooks/exhaustive-deps -- DEBUG(sleep-eyes): `state` is logged only
 
   useLayoutEffect(() => {
-    if (isShown3d) stageModule?.setCharacterLook(look);
-  }, [isShown3d, look, loadedModel]);
+    if (isShown3d && !isLookPending) stageModule?.setCharacterLook(look);
+  }, [isShown3d, look, isLookPending, loadedModel]);
 
   // While a new avatar loads, the one before stays on screen.
   useLayoutEffect(() => {

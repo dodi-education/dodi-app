@@ -17,11 +17,15 @@ import { createDodiAIKeyStore, type DodiAIKeyStore } from "./dodi-ai-key-store";
 import { createGameCrypto, createGameStore, type GameCrypto, type GameStore } from "./game-store";
 import { createCompanionStageStore, type CompanionStageStore } from "./companion-stage-store";
 import { createCustomTricksStore, type CustomTricksStore } from "./custom-tricks";
+import { createCharacterAssetStore, type CharacterAssetStore } from "./character-asset-store";
+import { createAssetPublicationStore, type AssetPublicationStore } from "./character-asset-publication";
+import { createDiscoverAssetStore, type DiscoverAssetStore } from "./discover-character-assets";
 import { createKidStore, type KidStore } from "./kid-store";
 import type { ClientPlatform } from "./platform";
 import { createProvidersStore, type ProvidersStore } from "./providers-store";
 import { createExecutionResolver, type ExecutionResolver } from "./resolve-execution";
 import { createVaultStore, type VaultStore } from "./vault-store";
+import { watchClientRegistration } from "./authorized-clients";
 
 import type { VaultSession } from "@dodi/vault";
 
@@ -46,6 +50,12 @@ export interface ClientState {
   companionStage: CompanionStageStore;
   /** Each companion's custom tricks, opened. */
   customTricks: CustomTricksStore;
+  /** The family's own avatars and accessories, opened (files on demand). */
+  characterAssets: CharacterAssetStore;
+  /** Discover submissions of the family's own assets, per asset. */
+  assetPublications: AssetPublicationStore;
+  /** Avatars and accessories on Discover (add / remove for the family). */
+  discoverAssets: DiscoverAssetStore;
   captcha: CaptchaStore;
 }
 
@@ -60,6 +70,13 @@ export function createClientState(platform: ClientPlatform): ClientState {
     parentLock: platform.parentLock,
     connectivity,
   });
+  // Browsers and the app appear under Access once they hold a vault wrap.
+  watchClientRegistration({
+    api,
+    vault,
+    deviceKeystore: platform.deviceKeystore,
+    describe: () => platform.describeClient(),
+  });
   const dataDeps = { api, offlineCache, vault, connectivity };
   const providers = createProvidersStore(api, vault);
   const dodiAI = createDodiAIClient({
@@ -70,12 +87,14 @@ export function createClientState(platform: ClientPlatform): ClientState {
   });
   const dodiAIKeys = createDodiAIKeyStore(dodiAI);
   const dodiAIDefaults = createDodiAIDefaultsStore(api);
+  const account = createAccountStore(api);
+  const characterAssets = createCharacterAssetStore({ api, vault });
 
   return {
     connectivity,
     vault,
     awaitSession: () => awaitSession(vault),
-    account: createAccountStore(api),
+    account,
     kids: createKidStore(dataDeps),
     games: createGameStore(dataDeps),
     gameCrypto: createGameCrypto(vault),
@@ -89,6 +108,9 @@ export function createClientState(platform: ClientPlatform): ClientState {
     companionVolume: createCompanionVolumeStore(platform.preferences),
     companionStage: createCompanionStageStore(),
     customTricks: createCustomTricksStore({ api, vault }),
+    characterAssets,
+    assetPublications: createAssetPublicationStore({ api, account, characterAssets }),
+    discoverAssets: createDiscoverAssetStore({ api, characterAssets }),
     captcha: createCaptchaStore(api),
   };
 }

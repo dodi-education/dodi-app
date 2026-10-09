@@ -124,6 +124,18 @@ describe("buildCrumbs", () => {
     ]);
   });
 
+  it("puts the approval page under Settings > Access", () => {
+    expect(buildCrumbs("/parent/authorize", t)).toEqual([
+      { label: "nav.settings", href: "/parent/settings/general" },
+      { label: "settings.navAccess", href: "/parent/settings/access" },
+      { label: "access.authorizeTitle" },
+    ]);
+    expect(buildCrumbs("/parent/settings/access", t)).toEqual([
+      { label: "nav.settings", href: "/parent/settings/general" },
+      { label: "settings.navAccess" },
+    ]);
+  });
+
   it("labels settings sub-sections and ignores unknown ones", () => {
     expect(buildCrumbs("/parent/settings/security", t)).toEqual([
       { label: "nav.settings", href: "/parent/settings/general" },

@@ -177,12 +177,14 @@ export async function updateSession(
   const { user } = lookup;
 
   // Redirect unauthenticated users from protected routes to login, carrying
-  // the target so a successful login can return to it (deep links).
+  // the target (with its query, e.g. the agent approval link's ?code=) so a
+  // successful login can return to it (deep links).
   if (!user && !isPublicRoute) {
     const url = request.nextUrl.clone();
+    const target = `${pathname}${request.nextUrl.search}`;
     url.pathname = "/login";
     url.search = "";
-    url.searchParams.set("next", pathname);
+    url.searchParams.set("next", target);
     return clearStaleSession(NextResponse.redirect(url), lookup.isStale);
   }
 

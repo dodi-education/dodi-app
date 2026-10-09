@@ -44,3 +44,19 @@ export { HullOutline, isOutlineHull } from "./hull-outline";
 export { OutlinePass } from "./outline-pass";
 export { decodePng, type DecodedImage } from "./png-decode";
 export { characterMaterial, isDecalMaterial } from "./toon-materials";
+export {
+  CHARACTER_ASSET_LIMITS,
+  KNOWN_SOCKETS,
+  REQUIRED_BONES,
+  validateCharacterAsset,
+  type CharacterAssetInfo,
+  type CharacterAssetKind,
+  type CharacterAssetReport,
+} from "./asset-validator";
+export {
+  CustomAssetError,
+  addCustomAccessories,
+  loadCustomAvatar,
+  parseCustomAsset,
+  type CustomAssetBytes,
+} from "./custom-assets";

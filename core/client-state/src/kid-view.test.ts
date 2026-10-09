@@ -241,7 +241,7 @@ describe("refreshKidHome (pull to refresh)", () => {
     expect(connect).not.toHaveBeenCalled();
   });
 
-  it("retries dodi's connection when it is stuck in an error, like Tap to retry", async () => {
+  it("retries dodi's connection when it is stuck in an error, like Try again", async () => {
     const { deps, connect } = setup({
       providers: async () => ({ xai: { apiKey: "k" } }),
       companion: { state: "disconnected", error: "Failed to start voice", fatalError: true },

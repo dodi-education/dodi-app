@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, View, type LayoutChangeEvent } from "react-native";
 import { GLView, type ExpoWebGLRenderingContext } from "expo-gl";
 import { useIsFocused } from "expo-router";
-import type { CharacterModelId } from "@dodi/character/character-catalog";
-import type { CompanionLook } from "@dodi/character/character-look";
+import { DEFAULT_CHARACTER_MODEL, type CharacterModelRef } from "@dodi/character/character-catalog";
+import { defaultLook, type CompanionLook } from "@dodi/character/character-look";
 import { canvasScaleFor, type CharacterStage } from "@dodi/character/character-stage";
 import { characterPoseFor, IDLE_POSE, type CompanionState } from "@dodi/character/character-pose";
 import type { FigureModeInput } from "@dodi/character/figure-mode";
@@ -22,6 +22,7 @@ import { useCompanionStageStore } from "@/lib/client-state";
 
 import { ThinkBubbles } from "./think-bubbles";
 import { useIsAppActive } from "@/lib/use-app-active";
+import { useWornLook } from "@/lib/use-worn-look";
 import { useReduceMotion } from "@/lib/use-reduce-motion";
 
 import { useCharacterGestures, type CharacterGestureTarget } from "./use-character-gestures";
@@ -30,7 +31,7 @@ export interface Character3dProps {
   /** The loaded stage (useCharacterStage); null keeps the figure's box empty while the figure is decided. */
   stage: CharacterStage | null;
   /** The stage's avatar model (tricks are fitted to it). */
-  model: CharacterModelId;
+  model: CharacterModelRef;
   /** The companion's look to wear (a look being tried on, else the saved one). */
   look: CompanionLook;
   /** GL setup failed: the view falls back to the 2D figure. */
@@ -66,7 +67,7 @@ const FRAME_INTERVAL_MS = 1000 / 30;
 export interface CharacterStageLoad {
   stage: CharacterStage | null;
   /** The model `stage` shows (the one before stays while a new avatar loads). */
-  model: CharacterModelId;
+  model: CharacterModelRef;
   load: FigureModeInput["load"];
   /** Mark the character unavailable (GL setup failed). */
   fail: () => void;
@@ -77,27 +78,41 @@ export interface CharacterStageLoad {
  * loaded it, else loaded while `isWanted` (the account's 3D setting is on or
  * not known yet). While a new avatar loads, the one before stays on screen.
  */
-export function useCharacterStage(isWanted: boolean, model: CharacterModelId): CharacterStageLoad {
-  const [loaded, setLoaded] = useState<{ stage: CharacterStage; model: CharacterModelId } | null>(() => {
+export function useCharacterStage(isWanted: boolean, requested: CharacterModelRef): CharacterStageLoad {
+  // A family's own avatar waits for the asset list (a deleted one falls back to
+  // the default), and one whose file fails gives way to the default, not to 2D.
+  const requestedLook = useMemo(() => defaultLook(requested), [requested]);
+  const worn = useWornLook(requestedLook);
+  const [brokenModels, setBrokenModels] = useState<ReadonlySet<string>>(() => new Set());
+  const isPending = worn === null;
+  const model: CharacterModelRef =
+    worn === null || brokenModels.has(worn.model) ? DEFAULT_CHARACTER_MODEL : worn.model;
+  const [loaded, setLoaded] = useState<{ stage: CharacterStage; model: CharacterModelRef } | null>(() => {
     const ready = loadedCharacterStage(model);
     return ready ? { stage: ready, model } : null;
   });
   const [hasFailed, setHasFailed] = useState(false);
 
   useEffect(() => {
-    if (!isWanted || hasFailed || loaded?.model === model) return;
+    if (!isWanted || hasFailed || isPending || loaded?.model === model) return;
     let isCurrent = true;
     loadCharacterStage(model).then(
       (stage) => isCurrent && setLoaded({ stage, model }),
       (err: unknown) => {
+        if (!isCurrent) return;
+        if (model !== DEFAULT_CHARACTER_MODEL) {
+          console.warn("[character] custom avatar unavailable, showing the default:", err);
+          setBrokenModels((broken) => new Set(broken).add(model));
+          return;
+        }
         console.warn("[character] 3D character unavailable, showing the 2D figure:", err);
-        if (isCurrent) setHasFailed(true);
+        setHasFailed(true);
       },
     );
     return () => {
       isCurrent = false;
     };
-  }, [loaded, model, isWanted, hasFailed]);
+  }, [loaded, model, isWanted, hasFailed, isPending]);
 
   const fail = useCallback(() => setHasFailed(true), []);
   return {
@@ -168,9 +183,13 @@ export function Character3d({
     stage?.setReducedMotion(isReducedMotion);
   }, [stage, isReducedMotion]);
   useEffect(() => (voiceLevel ? routeVoiceLevel(voiceLevel) : undefined), [voiceLevel]);
+  // The look as this stage can wear it: the family's own assets only while
+  // they exist, and the stage's model (a custom avatar may have fallen back).
+  const wornLook = useWornLook(look);
   useEffect(() => {
-    if (stage) setCharacterLook(look);
-  }, [stage, look]);
+    if (!stage || !wornLook) return;
+    setCharacterLook(wornLook.model === model ? wornLook : { ...wornLook, model, colors: {} });
+  }, [stage, wornLook, model]);
 
   // Tricks: the Playground and the voice ask through the stage store.
   const trickRequest = useCompanionStageStore((s) => s.trickRequest);

@@ -60,7 +60,7 @@ export async function GET(
 ): Promise<NextResponse> {
   const { id } = await context.params;
 
-  const auth = await requireAuth(request);
+  const auth = await requireAuth(request, { agentScope: "games:publish" });
   if (auth instanceof Response) return auth;
   const { accountId } = auth;
 
@@ -96,7 +96,7 @@ export async function POST(
 ): Promise<NextResponse> {
   const { id } = await context.params;
 
-  const auth = await requireAuth(request);
+  const auth = await requireAuth(request, { agentScope: "games:publish" });
   if (auth instanceof Response) return auth;
   const { accountId } = auth;
 

@@ -69,7 +69,13 @@ describe("GeminiLiveClient", () => {
     sockets[0].handlers.onOpen();
     const setup = sockets[0].sent[0].setup as Record<string, unknown>;
     expect(setup.model).toBe("models/gemini-live-x");
-    expect(setup.tools).toEqual([{ functionDeclarations: GEMINI.tools }]);
+    expect(setup.tools).toEqual([
+      {
+        functionDeclarations: [
+          { name: "launch_game", description: "d", parameters: { type: "object" }, behavior: "BLOCKING" },
+        ],
+      },
+    ]);
 
     sockets[0].handlers.onMessage(JSON.stringify({ setupComplete: {} }));
     expect(events).toEqual([{ type: "setupComplete" }]);

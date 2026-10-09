@@ -63,6 +63,13 @@ export type Companion = Row<"companions">;
 export type CompanionInsert = Insert<"companions">;
 export type CompanionUpdate = Update<"companions">;
 export type CustomTrick = Row<"custom_tricks">;
+/** A family's own avatar or accessory (.glb sealed in glb_enc; name/meta sealed too). */
+export type CharacterAsset = Row<"character_assets">;
+export type CharacterAssetInsert = Insert<"character_assets">;
+export type CharacterAssetUpdate = Update<"character_assets">;
+export type CharacterAssetKind = CharacterAsset["kind"];
+/** The list / write-response shape: no sealed file (large), no account id. */
+export type CharacterAssetSummary = Omit<CharacterAsset, "glb_enc" | "account_id">;
 /** An in-app report of an AI answer or a game (plaintext, sent to the operator). */
 export type ContentReport = Row<"content_reports">;
 export type ContentReportKind = ContentReport["content_kind"];
@@ -146,10 +153,12 @@ export interface MemorySourceEntryRef {
 export interface MemorySourceWithEntry extends MemorySource {
   entry: MemorySourceEntryRef | null;
 }
-export type Device = Row<"devices">;
-export type DeviceInsert = Insert<"devices">;
-export type DeviceUpdate = Update<"devices">;
-export type DeviceStatus = "pending" | "active" | "revoked";
+/** Something that can open the family vault: a browser, the app, the robot or an agent. */
+export type AuthorizedClient = Row<"authorized_clients">;
+export type AuthorizedClientInsert = Insert<"authorized_clients">;
+export type AuthorizedClientUpdate = Update<"authorized_clients">;
+export type AuthorizedClientKind = AuthorizedClient["kind"];
+export type AuthorizedClientStatus = "pending" | "active" | "revoked";
 
 export type InviteCode = Row<"invite_codes">;
 export type InviteCodeInsert = Insert<"invite_codes">;

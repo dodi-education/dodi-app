@@ -74,6 +74,8 @@ export interface ActiveKidPersistence {
   writeUnlockedKidIds(ids: Set<string>): void;
 }
 
+import type { ClientIdentity } from "./authorized-clients";
+
 export interface ClientPlatform {
   api: PlatformApi;
   /** The signed-in user's session token (bearer for dodi AI), null when signed out. */
@@ -90,4 +92,6 @@ export interface ClientPlatform {
   preferences: KeyValueStorage;
   /** The platform's first connectivity guess; data stores correct it. */
   isInitiallyOnline: boolean;
+  /** How this browser or app appears in the Access list (registered on unlock). */
+  describeClient(): ClientIdentity;
 }

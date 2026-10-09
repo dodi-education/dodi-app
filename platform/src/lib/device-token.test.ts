@@ -23,7 +23,13 @@ describe("device-token", () => {
     expect(verifyDeviceBearer(token)).toEqual({
       accountId: "acct-1",
       deviceId: "dev-1",
+      kind: "robot",
     });
+  });
+
+  it("marks an agent bearer as an agent", () => {
+    const token = issueDeviceBearer("acct-1", "dev-1", "agent");
+    expect(verifyDeviceBearer(token)?.kind).toBe("agent");
   });
 
   it("treats a JWT-shaped token as not-a-device-token", () => {

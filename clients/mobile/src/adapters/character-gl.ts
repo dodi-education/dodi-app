@@ -10,20 +10,27 @@ import { File } from "expo-file-system";
 import type { ExpoWebGLRenderingContext } from "expo-gl";
 import {
   ACCESSORY_LIST,
-  CHARACTER_MODELS,
   CharacterStage,
   DEFAULT_CHARACTER_MODEL,
+  addCustomAccessories,
   buildMotionClip,
+  characterModelFor,
   fitMotionScript,
+  isCustomAssetRef,
+  loadCustomAvatar,
   parseCharacterFile,
   rendererForContext,
+  withRigBones,
   type AccessoryName,
   type CharacterFile,
   type CharacterModelId,
+  type CharacterModelRef,
   type CompanionLook,
   type MotionScript,
   type TrickOutcome,
 } from "@dodi/character";
+
+import { clientState } from "@/lib/client-state";
 
 // The catalog's files (CHARACTER_MODELS / ACCESSORIES), the same ones the web
 // serves from clients/web/public/characters (the character pipeline writes both
@@ -51,6 +58,10 @@ if (nav && typeof nav.userAgent !== "string") nav.userAgent = "ReactNative";
 
 export type CharacterRenderer = ReturnType<typeof rendererForContext>;
 
+// A family's own avatars and accessories: fetched and opened by the store, loaded from bytes.
+const customAssetBytes = (assetId: string): Promise<Uint8Array> =>
+  clientState.characterAssets.getState().getBytes(assetId);
+
 async function readAsset(moduleId: number): Promise<CharacterFile> {
   const asset = Asset.fromModule(moduleId);
   await asset.downloadAsync();
@@ -66,8 +77,8 @@ function currentVoiceLevel(): number {
 }
 
 // One stage per avatar model, loaded when first shown.
-const loading = new Map<CharacterModelId, Promise<CharacterStage>>();
-const readyStages = new Map<CharacterModelId, CharacterStage>();
+const loading = new Map<CharacterModelRef, Promise<CharacterStage>>();
+const readyStages = new Map<CharacterModelRef, CharacterStage>();
 let lastLook: CompanionLook | null = null;
 
 /**
@@ -76,12 +87,13 @@ let lastLook: CompanionLook | null = null;
  * clip on. Rejects if the model fails; an accessory that fails to load is
  * left out rather than failing the stage (web: lib/character/character-stage).
  */
-export function loadCharacterStage(model: CharacterModelId = DEFAULT_CHARACTER_MODEL): Promise<CharacterStage> {
+export function loadCharacterStage(model: CharacterModelRef = DEFAULT_CHARACTER_MODEL): Promise<CharacterStage> {
   const existing = loading.get(model);
   if (existing) return existing;
   const promise = (async () => {
     const [character, ...accessories] = await Promise.all([
-      readAsset(CHARACTER_MODULES[model]),
+      // A catalog avatar from the bundle; a family's own from its decrypted bytes.
+      isCustomAssetRef(model) ? loadCustomAvatar(model, customAssetBytes) : readAsset(CHARACTER_MODULES[model]),
       ...ACCESSORY_LIST.map((name) =>
         readAsset(ACCESSORY_MODULES[name]).catch((err: unknown) => {
           console.warn(`[character] accessory ${name} unavailable:`, err);
@@ -94,8 +106,8 @@ export function loadCharacterStage(model: CharacterModelId = DEFAULT_CHARACTER_M
       if (file) accessoryFiles.set(ACCESSORY_LIST[i], file);
     });
     const stage = new CharacterStage(character, accessoryFiles, { voiceLevel: currentVoiceLevel });
-    if (lastLook?.model === model) stage.applyLook(lastLook);
     readyStages.set(model, stage);
+    if (lastLook?.model === model) setCharacterLook(lastLook);
     return stage;
   })();
   loading.set(model, promise);
@@ -106,14 +118,21 @@ export function loadCharacterStage(model: CharacterModelId = DEFAULT_CHARACTER_M
 }
 
 /** A model's stage, if it has loaded already (a later view shows it in its first frame). */
-export function loadedCharacterStage(model: CharacterModelId = DEFAULT_CHARACTER_MODEL): CharacterStage | null {
+export function loadedCharacterStage(model: CharacterModelRef = DEFAULT_CHARACTER_MODEL): CharacterStage | null {
   return readyStages.get(model) ?? null;
 }
 
 /** The companion's look (its model's stage wears it; a stage loaded later puts it on). */
 export function setCharacterLook(look: CompanionLook): void {
   lastLook = look;
-  readyStages.get(look.model)?.applyLook(look);
+  const stage = readyStages.get(look.model);
+  if (!stage) return;
+  stage.applyLook(look);
+  if (!look.accessories.some(isCustomAssetRef)) return;
+  // The family's own accessories load on first wear, then show (if still worn).
+  void addCustomAccessories(stage, look.accessories, customAssetBytes).then(() => {
+    if (lastLook === look) stage.applyLook(look);
+  });
 }
 
 /**
@@ -122,11 +141,14 @@ export function setCharacterLook(look: CompanionLook): void {
  */
 export function playCharacterTrick(
   stage: CharacterStage,
-  model: CharacterModelId,
+  model: CharacterModelRef,
   script: MotionScript,
   isReducedMotion: boolean,
 ): Promise<TrickOutcome> {
-  const fitted = fitMotionScript(script, CHARACTER_MODELS[model]).script;
+  // A custom avatar is fitted to the bones its file really has.
+  const described = characterModelFor(model);
+  const target = isCustomAssetRef(model) ? withRigBones(described, stage.boneNames) : described;
+  const fitted = fitMotionScript(script, target).script;
   return stage.playOnce(buildMotionClip(fitted, stage.motionRig), isReducedMotion);
 }
 

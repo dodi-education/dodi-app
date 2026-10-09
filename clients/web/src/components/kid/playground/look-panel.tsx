@@ -1,23 +1,28 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
   ACCESSORIES,
   ACCESSORY_LIST,
   CHARACTER_MODELS,
   COLOR_SWATCHES,
-  type AccessoryName,
-  type CharacterModelId,
+  accessorySocketOf,
+  characterModelFor,
+  customAssetRef,
+  type AccessoryRef,
+  type CharacterModelRef,
 } from "@dodi/character/character-catalog";
 import { defaultLook } from "@dodi/character/character-look";
+import { customSocketsOf } from "@dodi/client-state/character-asset-store";
 import { COMPANION_NAME_MAX_LENGTH, renameCompanion } from "@dodi/client-state/companions";
 import { playground as p } from "@dodi/ui-recipes";
 
 import { useActiveCompanion } from "@/hooks/use-active-companion";
 import { companionFlowDeps } from "@/lib/companion-flow-deps";
 import { cn } from "@/lib/utils";
+import { useCharacterAssetStore } from "@/stores/character-asset-store";
 
 import { useLookEditor } from "./use-look-editor";
 
@@ -56,21 +61,32 @@ export function LookPanel() {
   const t = useTranslations("playground");
   const { kid, companion, name } = useActiveCompanion();
   const { look, change, status } = useLookEditor();
-  const model = CHARACTER_MODELS[look.model];
+  const model = characterModelFor(look.model);
+  // The family's own avatars and accessories (from the dodi CLI), after the catalog's.
+  const assets = useCharacterAssetStore((s) => s.assets);
+  const loadAssets = useCharacterAssetStore((s) => s.load);
+  useEffect(() => {
+    void loadAssets().catch(() => {});
+  }, [loadAssets]);
+  const customAvatars = (assets ?? []).filter((a) => a.kind === "avatar");
+  const customAccessories = (assets ?? []).filter((a) => a.kind === "accessory");
 
   function setColor(material: string, base: string) {
     change({ ...look, colors: { ...look.colors, [material]: base } });
   }
 
-  function toggleAccessory(accessory: AccessoryName) {
+  function toggleAccessory(accessory: AccessoryRef) {
     const isWorn = look.accessories.includes(accessory);
     // One accessory per socket: a new hat replaces the old one.
-    const socket = ACCESSORIES[accessory].socket;
-    const others = look.accessories.filter((a) => a !== accessory && ACCESSORIES[a].socket !== socket);
+    const sockets = customSocketsOf(assets);
+    const socket = accessorySocketOf(accessory, sockets);
+    const others = look.accessories.filter(
+      (a) => a !== accessory && (socket === null || accessorySocketOf(a, sockets) !== socket),
+    );
     change({ ...look, accessories: isWorn ? others : [...others, accessory] });
   }
 
-  function setModel(id: CharacterModelId) {
+  function setModel(id: CharacterModelRef) {
     if (id !== look.model) change({ ...defaultLook(id), accessories: look.accessories });
   }
 
@@ -123,10 +139,25 @@ export function LookPanel() {
               </button>
             );
           })}
+          {customAccessories.map((asset) => {
+            const ref = customAssetRef(asset.id);
+            const isWorn = look.accessories.includes(ref);
+            return (
+              <button
+                key={asset.id}
+                type="button"
+                aria-pressed={isWorn}
+                className={cn(p.chip, p.webChip, isWorn && p.chipSelected)}
+                onClick={() => toggleAccessory(ref)}
+              >
+                <span className={p.chipText}>{asset.name}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {kid?.can_change_companion_avatar && MODELS.length > 1 ? (
+      {kid?.can_change_companion_avatar && MODELS.length + customAvatars.length > 1 ? (
         <div className={cn(p.section, p.webSection)}>
           <span className={p.label}>{t("avatar")}</span>
           <div className={cn(p.row, p.webRow)}>
@@ -141,6 +172,20 @@ export function LookPanel() {
                 <span className={p.chipText}>{t(`avatars.${m.labelKey}`)}</span>
               </button>
             ))}
+            {customAvatars.map((asset) => {
+              const ref = customAssetRef(asset.id);
+              return (
+                <button
+                  key={asset.id}
+                  type="button"
+                  aria-pressed={look.model === ref}
+                  className={cn(p.chip, p.webChip, look.model === ref && p.chipSelected)}
+                  onClick={() => setModel(ref)}
+                >
+                  <span className={p.chipText}>{asset.name}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
       ) : null}

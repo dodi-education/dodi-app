@@ -8,6 +8,7 @@ import { Suspense, useEffect } from "react";
 import { activeCompanionOf, companionNameOf, MAX_COMPANIONS_PER_KID } from "@dodi/client-state/companions";
 import { personaAvatar } from "@dodi/ui-recipes";
 
+import { CharacterAssetList } from "@/components/parent/character-asset-list";
 import { PersonaList } from "@/components/parent/persona-list";
 import { Row, RowMain, RowMeta, RowTitle } from "@/components/parent/rows";
 import { Section } from "@/components/parent/section";
@@ -87,6 +88,7 @@ function CompanionsTab() {
           </Section>
         );
       })}
+      <CharacterAssetList />
     </>
   );
 }

@@ -112,7 +112,13 @@ export class GeminiLiveClient implements VoiceClient {
     if (this.config.tools && this.config.tools.length > 0) {
       setup.tools = [
         {
-          functionDeclarations: this.config.tools,
+          // gemini-3.8-live made async (NON_BLOCKING) function calling the
+          // default; pin BLOCKING so dodi waits for each tool result before
+          // speaking, as on earlier Live models (where BLOCKING is the default).
+          functionDeclarations: this.config.tools.map((tool) => ({
+            ...tool,
+            behavior: "BLOCKING",
+          })),
         },
       ];
     }

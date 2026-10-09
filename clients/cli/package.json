@@ -1,0 +1,78 @@
+{
+  "name": "@dodi-education/cli",
+  "version": "0.1.0",
+  "description": "The dodi CLI: let your own AI agent build learning games and companion looks for your family on dodi.",
+  "license": "AGPL-3.0-only",
+  "author": "dodi",
+  "homepage": "https://dodi.app",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dodi-education/dodi-app.git",
+    "directory": "clients/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/dodi-education/dodi-app/issues"
+  },
+  "keywords": [
+    "dodi",
+    "cli",
+    "mcp",
+    "ai-agent",
+    "learning-games",
+    "kids",
+    "e2ee"
+  ],
+  "type": "module",
+  "bin": {
+    "dodi": "./dist/dodi.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "pnpm build && pnpm test"
+  },
+  "dependencies": {
+    "yaml": "^2.9.1"
+  },
+  "peerDependencies": {
+    "playwright": ">=1.50.0"
+  },
+  "peerDependenciesMeta": {
+    "playwright": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@dodi/ai": "workspace:*",
+    "@dodi/character": "workspace:*",
+    "@dodi/crypto": "workspace:*",
+    "@dodi/games": "workspace:*",
+    "@dodi/intl": "workspace:*",
+    "@dodi/protocol": "workspace:*",
+    "@dodi/screenshot": "workspace:*",
+    "@dodi/types": "workspace:*",
+    "@dodi/vault": "workspace:*",
+    "@types/node": "^20",
+    "esbuild": "^0.28.2",
+    "tsx": "4.23.13",
+    "typescript": "^5",
+    "vitest": "^4.1.8",
+    "zod": "^4.3.6"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": false
+  }
+}

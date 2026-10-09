@@ -12,6 +12,7 @@ import { libraryEmpty } from "@dodi/ui-recipes";
 import { DiscoverList } from "@/components/games-library/discover-list";
 import { GameImportDialog } from "@/components/games-library/game-import-dialog";
 import { GameStudioList } from "@/components/games-library/game-studio-list";
+import { DiscoverAssetList } from "@/components/parent/discover-asset-list";
 import { PageActions, Section } from "@/components/parent/section";
 import { ShellContent } from "@/components/shared/shell-content";
 import { Button, Text } from "@/components/ui";
@@ -83,6 +84,8 @@ export default function ParentGamesScreen() {
       <Section title={t("discoverTitle")} desc={t("discoverSubtitle")}>
         <DiscoverList />
       </Section>
+
+      <DiscoverAssetList />
     </ShellContent>
   );
 }

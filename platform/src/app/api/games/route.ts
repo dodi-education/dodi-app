@@ -70,7 +70,7 @@ const CreateGameSchema = z.object({
 });
 
 export async function GET(request: Request): Promise<NextResponse> {
-  const auth = await requireAuth(request);
+  const auth = await requireAuth(request, { agentScope: "games" });
   if (auth instanceof Response) return auth;
   const { accountId, db } = auth;
 
@@ -157,7 +157,7 @@ export async function GET(request: Request): Promise<NextResponse> {
 }
 
 export async function POST(request: Request): Promise<NextResponse> {
-  const auth = await requireAuth(request);
+  const auth = await requireAuth(request, { agentScope: "games" });
   if (auth instanceof Response) return auth;
   const { accountId, db } = auth;
 

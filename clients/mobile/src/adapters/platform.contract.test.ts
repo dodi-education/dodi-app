@@ -22,6 +22,8 @@ vi.mock("expo-secure-store", () => import("@/test-support/fake-secure-store"));
 vi.mock("expo-file-system", () => import("@/test-support/fake-expo-file-system"));
 vi.mock("expo-sqlite", () => import("@/test-support/fake-expo-sqlite"));
 vi.mock("expo-crypto", () => ({ randomUUID: () => crypto.randomUUID() }));
+// platform.ts reads Platform.OS for the Access label; the real module is Flow source.
+vi.mock("react-native", () => ({ Platform: { OS: "android" } }));
 // The auth client (better-auth over SecureStore) is not under test here.
 vi.mock("./auth", () => ({ getAccessToken: () => "" }));
 

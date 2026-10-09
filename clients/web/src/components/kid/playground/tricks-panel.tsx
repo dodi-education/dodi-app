@@ -3,7 +3,7 @@
 import { useTranslations } from "next-intl";
 import { useEffect } from "react";
 
-import { CHARACTER_MODELS } from "@dodi/character/character-catalog";
+import { characterModelFor } from "@dodi/character/character-catalog";
 import { canPerformTrick } from "@dodi/client-state/custom-tricks";
 import type { StageTrick } from "@dodi/client-state/companion-stage-store";
 import { playground as p } from "@dodi/ui-recipes";
@@ -47,7 +47,7 @@ export function TricksPanel() {
   const custom = useCustomTricksStore((s) => (companion ? s.byCompanion[companion.id] : undefined));
   const loadTricks = useCustomTricksStore((s) => s.load);
   const removeTrick = useCustomTricksStore((s) => s.remove);
-  const model = CHARACTER_MODELS[look.model];
+  const model = characterModelFor(look.model);
 
   useEffect(() => {
     if (companion) void loadTricks(companion.id).catch(() => {});

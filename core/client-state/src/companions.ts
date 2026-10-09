@@ -7,7 +7,7 @@
  * E2EE: the name and the look (avatar model, colors, accessories) are sealed
  * with the vault before they leave the device (`encryptCompanionFields`).
  */
-import { CHARACTER_MODELS } from "@dodi/character/character-catalog";
+import { characterModelFor } from "@dodi/character/character-catalog";
 import { defaultLook, sanitizeLook, type CompanionLook } from "@dodi/character/character-look";
 import type { Json, Kid, KidActivePersona, KidCompanion, Persona } from "@dodi/types/database";
 import { encryptCompanionFields, type CompanionPersonalFields } from "@dodi/vault/companion-crypto";
@@ -51,7 +51,7 @@ export function companionLookOf(companion: KidCompanion | null | undefined): Com
 export function companionNameOf(companion: KidCompanion | null | undefined): string {
   const name = companion?.name?.trim();
   if (name) return name;
-  return CHARACTER_MODELS[companionLookOf(companion).model].stockName;
+  return characterModelFor(companionLookOf(companion).model).stockName;
 }
 
 function slimPersona(persona: Persona | null): KidActivePersona | null {
