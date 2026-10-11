@@ -68,6 +68,8 @@ const ICONS = {
   volume: T.IconVolume,
   volume_low: T.IconVolume2,
   volume_off: T.IconVolumeOff,
+  deaf: T.IconDeaf,
+  ear: T.IconEar,
   undo: T.IconArrowBackUp,
   // Kid games + snapshots
   heart: T.IconHeart,

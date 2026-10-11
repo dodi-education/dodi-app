@@ -471,13 +471,17 @@ features:
     web: done
     mobile: done
     core: [ai, client-state]
-    web_paths: ["clients/web/src/stores/dodi-session-store.ts"]
+    web_paths:
+      - "clients/web/src/stores/dodi-session-store.ts"
+      - "clients/web/src/components/kid/companion-hearing-toggle.tsx"
     mobile_paths:
       - "clients/mobile/src/lib/dodi-session-store.ts"
       - "clients/mobile/src/adapters/audio-port.ts"
+      - "clients/mobile/src/components/kid/companion-hearing-toggle.tsx"
     notes: >-
-      The app talks only while it is in the foreground (backgrounding ends the
-      session). Echo cancellation: iOS voice processing on the audio engine and
+      A header button beside the volume control toggles deaf mode (listening
+      on/off), next to tapping the companion. The app talks only while it is in
+      the foreground (backgrounding ends the session). Echo cancellation: iOS voice processing on the audio engine and
       Android's VoiceCommunication input (patches/react-native-audio-api).
       The web's large-screen game panel (DodiFullGame) has no phone layout, so
       the app doesn't show it.

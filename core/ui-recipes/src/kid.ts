@@ -554,6 +554,17 @@ export const companionVolume = {
   muteIcon: 16,
 } as const;
 
+/**
+ * The hearing toggle beside the volume button: whether dodi listens (deaf
+ * mode, kids.deafened_dodi_at). The same round button; deaf turns the icon red.
+ */
+export const companionHearing = {
+  button: companionVolume.button + " shrink-0",
+  webButton: companionVolume.webButton,
+  deafButtonText: "text-danger",
+  icon: 20,
+} as const;
+
 // ----- Friends ------------------------------------------------------------------
 
 /** A centered state on the friends tab (offline, locked, loading). */

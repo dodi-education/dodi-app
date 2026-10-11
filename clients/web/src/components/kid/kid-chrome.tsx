@@ -15,6 +15,7 @@ import { startOfflineWarmup } from "@dodi/client-state/offline-warmup";
 
 import { Icon, type IconName } from "@/components/shared/icon";
 import { DodiCompact } from "@/components/dodi/dodi-compact";
+import { CompanionHearingToggle } from "@/components/kid/companion-hearing-toggle";
 import { CompanionVolumeControl } from "@/components/kid/companion-volume-control";
 import { cn } from "@/lib/utils";
 import { clientState } from "@/lib/client-state";
@@ -214,10 +215,11 @@ export function KidChrome({
               <DodiCompact />
             </div>
           ) : null}
-          {/* Volume/mute is a global companion property, so it lives in the
+          {/* Volume/mute and hearing are global companion properties, so they live in the
               header on every kid view — even where the dodi avatar is elsewhere
               (full-mode game ≥ lg shows dodi in the side panel). */}
           <CompanionVolumeControl />
+          <CompanionHearingToggle />
         </div>
         <a
           href="/parent/dashboard"

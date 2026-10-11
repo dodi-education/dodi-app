@@ -86,3 +86,5 @@ export { default as IconPlayerPlayFilled } from "@tabler/icons-react-native/Icon
 export { default as IconVolume } from "@tabler/icons-react-native/IconVolume";
 export { default as IconVolume2 } from "@tabler/icons-react-native/IconVolume2";
 export { default as IconVolumeOff } from "@tabler/icons-react-native/IconVolumeOff";
+export { default as IconDeaf } from "@tabler/icons-react-native/IconDeaf";
+export { default as IconEar } from "@tabler/icons-react-native/IconEar";

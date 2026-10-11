@@ -99,8 +99,6 @@ export interface Accessory {
   socket: string;
   /** Kids can put it on in the Playground (headphones belong to the deaf pose). */
   isKidSelectable: boolean;
-  /** Clips during which a worn accessory is taken off (it would clash). */
-  hiddenDuringClips: readonly string[];
   /** Message key under `playground.accessories`. */
   labelKey: string;
 }
@@ -111,7 +109,6 @@ export const ACCESSORIES: Record<AccessoryName, Accessory> = {
     file: "accessories/headphones.glb",
     socket: "socket_ears",
     isKidSelectable: false,
-    hiddenDuringClips: [],
     labelKey: "headphones",
   },
   party_hat: {
@@ -119,7 +116,6 @@ export const ACCESSORIES: Record<AccessoryName, Accessory> = {
     file: "accessories/party_hat.glb",
     socket: "socket_head_top",
     isKidSelectable: true,
-    hiddenDuringClips: ["deaf"],
     labelKey: "partyHat",
   },
   glasses: {
@@ -127,7 +123,6 @@ export const ACCESSORIES: Record<AccessoryName, Accessory> = {
     file: "accessories/glasses.glb",
     socket: "socket_eyes",
     isKidSelectable: true,
-    hiddenDuringClips: [],
     labelKey: "glasses",
   },
   scarf: {
@@ -135,7 +130,6 @@ export const ACCESSORIES: Record<AccessoryName, Accessory> = {
     file: "accessories/scarf.glb",
     socket: "socket_neck",
     isKidSelectable: true,
-    hiddenDuringClips: [],
     labelKey: "scarf",
   },
 };

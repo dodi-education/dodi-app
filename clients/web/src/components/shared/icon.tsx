@@ -27,6 +27,8 @@ import {
   IconDownload,
   IconArrowBackUp,
   IconEraser,
+  IconDeaf,
+  IconEar,
   IconExternalLink,
   IconEye,
   IconEyeOff,
@@ -122,6 +124,8 @@ export type IconName =
   | "friends"
   | "games"
   | "globe"
+  | "deaf"
+  | "ear"
   | "heart"
   | "heart_filled"
   | "hide"
@@ -215,6 +219,8 @@ const ICONS: Record<IconName, ComponentType<TablerIconProps>> = {
   friends: IconUsers,
   games: IconDeviceGamepad2,
   globe: IconLanguage,
+  deaf: IconDeaf,
+  ear: IconEar,
   heart: IconHeart,
   heart_filled: IconHeartFilled,
   history: IconHistory,

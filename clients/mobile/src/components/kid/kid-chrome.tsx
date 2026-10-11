@@ -13,6 +13,7 @@ import { kidChrome, kidGateHint, kidLoadingStage, kidNav } from "@dodi/ui-recipe
 
 import { mobilePlatform, writeLastView } from "@/adapters/platform";
 import { DodiCompact } from "@/components/dodi/dodi-compact";
+import { CompanionHearingToggle } from "@/components/kid/companion-hearing-toggle";
 import { CompanionVolumeControl } from "@/components/kid/companion-volume-control";
 import { useRefreshControl } from "@/components/shared/refresh-control";
 import { PageBackground } from "@/components/shared/page-background";
@@ -183,8 +184,9 @@ export function KidChrome({ children }: { children: ReactNode }) {
           <KidSwitcher />
         </View>
         {isCompactShown ? <DodiCompact /> : null}
-        {/* Volume/mute is a global companion property: on every kid view. */}
+        {/* Volume/mute and hearing are global companion properties: on every kid view. */}
         <CompanionVolumeControl />
+        <CompanionHearingToggle />
       </View>
       <Pressable
         accessibilityRole="link"

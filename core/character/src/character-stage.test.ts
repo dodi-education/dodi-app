@@ -19,6 +19,7 @@ const REPO = fileURLToPath(new URL("../../../", import.meta.url));
 const SOURCES = {
   character: "characters/dodi/dodi.glb",
   headphones: "characters/accessories/headphones/headphones.glb",
+  partyHat: "characters/accessories/party_hat/party_hat.glb",
 };
 const COPIES = {
   character: ["clients/web/public/characters/dodi.glb", "clients/mobile/assets/characters/dodi.glb"],
@@ -35,17 +36,22 @@ function bytesOf(path: string): ArrayBuffer {
 
 let character: CharacterFile;
 let headphones: CharacterFile;
+let partyHat: CharacterFile;
 
 beforeAll(async () => {
   character = await parseCharacterFile(bytesOf(SOURCES.character));
   headphones = await parseCharacterFile(bytesOf(SOURCES.headphones));
+  partyHat = await parseCharacterFile(bytesOf(SOURCES.partyHat));
 });
 
 function newStage(): CharacterStage {
   // Fresh files each time: the stage takes ownership of the scenes.
   return new CharacterStage(
     { scene: cloneSkinned(character.scene) as THREE.Group, animations: character.animations },
-    new Map([["headphones", { scene: cloneSkinned(headphones.scene) as THREE.Group, animations: [] }]]),
+    new Map([
+      ["headphones", { scene: cloneSkinned(headphones.scene) as THREE.Group, animations: [] }],
+      ["party_hat", { scene: cloneSkinned(partyHat.scene) as THREE.Group, animations: [] }],
+    ]),
   );
 }
 
@@ -114,11 +120,7 @@ describe("CharacterStage", () => {
       stage.update(0.2);
       expect(stage.currentClip).toBe(clip);
     }
-    let headphonesShown = false;
-    stage.character.traverse((obj) => {
-      if (obj.userData.accessory !== undefined) headphonesShown = obj.visible;
-    });
-    expect(headphonesShown).toBe(true);
+    expect(stage.isAccessoryShown("headphones")).toBe(true);
     expect(stage.setPose(characterPoseFor({ state: "deaf", isThinking: false, isSpeaking: false }), false)).toEqual({
       clip: "deaf",
       isChanged: false,
@@ -221,6 +223,14 @@ describe("CharacterStage looks", () => {
     expect(stage.isAccessoryShown("headphones")).toBe(true);
     stage.applyLook({ colors: {}, accessories: [] });
     expect(stage.isAccessoryShown("headphones")).toBe(false);
+  });
+
+  it("keeps a worn hat on alongside the deaf pose's headphones", () => {
+    const stage = newStage();
+    stage.applyLook({ colors: {}, accessories: ["party_hat"] });
+    stage.setPose(characterPoseFor({ state: "deaf", isThinking: false, isSpeaking: false }), false);
+    expect(stage.isAccessoryShown("headphones")).toBe(true);
+    expect(stage.isAccessoryShown("party_hat")).toBe(true);
   });
 });
 

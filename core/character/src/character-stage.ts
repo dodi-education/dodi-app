@@ -1,6 +1,5 @@
 import * as THREE from "three";
 
-import { ACCESSORIES, isAccessoryName } from "./character-catalog";
 import type { CharacterFile } from "./character-files";
 import { shadeFor } from "./character-look";
 import type { CharacterPose } from "./character-pose";
@@ -348,14 +347,10 @@ export class CharacterStage {
     return this.accessories.get(name)?.visible ?? false;
   }
 
-  /** The pose's accessories plus the look's, minus those the pose's clip takes off. */
+  /** The pose's accessories plus the look's. */
   private showAccessories(): void {
-    const clip = this.pose?.clip ?? null;
     for (const [name, accessory] of this.accessories) {
-      const isWorn = (this.pose?.accessories.includes(name) ?? false) || this.look.accessories.includes(name);
-      const isTakenOff =
-        clip !== null && isAccessoryName(name) && ACCESSORIES[name].hiddenDuringClips.includes(clip);
-      accessory.visible = isWorn && !isTakenOff;
+      accessory.visible = (this.pose?.accessories.includes(name) ?? false) || this.look.accessories.includes(name);
     }
   }
 
