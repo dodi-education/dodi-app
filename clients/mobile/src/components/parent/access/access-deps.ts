@@ -4,7 +4,7 @@ import { api, mobilePlatform } from "@/adapters/platform";
 import { clientState } from "@/lib/client-state";
 
 /** Access needs the platform API plus the vault (to wrap its key to a robot or agent). */
-export const accessDeps = (): AccessDeps => ({ api, vault: clientState.vault });
+export const accessDeps = (): AccessDeps => ({ api, vault: clientState.vault, providers: clientState.providers });
 
 /** This app's vault device id, so the Access list can mark it as "This device". */
 export async function currentDeviceId(): Promise<string | null> {

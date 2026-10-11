@@ -14,7 +14,14 @@
  */
 import { randomBytes, toBase64Url } from "@dodi/crypto";
 import { agentKeyPairs, deviceFingerprint, formatAgentAccessKey } from "@dodi/protocol/agent-key";
+import {
+  agentBuildProviders,
+  sealAgentProviderKeys,
+  selectAgentProviderKeys,
+} from "@dodi/protocol/agent-provider-keys";
 import { CURRENT_DEVICE_HEADER } from "@dodi/protocol/client-headers";
+import { AI_PROVIDERS } from "@dodi/ai/providers";
+import type { AccountModelConfig, AIProviderId } from "@dodi/types/ai";
 import {
   AGENT_EXPIRY_DAYS,
   SENSITIVE_AGENT_SCOPES,
@@ -26,11 +33,14 @@ import type { DeviceKeystore } from "@dodi/vault";
 import type { StoreApi } from "zustand/vanilla";
 
 import type { PlatformApi } from "./platform";
+import type { ProvidersStore } from "./providers-store";
 import type { VaultState, VaultStore } from "./vault-store";
 
 export interface AccessDeps {
   api: PlatformApi;
   vault: VaultStore;
+  /** The family's provider keys (decrypted in the vault): `studio` seals a subset to the agent. */
+  providers: ProvidersStore;
 }
 
 /** One entry of the Access list (mirrors the platform's AuthorizedClientView). */
@@ -75,7 +85,7 @@ export interface AgentGrant {
 }
 
 export type AccessRequestError = "not_found" | "rate_limited" | "failed";
-export type AllowOutcome = "ok" | "failed";
+export type AllowOutcome = "ok" | "no_build_keys" | "failed";
 
 /** The header that tells the list which client is asking (marks `is_current`). */
 export { CURRENT_DEVICE_HEADER };
@@ -109,6 +119,50 @@ export function groupAccess(clients: readonly AuthorizedClientView[]): AccessGro
     robots: others.filter((c) => c.kind === "robot"),
     agents: others.filter((c) => c.kind === "agent"),
   };
+}
+
+// ----- Building with the family's providers (`studio`) ------------------------
+
+async function loadModelConfig(api: PlatformApi): Promise<Partial<AccountModelConfig> | null> {
+  try {
+    const res = await api.request("/api/ai/config");
+    return res.ok ? ((await res.json()) as Partial<AccountModelConfig> | null) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The providers an agent with `studio` would build with (game, image, thinking), for the approval card. */
+export async function loadStudioProviders(api: PlatformApi): Promise<AIProviderId[]> {
+  return agentBuildProviders(await loadModelConfig(api));
+}
+
+/** {@link loadStudioProviders} as display names ("Anthropic Claude", …). */
+export async function loadStudioProviderNames(api: PlatformApi): Promise<string[]> {
+  const ids = await loadStudioProviders(api);
+  return ids.map((id) => AI_PROVIDERS.find((p) => p.id === id)?.name ?? id);
+}
+
+/**
+ * The build keys sealed to an agent's KEM key: only the configured game, image
+ * and thinking providers' keys, opened from the vault here. Null when none of
+ * them has a key (nothing to build with).
+ */
+export async function sealStudioKeys(
+  deps: Pick<AccessDeps, "api" | "providers">,
+  agentKemPublicKey: string,
+): Promise<string | null> {
+  const config = await loadModelConfig(deps.api);
+  const providers = await deps.providers.getState().load();
+  const keys: Partial<Record<AIProviderId, string>> = {};
+  for (const [id, entry] of Object.entries(providers)) {
+    if (entry?.key) keys[id as AIProviderId] = entry.key;
+  }
+  const bundle = selectAgentProviderKeys(config, keys);
+  if (Object.keys(bundle.keys).length === 0 || !config?.gameProvider || !bundle.keys[config.gameProvider]) {
+    return null;
+  }
+  return sealAgentProviderKeys(agentKemPublicKey, bundle);
 }
 
 // ----- Pairing (robot, agent) --------------------------------------------------
@@ -166,6 +220,11 @@ export async function allowAccessRequest(
   input: { grant?: AgentGrant } = {},
 ): Promise<AllowOutcome> {
   try {
+    // Seal the build keys first: a family without them can't grant `studio`,
+    // and nothing may be handed over in that case.
+    const isStudio = request.kind === "agent" && Boolean(input.grant?.scopes.includes("studio"));
+    const providerKeysSealed = isStudio ? await sealStudioKeys(deps, request.kemPublicKey) : null;
+    if (isStudio && !providerKeysSealed) return "no_build_keys";
     await deps.vault.getState().addDevice({
       deviceId: request.deviceId,
       deviceKemPublicKey: request.kemPublicKey,
@@ -175,7 +234,11 @@ export async function allowAccessRequest(
       headers: { "content-type": "application/json" },
       body: JSON.stringify(
         request.kind === "agent" && input.grant
-          ? { scopes: input.grant.scopes, expiresInDays: input.grant.expiresInDays }
+          ? {
+              scopes: input.grant.scopes,
+              expiresInDays: input.grant.expiresInDays,
+              ...(providerKeysSealed ? { providerKeysSealed } : {}),
+            }
           : {},
       ),
     });
@@ -232,11 +295,16 @@ function newDeviceId(): string {
 export async function createAgentAccessKey(
   deps: AccessDeps,
   input: { name: string } & AgentGrant,
-): Promise<{ key: string } | { error: "rate_limited" | "failed" }> {
+): Promise<{ key: string } | { error: "rate_limited" | "no_build_keys" | "failed" }> {
   const seed = randomBytes(32);
   const deviceId = newDeviceId();
   const keys = agentKeyPairs({ deviceId, seed });
   const kemPublicKey = toBase64Url(keys.kem.publicKey);
+  let providerKeysSealed: string | null = null;
+  if (input.scopes.includes("studio")) {
+    providerKeysSealed = await sealStudioKeys(deps, kemPublicKey).catch(() => null);
+    if (!providerKeysSealed) return { error: "no_build_keys" };
+  }
   try {
     await deps.vault.getState().addDevice({ deviceId, deviceKemPublicKey: kemPublicKey });
   } catch {
@@ -253,6 +321,7 @@ export async function createAgentAccessKey(
         name: input.name,
         scopes: input.scopes,
         expiresInDays: input.expiresInDays,
+        ...(providerKeysSealed ? { providerKeysSealed } : {}),
       }),
     });
     if (res.ok) return { key: formatAgentAccessKey({ deviceId, seed }) };
@@ -320,6 +389,7 @@ export function watchClientRegistration(deps: {
 
 /** Message keys (under `access`) for each agent scope. */
 export const AGENT_SCOPE_LABEL_KEYS: Record<AgentScope, { title: string; desc: string }> = {
+  studio: { title: "scopeStudio", desc: "scopeStudioDesc" },
   games: { title: "scopeGames", desc: "scopeGamesDesc" },
   "games:publish": { title: "scopeGamesPublish", desc: "scopeGamesPublishDesc" },
   "kids:basic": { title: "scopeKidsBasic", desc: "scopeKidsBasicDesc" },
@@ -333,7 +403,7 @@ export const AGENT_STARTER_PROMPT =
   "Build a learning game for my kid on dodi.app with the dodi CLI (needs Node 20+). " +
   "Install it with `npm install -g @dodi-education/cli`, " +
   "run `dodi login` and send me the link it prints so I can allow access, " +
-  "then read `dodi docs` and follow it.";
+  "then read `dodi docs` and follow it: you brief dodi's game agent and review what it builds.";
 
 /** The approval card's starting toggles: everything requested except the sensitive scopes. */
 export function initialAgentScopes(requested: readonly AgentScope[]): AgentScope[] {
@@ -370,6 +440,7 @@ export const ACCESS_REQUEST_ERROR_KEYS: Record<AccessRequestError, string> = {
   failed: "errorFailed",
 };
 export const ALLOW_ERROR_KEYS: Record<Exclude<AllowOutcome, "ok">, string> = {
+  no_build_keys: "errorNoBuildKeys",
   failed: "errorAllowFailed",
 };
 

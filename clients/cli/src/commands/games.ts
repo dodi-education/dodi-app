@@ -1,66 +1,44 @@
 /**
- * dodi games new | list | pull | check | push | publish | status | dev
+ * dodi games list | pull | push | publish | status
  *
- * Operations are exported as plain functions returning JSON-able results, so
- * `dodi mcp` exposes the very same behaviour as tools.
+ * Games are made with `dodi studio`. These commands cover the rest: listing
+ * the family's games, publishing one to dodi Discover (with the same
+ * translation step as the apps), and pulling a game into a folder for manual
+ * edits and pushing them back as a new version.
  */
-import { mkdir, readdir, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { SUPPORTED_LOCALES } from "@dodi/intl/locales";
+import { postPublication, PublicationRequestError } from "@dodi/client-state/game-publication";
+import { translateGameForPublication } from "@dodi/client-state/publication-translation";
+import { MissingTranslationsError } from "@dodi/client-state/game-publication";
+import { NoThinkingModelError } from "@dodi/client-state/resolve-execution";
 import type { Game } from "@dodi/types/database";
 import type { SuccessCriteria } from "@dodi/types/success";
-import {
-  decryptGame,
-  encryptGameCreateFields,
-  encryptGameFields,
-  toPublicationContent,
-} from "@dodi/vault";
+import { decryptGame, encryptGameFields } from "@dodi/vault";
 
 import { parse, requirePositional } from "../lib/args";
-import { checkGame, checkStatic, type CheckReport } from "../lib/game-check";
+import { checkStatic } from "../lib/game-check";
 import {
   GAME_FILE,
+  PULLED_GAME_README,
   readGameProject,
-  toCreateBody,
   toUpdateBody,
   writeGameMeta,
   type GameMeta,
 } from "../lib/game-project";
-import { AGENTS_MD, STARTER_BRIEFING, STARTER_GAME_HTML, starterMeta } from "../lib/game-template";
 import { CliError, EXIT, type Output } from "../lib/output";
 import { connect, type Connection } from "../lib/session";
-import { listKids } from "./kids";
-import { runDev } from "./games-dev";
+import { currentGameId } from "../studio/jobs";
+import { createCliThinking } from "../studio/ports";
 
 const USAGE = `dodi games <command>
-  new <folder> [--title <title>]     scaffold a working starter game
-  list                               the family's games
-  pull <game id> [<folder>]          download a game into a folder to edit or remix
-  check [<folder>] [--local|--service|--static] [--locale <code>]
-  push [<folder>] [--force]          seal and upload (creates or updates)
-  publish [<folder>]                 submit to dodi Discover (reviewed)
-  status [<folder>]                  Discover review status
-  dev [<folder>] [--port <n>]        live preview in a browser, bridge log here`;
-
-// ---------------------------------------------------------------------------
-// new
-// ---------------------------------------------------------------------------
-
-export async function newGame(dirInput: string, title?: string) {
-  const dir = path.resolve(dirInput);
-  await mkdir(dir, { recursive: true });
-  const existing = await readdir(dir);
-  if (existing.includes(GAME_FILE) || existing.includes("game.md")) {
-    throw new CliError(`${dir} already contains a game`, EXIT.usage, "Pick an empty folder.");
-  }
-  const name = title?.trim() || path.basename(dir).replace(/[-_]+/g, " ");
-  await writeFile(path.join(dir, GAME_FILE), STARTER_GAME_HTML);
-  await writeGameMeta(dir, starterMeta(name), STARTER_BRIEFING);
-  await writeFile(path.join(dir, "AGENTS.md"), AGENTS_MD);
-  await writeFile(path.join(dir, ".gitignore"), ".dodi/\n");
-  return { dir, files: [GAME_FILE, "game.md", "AGENTS.md"], next: "dodi docs games" };
-}
+  list                          the family's games
+  publish [<game id>]           submit a game to dodi Discover (translated, then reviewed)
+  status [<game id>]            its Discover review status
+  pull <game id> [<folder>]     download a game for manual edits
+  push [<folder>] [--force]     upload manual edits of a pulled game as a new version
+Without a game id, publish and status use the current studio game.`;
 
 // ---------------------------------------------------------------------------
 // list / pull
@@ -118,8 +96,7 @@ export async function pullGame(conn: Connection, gameId: string, dirInput?: stri
   await mkdir(dir, { recursive: true });
   await writeFile(path.join(dir, GAME_FILE), game.code_bundle);
   await writeGameMeta(dir, metaFromGame(game, sharing), game.markdown ?? "");
-  await writeFile(path.join(dir, "AGENTS.md"), AGENTS_MD);
-  await writeFile(path.join(dir, ".gitignore"), ".dodi/\n");
+  await writeFile(path.join(dir, "README.md"), PULLED_GAME_README);
   if (game.preview_image?.startsWith("data:image/")) {
     const ext = game.preview_image.slice(11, game.preview_image.indexOf(";")).replace("jpeg", "jpg");
     const base64 = game.preview_image.slice(game.preview_image.indexOf(",") + 1);
@@ -129,82 +106,89 @@ export async function pullGame(conn: Connection, gameId: string, dirInput?: stri
 }
 
 // ---------------------------------------------------------------------------
-// push
+// push (manual edits of a pulled game)
 // ---------------------------------------------------------------------------
 
 export async function pushGame(conn: Connection, dirInput: string, options: { force?: boolean } = {}) {
   const project = await readGameProject(dirInput);
+  if (!project.meta.game_id) {
+    throw new CliError(
+      "This folder is not a pulled game",
+      EXIT.usage,
+      'Games are made with `dodi studio new "<brief>"`. To edit one by hand, `dodi games pull <id>` first.',
+    );
+  }
   const result = checkStatic(project);
   if (result.errors.length && !options.force) {
     throw new CliError(
       `The game has ${result.errors.length} problem(s):\n- ${result.errors.join("\n- ")}`,
       EXIT.checkFailed,
-      "Fix them (see `dodi games check`), or push anyway with --force.",
+      "Fix them, or push anyway with --force.",
     );
   }
   if (!result.sanitizedCode) throw new CliError("The game cannot be sanitized", EXIT.checkFailed);
-
   const kids = await conn.api<Array<{ id: string }>>("/api/kids");
-  const kidIds = kids.map((k) => k.id);
-  if (kidIds.length === 0) throw new CliError("This family has no kids yet", EXIT.error, "Add a kid in the dodi app first.");
-
-  if (project.meta.game_id) {
-    const body = encryptGameFields(conn.vault, toUpdateBody(project, kidIds, result.sanitizedCode));
-    const row = await conn.api<Game>(`/api/games/${encodeURIComponent(project.meta.game_id)}`, { method: "PATCH", body });
-    return { action: "updated", gameId: row.id, title: project.meta.title, isActive: row.is_active, warnings: result.warnings };
-  }
-
-  const kidId = project.meta.kid ?? kidIds[0];
-  if (!kidIds.includes(kidId)) throw new CliError(`kid ${kidId} is not in this family`, EXIT.usage, "See `dodi kids`.");
-  const body = encryptGameCreateFields(conn.vault, toCreateBody(project, kidId, kidIds, result.sanitizedCode));
-  const row = await conn.api<Game>("/api/games", { body });
-  await writeGameMeta(project.dir, { ...project.meta, kid: kidId, game_id: row.id }, project.briefing);
-  return { action: "created", gameId: row.id, title: project.meta.title, isActive: row.is_active, warnings: result.warnings };
+  const body = encryptGameFields(conn.vault, toUpdateBody(project, kids.map((k) => k.id), result.sanitizedCode));
+  const row = await conn.api<Game>(`/api/games/${encodeURIComponent(project.meta.game_id)}`, { method: "PATCH", body });
+  return { action: "updated", gameId: row.id, title: project.meta.title, isActive: row.is_active, warnings: result.warnings };
 }
 
 // ---------------------------------------------------------------------------
 // publish / status
 // ---------------------------------------------------------------------------
 
-function requireGameId(meta: GameMeta): string {
-  if (!meta.game_id) {
-    throw new CliError("This game was never pushed", EXIT.usage, "Run `dodi games push` first.");
-  }
-  return meta.game_id;
+async function gameIdOr(positional: string | undefined): Promise<string> {
+  const gameId = positional ?? (await currentGameId());
+  if (!gameId) throw new CliError("Which game?", EXIT.usage, "Give a game id (see `dodi games list`).");
+  return gameId;
 }
 
-export async function publishGame(conn: Connection, dirInput: string) {
-  const project = await readGameProject(dirInput);
-  const gameId = requireGameId(project.meta);
-  const missing = SUPPORTED_LOCALES.filter((locale) => !project.meta.listing?.[locale]?.title);
-  if (missing.length) {
-    throw new CliError(
-      `game.md listing is missing ${missing.join(", ")}`,
-      EXIT.usage,
-      "Add listing: { <locale>: { title, description } } for every language (see `dodi docs publish`).",
+/**
+ * Publish like the apps' publish dialog: translate the game into every
+ * platform language with the family's thinking model (the translated bundle
+ * is sealed back into the family's own game first), then submit the
+ * plaintext copy for review.
+ */
+export async function publishGame(conn: Connection, gameId: string) {
+  const thinking = await createCliThinking(conn);
+  let game = decryptGame(conn.vault, await conn.api<Game>(`/api/games/${encodeURIComponent(gameId)}`));
+  let review;
+  try {
+    review = await translateGameForPublication(
+      { resolveThinking: thinking.resolveThinking, reportUsage: (report) => thinking.telemetry.reportUsage(report) },
+      game,
+    );
+  } catch (error) {
+    if (error instanceof MissingTranslationsError) {
+      throw new CliError("This game is too old to translate", EXIT.error, 'Rebuild it with dodi first: `dodi studio send "Rebuild the game"`.');
+    }
+    if (error instanceof NoThinkingModelError) {
+      throw new CliError("Publishing needs a thinking model to translate the game", EXIT.error, "The parent sets one up under Settings > AI providers.");
+    }
+    throw error;
+  }
+  if (review.codeBundle !== game.code_bundle) {
+    const sealed = encryptGameFields(conn.vault, { code_bundle: review.codeBundle });
+    game = decryptGame(
+      conn.vault,
+      await conn.api<Game>(`/api/games/${encodeURIComponent(gameId)}`, {
+        method: "PATCH",
+        body: { ...sealed, create_version: false },
+      }),
     );
   }
-  // Publish what the family has (the pushed version), not unpushed local edits.
-  const row = await conn.api<Game>(`/api/games/${encodeURIComponent(gameId)}`);
-  const game = decryptGame(conn.vault, row);
-  if (game.code_bundle.trim() !== project.code.trim()) {
-    throw new CliError("game.html has changes that were not pushed", EXIT.usage, "Run `dodi games push` first.");
+  try {
+    const publication = await postPublication({ api: conn.client }, gameId, game, { ...review, codeBundle: game.code_bundle });
+    return { gameId, publicationId: publication.id, status: "submitted", languages: Object.keys(review.translations) };
+  } catch (error) {
+    if (error instanceof PublicationRequestError && /handle/i.test(error.message + String(error.serverError ?? ""))) {
+      throw new CliError("The family has no public publication name yet", EXIT.error, "The parent picks one once when publishing a game in the dodi app.");
+    }
+    throw error;
   }
-  const content = {
-    ...toPublicationContent(game),
-    successCriteria: (game.success_criteria ?? {}) as Record<string, unknown>,
-    translations: Object.fromEntries(SUPPORTED_LOCALES.map((locale) => [locale, project.meta.listing![locale]])),
-  };
-  const { publication } = await conn.api<{ publication: { id: string; review_status?: string } }>(
-    `/api/games/${encodeURIComponent(gameId)}/publication`,
-    { body: content },
-  );
-  return { gameId, publicationId: publication.id, status: "submitted" };
 }
 
-export async function gameStatus(conn: Connection, dirInput: string) {
-  const project = await readGameProject(dirInput);
-  const gameId = requireGameId(project.meta);
+export async function gameStatus(conn: Connection, gameId: string) {
   const { publication } = await conn.api<{ publication: Record<string, unknown> | null }>(
     `/api/games/${encodeURIComponent(gameId)}/publication`,
   );
@@ -227,30 +211,9 @@ export async function gameStatus(conn: Connection, dirInput: string) {
 // CLI
 // ---------------------------------------------------------------------------
 
-function describeCheck(report: CheckReport): string {
-  const lines = [report.ok ? "✓ No errors." : `✗ ${report.errors.length} error(s):`];
-  for (const error of report.errors) lines.push(`  - ${error}`);
-  if (report.warnings.length) {
-    lines.push(`${report.warnings.length} warning(s):`);
-    for (const warning of report.warnings) lines.push(`  - ${warning}`);
-  }
-  lines.push(`Size: ${Math.round(report.sizeBytes / 1024)} KB of 200 KB`);
-  if (report.runtime) {
-    lines.push(`Runtime (${report.runtime.via}): ${report.runtime.ready ? "game:ready received" : "never became ready"}`);
-    if (report.runtime.frames.length) lines.push(`Frames: ${report.runtime.frames.join(", ")}`);
-  }
-  return lines.join("\n");
-}
-
 export async function runGames(argv: string[], out: Output): Promise<number> {
   const [sub, ...rest] = argv;
   switch (sub) {
-    case "new": {
-      const args = parse(rest, { title: { type: "string" } }, USAGE);
-      const result = await newGame(requirePositional(args.positionals, 0, "folder", USAGE), args.str("title"));
-      out.result(result, () => `Created ${result.dir}. Next: \`dodi docs games\`, then edit game.html and game.md.`);
-      return EXIT.ok;
-    }
     case "list": {
       parse(rest, {}, USAGE);
       const games = await listGames(await connect());
@@ -267,47 +230,24 @@ export async function runGames(argv: string[], out: Output): Promise<number> {
       out.result(result, () => `Pulled "${result.title}" into ${result.dir}.`);
       return EXIT.ok;
     }
-    case "check": {
-      const args = parse(
-        rest,
-        { local: { type: "boolean" }, service: { type: "boolean" }, static: { type: "boolean" }, locale: { type: "string" } },
-        USAGE,
-      );
-      const runtime = args.flag("static") ? "none" : args.flag("local") ? "local" : args.flag("service") ? "service" : "auto";
-      const project = await readGameProject(args.positionals[0] ?? ".");
-      const report = await checkGame(project, {
-        runtime,
-        locale: args.str("locale"),
-        connect: () => connect(),
-      });
-      out.result(report, () => describeCheck(report));
-      return report.ok ? EXIT.ok : EXIT.checkFailed;
-    }
     case "push": {
       const args = parse(rest, { force: { type: "boolean" } }, USAGE);
       const result = await pushGame(await connect(), args.positionals[0] ?? ".", { force: args.flag("force") });
-      out.result(result, () =>
-        [
-          `${result.action === "created" ? "Created" : "Updated"} "${result.title}" (${result.gameId}).`,
-          result.isActive ? "Kids can play it now." : "Hidden from kids until is_active: true (or the parent turns it on).",
-        ].join("\n"),
-      );
+      out.result(result, () => `Updated "${result.title}" (${result.gameId}).`);
       return EXIT.ok;
     }
     case "publish": {
       const args = parse(rest, {}, USAGE);
-      const result = await publishGame(await connect(), args.positionals[0] ?? ".");
+      const result = await publishGame(await connect(), await gameIdOr(args.positionals[0]));
       out.result(result, () => "Submitted to dodi Discover. It goes live after review: `dodi games status` shows where it is.");
       return EXIT.ok;
     }
     case "status": {
       const args = parse(rest, {}, USAGE);
-      const result = await gameStatus(await connect(), args.positionals[0] ?? ".");
+      const result = await gameStatus(await connect(), await gameIdOr(args.positionals[0]));
       out.result(result, () => JSON.stringify(result, null, 2));
       return EXIT.ok;
     }
-    case "dev":
-      return runDev(rest, out);
     default:
       throw new CliError(sub ? `Unknown command "games ${sub}"` : "Missing games command", EXIT.usage, USAGE);
   }

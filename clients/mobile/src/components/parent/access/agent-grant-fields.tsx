@@ -1,9 +1,15 @@
+import { useEffect, useState } from "react";
 import { View } from "react-native";
 import { useTranslations } from "use-intl";
-import { AGENT_EXPIRY_CHOICES, AGENT_SCOPE_LABEL_KEYS } from "@dodi/client-state/authorized-clients";
+import {
+  AGENT_EXPIRY_CHOICES,
+  AGENT_SCOPE_LABEL_KEYS,
+  loadStudioProviderNames,
+} from "@dodi/client-state/authorized-clients";
 import { SENSITIVE_AGENT_SCOPES, type AgentScope } from "@dodi/protocol/agent-scopes";
 import { fieldRow, section } from "@dodi/ui-recipes";
 
+import { api } from "@/adapters/platform";
 import { FieldRow } from "@/components/parent/rows";
 import { Icon, Select, Switch, Text } from "@/components/ui";
 
@@ -30,6 +36,27 @@ export function AgentGrantFields({
   onExpiresInDaysChange,
 }: AgentGrantFieldsProps) {
   const t = useTranslations("access");
+  const hasStudio = scopes.includes("studio");
+  // Which providers "Build with your AI providers" means: null while loading.
+  const [studioProviders, setStudioProviders] = useState<string[] | null>(null);
+  useEffect(() => {
+    if (!hasStudio) return;
+    let isCurrent = true;
+    void loadStudioProviderNames(api).then((names) => {
+      if (isCurrent) setStudioProviders(names);
+    });
+    return () => {
+      isCurrent = false;
+    };
+  }, [hasStudio]);
+
+  function warningFor(scope: AgentScope): string | null {
+    if (SENSITIVE_AGENT_SCOPES.includes(scope)) return t("sensitiveWarning");
+    if (scope !== "studio" || studioProviders === null) return null;
+    return studioProviders.length
+      ? t("studioWarning", { providers: studioProviders.join(", ") })
+      : t("studioNoProviders");
+  }
 
   function toggle(scope: AgentScope, isOn: boolean): void {
     // Keep the canonical order of `scopes`.
@@ -48,7 +75,7 @@ export function AgentGrantFields({
       </View>
       {scopes.map((scope) => {
         const keys = AGENT_SCOPE_LABEL_KEYS[scope];
-        const isSensitive = SENSITIVE_AGENT_SCOPES.includes(scope);
+        const warning = warningFor(scope);
         return (
           <FieldRow
             key={scope}
@@ -57,10 +84,10 @@ export function AgentGrantFields({
             hint={
               <View>
                 <Text className={fieldRow.hint}>{t(keys.desc)}</Text>
-                {isSensitive ? (
+                {warning ? (
                   <View accessibilityRole="alert" className="mt-1.5 flex-row items-start gap-1.5">
                     <Icon name="alert" size={14} color="warning" />
-                    <Text className="flex-1 text-[12.5px] text-warning">{t("sensitiveWarning")}</Text>
+                    <Text className="flex-1 text-[12.5px] text-warning">{warning}</Text>
                   </View>
                 ) : null}
               </View>

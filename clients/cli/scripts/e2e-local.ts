@@ -11,20 +11,19 @@
  * It asserts that what reached the server is sealed and that the agent is
  * refused outside its scopes. Never point it at a shared database.
  *
- * E2E_PUBLISH_GAME=1 also publishes the game to Discover with an access key.
- * Off by default: a game submission sends the operator notification email
- * when the local platform has SYSTEM_NOTIFICATION_EMAIL + RESEND_API_KEY set.
+ * Building and publishing games (dodi's game agent, translations) is covered
+ * by e2e-studio-local.ts.
  *
  *   NODE_EXTRA_CA_CERTS="$(mkcert -CAROOT)/rootCA.pem" pnpm --filter @dodi-education/cli exec tsx scripts/e2e-local.ts
  */
 import { execFileSync, spawnSync } from "node:child_process";
-import { copyFileSync, mkdtempSync, readFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { randomBytes, toBase64Url } from "@dodi/crypto";
 import { agentKeyPairs, formatAgentAccessKey } from "@dodi/protocol/agent-key";
-import { addDeviceToVault, createAccountVault, createDevice, VaultSession, type StoredVaultKeys } from "@dodi/vault";
+import { addDeviceToVault, createAccountVault, createDevice, encryptGameCreateFields, VaultSession, type StoredVaultKeys } from "@dodi/vault";
 
 const API = process.env.DODI_API_URL ?? "https://localhost:3001";
 const PLATFORM_ENV = path.resolve(import.meta.dirname, "../../../platform/.env.local");
@@ -131,27 +130,39 @@ async function main(): Promise<void> {
   const kidList = (kids.json.kids ?? []) as Array<{ name: string; age: number }>;
   assert(kidList[0]?.name === "Mia" && typeof kidList[0]?.age === "number", "kid name and age decrypted on the agent");
 
-  console.log("agent: games new, check, push, list, pull");
-  assert(cli(["games", "new", "dino", "--title", "Dino Count"]).code === 0, "scaffolded");
-  const check = cli(["games", "check", "dino", "--static"]);
-  assert(check.code === 0 && check.json.ok === true, "starter passes the check");
-  const push = cli(["games", "push", "dino"]);
-  assert(push.code === 0 && push.json.action === "created", "pushed");
-  const gameId = String(push.json.gameId);
-  const stored = sql(`select title || '|' || code_bundle from games where id = '${gameId}'`);
-  assert(stored.startsWith("enc:v1:") && stored.includes("|enc:v1:"), "title and bundle are sealed in the database");
-  const again = cli(["games", "push", "dino"]);
-  assert(again.json.action === "updated", "second push updates the same game");
-  const list = cli(["games", "list"]);
+  console.log("parent: a game made in Game Studio; agent: list, pull, edit by hand, push");
+  const gameHtml = readFileSync(path.resolve(import.meta.dirname, "../src/lib/game-fixture.test-support.ts"), "utf8");
+  const fixtureHtml = /FIXTURE_GAME_HTML = `([\s\S]*?)`;/.exec(gameHtml)![1];
+  const kidId = String((kids.json.kids as Array<{ id: string }>)[0].id);
+  const createdGame = await parent(token, "/api/games", {
+    body: {
+      kidId,
+      ...encryptGameCreateFields(vault, { title: "Dino Count", codeBundle: fixtureHtml, markdown: "## Game Overview" }),
+      isActive: false,
+    },
+  });
+  assert(createdGame.ok, "the parent's game exists");
+  const gameId = ((await createdGame.json()) as { id: string }).id;
+  const list = await cli(["games", "list"]);
   assert(((list.json.games ?? []) as Array<{ title: string }>).some((g) => g.title === "Dino Count"), "list decrypts the title");
-  const pulled = cli(["games", "pull", gameId, "dino-copy"]);
-  assert(pulled.code === 0 && readFileSync(path.join(workDir, "dino-copy", "game.html"), "utf8").includes("dodi-translations"), "pull writes the game back");
+  const pulled = await cli(["games", "pull", gameId, "dino"]);
+  assert(pulled.code === 0 && readFileSync(path.join(workDir, "dino", "game.html"), "utf8").includes("dodi-translations"), "pull writes the game into a folder");
+  const pulledHtml = path.join(workDir, "dino", "game.html");
+  writeFileSync(pulledHtml, readFileSync(pulledHtml, "utf8").replace("Catch the stars", "Catch the dinos"));
+  const pushed = await cli(["games", "push", "dino"]);
+  assert(pushed.code === 0 && pushed.json.action === "updated", "the manual edit is pushed as a new version");
+  const stored = sql(`select code_bundle from games where id = '${gameId}'`);
+  assert(stored.startsWith("enc:v1:") && vault.decryptField(stored)?.includes("Catch the dinos"), "the edit is sealed in the database");
+  mkdirSync(path.join(workDir, "fresh"), { recursive: true });
+  writeFileSync(path.join(workDir, "fresh", "game.html"), fixtureHtml);
+  writeFileSync(path.join(workDir, "fresh", "game.md"), "---\ntitle: Hand made\n---\nbody");
+  assert((await cli(["games", "push", "fresh"])).code === 2, "a hand-made game is refused: games are made with dodi studio");
 
   console.log("agent: refused outside its scopes");
-  const memory = cli(["kids", "--memory", String((kids.json.kids as Array<{ id: string }>)[0].id)]);
+  const memory = await cli(["kids", "--memory", kidId]);
   assert(memory.code === 6, "kids:memory was not granted → exit 6");
-  const publish = cli(["games", "publish", "dino"]);
-  assert(publish.code === 6 || publish.code === 2, "publishing without games:publish is refused");
+  const publish = await cli(["games", "publish", gameId]);
+  assert(publish.code === 6, "publishing without games:publish (and studio) is refused → exit 6");
 
   console.log("agent: assets new, check, push, list, pull, publish");
   assert(cli(["assets", "new", "hat", "--kind", "accessory", "--name", "Party hat"]).code === 0, "asset scaffolded");
@@ -240,53 +251,7 @@ async function main(): Promise<void> {
     assert(cli(["logout"]).json.revoked === true, "access key disconnected");
   }
 
-  if (process.env.E2E_PUBLISH_GAME !== "1") {
-    await revokeBrowser();
-    console.log("\nAll good (game publishing skipped; E2E_PUBLISH_GAME=1 runs it). Test account:", email);
-    return;
-  }
-
-  console.log("parent: create an access key for a second agent (games + games:publish)");
-  const seed = randomBytes(32);
-  const keyDeviceId = Array.from(randomBytes(12), (b) => b.toString(16).padStart(2, "0")).join("");
-  const keyPairs = agentKeyPairs({ deviceId: keyDeviceId, seed });
-  const enrolled = await fetch(`${API}/api/authorized-clients/enroll`, {
-    method: "POST",
-    headers: { "content-type": "application/json", connection: "close" },
-    body: JSON.stringify({
-      deviceId: keyDeviceId,
-      kemPublicKey: toBase64Url(keyPairs.kem.publicKey),
-      signPublicKey: toBase64Url(keyPairs.sign.publicKey),
-      name: "e2e access key",
-      kind: "agent",
-      scopes: ["games", "games:publish"],
-    }),
-  });
-  const { pairingCode } = (await enrolled.json()) as { pairingCode: string };
-  const keyClaim = (await (await parent(token, "/api/authorized-clients/claim", { body: { pairingCode } })).json()) as { id: string };
-  storedKeys = addDeviceToVault(storedKeys, created.vmk, {
-    deviceId: keyDeviceId,
-    deviceKemPublicKey: toBase64Url(keyPairs.kem.publicKey),
-  });
-  assert((await parent(token, "/api/vault/keys", { method: "PUT", body: storedKeys })).ok, "access key wrap stored");
-  assert(
-    (await parent(token, `/api/authorized-clients/${keyClaim.id}/activate`, { body: { scopes: ["games", "games:publish"], expiresInDays: null } })).ok,
-    "access key activated",
-  );
-
-  console.log("agent 2: login --token, publish the game to Discover");
-  const accessKey = formatAgentAccessKey({ deviceId: keyDeviceId, seed });
-  const tokenLogin = cli(["login", "--token", accessKey]);
-  assert(tokenLogin.code === 0 && tokenLogin.json.expiresAt === null, "connected with the access key, never expires");
-  const gamePublish = cli(["games", "publish", "dino"]);
-  assert(gamePublish.code === 0 && gamePublish.json.status === "submitted", "game submitted to Discover");
-  const gameStatus = cli(["games", "status", "dino"]);
-  assert(gameStatus.json.published === true && gameStatus.json.state === "in_review", "game status shows it in review");
-  const copy = sql(`select title from games where source_game_id = '${gameId}' and publication_requested_at is not null`);
-  assert(copy === "Dino Count", "the Discover copy is plaintext; the family's game stays sealed");
-  assert(cli(["logout"]).json.revoked === true, "access key revoked on logout");
   await revokeBrowser();
-
   console.log("\nAll good. Test account:", email);
 }
 

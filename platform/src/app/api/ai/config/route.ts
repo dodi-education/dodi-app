@@ -27,7 +27,7 @@ const UpdateConfigSchema = z.object({
 });
 
 export async function GET(request: Request): Promise<NextResponse> {
-  const auth = await requireAuth(request);
+  const auth = await requireAuth(request, { agentScope: "studio" });
   if (auth instanceof Response) return auth;
   const { accountId, db } = auth;
 

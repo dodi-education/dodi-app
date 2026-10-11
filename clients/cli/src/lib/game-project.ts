@@ -1,11 +1,11 @@
 /**
- * A game as a folder an agent edits with its normal file tools:
+ * A pulled game as a folder, for manual edits (`dodi games pull` / `push`).
+ * Games are made with `dodi studio`; this is the escape hatch to hand-edit one:
  *
  *   game.html   the bundle, exactly as the sandbox runs it
  *   game.md     YAML front matter (title, ages, success criteria, …) and, as
  *               the body, the briefing the companion reads while the kid plays
  *   preview.jpg optional list picture (.png / .webp work too)
- *   AGENTS.md   a short pointer for the agent
  *
  * Front matter is markdown-first on purpose: an agent reads and writes it like
  * any document, and the CLI maps it onto the games API.
@@ -25,11 +25,6 @@ import { CliError, EXIT } from "./output";
 export const GAME_FILE = "game.html";
 export const META_FILE = "game.md";
 const PREVIEW_FILES = ["preview.jpg", "preview.jpeg", "preview.png", "preview.webp"];
-
-export interface ListingText {
-  title: string;
-  description: string;
-}
 
 /** The front matter of game.md. */
 export interface GameMeta {
@@ -51,8 +46,6 @@ export interface GameMeta {
   learning_goal: string;
   success_definition: string;
   success_criteria?: SuccessCriteria;
-  /** Discover listing per platform locale (needed by `dodi games publish`). */
-  listing?: Record<string, ListingText>;
   /** Written by `dodi games push`. */
   game_id?: string;
 }
@@ -95,7 +88,7 @@ export function parseGameMeta(dir: string, raw: unknown): GameMeta {
   const known = new Set([
     "title", "description", "kid", "audience", "is_active", "age_min", "age_max",
     "duration_minutes", "tags", "progress_kind", "capabilities", "perspective",
-    "learning_goal", "success_definition", "success_criteria", "listing", "game_id",
+    "learning_goal", "success_definition", "success_criteria", "game_id",
   ]);
   const unknown = Object.keys(r).filter((key) => !known.has(key));
   if (unknown.length) fail(dir, `unknown field(s): ${unknown.join(", ")}`);
@@ -138,17 +131,6 @@ export function parseGameMeta(dir: string, raw: unknown): GameMeta {
     }
   }
 
-  let listing: Record<string, ListingText> | undefined;
-  if (r.listing != null) {
-    if (typeof r.listing !== "object" || Array.isArray(r.listing)) fail(dir, '"listing" must map locales to { title, description }');
-    listing = {};
-    for (const [locale, value] of Object.entries(r.listing as Record<string, unknown>)) {
-      const entry = value as Record<string, unknown> | null;
-      if (!entry || typeof entry.title !== "string" || !entry.title.trim()) fail(dir, `listing.${locale}.title is required`);
-      listing[locale] = { title: entry.title.trim(), description: typeof entry.description === "string" ? entry.description : "" };
-    }
-  }
-
   const ageMin = ageField(dir, r, "age_min");
   const ageMax = ageField(dir, r, "age_max");
   if (ageMin != null && ageMax != null && ageMin > ageMax) fail(dir, '"age_min" is above "age_max"');
@@ -174,7 +156,6 @@ export function parseGameMeta(dir: string, raw: unknown): GameMeta {
     learning_goal: stringField(dir, r, "learning_goal"),
     success_definition: stringField(dir, r, "success_definition"),
     ...(successCriteria ? { success_criteria: successCriteria } : {}),
-    ...(listing ? { listing } : {}),
     ...(typeof r.game_id === "string" && r.game_id ? { game_id: r.game_id } : {}),
   };
 }
@@ -313,3 +294,12 @@ function toAudience(meta: GameMeta, kidIds: string[]) {
   }
   return { isFamily: false, audienceIds: meta.audience };
 }
+
+/** Written next to a pulled game. */
+export const PULLED_GAME_README = `# A pulled dodi game
+
+This folder is a copy of a family game for manual edits. Edit game.html and
+game.md, then \`dodi games push .\` uploads it as a new version (sealed on this
+machine). To change the game with dodi's game agent instead, use
+\`dodi studio open <game id>\` and \`dodi studio send "<feedback>"\`.
+`;

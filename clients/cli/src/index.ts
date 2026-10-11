@@ -49,11 +49,14 @@ export async function main(argv: string[]): Promise<number> {
   }
 }
 
+/** Exit once stdout is flushed: nothing a command started may keep the CLI alive. */
+function exitWith(code: number): void {
+  process.stdout.write("", () => process.exit(code));
+}
+
+const isLongRunning = process.argv[2] === "mcp";
+
 main(process.argv.slice(2)).then(
-  (code) => {
-    process.exitCode = code;
-  },
-  (error) => {
-    process.exitCode = printError(error, process.argv.includes("--json"));
-  },
+  (code) => (isLongRunning ? (process.exitCode = code) : exitWith(code)),
+  (error) => exitWith(printError(error, process.argv.includes("--json"))),
 );

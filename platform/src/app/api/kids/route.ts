@@ -24,7 +24,10 @@ export async function GET(request: Request): Promise<NextResponse> {
   try {
     if (auth.via === "agent") {
       const includeBasic = auth.scopes?.has("kids:basic") ?? false;
-      return NextResponse.json(await listKidsForAgent(db, accountId, { includeBasic }));
+      const includeMemory = auth.scopes?.has("kids:memory") ?? false;
+      return NextResponse.json(
+        await listKidsForAgent(db, accountId, { includeBasic, includeMemory }),
+      );
     }
     const kids = await listKids(db, accountId);
     return NextResponse.json(kids);
@@ -55,7 +58,11 @@ export async function POST(request: Request): Promise<NextResponse> {
   // max_kids NULL = unlimited (every plan today), so only enforce a numeric cap.
   const account = await getAccount(db, accountId);
   const existingKids = await listKids(db, accountId);
-  if (account && account.max_kids != null && existingKids.length >= account.max_kids) {
+  if (
+    account &&
+    account.max_kids != null &&
+    existingKids.length >= account.max_kids
+  ) {
     return NextResponse.json(
       { error: "kid_limit_reached", limit: account.max_kids },
       { status: 409 },

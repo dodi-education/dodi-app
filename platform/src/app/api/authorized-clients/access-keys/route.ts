@@ -21,6 +21,8 @@ const AccessKeySchema = z.object({
   name: z.string().trim().min(1).max(80),
   scopes: z.array(z.string()).min(1).max(20),
   expiresInDays: z.number().int().nullable(),
+  /** With `studio`: the build provider keys sealed to the agent (the server can't read them). */
+  providerKeysSealed: z.string().max(20_000).nullable().optional(),
 });
 
 /**

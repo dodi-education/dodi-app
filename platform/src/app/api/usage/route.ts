@@ -53,7 +53,7 @@ const UsageReportSchema = z.object({
 
 /** User-authed: record one AI usage event. `account_id` is stamped from auth. */
 export async function POST(request: Request): Promise<Response> {
-  const auth = await requireAuth(request);
+  const auth = await requireAuth(request, { agentScope: "studio" });
   if (auth instanceof Response) return auth;
   const { accountId, db } = auth;
 

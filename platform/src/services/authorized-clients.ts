@@ -39,6 +39,36 @@ export interface AgentGrant {
   scopes: readonly string[];
   /** Days until the connection stops working; null = never. */
   expiresInDays: number | null;
+  /**
+   * With `studio`: the build provider keys, sealed by the parent's browser to
+   * the agent's KEM key (@dodi/protocol/agent-provider-keys). Without it the
+   * `studio` scope is dropped: a build can't run without keys.
+   */
+  providerKeysSealed?: string | null;
+}
+
+/** The longest sealed key bundle accepted (a few keys, KEM-wrapped). */
+export const MAX_PROVIDER_KEYS_SEALED_CHARS = 20_000;
+
+/** Scopes and key bundle as stored: `studio` only together with its sealed keys. */
+function studioGrant(
+  scopes: AgentScope[],
+  sealed: string | null | undefined,
+  now: Date,
+): Pick<
+  AuthorizedClientUpdate,
+  "scopes" | "provider_keys_sealed" | "provider_keys_set_at"
+> {
+  const hasKeys = typeof sealed === "string" && sealed.length > 0;
+  if (hasKeys && sealed.length > MAX_PROVIDER_KEYS_SEALED_CHARS) {
+    throw new Error("Provider key bundle is too large");
+  }
+  const isStudio = scopes.includes("studio") && hasKeys;
+  return {
+    scopes: isStudio ? scopes : scopes.filter((s) => s !== "studio"),
+    provider_keys_sealed: isStudio ? sealed : null,
+    provider_keys_set_at: isStudio ? now.toISOString() : null,
+  };
 }
 
 /** The longest an agent connection may live, in days. */
@@ -148,8 +178,13 @@ export async function activateClient(
   if (client.kind === "agent") {
     if (!grant) throw new Error("An agent needs the granted scopes and expiry");
     const requested = new Set(client.scopes);
-    update.scopes = normalizeAgentScopes(grant.scopes).filter((s) =>
-      requested.has(s),
+    Object.assign(
+      update,
+      studioGrant(
+        normalizeAgentScopes(grant.scopes).filter((s) => requested.has(s)),
+        grant.providerKeysSealed,
+        now,
+      ),
     );
     const days = grant.expiresInDays;
     if (
@@ -179,6 +214,8 @@ export interface AccessKeyInput {
   name: string;
   scopes: readonly string[];
   expiresInDays: number | null;
+  /** See {@link AgentGrant.providerKeysSealed}. */
+  providerKeysSealed?: string | null;
 }
 
 /**
@@ -210,7 +247,11 @@ export async function createAccessKeyClient(
       name: input.name.slice(0, 80),
       kind: "agent",
       status: "active",
-      scopes: normalizeAgentScopes(input.scopes),
+      ...studioGrant(
+        normalizeAgentScopes(input.scopes),
+        input.providerKeysSealed,
+        now,
+      ),
       expires_at:
         days == null
           ? null
@@ -219,6 +260,27 @@ export async function createAccessKeyClient(
     })
     .returningAll()
     .executeTakeFirstOrThrow();
+}
+
+/**
+ * An agent's sealed build keys (`studio`), or null when it has none. Only the
+ * agent can open them; the server hands out the ciphertext.
+ */
+export async function getAgentProviderKeys(
+  db: Db,
+  accountId: string,
+  deviceId: string,
+): Promise<{ sealed: string; setAt: string | null } | null> {
+  const row = await db
+    .selectFrom("authorized_clients")
+    .select(["provider_keys_sealed", "provider_keys_set_at"])
+    .where("device_id", "=", deviceId)
+    .where("account_id", "=", accountId)
+    .where("kind", "=", "agent")
+    .executeTakeFirst();
+  return row?.provider_keys_sealed
+    ? { sealed: row.provider_keys_sealed, setAt: row.provider_keys_set_at }
+    : null;
 }
 
 export interface RegisterOwnClientInput {

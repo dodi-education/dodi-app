@@ -1,12 +1,10 @@
 /**
- * What `dodi games new` writes: a tiny but complete game that already passes
- * `dodi games check` (bridge handshake, commands, save/restore, translations
- * in every platform language), so an agent starts from something that works
- * and replaces it rather than guessing the protocol.
+ * Test fixture: a small but complete game that passes the static checks
+ * (bridge handshake, commands, save/restore, translations).
  */
 import type { GameMeta } from "./game-project";
 
-export const STARTER_GAME_HTML = `<!doctype html>
+export const FIXTURE_GAME_HTML = `<!doctype html>
 <html>
 <head>
 <meta charset="utf-8" />
@@ -86,7 +84,7 @@ export const STARTER_GAME_HTML = `<!doctype html>
 </html>
 `;
 
-export function starterMeta(title: string): GameMeta {
+export function fixtureMeta(title: string): GameMeta {
   return {
     title,
     description: "Tap the star to catch it. A starting point to replace with your own game.",
@@ -100,14 +98,10 @@ export function starterMeta(title: string): GameMeta {
     capabilities: ["save_state"],
     learning_goal: "",
     success_definition: "",
-    listing: {
-      en: { title: "Catch the stars", description: "Tap the star to catch it." },
-      de: { title: "Fang die Sterne", description: "Tippe auf den Stern, um ihn zu fangen." },
-    },
   };
 }
 
-export const STARTER_BRIEFING = `## Game Overview
+export const FIXTURE_BRIEFING = `## Game Overview
 A star appears somewhere on the screen. Tapping it scores a point and the star jumps elsewhere.
 
 ## Rules
@@ -123,15 +117,3 @@ None besides saving and restoring.
 ## Teaching Strategy
 Cheer each catch and count along with the kid.`;
 
-export const AGENTS_MD = `# Building a dodi game
-
-This folder is a dodi game. Read \`dodi docs games\` (the full guide) and
-\`dodi docs format\` (game.md fields) before changing anything.
-
-Loop until it is right:
-1. Edit game.html and game.md.
-2. \`dodi games check .\` and fix every error; look at .dodi/check/*.jpg.
-3. \`dodi games push .\` uploads it to the family library (sealed on this machine).
-
-Set is_active: true in game.md when the kids should see it.
-`;

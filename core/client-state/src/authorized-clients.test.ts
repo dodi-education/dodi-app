@@ -1,5 +1,6 @@
 import { toBase64Url } from "@dodi/crypto";
 import { agentKeyPairs, parseAgentAccessKey } from "@dodi/protocol/agent-key";
+import { openAgentProviderKeys } from "@dodi/protocol/agent-provider-keys";
 import { createDevice, type DeviceKeystore } from "@dodi/vault";
 import { describe, expect, it, vi } from "vitest";
 import { createStore } from "zustand/vanilla";
@@ -16,6 +17,7 @@ import {
   type AuthorizedClientView,
 } from "./authorized-clients";
 import type { PlatformApi } from "./platform";
+import type { ProvidersStore } from "./providers-store";
 import type { VaultState, VaultStore } from "./vault-store";
 
 type Handler = (init: RequestInit | undefined) => Response;
@@ -50,6 +52,14 @@ function fakeVault() {
 }
 
 const json = (body: unknown, status = 200) => () => new Response(JSON.stringify(body), { status });
+
+/** The vault's decrypted provider keys. */
+function fakeProviders(keys: Record<string, string> = {}): ProvidersStore {
+  const providers = Object.fromEntries(
+    Object.entries(keys).map(([id, key]) => [id, { key, keyPreview: key.slice(-4), addedAt: "2026-10-11" }]),
+  );
+  return createStore(() => ({ providers, load: async () => providers })) as unknown as ProvidersStore;
+}
 
 const SIGN_PUB = toBase64Url(agentKeyPairs({ deviceId: "x", seed: new Uint8Array(32) }).sign.publicKey);
 const CLAIMED_AGENT = {
@@ -128,7 +138,7 @@ describe("Access", () => {
   it("wraps the vault, then activates with the grant", async () => {
     const { vault, addDevice } = fakeVault();
     const { api, calls } = routedApi({ "/api/authorized-clients/row-1/activate": json({}) });
-    const outcome = await allowAccessRequest({ api, vault }, { ...CLAIMED_AGENT, kind: "agent" }, {
+    const outcome = await allowAccessRequest({ api, vault, providers: fakeProviders() }, { ...CLAIMED_AGENT, kind: "agent" }, {
       grant: { scopes: ["games"], expiresInDays: 30 },
     });
     expect(outcome).toBe("ok");
@@ -136,10 +146,43 @@ describe("Access", () => {
     expect(calls[0].body).toEqual({ scopes: ["games"], expiresInDays: 30 });
   });
 
+  it("seals only the build providers' keys to an agent allowed to build", async () => {
+    const agentKeys = agentKeyPairs({ deviceId: "x", seed: new Uint8Array(32).fill(7) });
+    const { vault } = fakeVault();
+    const { api, calls } = routedApi({
+      "/api/ai/config": json({ voiceProvider: "xai", gameProvider: "anthropic", imageProvider: "gemini" }),
+      "/api/authorized-clients/row-1/activate": json({}),
+    });
+    const outcome = await allowAccessRequest(
+      { api, vault, providers: fakeProviders({ anthropic: "sk-ant", gemini: "g-key", xai: "x-key" }) },
+      { ...CLAIMED_AGENT, kemPublicKey: toBase64Url(agentKeys.kem.publicKey), kind: "agent" },
+      { grant: { scopes: ["studio", "games"], expiresInDays: 30 } },
+    );
+    expect(outcome).toBe("ok");
+    const sent = calls.find((c) => c.path.endsWith("/activate"))!.body as { providerKeysSealed: string };
+    expect(sent.providerKeysSealed).not.toContain("sk-ant");
+    expect(openAgentProviderKeys(sent.providerKeysSealed, agentKeys.kem.secretKey).keys).toEqual({
+      anthropic: "sk-ant",
+      gemini: "g-key",
+    });
+  });
+
+  it("refuses studio without a game model key, before handing over the vault", async () => {
+    const { vault, addDevice } = fakeVault();
+    const { api } = routedApi({ "/api/ai/config": json({ voiceProvider: "xai" }) });
+    const outcome = await allowAccessRequest(
+      { api, vault, providers: fakeProviders({ xai: "x-key" }) },
+      { ...CLAIMED_AGENT, kind: "agent" },
+      { grant: { scopes: ["studio"], expiresInDays: 7 } },
+    );
+    expect(outcome).toBe("no_build_keys");
+    expect(addDevice).not.toHaveBeenCalled();
+  });
+
   it("drops the wrap again when activation fails", async () => {
     const { vault, removeDevice } = fakeVault();
     const { api } = routedApi({ "/api/authorized-clients/row-1/activate": json({}, 400) });
-    const outcome = await allowAccessRequest({ api, vault }, { ...CLAIMED_AGENT, kind: "robot" });
+    const outcome = await allowAccessRequest({ api, vault, providers: fakeProviders() }, { ...CLAIMED_AGENT, kind: "robot" });
     expect(outcome).toBe("failed");
     expect(removeDevice).toHaveBeenCalledWith("dev-1");
   });
@@ -158,7 +201,7 @@ describe("Access", () => {
         return new Response(JSON.stringify({ client: { id: "row-9" } }), { status: 201 });
       },
     });
-    const result = await createAgentAccessKey({ api, vault }, { name: "Bot", scopes: ["games"], expiresInDays: 90 });
+    const result = await createAgentAccessKey({ api, vault, providers: fakeProviders() }, { name: "Bot", scopes: ["games"], expiresInDays: 90 });
     const parsed = parseAgentAccessKey("key" in result ? result.key : "");
     expect(parsed?.deviceId).toBe(sent.deviceId);
     expect(toBase64Url(agentKeyPairs(parsed!).kem.publicKey)).toBe(sent.kemPublicKey);
@@ -171,7 +214,7 @@ describe("Access", () => {
   it("drops the wrap again when the platform refuses the key", async () => {
     const { vault, removeDevice } = fakeVault();
     const { api } = routedApi({ "/api/authorized-clients/access-keys": json({}, 429) });
-    const result = await createAgentAccessKey({ api, vault }, { name: "Bot", scopes: ["games"], expiresInDays: 7 });
+    const result = await createAgentAccessKey({ api, vault, providers: fakeProviders() }, { name: "Bot", scopes: ["games"], expiresInDays: 7 });
     expect(result).toEqual({ error: "rate_limited" });
     expect(removeDevice).toHaveBeenCalled();
   });

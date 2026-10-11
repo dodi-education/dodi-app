@@ -1,11 +1,17 @@
 "use client";
 
 import { useTranslations } from "next-intl";
+import { useEffect, useState } from "react";
 
 import { FieldRow, fieldSelectClass } from "@/components/parent/rows";
 import { Icon } from "@/components/shared/icon";
 import { Switch } from "@/components/ui/switch";
-import { AGENT_EXPIRY_CHOICES, AGENT_SCOPE_LABEL_KEYS } from "@dodi/client-state/authorized-clients";
+import { dodi } from "@/lib/api";
+import {
+  AGENT_EXPIRY_CHOICES,
+  AGENT_SCOPE_LABEL_KEYS,
+  loadStudioProviderNames,
+} from "@dodi/client-state/authorized-clients";
 import { SENSITIVE_AGENT_SCOPES, type AgentScope } from "@dodi/protocol/agent-scopes";
 
 interface AgentGrantFieldsProps {
@@ -30,6 +36,27 @@ export function AgentGrantFields({
   onExpiresInDaysChange,
 }: AgentGrantFieldsProps) {
   const t = useTranslations("access");
+  const hasStudio = scopes.includes("studio");
+  // Which providers "Build with your AI providers" means: null while loading.
+  const [studioProviders, setStudioProviders] = useState<string[] | null>(null);
+  useEffect(() => {
+    if (!hasStudio) return;
+    let isCurrent = true;
+    void loadStudioProviderNames(dodi).then((names) => {
+      if (isCurrent) setStudioProviders(names);
+    });
+    return () => {
+      isCurrent = false;
+    };
+  }, [hasStudio]);
+
+  function warningFor(scope: AgentScope): string | null {
+    if (SENSITIVE_AGENT_SCOPES.includes(scope)) return t("sensitiveWarning");
+    if (scope !== "studio" || studioProviders === null) return null;
+    return studioProviders.length
+      ? t("studioWarning", { providers: studioProviders.join(", ") })
+      : t("studioNoProviders");
+  }
 
   function toggle(scope: AgentScope, isOn: boolean) {
     // Keep the canonical order of `scopes`.
@@ -41,7 +68,7 @@ export function AgentGrantFields({
       <div className="px-5 pt-4 pb-2 text-sm font-semibold">{t("scopesLabel")}</div>
       {scopes.map((scope) => {
         const keys = AGENT_SCOPE_LABEL_KEYS[scope];
-        const isSensitive = SENSITIVE_AGENT_SCOPES.includes(scope);
+        const warning = warningFor(scope);
         const id = `${idPrefix}-scope-${scope.replace(":", "-")}`;
         return (
           <FieldRow
@@ -51,10 +78,10 @@ export function AgentGrantFields({
             hint={
               <>
                 {t(keys.desc)}
-                {isSensitive ? (
+                {warning ? (
                   <span role="note" className="mt-1.5 flex items-start gap-1.5 text-warning">
                     <Icon name="alert" size={14} />
-                    <span>{t("sensitiveWarning")}</span>
+                    <span>{warning}</span>
                   </span>
                 ) : null}
               </>

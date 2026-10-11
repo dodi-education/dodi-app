@@ -18,10 +18,10 @@ describe("dodi mcp", () => {
   });
 
   it("runs a tool through the same command as the shell", async () => {
-    const res = await handleMessage({ id: 4, method: "tools/call", params: { name: "dodi_docs", arguments: { topic: "publish" } } });
+    const res = await handleMessage({ id: 4, method: "tools/call", params: { name: "dodi_docs", arguments: { topic: "studio" } } });
     const result = res?.result as { isError: boolean; content: Array<{ text: string }> };
     expect(result.isError).toBe(false);
-    expect(JSON.parse(result.content[0].text).result.markdown).toMatch(/Discover/);
+    expect(JSON.parse(result.content[0].text).result.markdown).toMatch(/brief/);
   });
 
   it("reports a failing tool as an error with its exit code", async () => {
@@ -32,8 +32,18 @@ describe("dodi mcp", () => {
   });
 
   it("maps tool input onto CLI arguments", () => {
-    const check = TOOLS.find((t) => t.name === "dodi_games_check")!;
-    expect(check.argv({ folder: "g", runtime: "local", locale: "de" })).toEqual(["games", "check", "g", "--local", "--locale", "de"]);
+    const send = TOOLS.find((t) => t.name === "dodi_studio_send")!;
+    expect(send.argv({ feedback: "bigger buttons", images: ["a.png", "b.jpg"] })).toEqual([
+      "studio",
+      "send",
+      "bigger buttons",
+      "--image",
+      "a.png",
+      "--image",
+      "b.jpg",
+    ]);
+    const wait = TOOLS.find((t) => t.name === "dodi_studio_wait")!;
+    expect(wait.argv({ timeout_seconds: 60 })).toEqual(["studio", "wait", "--timeout", "60"]);
     const login = TOOLS.find((t) => t.name === "dodi_login")!;
     expect(login.argv({ resume: true })).toEqual(["login", "--resume", "--wait", "20"]);
   });

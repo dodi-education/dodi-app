@@ -15,13 +15,31 @@ export async function GET(request: Request): Promise<Response> {
       { status: 400 },
     );
   }
-  const client = await auth.db
-    .selectFrom("authorized_clients")
-    .select(["id", "name", "scopes", "expires_at", "enrolled_at"])
-    .where("device_id", "=", auth.deviceId)
-    .where("account_id", "=", auth.accountId)
-    .executeTakeFirst();
-  return NextResponse.json({ client: client ?? null });
+  const [client, account] = await Promise.all([
+    auth.db
+      .selectFrom("authorized_clients")
+      .select([
+        "id",
+        "name",
+        "scopes",
+        "expires_at",
+        "enrolled_at",
+        "provider_keys_set_at",
+      ])
+      .where("device_id", "=", auth.deviceId)
+      .where("account_id", "=", auth.accountId)
+      .executeTakeFirst(),
+    auth.db
+      .selectFrom("accounts")
+      .select("language")
+      .where("id", "=", auth.accountId)
+      .executeTakeFirst(),
+  ]);
+  // The parent's UI language: what the agent writes into the studio thread in.
+  return NextResponse.json({
+    client: client ?? null,
+    language: account?.language ?? "en",
+  });
 }
 
 /**

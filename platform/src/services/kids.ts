@@ -94,7 +94,9 @@ export async function listKids(db: Db, accountId: string): Promise<Kid[]> {
 }
 
 export async function getKid(db: Db, kidId: string): Promise<Kid | null> {
-  const row = await selectKid(db).where("kids.id", "=", kidId).executeTakeFirst();
+  const row = await selectKid(db)
+    .where("kids.id", "=", kidId)
+    .executeTakeFirst();
   return row ? toKid(row) : null;
 }
 
@@ -122,7 +124,9 @@ export async function createKid(db: Db, kid: KidInsert): Promise<Kid> {
       .execute();
     return id;
   };
-  const id = db.isTransaction ? await run(db) : await db.transaction().execute(run);
+  const id = db.isTransaction
+    ? await run(db)
+    : await db.transaction().execute(run);
   const created = await getKid(db, id);
   if (!created) throw new Error(`Kid ${id} vanished after insert`);
   return created;
@@ -156,6 +160,10 @@ export interface AgentKid {
   display_name?: string;
   /** Sealed; only with the `kids:basic` scope. */
   birthdate?: string | null;
+  /** Sealed memory dossier; only with `kids:memory` (a build's learning context). */
+  memory?: string | null;
+  /** Sealed parent notes; only with `kids:memory`. */
+  parent_notes?: string | null;
 }
 
 /**
@@ -166,19 +174,34 @@ export interface AgentKid {
 export async function listKidsForAgent(
   db: Db,
   accountId: string,
-  { includeBasic }: { includeBasic: boolean },
+  {
+    includeBasic,
+    includeMemory = false,
+  }: { includeBasic: boolean; includeMemory?: boolean },
 ): Promise<AgentKid[]> {
   const rows = await db
     .selectFrom("kids")
-    .select(["id", "language", "display_name", "birthdate"])
+    .select([
+      "id",
+      "language",
+      "display_name",
+      "birthdate",
+      "memory",
+      "parent_notes",
+    ])
     .where("account_id", "=", accountId)
     .orderBy("created_at", "asc")
     .execute();
-  return rows.map((row) =>
-    includeBasic
-      ? { id: row.id, language: row.language, display_name: row.display_name, birthdate: row.birthdate }
-      : { id: row.id, language: row.language },
-  );
+  return rows.map((row) => ({
+    id: row.id,
+    language: row.language,
+    ...(includeBasic
+      ? { display_name: row.display_name, birthdate: row.birthdate }
+      : {}),
+    ...(includeMemory
+      ? { memory: row.memory, parent_notes: row.parent_notes }
+      : {}),
+  }));
 }
 
 /** A kid's sealed memory dossier (kids.memory), or undefined when the kid isn't the account's. */

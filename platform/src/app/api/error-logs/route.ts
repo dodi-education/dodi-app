@@ -42,7 +42,7 @@ const ErrorLogReportSchema = z.object({
  * beyond the id; the UI keeps its generic message.
  */
 export async function POST(request: Request): Promise<Response> {
-  const auth = await requireAuth(request);
+  const auth = await requireAuth(request, { agentScope: "studio" });
   if (auth instanceof Response) return auth;
   const { accountId, db } = auth;
 

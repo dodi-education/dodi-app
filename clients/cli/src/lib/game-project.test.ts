@@ -5,7 +5,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { readGameProject, renderGameMd, splitFrontMatter, toCreateBody, toUpdateBody } from "./game-project";
-import { STARTER_BRIEFING, STARTER_GAME_HTML, starterMeta } from "./game-template";
+import { FIXTURE_BRIEFING as STARTER_BRIEFING, FIXTURE_GAME_HTML as STARTER_GAME_HTML, fixtureMeta as starterMeta } from "./game-fixture.test-support";
 
 async function folder(meta: string, code = STARTER_GAME_HTML): Promise<string> {
   const dir = await mkdtemp(path.join(tmpdir(), "dodi-game-"));

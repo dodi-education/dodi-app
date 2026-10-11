@@ -24,9 +24,7 @@ interface ToolDef {
 }
 
 const str = (description: string) => ({ type: "string", description });
-const folder = str("Path to the game folder");
 
-const flag = (on: unknown, name: string): string[] => (on === true ? [name] : []);
 const opt = (value: unknown, name: string): string[] => (typeof value === "string" && value ? [name, value] : []);
 
 export const TOOLS: ToolDef[] = [
@@ -53,79 +51,92 @@ export const TOOLS: ToolDef[] = [
   { name: "dodi_whoami", description: "Show this connection's family, scopes and expiry.", inputSchema: { type: "object", properties: {} }, argv: () => ["whoami"] },
   {
     name: "dodi_docs",
-    description: "Read the dodi authoring docs. Start with topic 'start', then 'games' before writing a game.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        topic: { type: "string", enum: [...DOC_TOPICS] },
-        perspective: { type: "string", enum: ["bird", "side", "isometric"] },
-      },
-    },
-    argv: (i) => ["docs", ...(typeof i.topic === "string" ? [i.topic] : []), ...opt(i.perspective, "--perspective")],
+    description: "Read the dodi docs. Start with topic 'start', then 'studio' before your first brief.",
+    inputSchema: { type: "object", properties: { topic: { type: "string", enum: [...DOC_TOPICS] } } },
+    argv: (i) => ["docs", ...(typeof i.topic === "string" ? [i.topic] : [])],
   },
   {
     name: "dodi_kids",
-    description: "List the family's kids (names/ages only with kids:basic), or one kid's memory dossier (kids:memory).",
-    inputSchema: { type: "object", properties: { memory_kid_id: str("Return this kid's memory dossier instead") } },
+    description: "List the family's kids (names and ages only with kids:basic), or one kid's memory (kids:memory).",
+    inputSchema: { type: "object", properties: { memory_kid_id: str("Return this kid's memory instead") } },
     argv: (i) => ["kids", ...opt(i.memory_kid_id, "--memory")],
   },
-  { name: "dodi_games_list", description: "List the family's games.", inputSchema: { type: "object", properties: {} }, argv: () => ["games", "list"] },
   {
-    name: "dodi_games_new",
-    description: "Scaffold a working starter game in a new folder.",
-    inputSchema: { type: "object", properties: { folder, title: str("Game title") }, required: ["folder"] },
-    argv: (i) => ["games", "new", String(i.folder), ...opt(i.title, "--title")],
+    name: "dodi_studio_new",
+    description: "Start a new game: plan it with dodi's game agent from your brief. Returns dodi's reply and the plan.",
+    inputSchema: { type: "object", properties: { brief: str("What to make, for whom, what they should learn"), kid_id: str("Make it for one kid instead of the family") }, required: ["brief"] },
+    argv: (i) => ["studio", "new", String(i.brief), ...opt(i.kid_id, "--kid")],
   },
   {
-    name: "dodi_games_pull",
-    description: "Download a family game into a folder to edit or remix it.",
-    inputSchema: { type: "object", properties: { game_id: str("Game id"), folder }, required: ["game_id"] },
-    argv: (i) => ["games", "pull", String(i.game_id), ...(typeof i.folder === "string" ? [i.folder] : [])],
+    name: "dodi_studio_plan",
+    description: "Keep planning the current game: answer dodi or ask for changes to the plan.",
+    inputSchema: { type: "object", properties: { message: str("Your answer or change request") }, required: ["message"] },
+    argv: (i) => ["studio", "plan", String(i.message)],
   },
   {
-    name: "dodi_games_check",
-    description: "Validate and run the game headlessly: errors, warnings, runtime errors, layout issues and screenshot files.",
+    name: "dodi_studio_build",
+    description: "Accept the plan: dodi builds the game in the background. Follow it with dodi_studio_wait.",
+    inputSchema: { type: "object", properties: { plan: str("Your edited version of the plan (optional)") } },
+    argv: (i) => ["studio", "build", ...opt(i.plan, "--plan")],
+  },
+  {
+    name: "dodi_studio_send",
+    description: "A change round on the built game: dodi works in the background. Follow it with dodi_studio_wait.",
     inputSchema: {
       type: "object",
       properties: {
-        folder,
-        runtime: { type: "string", enum: ["auto", "local", "service", "static"], description: "Where to run it (default auto)" },
-        locale: str("Language to render"),
+        feedback: str("One concrete change"),
+        images: { type: "array", items: { type: "string" }, description: "Reference picture files (PNG or JPEG)" },
       },
-      required: ["folder"],
+      required: ["feedback"],
     },
     argv: (i) => [
-      "games",
-      "check",
-      String(i.folder),
-      ...(i.runtime === "local" ? ["--local"] : i.runtime === "service" ? ["--service"] : i.runtime === "static" ? ["--static"] : []),
-      ...opt(i.locale, "--locale"),
+      "studio",
+      "send",
+      String(i.feedback),
+      ...(Array.isArray(i.images) ? i.images.flatMap((file) => ["--image", String(file)]) : []),
     ],
   },
   {
-    name: "dodi_games_push",
-    description: "Seal and upload the game to the family library (creates or updates).",
-    inputSchema: { type: "object", properties: { folder, force: { type: "boolean", description: "Upload despite check errors" } }, required: ["folder"] },
-    argv: (i) => ["games", "push", String(i.folder), ...flag(i.force, "--force")],
+    name: "dodi_studio_wait",
+    description: "Wait for the running build. Returns dodi's reply and the screenshot files to look at; exit code 3 means still building, call again.",
+    inputSchema: { type: "object", properties: { timeout_seconds: { type: "number", description: "Default 110" } } },
+    argv: (i) => ["studio", "wait", ...(typeof i.timeout_seconds === "number" ? ["--timeout", String(i.timeout_seconds)] : [])],
+  },
+  { name: "dodi_studio_show", description: "Where the current game stands: plan, last reply, build state.", inputSchema: { type: "object", properties: {} }, argv: () => ["studio", "show"] },
+  { name: "dodi_studio_stop", description: "Stop the running build.", inputSchema: { type: "object", properties: {} }, argv: () => ["studio", "stop"] },
+  { name: "dodi_studio_resume", description: "Continue an interrupted build.", inputSchema: { type: "object", properties: {} }, argv: () => ["studio", "resume"] },
+  {
+    name: "dodi_studio_open",
+    description: "Work on another of the family's games (see dodi_games_list).",
+    inputSchema: { type: "object", properties: { game_id: str("Game id") }, required: ["game_id"] },
+    argv: (i) => ["studio", "open", String(i.game_id)],
   },
   {
+    name: "dodi_studio_activate",
+    description: "Let the kids play the current game. Only when the parent asked for it.",
+    inputSchema: { type: "object", properties: {} },
+    argv: () => ["studio", "activate"],
+  },
+  { name: "dodi_games_list", description: "List the family's games.", inputSchema: { type: "object", properties: {} }, argv: () => ["games", "list"] },
+  {
     name: "dodi_games_publish",
-    description: "Submit the pushed game to dodi Discover (reviewed before it goes live).",
-    inputSchema: { type: "object", properties: { folder }, required: ["folder"] },
-    argv: (i) => ["games", "publish", String(i.folder)],
+    description: "Submit a game to dodi Discover (translated into every language, then reviewed). Only when the parent asked for it.",
+    inputSchema: { type: "object", properties: { game_id: str("Game id (default: the current studio game)") } },
+    argv: (i) => ["games", "publish", ...(typeof i.game_id === "string" ? [i.game_id] : [])],
   },
   {
     name: "dodi_games_status",
-    description: "Discover review status of a pushed game.",
-    inputSchema: { type: "object", properties: { folder }, required: ["folder"] },
-    argv: (i) => ["games", "status", String(i.folder)],
+    description: "Discover review status of a game.",
+    inputSchema: { type: "object", properties: { game_id: str("Game id (default: the current studio game)") } },
+    argv: (i) => ["games", "status", ...(typeof i.game_id === "string" ? [i.game_id] : [])],
   },
   {
     name: "dodi_assets_new",
     description: "Scaffold a custom companion avatar or accessory folder.",
     inputSchema: {
       type: "object",
-      properties: { folder, kind: { type: "string", enum: ["avatar", "accessory"] }, name: str("Asset name") },
+      properties: { folder: str("Path to the asset folder"), kind: { type: "string", enum: ["avatar", "accessory"] }, name: str("Asset name") },
       required: ["folder", "kind"],
     },
     argv: (i) => ["assets", "new", String(i.folder), "--kind", String(i.kind), ...opt(i.name, "--name")],
@@ -133,27 +144,21 @@ export const TOOLS: ToolDef[] = [
   {
     name: "dodi_assets_check",
     description: "Validate an asset folder's asset.glb against the dodi character format.",
-    inputSchema: { type: "object", properties: { folder }, required: ["folder"] },
+    inputSchema: { type: "object", properties: { folder: str("Path to the asset folder") }, required: ["folder"] },
     argv: (i) => ["assets", "check", String(i.folder)],
   },
   {
     name: "dodi_assets_push",
     description: "Seal and upload a custom avatar or accessory (creates or updates).",
-    inputSchema: { type: "object", properties: { folder }, required: ["folder"] },
+    inputSchema: { type: "object", properties: { folder: str("Path to the asset folder") }, required: ["folder"] },
     argv: (i) => ["assets", "push", String(i.folder)],
   },
   { name: "dodi_assets_list", description: "List the family's custom avatars and accessories.", inputSchema: { type: "object", properties: {} }, argv: () => ["assets", "list"] },
   {
     name: "dodi_assets_publish",
-    description: "Share a pushed avatar or accessory on dodi Discover (a person reviews it first). Uses preview.png from the folder if present.",
-    inputSchema: { type: "object", properties: { folder }, required: ["folder"] },
+    description: "Share a pushed avatar or accessory on dodi Discover (a person reviews it first).",
+    inputSchema: { type: "object", properties: { folder: str("Path to the asset folder") }, required: ["folder"] },
     argv: (i) => ["assets", "publish", String(i.folder)],
-  },
-  {
-    name: "dodi_assets_status",
-    description: "Discover review status of a pushed avatar or accessory.",
-    inputSchema: { type: "object", properties: { folder }, required: ["folder"] },
-    argv: (i) => ["assets", "status", String(i.folder)],
   },
 ];
 
@@ -211,7 +216,7 @@ export async function handleMessage(message: {
         capabilities: { tools: {} },
         serverInfo: { name: "dodi", version: CLI_VERSION },
         instructions:
-          "Build learning games and companion looks for a dodi family. Start with dodi_docs (topic start), connect with dodi_login, read dodi_docs topic games before writing a game, and loop dodi_games_check until it reports ok before dodi_games_push.",
+          "Make learning games for a dodi family by briefing dodi's own game agent, like a parent in Game Studio. Read dodi_docs (topic start, then studio), connect with dodi_login, then dodi_studio_new → dodi_studio_plan → dodi_studio_build → dodi_studio_wait → dodi_studio_send.",
       });
     case "ping":
       return reply({});

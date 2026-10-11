@@ -17,6 +17,7 @@
     "./agent-key": "./src/agent-key.ts",
     "./client-label": "./src/client-label.ts",
     "./client-headers": "./src/client-headers.ts",
+    "./agent-provider-keys": "./src/agent-provider-keys.ts",
     "./client": "./src/client.ts"
   },
   "main": "./src/index.ts",

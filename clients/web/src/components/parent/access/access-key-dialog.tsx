@@ -71,7 +71,15 @@ export function AccessKeyDialog({ isOpen, onOpenChange, onCreated }: AccessKeyDi
     const outcome = await createAgentAccessKey(accessDeps(), { name: name.trim(), scopes: selected, expiresInDays });
     setIsCreating(false);
     if ("error" in outcome) {
-      setError(t(outcome.error === "rate_limited" ? "errorRateLimited" : "keyFailed"));
+      setError(
+        t(
+          outcome.error === "rate_limited"
+            ? "errorRateLimited"
+            : outcome.error === "no_build_keys"
+              ? "errorNoBuildKeys"
+              : "keyFailed",
+        ),
+      );
       return;
     }
     setAccessKey(outcome.key);

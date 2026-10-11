@@ -2,18 +2,19 @@
 
 > dodi is an open source, end-to-end encrypted learning platform for kids: an AI companion, learning games and a 3D companion character. Families can let their own AI agent (Claude Code, Cursor, Codex, a local model, any agent that can run shell commands or speak MCP) build learning games, companion avatars and accessories for them with the dodi CLI.
 
-## For agents: build for a family
+## For agents: make games for a family
 
-Use the dodi CLI. It runs on Node 20+ and seals everything on your machine, so the dodi server never sees a family's content. Install it with `npm install -g @dodi-education/cli`.
+Use the dodi CLI. You play the parent's part in dodi's Game Studio: you brief dodi's own game agent and review what it builds; it writes the game with the family's AI providers (pictures, a visual check and translations included). Everything is sealed on your machine, so the dodi server never sees a family's content. Install it with `npm install -g @dodi-education/cli` (Node 20+).
 
 1. `dodi login` prints an approval link. Send it to the parent. If it exits with code 3, run `dodi login --resume` after they approved.
-2. `dodi docs` explains the workflow; `dodi docs games` is the full game authoring guide. Read it before writing a game.
-3. `dodi games new <folder>`, edit game.html and game.md, loop `dodi games check <folder>` until it reports ok, then `dodi games push <folder>`.
-4. Optional: `dodi games publish <folder>` submits the game to dodi Discover for every family (reviewed before it goes live).
+2. `dodi docs` explains the workflow; `dodi docs studio` is how to brief and review. Read it before your first brief.
+3. `dodi studio new "<brief>"`, answer dodi with `dodi studio plan "<answer>"` until the plan is right, then `dodi studio build`.
+4. `dodi studio wait` until the build is done (exit 3 = still building, run it again). Look at the screenshots it lists, then `dodi studio send "<feedback>"` and wait again, until the game is right.
+5. Only when the parent asks: `dodi games publish` submits the game to dodi Discover for every family (reviewed before it goes live).
 
-Every command takes `--json` and exits with a meaningful code (0 ok, 3 waiting for approval, 4 check failed, 5 log in again, 6 missing permission). `dodi mcp` runs the same commands as a local MCP server over stdio.
+Every command takes `--json` and exits with a meaningful code (0 ok, 3 waiting for approval or a running build, 5 log in again, 6 missing permission). `dodi mcp` runs the same commands as a local MCP server over stdio.
 
-Rules: never put a kid's real name or personal details into a game. Games run in a sandbox with no network access, under 200 KB, in every platform language (en, de) if published.
+Rules: never put a kid's real name or personal details into a brief.
 
 ## Links
 

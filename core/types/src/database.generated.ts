@@ -185,6 +185,14 @@ export interface AuthorizedClients {
   name: string | null;
   pairing_code: string | null;
   /**
+   * Agent with the studio scope: the family's build provider keys (game, image, thinking), sealed client-side to the agent's KEM key. Server cannot read it.
+   */
+  provider_keys_sealed: string | null;
+  /**
+   * When provider_keys_sealed was sealed (the parent allowed the agent).
+   */
+  provider_keys_set_at: Timestamp | null;
+  /**
    * Agent only. Pending: the scopes the CLI requested. Active: the scopes the parent granted. Values: games, games:publish, kids:basic, kids:memory, assets, assets:publish.
    */
   scopes: Generated<string[]>;

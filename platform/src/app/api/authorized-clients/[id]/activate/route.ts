@@ -12,6 +12,8 @@ const ActivateSchema = z.object({
   /** Agents: what the parent granted (narrows the request). */
   scopes: z.array(z.string()).max(20).optional(),
   expiresInDays: z.number().int().nullable().optional(),
+  /** With `studio`: the build provider keys sealed to the agent (the server can't read them). */
+  providerKeysSealed: z.string().max(20_000).nullable().optional(),
 });
 
 /**
@@ -23,16 +25,28 @@ export async function POST(request: Request, context: Ctx): Promise<Response> {
   const auth = await requireAuth(request);
   if (auth instanceof Response) return auth;
   if (auth.via !== "user") {
-    return NextResponse.json({ error: "Only a signed-in parent can allow access" }, { status: 403 });
+    return NextResponse.json(
+      { error: "Only a signed-in parent can allow access" },
+      { status: 403 },
+    );
   }
   const { id } = await context.params;
-  const parsed = ActivateSchema.safeParse((await request.json().catch(() => null)) ?? {});
+  const parsed = ActivateSchema.safeParse(
+    (await request.json().catch(() => null)) ?? {},
+  );
   if (!parsed.success) {
-    return NextResponse.json({ error: "Validation failed", issues: parsed.error.issues }, { status: 400 });
+    return NextResponse.json(
+      { error: "Validation failed", issues: parsed.error.issues },
+      { status: 400 },
+    );
   }
 
   const grant = parsed.data.scopes
-    ? { scopes: parsed.data.scopes, expiresInDays: parsed.data.expiresInDays ?? null }
+    ? {
+        scopes: parsed.data.scopes,
+        expiresInDays: parsed.data.expiresInDays ?? null,
+        providerKeysSealed: parsed.data.providerKeysSealed ?? null,
+      }
     : undefined;
   try {
     const client = await activateClient(auth.db, auth.accountId, id, grant);

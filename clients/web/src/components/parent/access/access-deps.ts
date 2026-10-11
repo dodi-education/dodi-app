@@ -4,7 +4,7 @@ import type { AccessDeps } from "@dodi/client-state/authorized-clients";
 import { createIndexedDbDeviceKeystore } from "@dodi/vault";
 
 /** Access needs the platform API plus the vault (to wrap its key to a robot or agent). */
-export const accessDeps = (): AccessDeps => ({ api: dodi, vault: clientState.vault });
+export const accessDeps = (): AccessDeps => ({ api: dodi, vault: clientState.vault, providers: clientState.providers });
 
 const deviceKeystore = createIndexedDbDeviceKeystore();
 

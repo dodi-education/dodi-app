@@ -10,6 +10,7 @@ import {
   createAccessKeyClient,
   createPendingClient,
   getActiveAgentClient,
+  getAgentProviderKeys,
   getActivePairedClient,
   listAuthorizedClients,
   registerOwnClient,
@@ -219,6 +220,60 @@ describe("paired clients (robot, agent)", () => {
         expiresInDays: 0,
       }),
     ).rejects.toThrow("Expiry");
+  });
+
+  it("stores the sealed build keys with studio, and drops studio without them", async () => {
+    const withKeys = await pairAgent(["studio", "games"]);
+    const active = await activateClient(
+      t.scopedDb(accountId),
+      accountId,
+      withKeys.claimed.id,
+      {
+        scopes: ["studio", "games"],
+        expiresInDays: 7,
+        providerKeysSealed: '{"v":1,"scheme":"kem"}',
+      },
+    );
+    expect(active.scopes).toEqual(["studio", "games"]);
+    expect(active.provider_keys_sealed).toBe('{"v":1,"scheme":"kem"}');
+    expect(active.provider_keys_set_at).not.toBeNull();
+    expect(
+      await getAgentProviderKeys(t.serviceDb, accountId, withKeys.deviceId),
+    ).toMatchObject({
+      sealed: '{"v":1,"scheme":"kem"}',
+    });
+
+    const without = await pairAgent(["studio", "games"]);
+    const noKeys = await activateClient(
+      t.scopedDb(accountId),
+      accountId,
+      without.claimed.id,
+      {
+        scopes: ["studio", "games"],
+        expiresInDays: 7,
+      },
+    );
+    expect(noKeys.scopes).toEqual(["games"]);
+    expect(noKeys.provider_keys_sealed).toBeNull();
+    expect(
+      await getAgentProviderKeys(t.serviceDb, accountId, without.deviceId),
+    ).toBeNull();
+  });
+
+  it("never stores keys for a scope the agent didn't ask for", async () => {
+    const { claimed } = await pairAgent(["games"]);
+    const active = await activateClient(
+      t.scopedDb(accountId),
+      accountId,
+      claimed.id,
+      {
+        scopes: ["games", "studio"],
+        expiresInDays: 7,
+        providerKeysSealed: "sealed",
+      },
+    );
+    expect(active.scopes).toEqual(["games"]);
+    expect(active.provider_keys_sealed).toBeNull();
   });
 
   it("keeps robots unscoped and never lets a browser sign challenges", async () => {

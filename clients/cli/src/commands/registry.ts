@@ -6,6 +6,7 @@ import { runDocs } from "./docs";
 import { runGames } from "./games";
 import { runKids } from "./kids";
 import { runLogin } from "./login";
+import { runStudio } from "./studio";
 
 export interface Command {
   summary: string;
@@ -18,6 +19,7 @@ export const COMMANDS: Record<string, Command> = {
   logout: { summary: "disconnect and delete the local keys", run: runLogout },
   docs: { summary: "the authoring guide (start here)", run: runDocs },
   kids: { summary: "the kids you build for", run: runKids },
-  games: { summary: "create, check, push and publish games", run: runGames },
+  studio: { summary: "make a game with dodi's game agent: plan, build, review", run: runStudio },
+  games: { summary: "the family's games: list, publish, manual edits", run: runGames },
   assets: { summary: "custom companion avatars and accessories", run: runAssets },
 };

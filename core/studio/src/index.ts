@@ -22,3 +22,4 @@ export * from "./studio-plan";
 export * from "./studio-settings";
 export * from "./studio-versions";
 export * from "./tag-style";
+export * from "./studio-session";

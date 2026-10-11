@@ -9,6 +9,8 @@ import { describe, expect, it } from "vitest";
  * to this list, never a side effect.
  */
 const AGENT_ROUTES: Record<string, string[]> = {
+  "ai/config/route.ts": ["studio"],
+  "authorized-clients/self/provider-keys/route.ts": ["studio"],
   "authorized-clients/self/route.ts": ["any", "any"],
   "character-assets/[id]/publication/route.ts": [
     "assets:publish",
@@ -17,15 +19,18 @@ const AGENT_ROUTES: Record<string, string[]> = {
   "character-assets/[id]/route.ts": ["assets", "assets"],
   "character-assets/route.ts": ["assets", "assets"],
   "character-assets/shared/route.ts": ["assets"],
+  "error-logs/route.ts": ["studio"],
   "games/[id]/publication/draft/route.ts": ["games:publish"],
   "games/[id]/publication/route.ts": ["games:publish", "games:publish"],
   "games/[id]/route.ts": ["games", "games"],
+  "games/[id]/sharing/route.ts": ["games"],
   "games/[id]/versions/[versionId]/route.ts": ["games"],
   "games/[id]/versions/route.ts": ["games"],
   "games/route.ts": ["games", "games"],
   "games/screenshot/route.ts": ["games"],
   "kids/[id]/dossier/route.ts": ["kids:memory"],
   "kids/route.ts": ["any"],
+  "usage/route.ts": ["studio"],
   "vault/keys/route.ts": ["any"],
   "whoami/route.ts": ["any"],
 };

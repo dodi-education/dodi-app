@@ -1,6 +1,6 @@
 /**
  * What a family's connected agent (the dodi CLI, paired as an agent device)
- * may do. Mirrors the `devices_scopes_check` constraint. The server checks a
+ * may do. Mirrors the `authorized_clients_scopes_check` constraint. The server checks a
  * scope on every route an agent bearer may reach and refuses all other routes,
  * so a scope here is a server-side boundary: the agent holds the vault key and
  * could open any ciphertext it got hold of, which is why the server decides
@@ -8,6 +8,7 @@
  */
 
 export const AGENT_SCOPES = [
+  "studio",
   "games",
   "games:publish",
   "kids:basic",
@@ -20,6 +21,7 @@ export type AgentScope = (typeof AGENT_SCOPES)[number];
 
 /** What `dodi login` asks for unless told otherwise. */
 export const DEFAULT_AGENT_SCOPES: readonly AgentScope[] = [
+  "studio",
   "games",
   "games:publish",
   "kids:basic",
