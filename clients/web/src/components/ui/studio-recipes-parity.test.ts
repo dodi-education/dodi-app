@@ -252,7 +252,8 @@ describe("web Game Studio keeps its classes after moving to @dodi/ui-recipes", (
   });
 
   it("composer and its notices", () => {
-    expectSameClasses(composer.box, "flex-shrink-0 px-4 pb-3.5 pt-2");
+    // shrink-0 is Tailwind 3's name for flex-shrink-0 (same CSS); tailwind-merge only knows the new one.
+    expectSameClasses(composer.box, "shrink-0 px-4 pb-3.5 pt-2");
     expectSameClasses(
       cn(composerNotice.web, composerNotice.box, composerNotice.text, composerNotice.warning, composerNotice.warningText),
       "mb-2 flex items-start gap-1.5 rounded-lg bg-warning-soft px-2.5 py-1.5 text-xs font-medium text-warning",
@@ -300,6 +301,17 @@ describe("web Game Studio keeps its classes after moving to @dodi/ui-recipes", (
     );
     expectSameClasses(cn(composer.send, composer.webSend, composer.sendOff), `${send} bg-border-strong`);
     expectSameClasses(composer.footer, "mt-2 text-center text-[11px] leading-snug text-faint");
+    // The resize grip moved here from inline classes. It grew from h-3 for touch
+    // (the phone layout has it too), takes keyboard focus (the grip shows it) and
+    // drops z-10 so the staged images' remove buttons, rendered later, stay on top.
+    expectSameClasses(
+      cn(composer.resize, composer.webResize),
+      "group absolute -top-3 left-0 right-0 flex h-6 cursor-ns-resize touch-none items-center justify-center outline-none",
+    );
+    expectSameClasses(
+      cn(composer.grip, composer.webGrip),
+      "h-[3px] w-8 rounded bg-border-strong transition-all group-hover:w-12 group-hover:bg-primary group-focus-visible:w-12 group-focus-visible:bg-primary",
+    );
   });
 
   it("Plan step: surfaces, plan card, pills, image sheet", () => {

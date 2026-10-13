@@ -1,20 +1,28 @@
 import type { ReactNode } from "react";
-import { useState } from "react";
-import { Image, Pressable, TextInput, View } from "react-native";
+import { useRef, useState } from "react";
+import { type AccessibilityActionEvent, type GestureResponderEvent, Image, Pressable, TextInput, View } from "react-native";
 import { useTranslations } from "use-intl";
 import { COLORS } from "@dodi/design-tokens";
+import {
+  COMPOSER_HEIGHT_BOUNDS,
+  COMPOSER_HEIGHT_KEYS,
+  COMPOSER_ONE_LINE,
+  composerInputHeight,
+  dragComposerHeight,
+  readComposerHeight,
+  stepComposerHeight,
+} from "@dodi/studio/composer-height";
 import { composer as styles } from "@dodi/ui-recipes";
 
+import { mobilePlatform } from "@/adapters/platform";
 import { Icon, Text } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { fontFamilyFor } from "@/lib/fonts";
 
-/** The input's height (the web's default composer height on a phone). */
-const COMPOSER_HEIGHT = 150;
-/** One line: an open plan surface shrinks the input so the canvas gets the screen. */
-const COMPOSER_ONE_LINE = 28;
-/** How far it grows back on a plan surface once there is text to read. */
-const COMPOSER_SURFACE_MAX = 96;
+/** The app is the web's vertical (phone) layout. */
+const LAYOUT = "vertical";
+const BOUNDS = COMPOSER_HEIGHT_BOUNDS[LAYOUT];
+const HEIGHT_KEY = COMPOSER_HEIGHT_KEYS[LAYOUT];
 
 interface ComposerProps {
   draft: string;
@@ -52,20 +60,46 @@ export function Composer({
 }: ComposerProps) {
   const t = useTranslations("gameStudio");
   const [isFocused, setIsFocused] = useState(false);
+  // The parent's chosen height (the grip drags it), remembered on the device.
+  const [chosenHeight, setChosenHeight] = useState(() =>
+    readComposerHeight(mobilePlatform.preferences.getItem(HEIGHT_KEY), LAYOUT),
+  );
+  const chosenRef = useRef(chosenHeight);
+  // What the input got: less than chosen while the open keyboard leaves too little room.
+  const laidOutRef = useRef(chosenHeight);
+  const [isResizing, setIsResizing] = useState(false);
+  const dragRef = useRef({ startY: 0, startHeight: 0 });
+  const onResizeStart = (e: GestureResponderEvent): void => {
+    // Drag from what is on screen, not from a height the keyboard squeezed.
+    dragRef.current = { startY: e.nativeEvent.pageY, startHeight: Math.min(chosenRef.current, laidOutRef.current) };
+    setIsResizing(true);
+  };
+  const onResizeMove = (e: GestureResponderEvent): void => {
+    const { startY, startHeight } = dragRef.current;
+    chosenRef.current = dragComposerHeight(startHeight, e.nativeEvent.pageY - startY, LAYOUT);
+    setChosenHeight(chosenRef.current);
+  };
+  const onResizeEnd = (): void => {
+    setIsResizing(false);
+    mobilePlatform.preferences.setItem(HEIGHT_KEY, String(chosenRef.current));
+  };
+  // Screen readers: swipe up / down on the grip.
+  const onResizeAction = (e: AccessibilityActionEvent): void => {
+    const direction = e.nativeEvent.actionName === "increment" ? "grow" : "shrink";
+    chosenRef.current = stepComposerHeight(chosenRef.current, direction, LAYOUT);
+    setChosenHeight(chosenRef.current);
+    mobilePlatform.preferences.setItem(HEIGHT_KEY, String(chosenRef.current));
+  };
   const hasText = draft.trim().length > 0;
-  const height = !isSurfaceOpen
-    ? COMPOSER_HEIGHT
-    : hasText
-      ? Math.min(COMPOSER_HEIGHT, COMPOSER_SURFACE_MAX)
-      : COMPOSER_ONE_LINE;
+  const height = composerInputHeight({ height: chosenHeight, isSurfaceOpen, hasText });
   const isSendOn = isThinking ? true : hasText && !isLocked;
   const inputClasses = cn(styles.input, styles.inputText);
 
   return (
-    <View className={styles.box}>
+    <View className={cn(styles.box, styles.boxShrink)}>
       {notices}
       <View
-        className={cn(styles.card, isFocused && styles.cardFocused)}
+        className={cn(styles.card, styles.cardShrink, isFocused && styles.cardFocused)}
         style={{
           shadowColor: COLORS.ink,
           shadowOpacity: 0.07,
@@ -74,6 +108,29 @@ export function Composer({
           elevation: 2,
         }}
       >
+        {/* The resize grip on the card's top edge (not over a plan surface, which
+            sizes the input itself). Before the staged images, so their remove
+            buttons stay on top of it. */}
+        {!isSurfaceOpen ? (
+          <View
+            onStartShouldSetResponder={() => true}
+            onMoveShouldSetResponder={() => true}
+            onResponderTerminationRequest={() => false}
+            onResponderGrant={onResizeStart}
+            onResponderMove={onResizeMove}
+            onResponderRelease={onResizeEnd}
+            onResponderTerminate={onResizeEnd}
+            accessible
+            accessibilityRole="adjustable"
+            accessibilityLabel={t("resizeComposer")}
+            accessibilityValue={{ min: BOUNDS.min, max: BOUNDS.max, now: chosenHeight }}
+            accessibilityActions={[{ name: "increment" }, { name: "decrement" }]}
+            onAccessibilityAction={onResizeAction}
+            className={styles.resize}
+          >
+            <View className={cn(styles.grip, isResizing && styles.gripActive)} />
+          </View>
+        ) : null}
         {pendingImages.length > 0 ? (
           <View className={styles.pending}>
             {pendingImages.map((img, i) => (
@@ -110,8 +167,12 @@ export function Composer({
           textAlignVertical="top"
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
+          onLayout={(e) => {
+            laidOutRef.current = e.nativeEvent.layout.height;
+          }}
           className={inputClasses}
-          style={{ height, fontFamily: fontFamilyFor(inputClasses) }}
+          // Shrinks (to a line at least) before the open keyboard clips the send row.
+          style={{ height, flexShrink: 1, minHeight: COMPOSER_ONE_LINE, fontFamily: fontFamilyFor(inputClasses) }}
         />
         <View className={styles.actions}>
           <Pressable

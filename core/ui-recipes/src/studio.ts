@@ -216,10 +216,21 @@ export const chatThinking = {
 // ----- Composer -------------------------------------------------------------------
 
 export const composer = {
-  box: "flex-shrink-0 px-4 pb-3.5 pt-2",
+  /** `shrink-0` (not `flex-shrink-0`, same CSS) so the app's `boxShrink` overrides it in `cn`. */
+  box: "shrink-0 px-4 pb-3.5 pt-2",
+  /** The app lets a tall box give way to the open keyboard (the input shrinks, the send row stays). */
+  boxShrink: "shrink",
   card: "relative rounded-2xl border border-border-strong bg-card px-4 pb-2.5 pt-3",
+  cardShrink: "shrink",
   webCard: "shadow-[0_4px_18px_rgba(34,56,78,0.07)] transition-colors focus-within:border-primary",
   cardFocused: "border-primary",
+  /** The grip on the card's top edge that drags the input taller or shorter (inside the padding). */
+  resize: "absolute -top-3 left-0 right-0 h-6 items-center justify-center",
+  webResize: "group flex cursor-ns-resize touch-none outline-none",
+  grip: "h-[3px] w-8 rounded bg-border-strong",
+  webGrip:
+    "transition-all group-hover:w-12 group-hover:bg-primary group-focus-visible:w-12 group-focus-visible:bg-primary",
+  gripActive: "w-12 bg-primary",
   pending: "mb-2 flex-row flex-wrap gap-2",
   webPending: "flex",
   pendingImage: "h-12 w-12 rounded-lg border border-border",

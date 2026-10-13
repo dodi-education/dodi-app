@@ -11,7 +11,13 @@
       "ios": { "simulator": false }
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://platform.dodi.app",
+        "EXPO_PUBLIC_DODI_AI_URL": "https://ai.dodi.app",
+        "EXPO_PUBLIC_SITE_URL": "https://www.dodi.app",
+        "EXPO_PUBLIC_CAPTCHA_ORIGIN": "https://app.dodi.app"
+      }
     }
   },
   "submit": {

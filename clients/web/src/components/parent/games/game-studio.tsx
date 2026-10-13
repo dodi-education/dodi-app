@@ -70,6 +70,15 @@ import {
 } from "@dodi/studio/studio-game";
 import { gameAfterBuild } from "@dodi/studio/studio-outcome";
 import {
+  COMPOSER_HEIGHT_BOUNDS,
+  COMPOSER_HEIGHT_KEYS,
+  composerInputHeight,
+  type ComposerLayout,
+  dragComposerHeight,
+  readComposerHeight,
+  stepComposerHeight,
+} from "@dodi/studio/composer-height";
+import {
   resolveStudioPanes,
   type PlanSurface as PlanSurfaceKind,
 } from "@dodi/studio/studio-panes";
@@ -166,16 +175,6 @@ type ChatMessage = StudioChatMessage;
 const SIDE_MIN = 300;
 const SIDE_MAX = 620;
 const SIDE_DEFAULT = 384;
-const COMPOSER_MIN = 60;
-const COMPOSER_MAX = 520;
-const COMPOSER_DEFAULT = 150;
-/** One line of the composer (14.5px text at leading-normal, plus its padding).
- *  The sketch surface shrinks the input to this so the canvas gets the screen. */
-const COMPOSER_ONE_LINE = 28;
-/** How far the composer may grow back on a plan surface, once there is text to
- *  read. Well under the resizable height, which the canvas and the plan need
- *  more than the input does. */
-const COMPOSER_SURFACE_MAX = 96;
 /** Max reference images a single message can carry. */
 const MAX_ATTACHMENTS = 3;
 /** How long the Plan step waits after a change before re-sealing it onto the row. */
@@ -194,10 +193,14 @@ function studioUrl(gameId: string, view: DraftView): string {
     : `/parent/game-studio/${gameId}/${view}`;
 }
 
+/** A persisted UI value from localStorage (null on the server). */
+function readStoredValue(key: string): string | null {
+  return typeof window === "undefined" ? null : window.localStorage.getItem(key);
+}
+
 /** Read a persisted panel size from localStorage, clamped to [min, max]. */
 function readStoredSize(key: string, min: number, max: number, fallback: number): number {
-  if (typeof window === "undefined") return fallback;
-  const v = parseInt(window.localStorage.getItem(key) ?? "", 10);
+  const v = parseInt(readStoredValue(key) ?? "", 10);
   return v >= min && v <= max ? v : fallback;
 }
 
@@ -454,13 +457,17 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
   const [sideWidth, setSideWidth] = useState(() =>
     readStoredSize("dodi-studio-side-width", SIDE_MIN, SIDE_MAX, SIDE_DEFAULT),
   );
-  const [composerHeight, setComposerHeight] = useState(() =>
-    readStoredSize("dodi-studio-input-height", COMPOSER_MIN, COMPOSER_MAX, COMPOSER_DEFAULT),
-  );
+  // The composer's height, remembered per layout (a phone starts at half).
+  const [composerHeights, setComposerHeights] = useState<Record<ComposerLayout, number>>(() => ({
+    side: readComposerHeight(readStoredValue(COMPOSER_HEIGHT_KEYS.side), "side"),
+    vertical: readComposerHeight(readStoredValue(COMPOSER_HEIGHT_KEYS.vertical), "vertical"),
+  }));
   // Portrait phones + upright tablets get a vertical, tab-switched layout
   // (matches the `compact` CSS variant). Landscape/desktop keep the resizable
   // side-by-side panes.
   const vertical = useMediaQuery("(orientation: portrait), (max-width: 767px)");
+  const composerLayout: ComposerLayout = vertical ? "vertical" : "side";
+  const composerHeight = composerHeights[composerLayout];
   // Touch keyboards: Enter types a newline in the composer; sending is the button.
   const isTouch = useMediaQuery("(pointer: coarse)");
   // New games open on the Game tab (the Plan step, then settings); existing
@@ -482,7 +489,6 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
   // Handle into the always-mounted preview sandbox (edit-time screenshots).
   const sandboxRef = useRef<GameSandboxHandle | null>(null);
   const sideWidthRef = useRef(sideWidth);
-  const composerHeightRef = useRef(composerHeight);
   // The in-flight build's abort handle — drives Stop + navigation guards.
   const abortRef = useRef<AbortController | null>(null);
 
@@ -590,24 +596,41 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     document.addEventListener("mouseup", up);
   };
 
-  const startComposerResize = (e: React.MouseEvent): void => {
+  const setComposerHeight = (layout: ComposerLayout, height: number): void => {
+    setComposerHeights((heights) => ({ ...heights, [layout]: height }));
+  };
+
+  // Pointer events, so a finger drags the grip on a phone as a mouse does on desktop.
+  const startComposerResize = (e: React.PointerEvent<HTMLDivElement>): void => {
     e.preventDefault();
+    const layout = composerLayout;
     const startY = e.clientY;
-    const startH = composerHeightRef.current;
+    const startH = composerHeight;
+    let height = startH;
     document.body.style.userSelect = "none";
-    const move = (ev: MouseEvent): void => {
-      const next = Math.min(COMPOSER_MAX, Math.max(COMPOSER_MIN, startH + (startY - ev.clientY)));
-      composerHeightRef.current = next;
-      setComposerHeight(next);
+    const move = (ev: PointerEvent): void => {
+      height = dragComposerHeight(startH, ev.clientY - startY, layout);
+      setComposerHeight(layout, height);
     };
     const up = (): void => {
-      document.removeEventListener("mousemove", move);
-      document.removeEventListener("mouseup", up);
+      document.removeEventListener("pointermove", move);
+      document.removeEventListener("pointerup", up);
+      document.removeEventListener("pointercancel", up);
       document.body.style.userSelect = "";
-      localStorage.setItem("dodi-studio-input-height", String(composerHeightRef.current));
+      localStorage.setItem(COMPOSER_HEIGHT_KEYS[layout], String(height));
     };
-    document.addEventListener("mousemove", move);
-    document.addEventListener("mouseup", up);
+    document.addEventListener("pointermove", move);
+    document.addEventListener("pointerup", up);
+    document.addEventListener("pointercancel", up);
+  };
+
+  // The grip is a focusable splitter: the arrow keys resize it too.
+  const onComposerResizeKey = (e: React.KeyboardEvent<HTMLDivElement>): void => {
+    if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+    e.preventDefault();
+    const height = stepComposerHeight(composerHeight, e.key === "ArrowUp" ? "grow" : "shrink", composerLayout);
+    setComposerHeight(composerLayout, height);
+    localStorage.setItem(COMPOSER_HEIGHT_KEYS[composerLayout], String(height));
   };
 
   const setField = <K extends keyof StudioGame>(key: K, value: StudioGame[K]) => {
@@ -2349,14 +2372,24 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
               </div>
             )}
             <div className={cn(composer.card, composer.webCard)}>
-              {/* Composer top resize handle (horizontal layout only) */}
-              {!vertical && (
+              {/* The resize grip on the card's top edge (not over a plan surface,
+                  which sizes the input itself). Before the staged images, so their
+                  remove buttons stay on top of it. */}
+              {!mobileSurfaceOpen && (
                 <div
-                  onMouseDown={startComposerResize}
-                  className="group absolute -top-1.5 left-0 right-0 z-10 flex h-3 cursor-ns-resize items-center justify-center"
-                  title="Drag to resize"
+                  role="separator"
+                  aria-orientation="horizontal"
+                  aria-label={t("resizeComposer")}
+                  aria-valuemin={COMPOSER_HEIGHT_BOUNDS[composerLayout].min}
+                  aria-valuemax={COMPOSER_HEIGHT_BOUNDS[composerLayout].max}
+                  aria-valuenow={composerHeight}
+                  tabIndex={0}
+                  title={t("resizeComposer")}
+                  onPointerDown={startComposerResize}
+                  onKeyDown={onComposerResizeKey}
+                  className={cn(composer.resize, composer.webResize)}
                 >
-                  <span className="h-[3px] w-8 rounded bg-border-strong transition-all group-hover:w-12 group-hover:bg-primary" />
+                  <span className={cn(composer.grip, composer.webGrip)} />
                 </div>
               )}
               {pendingImages.length > 0 && (
@@ -2386,11 +2419,11 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
               )}
               <textarea
                 style={{
-                  height: !mobileSurfaceOpen
-                    ? composerHeight
-                    : draft.trim()
-                      ? Math.min(composerHeight, COMPOSER_SURFACE_MAX)
-                      : COMPOSER_ONE_LINE,
+                  height: composerInputHeight({
+                    height: composerHeight,
+                    isSurfaceOpen: mobileSurfaceOpen,
+                    hasText: draft.trim().length > 0,
+                  }),
                 }}
                 disabled={composerLocked}
                 enterKeyHint={isTouch ? "enter" : "send"}

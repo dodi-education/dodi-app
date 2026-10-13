@@ -1,4 +1,4 @@
-import { KeyboardAvoidingView, Platform, View } from "react-native";
+import { KeyboardAvoidingView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTranslations } from "use-intl";
 import type { StudioGame, StudioView } from "@dodi/studio/studio-game";
@@ -6,6 +6,7 @@ import { PARENT_TOP_BAR_HEIGHT, studioFrame } from "@dodi/ui-recipes";
 
 import { Button, Dialog } from "@/components/ui";
 import { cn } from "@/lib/cn";
+import { keyboardAvoidance } from "@/lib/keyboard-avoidance";
 
 import { ChatPane } from "./chat-pane";
 import { ReferenceImageSheet } from "./reference-image-sheet";
@@ -33,9 +34,10 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
   return (
     <KeyboardAvoidingView
       className="flex-1"
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      // The studio sits under the shell's top bar: the keyboard overlap is measured from the screen top.
-      keyboardVerticalOffset={PARENT_TOP_BAR_HEIGHT + insets.top}
+      // Pads on both platforms (edge to edge, Android's window no longer resizes). The studio
+      // sits under the shell's top bar: the keyboard overlap is measured from the screen top,
+      // less the bottom inset the studio already pads (it lies under the open keyboard).
+      {...keyboardAvoidance({ top: PARENT_TOP_BAR_HEIGHT + insets.top, bottomInset: insets.bottom })}
     >
       <View className={cn(studioFrame.root, "flex-1")} style={{ paddingBottom: insets.bottom }}>
         {/* The Game / dodi switch (hidden while the dodi pane is gated away, and

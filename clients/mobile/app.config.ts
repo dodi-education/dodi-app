@@ -14,6 +14,7 @@ const MICROPHONE_PERMISSION =
 const config: ExpoConfig = {
   name: "dodi",
   slug: "dodi",
+  owner: "birkeal",
   scheme: "dodi",
   version: "0.1.0",
   orientation: "default",
@@ -97,6 +98,7 @@ const config: ExpoConfig = {
     ],
   ],
   experiments: { typedRoutes: true },
+  extra: { eas: { projectId: "18115b1f-3082-466f-8b30-381216bf1845" } },
 };
 
 export default config;

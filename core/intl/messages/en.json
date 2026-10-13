@@ -813,6 +813,7 @@
     "dropImages": "Drop images here",
     "dropImagesHint": "Attached as reference images for dodi",
     "removeImage": "Remove image",
+    "resizeComposer": "Resize the message box",
     "attachedImage": "Attached image {n}",
     "backgroundImageLabel": "Background image",
     "backgroundImageToggle": "Generate a background image with AI",

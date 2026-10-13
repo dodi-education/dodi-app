@@ -4,6 +4,8 @@ node_modules/
 dist/
 ios/
 android/
+*.aab
+*.apk
 .env.local
 credentials.json
 *.keystore

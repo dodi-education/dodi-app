@@ -210,6 +210,9 @@ features:
     notes: >-
       The app has the phone layout only. Its code view is read-only (no
       CodeMirror, so no manual code edits) and has no syntax highlighting.
+      The composer's grip resizes the input on both clients; the phone layout
+      starts at half the desktop height and remembers its own size
+      (core: studio/composer-height).
 
   - id: parent.game-studio.resume
     area: parent

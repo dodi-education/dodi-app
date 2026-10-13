@@ -813,6 +813,7 @@
     "dropImages": "Bilder hier ablegen",
     "dropImagesHint": "Werden als Referenzbilder für dodi angehängt",
     "removeImage": "Bild entfernen",
+    "resizeComposer": "Höhe des Eingabefelds ändern",
     "attachedImage": "Angehängtes Bild {n}",
     "backgroundImageLabel": "Hintergrundbild",
     "backgroundImageToggle": "Hintergrundbild mit KI erstellen",
