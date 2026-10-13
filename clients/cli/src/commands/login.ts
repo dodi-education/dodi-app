@@ -11,10 +11,10 @@ import { hostname } from "node:os";
 
 import { generateDeviceKeyPairs, randomBytes, toBase64Url } from "@dodi/crypto";
 import { deviceFingerprint } from "@dodi/protocol/agent-key";
-import { DEFAULT_AGENT_SCOPES, isAgentScope, type AgentScope } from "@dodi/protocol/agent-scopes";
+import { AGENT_SCOPES, DEFAULT_AGENT_SCOPES, isAgentScope, type AgentScope } from "@dodi/protocol/agent-scopes";
 import { DodiClient } from "@dodi/protocol/client";
 
-import { parse } from "../lib/args";
+import { parse, showHelp } from "../lib/args";
 import { apiUrl, appUrl, approvalUrl } from "../lib/config";
 import {
   identityFromAccessKey,
@@ -28,8 +28,10 @@ import {
 import { CliError, EXIT, type Output } from "../lib/output";
 import { connectionFor, requestDeviceToken, tokenProvider, unlockVault } from "../lib/session";
 
-const USAGE =
-  "dodi login [--name <agent name>] [--scopes games,games:publish,kids:basic,kids:memory,assets,assets:publish] [--wait <seconds>] [--resume] [--token <dodi_ak_…>]";
+const USAGE = `dodi login [--name <agent name>] [--scopes <list>] [--wait <seconds>] [--resume] [--force] [--token <dodi_ak_…>]
+  --scopes   comma-separated, from ${AGENT_SCOPES.join(", ")}
+             (default ${DEFAULT_AGENT_SCOPES.join(",")})
+  --force    pair again even though this machine is already connected`;
 
 const POLL_MS = 2_000;
 
@@ -105,6 +107,7 @@ function describeConnected(result: Connected): string {
 }
 
 export async function runLogin(argv: string[], out: Output, env: NodeJS.ProcessEnv = process.env): Promise<number> {
+  if (showHelp(argv, out, USAGE)) return EXIT.ok;
   const args = parse(
     argv,
     {

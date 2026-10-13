@@ -17,7 +17,7 @@ import type { Game } from "@dodi/types/database";
 import type { SuccessCriteria } from "@dodi/types/success";
 import { decryptGame, encryptGameFields } from "@dodi/vault";
 
-import { parse, requirePositional } from "../lib/args";
+import { parse, requirePositional, showHelp } from "../lib/args";
 import { checkStatic } from "../lib/game-check";
 import {
   GAME_FILE,
@@ -212,6 +212,7 @@ export async function gameStatus(conn: Connection, gameId: string) {
 // ---------------------------------------------------------------------------
 
 export async function runGames(argv: string[], out: Output): Promise<number> {
+  if (showHelp(argv, out, USAGE)) return EXIT.ok;
   const [sub, ...rest] = argv;
   switch (sub) {
     case "list": {

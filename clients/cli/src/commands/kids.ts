@@ -5,7 +5,7 @@
  */
 import { ageFromBirthdate } from "@dodi/intl/age";
 
-import { parse } from "../lib/args";
+import { parse, showHelp } from "../lib/args";
 import { EXIT, type Output } from "../lib/output";
 import { connect, type Connection } from "../lib/session";
 
@@ -42,6 +42,7 @@ export async function kidMemory(conn: Connection, kidId: string): Promise<string
 }
 
 export async function runKids(argv: string[], out: Output): Promise<number> {
+  if (showHelp(argv, out, USAGE)) return EXIT.ok;
   const args = parse(argv, { memory: { type: "string" } }, USAGE);
   const memoryKid = args.str("memory");
   const conn = await connect();

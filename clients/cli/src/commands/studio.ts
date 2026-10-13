@@ -20,9 +20,13 @@ import {
   planTurn,
   prepareEdit,
   StudioSessionError,
+  updateStudioSettings,
+  type StudioSettingsChanges,
 } from "@dodi/studio/studio-session";
+import type { StudioGame } from "@dodi/studio/studio-game";
+import type { GamePerspective } from "@dodi/types/games";
 
-import { parse, requirePositional } from "../lib/args";
+import { parse, requirePositional, showHelp } from "../lib/args";
 import { CliError, EXIT, type Output } from "../lib/output";
 import { connect, type Connection } from "../lib/session";
 import { loadStudioContext } from "../studio/context";
@@ -51,6 +55,9 @@ const USAGE = `dodi studio <command>
   show                              where the current game stands
   stop | resume                     stop the build / continue an interrupted one
   open <game id>                    work on another of the family's games
+  settings [--title <t>] [--learning-goal <t>] [--success "<definition>"] [--ages <min>-<max>]
+           [--perspective bird|side|isometric|auto] [--preview-image on|off] [--background-image on|off]
+                                    show the game's settings, or change them (only what the parent asked for)
   activate                          let the kids play it (only when the parent asked for it)
 All commands work on the current game; --game <id> picks another.`;
 
@@ -68,11 +75,81 @@ function sessionError(error: unknown): never {
       not_planning: ["This game is past planning", 'Ask for changes with `dodi studio send "<feedback>"`.'],
       no_plan: ["There is no plan to build yet", 'Plan with dodi first: `dodi studio plan "<message>"`.'],
       vault_locked: ["The family vault is locked", "Run `dodi login` again."],
+      invalid_settings: [
+        `Not saved: ${error.fields.map((field) => SETTING_NAMES[field] ?? field).join(", ")} ${error.fields.length > 1 ? "are" : "is"} not valid`,
+        "A title and learning goal can't be empty; ages run from 1 to 25, the youngest first.",
+      ],
+      no_image_provider: [
+        "The family has no image model set up",
+        "The parent sets one up under Settings > AI providers, then connects you again (`dodi login --force`).",
+      ],
     };
     const [message, hint] = messages[error.code];
     throw new CliError(message, EXIT.usage, hint);
   }
   throw error;
+}
+
+const SETTING_NAMES: Record<string, string> = { title: "the title", learningGoal: "the learning goal", ages: "the age range" };
+
+const PERSPECTIVES = ["bird", "side", "isometric", "auto"] as const;
+
+function onOff(value: string | undefined, flag: string): boolean | undefined {
+  if (value === undefined) return undefined;
+  if (value === "on" || value === "off") return value === "on";
+  throw new CliError(`--${flag} takes on or off`, EXIT.usage, USAGE);
+}
+
+/** The settings flags as changes; an empty object when none was given. */
+function settingsChanges(args: { str(name: string): string | undefined }): StudioSettingsChanges {
+  const changes: StudioSettingsChanges = {
+    title: args.str("title"),
+    learningGoal: args.str("learning-goal"),
+    successDefinition: args.str("success"),
+    generatePreviewImage: onOff(args.str("preview-image"), "preview-image"),
+    generateBackgroundImage: onOff(args.str("background-image"), "background-image"),
+  };
+  const ages = args.str("ages");
+  if (ages !== undefined) {
+    const match = /^(\d{1,2})-(\d{1,2})$/.exec(ages.trim());
+    if (!match) throw new CliError("--ages takes a range like 5-8", EXIT.usage, USAGE);
+    changes.targetAgeMin = Number(match[1]);
+    changes.targetAgeMax = Number(match[2]);
+  }
+  const perspective = args.str("perspective");
+  if (perspective !== undefined) {
+    if (!(PERSPECTIVES as readonly string[]).includes(perspective)) {
+      throw new CliError(`--perspective takes ${PERSPECTIVES.join(", ")}`, EXIT.usage, USAGE);
+    }
+    changes.perspective = perspective === "auto" ? null : (perspective as GamePerspective);
+  }
+  return Object.fromEntries(Object.entries(changes).filter(([, value]) => value !== undefined));
+}
+
+function settingsView(gameId: string, game: StudioGame) {
+  return {
+    gameId,
+    title: game.title,
+    learningGoal: game.learningGoal,
+    successDefinition: game.successDefinition,
+    ages: `${game.targetAgeMin}-${game.targetAgeMax}`,
+    perspective: game.perspective ?? "auto",
+    previewImage: game.generatePreviewImage ? "on" : "off",
+    hasPreviewImage: Boolean(game.previewImage),
+    backgroundImage: game.generateBackgroundImage ? "on" : "off",
+  };
+}
+
+function describeSettings(view: ReturnType<typeof settingsView>): string {
+  return [
+    `Title:              ${view.title || "(none)"}`,
+    `Learning goal:      ${view.learningGoal || "(none)"}`,
+    `Success:            ${view.successDefinition || "(none)"}`,
+    `Ages:               ${view.ages}`,
+    `Perspective:        ${view.perspective}`,
+    `Preview picture:    ${view.previewImage}${view.hasPreviewImage ? "" : " (the game has none yet)"}`,
+    `Background picture: ${view.backgroundImage}`,
+  ].join("\n");
 }
 
 async function gameFor(args: { str(name: string): string | undefined }): Promise<string> {
@@ -272,6 +349,7 @@ async function waitFor(gameId: string, seconds: number): Promise<StudioJob> {
 // ----- Command ---------------------------------------------------------------------
 
 export async function runStudio(argv: string[], out: Output): Promise<number> {
+  if (showHelp(argv, out, USAGE)) return EXIT.ok;
   const [sub, ...rest] = argv;
   if (sub === "__worker") return runWorker(requirePositional(rest, 0, "game id", USAGE));
 
@@ -367,6 +445,47 @@ export async function runStudio(argv: string[], out: Output): Promise<number> {
       const snapshot = await openStudioGame({ api: conn.client, session: async () => conn.vault }, gameId).catch(sessionError);
       await setCurrentGame(gameId);
       out.result({ gameId, title: snapshot.game.title }, () => `Now working on "${snapshot.game.title || "Untitled game"}".`);
+      return EXIT.ok;
+    }
+    case "settings": {
+      const args = parse(
+        rest,
+        {
+          ...common,
+          title: { type: "string" },
+          "learning-goal": { type: "string" },
+          success: { type: "string" },
+          ages: { type: "string" },
+          perspective: { type: "string" },
+          "preview-image": { type: "string" },
+          "background-image": { type: "string" },
+        },
+        USAGE,
+      );
+      const changes = settingsChanges(args);
+      const gameId = await gameFor(args);
+      const conn = await connect();
+      if (!Object.keys(changes).length) {
+        const snapshot = await openStudioGame({ api: conn.client, session: async () => conn.vault }, gameId).catch(sessionError);
+        const view = settingsView(gameId, snapshot.game);
+        out.result(view, () => describeSettings(view));
+        return EXIT.ok;
+      }
+      if (isJobActive(await readJob(gameId))) {
+        throw new CliError("dodi is building this game right now", EXIT.usage, "Change the settings after `dodi studio wait` says it is done.");
+      }
+      const { game, successMapping } = await updateStudioSettings(await createCliStudioPorts(conn), gameId, changes).catch(sessionError);
+      const view = settingsView(gameId, game);
+      const notes = [
+        successMapping === "failed" ? "The success definition is saved, but dodi could not turn it into checks; the old checks stay until the next build." : "",
+        changes.generatePreviewImage && !game.previewImage
+          ? 'The next build draws the preview picture: `dodi studio send "Make a preview picture for the game list"`.'
+          : changes.generatePreviewImage
+            ? 'For a new preview picture now: `dodi studio send "Make a new preview picture"`.'
+            : "",
+        changes.generateBackgroundImage ? 'For a background picture now: `dodi studio send "Add a background picture"`.' : "",
+      ].filter(Boolean);
+      out.result({ ...view, successMapping, notes }, () => ["Saved.", "", describeSettings(view), ...(notes.length ? ["", ...notes] : [])].join("\n"));
       return EXIT.ok;
     }
     case "activate": {

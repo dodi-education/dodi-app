@@ -5,9 +5,11 @@ import { VaultSession } from "@dodi/vault";
 
 vi.mock("@dodi/ai/game-plan-agent", () => ({ runPlanAgent: vi.fn() }));
 vi.mock("@dodi/ai/plan-settings", () => ({ derivePlanSettings: vi.fn() }));
+vi.mock("@dodi/ai/success-mapping", () => ({ mapSuccessDefinition: vi.fn() }));
 
 import { runPlanAgent } from "@dodi/ai/game-plan-agent";
 import { derivePlanSettings } from "@dodi/ai/plan-settings";
+import { mapSuccessDefinition } from "@dodi/ai/success-mapping";
 import { UNBUILT_GAME_PLACEHOLDER } from "@dodi/games/placeholder";
 
 import type { StudioKid } from "./build-runner";
@@ -21,6 +23,7 @@ import {
   planTurn,
   prepareEdit,
   StudioSessionError,
+  updateStudioSettings,
   type StudioSessionContext,
   type StudioSessionPorts,
 } from "./studio-session";
@@ -34,6 +37,7 @@ import { restoreTranscript, type StudioChatMessage } from "./transcript";
 
 const agent = vi.mocked(runPlanAgent);
 const derive = vi.mocked(derivePlanSettings);
+const mapSuccess = vi.mocked(mapSuccessDefinition);
 const USAGE = { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 };
 
 const KIDS: StudioKid[] = [
@@ -149,6 +153,7 @@ async function context(): Promise<StudioSessionContext> {
 beforeEach(() => {
   agent.mockReset();
   derive.mockReset();
+  mapSuccess.mockReset();
   session = new VaultSession(generateVaultMasterKey());
   rows = new Map();
   requests = [];
@@ -272,6 +277,92 @@ describe("prepareEdit", () => {
     await expect(prepareEdit(makePorts(), await context(), { gameId: "planning", text: "x" })).rejects.toThrow(
       "still_planning",
     );
+  });
+});
+
+describe("updateStudioSettings", () => {
+  /** A game the CLI 0.1.0 pushed by hand: built, no picture settings in its metadata. */
+  function handWrittenGame(): void {
+    rows.set("hand", {
+      ...baseRow("hand"),
+      title: session.encryptField("Dino Count"),
+      learning_goal: session.encryptField("Count to 10"),
+      success_definition: session.encryptField("Counts to 10 three times"),
+      code_bundle: session.encryptField("<html>game</html>"),
+      metadata: { capabilities: ["save_state"], createdWith: "dodi-cli" },
+    });
+  }
+
+  it("switches the pictures on for a game that never had the setting, keeping its other metadata", async () => {
+    handWrittenGame();
+    const { game, successMapping } = await updateStudioSettings(makePorts(), "hand", {
+      generatePreviewImage: true,
+      generateBackgroundImage: true,
+    });
+    expect(game.generatePreviewImage).toBe(true);
+    expect(game.generateBackgroundImage).toBe(true);
+    expect(successMapping).toBe("unchanged");
+    expect(mapSuccess).not.toHaveBeenCalled();
+    expect(rows.get("hand")!.metadata).toMatchObject({
+      generatePreviewImage: true,
+      generateBackgroundImage: true,
+      capabilities: ["save_state"],
+      createdWith: "dodi-cli",
+    });
+    // Sealed as in the studio: the title never leaves the device in plaintext.
+    expect(String(rows.get("hand")!.title)).toMatch(/^enc:v1:/);
+  });
+
+  it("refuses the pictures without an image model", async () => {
+    handWrittenGame();
+    hasImageProvider = false;
+    await expect(updateStudioSettings(makePorts(), "hand", { generatePreviewImage: true })).rejects.toThrow(
+      "no_image_provider",
+    );
+    expect(requests.some((r) => r.method === "PATCH")).toBe(false);
+  });
+
+  it("switches a picture off without asking for an image model", async () => {
+    handWrittenGame();
+    hasImageProvider = false;
+    const { game } = await updateStudioSettings(makePorts(), "hand", { generatePreviewImage: false });
+    expect(game.generatePreviewImage).toBe(false);
+  });
+
+  it("maps a changed success definition to criteria again, and keeps the old ones when that fails", async () => {
+    handWrittenGame();
+    const criteria = { description: "x", match: "all", conditions: [], requiredMetrics: [] };
+    mapSuccess.mockResolvedValueOnce({ successCriteria: criteria, progressKind: "goal" } as never);
+    const mapped = await updateStudioSettings(makePorts(), "hand", { successDefinition: "Counts to 20" });
+    expect(mapped.successMapping).toBe("mapped");
+    expect(mapped.game.successDefinition).toBe("Counts to 20");
+    expect(rows.get("hand")!.progress_kind).toBe("goal");
+
+    mapSuccess.mockRejectedValueOnce(new Error("model down"));
+    const failed = await updateStudioSettings(makePorts(), "hand", { successDefinition: "Counts to 30" });
+    expect(failed.successMapping).toBe("failed");
+    expect(failed.game.successDefinition).toBe("Counts to 30");
+  });
+
+  it("saves ages, perspective and title, and refuses an empty title or a bad age range", async () => {
+    handWrittenGame();
+    const { game } = await updateStudioSettings(makePorts(), "hand", {
+      title: "Dino Count 2",
+      targetAgeMin: 5,
+      targetAgeMax: 8,
+      perspective: "side",
+    });
+    expect(game).toMatchObject({ title: "Dino Count 2", targetAgeMin: 5, targetAgeMax: 8, perspective: "side" });
+
+    const refused = await updateStudioSettings(makePorts(), "hand", { title: " ", targetAgeMin: 9 }).catch((e) => e);
+    expect(refused).toBeInstanceOf(StudioSessionError);
+    expect(refused.code).toBe("invalid_settings");
+    expect(refused.fields).toEqual(["title", "ages"]);
+  });
+
+  it("refuses a game that is still being planned", async () => {
+    rows.set("planning", { ...baseRow("planning"), plan_enc: session.encryptJson({ summary: "x", isAccepted: false }) });
+    await expect(updateStudioSettings(makePorts(), "planning", { title: "x" })).rejects.toThrow("still_planning");
   });
 });
 

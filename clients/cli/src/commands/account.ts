@@ -1,7 +1,11 @@
 /** dodi whoami / dodi logout. */
+import { showHelp } from "../lib/args";
 import { clearStoredCredentials, loadStoredCredentials } from "../lib/credentials";
 import { CliError, EXIT, type Output } from "../lib/output";
 import { connect } from "../lib/session";
+
+const WHOAMI_USAGE = "dodi whoami: show this connection (family, scopes, expiry)";
+const LOGOUT_USAGE = "dodi logout: disconnect this agent and delete its local keys";
 
 interface SelfDevice {
   name: string | null;
@@ -10,7 +14,8 @@ interface SelfDevice {
   enrolled_at: string | null;
 }
 
-export async function runWhoami(_argv: string[], out: Output): Promise<number> {
+export async function runWhoami(argv: string[], out: Output): Promise<number> {
+  if (showHelp(argv, out, WHOAMI_USAGE)) return EXIT.ok;
   const conn = await connect();
   const { client: device } = await conn.api<{ client: SelfDevice | null }>("/api/authorized-clients/self");
   const who = await conn.api<{ accountId: string }>("/api/whoami");
@@ -34,7 +39,8 @@ export async function runWhoami(_argv: string[], out: Output): Promise<number> {
 }
 
 /** Disconnect: the platform revokes the device and drops its vault wrap, then the keys are deleted here. */
-export async function runLogout(_argv: string[], out: Output): Promise<number> {
+export async function runLogout(argv: string[], out: Output): Promise<number> {
+  if (showHelp(argv, out, LOGOUT_USAGE)) return EXIT.ok;
   const stored = await loadStoredCredentials();
   if (!stored && !process.env.DODI_TOKEN) {
     out.result({ status: "not_connected" }, () => "Not connected.");

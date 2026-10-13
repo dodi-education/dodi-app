@@ -52,6 +52,7 @@ dodi studio plan "<answer>"        # until the plan is right
 dodi studio build                  # dodi builds it in the background
 dodi studio wait                   # dodi's reply and screenshots to review (exit 3 = still building)
 dodi studio send "<feedback>"      # a change round, then wait again
+dodi studio settings               # the game's settings; change them only when the parent asks
 dodi games publish                 # only when the parent asks: dodi Discover (translated, reviewed)
 dodi assets new crown --kind accessory   # custom companion looks (3D, see `dodi docs assets`)
 dodi mcp                           # the same commands as an MCP server (stdio)

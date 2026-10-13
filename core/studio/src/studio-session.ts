@@ -13,15 +13,18 @@
  *   acceptPlan    derive the settings from the plan, save them, and return the
  *                 build that makes it (`isAgreedPlan`)
  *   prepareEdit   the build for a change request on a built game
+ *   updateStudioSettings  the Settings tab: change a game's settings
  *
  * Builds themselves run through `createBuildManager` / `runStudioBuild`.
  */
 import { decryptGame } from "@dodi/vault/game-crypto";
 import type { Game } from "@dodi/types/database";
+import type { GamePerspective } from "@dodi/types/games";
 import type { VaultSession } from "@dodi/vault";
 import { normalizeLocale } from "@dodi/intl";
 import { loadMessages } from "@dodi/intl/messages";
 
+import { isValidAgeRange } from "./age-range";
 import type { AgentRunCheck } from "./agent-run-log";
 import { SCREENSHOT_BOUND, type StudioBuildInput, type StudioBuildTexts, type StudioKid } from "./build-runner";
 import { EMPTY_PLANNING, restorePlanning, type PlanningState } from "./plan-state";
@@ -37,7 +40,7 @@ import {
   type PlanTurnOptions,
   type PlanTurnTexts,
 } from "./studio-plan";
-import { patchGameSettings } from "./studio-settings";
+import { mapSettingsSuccessDefinition, patchGameSettings } from "./studio-settings";
 import { restoreTranscript, type StudioChatMessage } from "./transcript";
 
 /** A build client's ports plus what the editor steps need (sealing while unlocked, list invalidation). */
@@ -101,7 +104,11 @@ export class StudioSessionError extends Error {
       | "still_planning"
       | "not_planning"
       | "no_plan"
-      | "vault_locked",
+      | "vault_locked"
+      | "invalid_settings"
+      | "no_image_provider",
+    /** For invalid_settings: the fields that were refused. */
+    readonly fields: string[] = [],
   ) {
     super(code);
     this.name = "StudioSessionError";
@@ -283,6 +290,77 @@ export async function acceptPlan(
 function fallbackTitle(planText: string): string {
   const first = planText.split("\n").find((line) => line.trim()) ?? "";
   return first.replace(/^[#*\-\s]+/, "").slice(0, 60).trim() || "New game";
+}
+
+// ----- Settings --------------------------------------------------------------------
+
+/** The settings a parent edits on the studio's Settings tab; omitted fields stay as they are. */
+export interface StudioSettingsChanges {
+  title?: string;
+  learningGoal?: string;
+  successDefinition?: string;
+  targetAgeMin?: number;
+  targetAgeMax?: number;
+  /** null = dodi chooses. */
+  perspective?: GamePerspective | null;
+  generateBackgroundImage?: boolean;
+  generatePreviewImage?: boolean;
+}
+
+export interface StudioSettingsResult {
+  game: StudioGame;
+  /**
+   * The success definition (or the learning goal it is read against) changed
+   * and was mapped to criteria again; "failed" kept the stored criteria.
+   */
+  successMapping: "unchanged" | "mapped" | "failed";
+}
+
+/**
+ * Save changed settings of a game that is past planning, as the studio's
+ * Settings tab does: the success definition is mapped to criteria again when
+ * it (or the learning goal) changed, and the pictures can only be switched on
+ * with an image model set up. Takes effect from the next build: switching the
+ * preview picture on for a game without one makes that build draw it.
+ */
+export async function updateStudioSettings(
+  ports: StudioSessionPorts,
+  gameId: string,
+  changes: StudioSettingsChanges,
+): Promise<StudioSettingsResult> {
+  const snapshot = await openStudioGame(ports, gameId);
+  // While planning, the settings come from the plan when it is built.
+  if (snapshot.planning) throw new StudioSessionError("still_planning");
+
+  const defined = Object.fromEntries(
+    Object.entries(changes).filter(([, value]) => value !== undefined),
+  ) as StudioSettingsChanges;
+  const game: StudioGame = { ...snapshot.game, ...defined };
+  const invalid = [
+    defined.title !== undefined && !game.title.trim() ? "title" : null,
+    defined.learningGoal !== undefined && !game.learningGoal.trim() ? "learningGoal" : null,
+    (defined.targetAgeMin !== undefined || defined.targetAgeMax !== undefined) &&
+    !isValidAgeRange(game.targetAgeMin, game.targetAgeMax)
+      ? "ages"
+      : null,
+  ].filter((field): field is string => field !== null);
+  if (invalid.length) throw new StudioSessionError("invalid_settings", invalid);
+
+  if (defined.generateBackgroundImage || defined.generatePreviewImage) {
+    const { hasImageProvider } = await checkStudioProviders(ports);
+    if (!hasImageProvider) throw new StudioSessionError("no_image_provider");
+  }
+
+  const isMappingNeeded =
+    (defined.successDefinition !== undefined && defined.successDefinition !== snapshot.game.successDefinition) ||
+    (defined.learningGoal !== undefined && defined.learningGoal !== snapshot.game.learningGoal);
+  const mapped = isMappingNeeded ? await mapSettingsSuccessDefinition(ports, game) : null;
+
+  const row = await patchGameSettings(ports, gameId, game, { mapped, isEndingPlanning: false });
+  return {
+    game: studioGameFromRow(row, { family: game.isFamily, kidIds: game.audienceIds }),
+    successMapping: !isMappingNeeded ? "unchanged" : mapped ? "mapped" : "failed",
+  };
 }
 
 // ----- Edit rounds -----------------------------------------------------------------

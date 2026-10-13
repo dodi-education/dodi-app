@@ -1,6 +1,6 @@
 {
   "name": "@dodi-education/cli",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "The dodi CLI: let your own AI agent build learning games and companion looks for your family on dodi.",
   "license": "AGPL-3.0-only",
   "author": "dodi",

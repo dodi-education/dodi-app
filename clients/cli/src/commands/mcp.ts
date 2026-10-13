@@ -113,6 +113,34 @@ export const TOOLS: ToolDef[] = [
     argv: (i) => ["studio", "open", String(i.game_id)],
   },
   {
+    name: "dodi_studio_settings",
+    description:
+      "Show the current game's settings, or change the ones you pass. Change settings only when the parent asks; never switch on a picture the parent switched off. Takes effect from the next build.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        title: str("Game title"),
+        learning_goal: str("What the kid should learn"),
+        success: str("How you'd know they learned it"),
+        ages: str("Age range, e.g. 5-8"),
+        perspective: { type: "string", enum: ["bird", "side", "isometric", "auto"] },
+        preview_image: { type: "string", enum: ["on", "off"], description: "dodi draws the game-list preview picture" },
+        background_image: { type: "string", enum: ["on", "off"], description: "dodi draws a background picture" },
+      },
+    },
+    argv: (i) => [
+      "studio",
+      "settings",
+      ...opt(i.title, "--title"),
+      ...opt(i.learning_goal, "--learning-goal"),
+      ...opt(i.success, "--success"),
+      ...opt(i.ages, "--ages"),
+      ...opt(i.perspective, "--perspective"),
+      ...opt(i.preview_image, "--preview-image"),
+      ...opt(i.background_image, "--background-image"),
+    ],
+  },
+  {
     name: "dodi_studio_activate",
     description: "Let the kids play the current game. Only when the parent asked for it.",
     inputSchema: { type: "object", properties: {} },

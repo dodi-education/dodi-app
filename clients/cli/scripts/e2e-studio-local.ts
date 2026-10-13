@@ -210,6 +210,19 @@ async function main(): Promise<void> {
     const show = await cli(["studio", "show"]);
     assert(show.json.stage === "built", "show: the game is built");
 
+    console.log("agent: settings of a game without picture settings (as CLI 0.1.0 pushed them)");
+    sql(`update games set metadata = metadata - 'generatePreviewImage' - 'generateBackgroundImage' || '{"createdWith":"dodi-cli"}' where id = '${gameId}'`);
+    const settings = await cli(["studio", "settings"]);
+    assert(settings.code === 0 && settings.json.previewImage === "off", "settings: the preview picture reads as off");
+    const noImageModel = await cli(["studio", "settings", "--preview-image", "on"]);
+    assert(noImageModel.code === 2 && String(noImageModel.json.error).includes("no image model"), `without an image model the picture can't be switched on (${String(noImageModel.json.error)})`);
+    const changed = await cli(["studio", "settings", "--title", "Dino Zählen", "--ages", "5-7", "--perspective", "side"]);
+    assert(changed.code === 0 && changed.json.title === "Dino Zählen" && changed.json.ages === "5-7", "settings saved");
+    const saved = sql(`select title || '|' || target_age_min || '|' || target_age_max || '|' || (metadata->>'perspective') || '|' || (metadata->>'createdWith') from games where id = '${gameId}'`).split("|");
+    assert(vault.decryptField(saved[0]) === "Dino Zählen", "the new title is sealed on the row");
+    assert(saved.slice(1).join("|") === "5|7|side|dodi-cli", "ages and perspective saved, other metadata kept");
+    assert((await cli(["studio", "settings", "--ages", "9-5"])).code === 2, "a reversed age range is refused");
+
     if (process.env.E2E_PUBLISH_GAME === "1") {
       console.log("agent: publish to dodi Discover (translated like the apps do)");
       sql(`update accounts set publication_handle = 'e2e${Date.now() % 100000}' where id = '${userId}'`);

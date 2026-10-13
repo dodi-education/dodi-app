@@ -13,7 +13,7 @@ import path from "node:path";
 import { validateCharacterAsset, type CharacterAssetReport } from "@dodi/character/asset-validator";
 import YAML from "yaml";
 
-import { parse, requirePositional } from "../lib/args";
+import { parse, requirePositional, showHelp } from "../lib/args";
 import { splitFrontMatter } from "../lib/game-project";
 import { CliError, EXIT, type Output } from "../lib/output";
 import { connect, type Connection } from "../lib/session";
@@ -264,6 +264,7 @@ function describeCheck(report: Awaited<ReturnType<typeof checkAsset>>): string {
 }
 
 export async function runAssets(argv: string[], out: Output): Promise<number> {
+  if (showHelp(argv, out, USAGE)) return EXIT.ok;
   const [sub, ...rest] = argv;
   switch (sub) {
     case "new": {

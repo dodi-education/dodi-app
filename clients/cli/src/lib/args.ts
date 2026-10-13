@@ -3,7 +3,7 @@ import { parseArgs, type ParseArgsConfig } from "node:util";
 
 type ParseArgsOptionsConfig = NonNullable<ParseArgsConfig["options"]>;
 
-import { CliError, EXIT } from "./output";
+import { CliError, EXIT, type Output } from "./output";
 
 export interface ParsedArgs {
   values: Record<string, string | boolean | undefined>;
@@ -34,4 +34,16 @@ export function requirePositional(positionals: string[], index: number, name: st
   const value = positionals[index];
   if (!value) throw new CliError(`Missing <${name}>`, EXIT.usage, usage);
   return value;
+}
+
+/**
+ * `--help` / `-h` anywhere before a `--`: prints the usage and returns true.
+ * Every command checks this first, before it touches the network or disk.
+ */
+export function showHelp(argv: string[], out: Output, usage: string): boolean {
+  const end = argv.indexOf("--");
+  const flags = end < 0 ? argv : argv.slice(0, end);
+  if (!flags.some((arg) => arg === "--help" || arg === "-h")) return false;
+  out.result({ usage }, () => usage);
+  return true;
 }

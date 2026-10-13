@@ -75,6 +75,17 @@ build your own edited version of it).
 - You can attach a reference picture: \`--image <file.png>\`.
 - A few rounds are normal. Stop when it is right; don't polish forever.
 
+## Settings (\`dodi studio settings\`)
+\`dodi studio settings\` shows the game's settings: title, learning goal,
+success definition, ages, perspective, and whether dodi draws the preview
+and background pictures. Change them only when the parent asks, and never
+switch a picture on that the parent switched off. A game without a preview
+picture (e.g. one made by hand) gets one like this:
+  dodi studio settings --preview-image on
+  dodi studio send "Make a preview picture for the game list"
+  dodi studio wait
+Settings take effect from the next build.
+
 ## When you are done
 Tell the parent what you made and that they can try it in the app. They
 decide whether the kids can play it (\`dodi studio activate\` only when they
@@ -97,6 +108,10 @@ dodi studio wait [--timeout <s>]     default 110 s; exit 3 = still building
 dodi studio show
 dodi studio stop | resume
 dodi studio open <game id>
+dodi studio settings [--title <t>] [--learning-goal <t>] [--success "<definition>"]
+                     [--ages <min>-<max>] [--perspective bird|side|isometric|auto]
+                     [--preview-image on|off] [--background-image on|off]
+                                     no flags: show them; only when the parent asks
 dodi studio activate
 
 ## Games
