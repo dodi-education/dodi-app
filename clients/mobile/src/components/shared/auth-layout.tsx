@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Image, KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, View } from "react-native";
+import { Image, KeyboardAvoidingView, Linking, Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTranslations } from "use-intl";
 import { authLayout } from "@dodi/ui-recipes";
@@ -8,6 +8,7 @@ import { legalUrl, SETTINGS_LEGAL_PAGES } from "@dodi/client-state/legal-links";
 import { Text } from "@/components/ui";
 import { SITE_URL } from "@/lib/env";
 import { useLocaleSetting } from "@/lib/intl";
+import { keyboardAvoidance } from "@/lib/keyboard-avoidance";
 
 import { PageBackground } from "./page-background";
 
@@ -43,7 +44,12 @@ export function AuthLayout({ children }: { children: ReactNode }) {
   const insets = useSafeAreaInsets();
   return (
     <PageBackground>
-      <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <KeyboardAvoidingView
+        className="flex-1"
+        // Pads on both platforms (edge to edge, Android's window no longer resizes). Full screen
+        // from the top; the content's bottom inset lies under the open keyboard.
+        {...keyboardAvoidance({ top: 0, bottomInset: insets.bottom })}
+      >
         <ScrollView
           keyboardShouldPersistTaps="handled"
           contentContainerClassName={authLayout.root}

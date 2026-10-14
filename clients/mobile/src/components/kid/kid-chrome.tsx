@@ -1,7 +1,7 @@
 import { type Href, usePathname, useRouter } from "expo-router";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import { type ReactNode, useEffect } from "react";
-import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from "react-native";
+import { Image, KeyboardAvoidingView, Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTranslations } from "use-intl";
 import { onBackOnline } from "@dodi/client-state/connectivity-store";
@@ -25,6 +25,7 @@ import { notifyCompanionInteraction } from "@/lib/companion-session";
 import { useDodiSessionStore } from "@/lib/dodi-session-store";
 import { APP_URL } from "@/lib/env";
 import { MAX_FONT_SCALE } from "@/lib/font-scale";
+import { keyboardAvoidance } from "@/lib/keyboard-avoidance";
 import { registerKidNavItem, remeasureKidNavItem } from "@/lib/kid-nav-rects";
 import { emitKidTabReselect } from "@/lib/kid-tab-reselect";
 import { endVoiceSession } from "@/lib/kid-voice";
@@ -40,6 +41,9 @@ import { KidSwitcher } from "./kid-switcher";
 import { KidText } from "./kid-text";
 
 const KEEP_AWAKE_TAG = "dodi-voice";
+
+/** The page's bottom padding (over the safe-area inset) that clears the absolutely positioned bottom nav. */
+const NAV_CLEARANCE = 96;
 
 const KID_NAV_ITEMS: { href: "/home" | "/games" | "/snapshots" | "/friends"; key: string; icon: IconName }[] = [
   { href: "/home", key: "home", icon: "home" },
@@ -210,12 +214,18 @@ export function KidChrome({ children }: { children: ReactNode }) {
   return (
     // Every touch keeps dodi awake (web: document click/touch/key listeners).
     <PageBackground onTouchStart={() => notifyCompanionInteraction()}>
-      <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <KeyboardAvoidingView
+        className="flex-1"
+        // Pads on both platforms (edge to edge, Android's window no longer resizes). Full screen
+        // from the top; the nav clearance and the bottom inset all lie under the open keyboard
+        // (the nav sits outside this view and the keyboard covers it).
+        {...keyboardAvoidance({ top: 0, bottomInset: NAV_CLEARANCE + insets.bottom })}
+      >
         <RefreshScope registry={refreshRegistry}>
           {isFullMode && !page ? (
             <View className="flex-1" style={{ paddingTop: insets.top }}>
               {header}
-              <View className={kidChrome.mainFull} style={{ paddingBottom: 96 + insets.bottom }}>
+              <View className={kidChrome.mainFull} style={{ paddingBottom: NAV_CLEARANCE + insets.bottom }}>
                 <View className={cn(kidChrome.mainFullInner, "flex-1")}>{children}</View>
               </View>
             </View>
@@ -227,7 +237,7 @@ export function KidChrome({ children }: { children: ReactNode }) {
               refreshControl={refreshControl}
             >
               {header}
-              <View className={kidChrome.main} style={{ paddingBottom: 96 + insets.bottom }}>
+              <View className={kidChrome.main} style={{ paddingBottom: NAV_CLEARANCE + insets.bottom }}>
                 {page ?? children}
               </View>
             </ScrollView>

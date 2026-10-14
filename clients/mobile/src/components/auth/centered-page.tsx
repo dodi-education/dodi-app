@@ -1,9 +1,10 @@
 import type { ReactNode } from "react";
-import { KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
+import { KeyboardAvoidingView, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { PageBackground } from "@/components/shared/page-background";
 import { cn } from "@/lib/cn";
+import { keyboardAvoidance } from "@/lib/keyboard-avoidance";
 
 /**
  * A full-height, vertically centered column over the page gradient: the web's
@@ -24,7 +25,12 @@ export function CenteredPage({
   const insets = useSafeAreaInsets();
   return (
     <PageBackground>
-      <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <KeyboardAvoidingView
+        className="flex-1"
+        // Pads on both platforms (edge to edge, Android's window no longer resizes). Full screen
+        // from the top; the content's bottom inset lies under the open keyboard.
+        {...keyboardAvoidance({ top: 0, bottomInset: insets.bottom })}
+      >
         <ScrollView
           keyboardShouldPersistTaps="handled"
           contentContainerClassName={cn("items-center justify-center", pageClassName)}

@@ -1,10 +1,12 @@
 import type { ReactNode } from "react";
-import { KeyboardAvoidingView, Platform, ScrollView } from "react-native";
+import { KeyboardAvoidingView, ScrollView } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { Refresher } from "@dodi/client-state/pull-refresh";
-import { shellContent } from "@dodi/ui-recipes";
+import { PARENT_TOP_BAR_HEIGHT, shellContent } from "@dodi/ui-recipes";
 
 import { useRefreshControl } from "@/components/shared/refresh-control";
 import { cn } from "@/lib/cn";
+import { keyboardAvoidance } from "@/lib/keyboard-avoidance";
 import { useRefreshOnPull } from "@/lib/refresh-scope";
 
 /**
@@ -26,9 +28,15 @@ export function ShellContent({
 }) {
   useRefreshOnPull("screen", onRefresh);
   const refreshControl = useRefreshControl();
+  const insets = useSafeAreaInsets();
 
   return (
-    <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === "ios" ? "padding" : undefined}>
+    <KeyboardAvoidingView
+      className="flex-1"
+      // Pads on both platforms (edge to edge, Android's window no longer resizes). The column
+      // sits under the shell's top bar and pads no safe-area inset (its bottom padding is fixed).
+      {...keyboardAvoidance({ top: PARENT_TOP_BAR_HEIGHT + insets.top, bottomInset: 0 })}
+    >
       <ScrollView
         keyboardShouldPersistTaps="handled"
         contentContainerClassName={cn(shellContent, className)}
