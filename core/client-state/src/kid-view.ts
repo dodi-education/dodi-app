@@ -243,3 +243,17 @@ export async function refreshKidHome(deps: KidHomeRefreshDeps, kidId: string): P
   }
   return hasProvider;
 }
+
+// ----- Header ------------------------------------------------------------------
+
+/** The kid home: dodi's stage (web route and app screen). */
+export const KID_HOME_PATH = "/home";
+
+/**
+ * The header's hearing (deaf mode) toggle shows only on the kid home. Volume
+ * stays on every kid view; elsewhere a tap on the compact dodi still toggles
+ * listening.
+ */
+export function isHearingToggleShown(pathname: string): boolean {
+  return pathname === KID_HOME_PATH;
+}

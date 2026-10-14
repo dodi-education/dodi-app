@@ -11,6 +11,7 @@ import {
   createCardRefreshScheduler,
   enterKidView,
   isCompanionInError,
+  isHearingToggleShown,
   kidPickAction,
   onKidViewMount,
   parseAvatarPin,
@@ -284,5 +285,14 @@ describe("refreshKidHome (pull to refresh)", () => {
     expect(isCompanionInError({ state: "disconnected", error: null, fatalError: true })).toBe(true);
     expect(isCompanionInError({ state: "disconnected", error: null, fatalError: false })).toBe(false);
     expect(isCompanionInError({ state: "active", error: "micPermissionNeeded", fatalError: false })).toBe(false);
+  });
+});
+
+describe("isHearingToggleShown", () => {
+  it("shows the hearing toggle on the kid home only", () => {
+    expect(isHearingToggleShown("/home")).toBe(true);
+    for (const path of ["/games", "/games/abc", "/snapshots", "/snapshots/abc", "/friends"]) {
+      expect(isHearingToggleShown(path)).toBe(false);
+    }
   });
 });

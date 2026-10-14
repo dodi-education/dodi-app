@@ -482,8 +482,8 @@ features:
       - "clients/mobile/src/adapters/audio-port.ts"
       - "clients/mobile/src/components/kid/companion-hearing-toggle.tsx"
     notes: >-
-      A header button beside the volume control toggles deaf mode (listening
-      on/off), next to tapping the companion. The app talks only while it is in
+      On the kid home, a header button beside the volume control toggles deaf
+      mode (listening on/off), next to tapping the companion. The app talks only while it is in
       the foreground (backgrounding ends the session). Echo cancellation: iOS voice processing on the audio engine and
       Android's VoiceCommunication input (patches/react-native-audio-api).
       The web's large-screen game panel (DodiFullGame) has no phone layout, so

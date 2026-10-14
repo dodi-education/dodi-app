@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTranslations } from "use-intl";
 import { onBackOnline } from "@dodi/client-state/connectivity-store";
 import { previewImageSource } from "@dodi/client-state/game-preview-image";
-import { onKidViewMount } from "@dodi/client-state/kid-view";
+import { isHearingToggleShown, onKidViewMount } from "@dodi/client-state/kid-view";
 import { startOfflineWarmup } from "@dodi/client-state/offline-warmup";
 import type { Kid } from "@dodi/types/database";
 import { kidChrome, kidGateHint, kidLoadingStage, kidNav } from "@dodi/ui-recipes";
@@ -188,9 +188,9 @@ export function KidChrome({ children }: { children: ReactNode }) {
           <KidSwitcher />
         </View>
         {isCompactShown ? <DodiCompact /> : null}
-        {/* Volume/mute and hearing are global companion properties: on every kid view. */}
+        {/* Volume/mute is a global companion property: on every kid view. The hearing toggle is home-only. */}
         <CompanionVolumeControl />
-        <CompanionHearingToggle />
+        {isHearingToggleShown(pathname) ? <CompanionHearingToggle /> : null}
       </View>
       {/* Just the lock, as the web's compact layout shows it (a 44pt box). */}
       <Pressable
