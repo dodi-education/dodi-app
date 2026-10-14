@@ -6,35 +6,43 @@ import type { ExpoConfig } from "expo/config";
 const MICROPHONE_PERMISSION =
   "Your child talks with the voice companion through the microphone. The app only listens while a conversation is on.";
 
+// APP_VARIANT=development builds the dev client as its own app ("dodi dev",
+// app.dodi.dev) so it installs next to the store version: separate icon,
+// storage, keychain and URL scheme.
+const IS_DEV_VARIANT = process.env.APP_VARIANT === "development";
+const BUNDLE_ID = IS_DEV_VARIANT ? "app.dodi.dev" : "app.dodi";
+const ICON_SUFFIX = IS_DEV_VARIANT ? "-dev" : "";
+
 /**
  * Expo config. Environment (EXPO_PUBLIC_*) is read by Expo from .env.local at
- * build time; see .env.local.example. Native identifiers are fixed here so
- * prebuild output is reproducible.
+ * build time; see .env.local.example. Native identifiers are fixed here (per
+ * variant) so prebuild output is reproducible.
  */
 const config: ExpoConfig = {
-  name: "dodi",
+  name: IS_DEV_VARIANT ? "dodi dev" : "dodi",
   slug: "dodi",
   owner: "birkeal",
-  scheme: "dodi",
+  scheme: IS_DEV_VARIANT ? "dodi-dev" : "dodi",
   version: "0.1.0",
   orientation: "default",
-  icon: "./assets/images/icon.png",
+  icon: `./assets/images/icon${ICON_SUFFIX}.png`,
   userInterfaceStyle: "light",
   ios: {
-    bundleIdentifier: "app.dodi",
+    bundleIdentifier: BUNDLE_ID,
     supportsTablet: true,
     deploymentTarget: "17.0",
     config: { usesNonExemptEncryption: true },
     infoPlist: {
       // Game Studio builds keep running as BGContinuedProcessingTask (iOS 26+);
-      // the module registers one identifier per build under this prefix.
-      BGTaskSchedulerPermittedIdentifiers: ["app.dodi.build.*"],
+      // the module registers one identifier per build under this prefix
+      // (derived from the runtime bundle id, so it must follow the variant).
+      BGTaskSchedulerPermittedIdentifiers: [`${BUNDLE_ID}.build.*`],
     },
   },
   android: {
-    package: "app.dodi",
+    package: BUNDLE_ID,
     adaptiveIcon: {
-      foregroundImage: "./assets/images/adaptive-icon.png",
+      foregroundImage: `./assets/images/adaptive-icon${ICON_SUFFIX}.png`,
       backgroundColor: "#F5F8FB",
     },
     // Merged in by dependencies but unused, and questioned in Play review of

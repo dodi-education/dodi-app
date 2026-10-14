@@ -24,6 +24,23 @@ pnpm --filter @dodi/mobile bundle:check   # full Android + iOS JS bundles, no SD
 `bundle:check` is the fastest proof that every import resolves in Metro (the
 pnpm workspace, NativeWind, package exports) without building native code.
 
+### Dev app next to the store app
+
+`APP_VARIANT=development` (set by `start`, `android`, `ios` and the EAS
+`development` profile) builds the dev client as a separate app: **dodi dev**,
+`app.dodi.dev`, scheme `dodi-dev://`, icon with a DEV badge. It installs
+alongside the store version with its own storage and keychain, so you sign in
+and unlock the vault in it separately. Release builds (`build:android*`, EAS
+`preview`/`production`) stay `app.dodi`.
+
+```bash
+pnpm --filter @dodi/mobile android   # once (and after native changes): prebuild --clean + install on the device
+pnpm --filter @dodi/mobile start     # day to day: Metro, the installed dev app loads JS live
+```
+
+Switching variants needs a clean prebuild (`expo run` reuses an existing
+`android/`), which the scripts above do.
+
 ## Native builds
 
 The `android/` and `ios/` folders are generated (`expo prebuild`) and not

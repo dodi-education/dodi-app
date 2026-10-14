@@ -5,9 +5,9 @@
   "license": "AGPL-3.0-only",
   "main": "index.ts",
   "scripts": {
-    "start": "expo start --dev-client",
-    "android": "expo run:android",
-    "ios": "expo run:ios",
+    "start": "APP_VARIANT=development expo start --dev-client",
+    "android": "APP_VARIANT=development expo prebuild --platform android --clean --no-install && APP_VARIANT=development expo run:android",
+    "ios": "APP_VARIANT=development expo prebuild --platform ios --clean --no-install && APP_VARIANT=development expo run:ios",
     "prebuild": "expo prebuild",
     "bundle:check": "expo export --platform android --platform ios --output-dir .expo-export --no-minify",
     "typecheck": "tsc --noEmit",
