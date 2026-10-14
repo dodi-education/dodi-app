@@ -5,7 +5,7 @@
  * passes the same hostname pinning as the web's. Invisible unless Cloudflare
  * needs the parent to act. Forms call `getToken()` right before a request.
  */
-import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { View } from "react-native";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 
@@ -47,6 +47,8 @@ function ensure(){
   widget=turnstile.render('#w',{sitekey:${JSON.stringify(siteKey)},action:${JSON.stringify(action)},
     execution:'execute',appearance:'interaction-only',
     callback:function(t){post({type:'token',token:t});},
+    'before-interactive-callback':function(){post({type:'interactive',isShown:true});},
+    'after-interactive-callback':function(){post({type:'interactive',isShown:false});},
     'error-callback':function(){post({type:'error'});return true;},
     'expired-callback':function(){turnstile.reset(widget);}});
   return true;
@@ -71,6 +73,8 @@ export const Captcha = forwardRef<CaptchaHandle, { action: CaptchaAction }>(func
   const load = useCaptchaStore((s) => s.load);
   const webRef = useRef<WebView>(null);
   const pending = useRef<Pending | null>(null);
+  // Whether Cloudflare needs the parent to act; until then the box takes no room.
+  const [isInteractive, setIsInteractive] = useState(false);
 
   useEffect(() => {
     void load();
@@ -104,7 +108,11 @@ export const Captcha = forwardRef<CaptchaHandle, { action: CaptchaAction }>(func
   if (!config || config.provider === null) return null;
 
   const onMessage = (event: WebViewMessageEvent): void => {
-    const message = JSON.parse(event.nativeEvent.data) as { type: string; token?: string };
+    const message = JSON.parse(event.nativeEvent.data) as { type: string; token?: string; isShown?: boolean };
+    if (message.type === "interactive") {
+      setIsInteractive(message.isShown === true);
+      return;
+    }
     const current = pending.current;
     if (!current) return;
     pending.current = null;
@@ -113,7 +121,15 @@ export const Captcha = forwardRef<CaptchaHandle, { action: CaptchaAction }>(func
   };
 
   return (
-    <View className="h-20 w-full" accessibilityElementsHidden={false}>
+    // Out of the form's layout until Cloudflare asks the parent to act (web: the
+    // container's `empty:hidden`), so no blank box sits above the submit button.
+    // The WebView stays mounted at full size so the invisible challenge keeps running.
+    <View
+      className={isInteractive ? "h-20 w-full" : "absolute h-20 w-full opacity-0"}
+      pointerEvents={isInteractive ? "auto" : "none"}
+      accessibilityElementsHidden={!isInteractive}
+      importantForAccessibility={isInteractive ? "auto" : "no-hide-descendants"}
+    >
       <WebView
         ref={webRef}
         source={{ html: widgetHtml(config.siteKey, action), baseUrl: CAPTCHA_ORIGIN }}
