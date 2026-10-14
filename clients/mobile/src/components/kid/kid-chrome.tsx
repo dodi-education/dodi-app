@@ -192,17 +192,14 @@ export function KidChrome({ children }: { children: ReactNode }) {
         <CompanionVolumeControl />
         <CompanionHearingToggle />
       </View>
+      {/* Just the lock, as the web's compact layout shows it (a 44pt box). */}
       <Pressable
         accessibilityRole="link"
         accessibilityLabel={t("switchToParentView")}
         onPress={switchToParent}
-        hitSlop={6}
         className={cn(kidChrome.parentLink, "active:opacity-70")}
       >
         <Icon name="lock" size={kidChrome.parentIcon.size} color="faint" />
-        <KidText className={kidChrome.parentLinkText} maxFontSizeMultiplier={MAX_FONT_SCALE.chrome}>
-          {t("parent")}
-        </KidText>
       </Pressable>
     </View>
   );

@@ -97,10 +97,12 @@ describe("kid components keep their classes after moving to @dodi/ui-recipes", (
       "flex items-center justify-between px-4 py-3 md:px-6 md:py-4",
     );
     expectSameClasses(cn(kidChrome.headerLeft, kidChrome.webHeaderLeft), "flex min-w-0 items-center gap-3");
+    // Since the header overlap fix: a 44pt box, the label hidden in the compact layout.
     expectSameClasses(
-      cn(kidChrome.parentLink, kidChrome.parentLinkText, kidChrome.webParentLink),
-      "flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-2 text-sm font-bold text-faint transition-colors hover:text-muted-foreground",
+      cn(kidChrome.parentLink, kidChrome.webParentLinkText, kidChrome.webParentLink),
+      "flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-1.5 rounded-lg px-2.5 py-2 text-sm font-bold text-faint transition-colors hover:text-muted-foreground",
     );
+    expectSameClasses(kidChrome.webParentLinkLabel, "compact:hidden");
     expectSameClasses(cn(kidChrome.main, kidChrome.webMain), "flex flex-1 flex-col items-center px-4 pb-24");
     expectSameClasses(cn(kidChrome.mainFull, kidChrome.webMainFull), "flex flex-1 flex-col px-4 pb-24");
     expectSameClasses(kidChrome.mainFullInner, "mx-auto w-full max-w-6xl");
@@ -408,7 +410,8 @@ describe("kid components keep their classes after moving to @dodi/ui-recipes", (
   });
   it("companion: compact dodi, listening pulse, volume control", () => {
     const c = companionCompact;
-    expectSameClasses(cn(c.webRoot, c.root), "flex min-w-0 items-center gap-2.5");
+    // Since the header overlap fix: never narrower than the button, the gap moved onto the bubble.
+    expectSameClasses(cn(c.webRoot, c.root), "flex min-w-10 items-center");
     expectSameClasses(
       cn(c.button, c.webButton),
       "relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-dodi-200 bg-white shadow-sm transition-shadow hover:shadow-md disabled:opacity-60",
@@ -437,7 +440,7 @@ describe("kid components keep their classes after moving to @dodi/ui-recipes", (
     expectSameClasses(c.liveRegion, "min-w-0");
     expectSameClasses(
       cn(c.bubble, c.webBubble),
-      "relative flex h-10 min-w-0 items-center rounded-full bg-white px-3.5 shadow-sm animate-in fade-in slide-in-from-left-2 duration-200",
+      "relative ml-2.5 flex h-10 min-w-0 items-center rounded-full bg-white px-3.5 shadow-sm animate-in fade-in slide-in-from-left-2 duration-200",
     );
     expectSameClasses(
       cn(c.bubbleTail, c.webBubbleTail),

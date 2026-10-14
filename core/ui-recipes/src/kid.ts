@@ -123,10 +123,20 @@ export const kidChrome = {
   webHeader: "flex md:px-6 md:py-4",
   headerLeft: "min-w-0 shrink flex-row items-center gap-3",
   webHeaderLeft: "flex",
-  /** "Parent": back to the parent area (behind its PIN). */
-  parentLink: "shrink-0 flex-row items-center gap-1.5 rounded-lg px-2.5 py-2",
-  parentLinkText: "text-sm font-bold text-faint",
+  /**
+   * "Parent": back to the parent area (behind its PIN). The box is 44pt itself,
+   * so the lock alone (compact layout) is still a full touch target.
+   */
+  parentLink: "min-h-11 min-w-11 shrink-0 flex-row items-center justify-center gap-1.5 rounded-lg px-2.5 py-2",
+  /** The web puts the label's text style on the link itself (the lock takes its color). */
+  webParentLinkText: "text-sm font-bold text-faint",
   webParentLink: "flex transition-colors hover:text-muted-foreground",
+  /**
+   * The "Parent" label: hidden in the compact layout, so a phone's crowded
+   * header shows only the lock (the link keeps its accessible name). The app
+   * always renders compact, so it shows only the lock and has no label.
+   */
+  webParentLinkLabel: "compact:hidden",
   parentIcon: { size: 15 },
   /** The page column above the bottom nav. */
   main: "flex-1 flex-col items-center px-4 pb-24",
@@ -421,7 +431,8 @@ export const thinkBubbles = {
 
 /** The header's compact companion (web: components/dodi/dodi-compact). */
 export const companionCompact = {
-  root: "min-w-0 shrink flex-row items-center gap-2.5",
+  /** Shrinks for the bubble's text, never below the button (its w-10). */
+  root: "min-w-10 shrink flex-row items-center",
   webRoot: "flex",
   button: "relative h-10 w-10 shrink-0 items-center justify-center rounded-full border border-dodi-200 bg-white",
   webButton: "flex shadow-sm transition-shadow hover:shadow-md disabled:opacity-60",
@@ -446,8 +457,11 @@ export const companionCompact = {
   errorDot: "bg-danger",
   /** The status bubble's live region (always present, empty when idle). */
   liveRegion: "min-w-0 shrink",
-  /** The status bubble beside the avatar while dodi is doing something. */
-  bubble: "relative h-10 min-w-0 shrink flex-row items-center rounded-full bg-white px-3.5",
+  /**
+   * The status bubble beside the avatar while dodi is doing something. The
+   * spacing from the avatar lives here, so an idle (empty) live region adds none.
+   */
+  bubble: "relative ml-2.5 h-10 min-w-0 shrink flex-row items-center rounded-full bg-white px-3.5",
   webBubble: "flex shadow-sm animate-in fade-in slide-in-from-left-2 duration-200",
   /** Its tail pointing left at the avatar (a rotated square, centred vertically). */
   bubbleTail: "absolute -left-1 top-1/2 size-2.5 rotate-45 rounded-[2px] bg-white",

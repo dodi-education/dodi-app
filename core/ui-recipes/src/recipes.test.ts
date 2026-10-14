@@ -70,3 +70,35 @@ describe("ui recipes", () => {
     expect(recipes.kidAvatarColor(-1)).toEqual(recipes.kidAvatarPalette[3]);
   });
 });
+
+/**
+ * Bug: in the kid header the dodi button overlapped the volume button on a
+ * phone. Once the hearing toggle shows, the row (kid pill, dodi, volume,
+ * hearing, Parent) is wider than a phone, and dodi's box was the only part
+ * allowed to shrink: it narrowed below its button, which then overflowed onto
+ * the volume button. Its gap also applied to the always-present (usually
+ * empty) status-bubble live region, so an idle dodi sat 10pt further from the
+ * volume button than the header's other buttons sit apart.
+ */
+describe("kid header", () => {
+  const classes = (value: string): string[] => value.split(/\s+/);
+
+  it("never narrows dodi's box below its button", () => {
+    const buttonWidth = /(?:^|\s)w-(\S+)/.exec(recipes.companionCompact.button)?.[1];
+    expect(buttonWidth).toBeDefined();
+    expect(classes(recipes.companionCompact.root)).toContain(`min-w-${buttonWidth}`);
+    expect(classes(recipes.companionCompact.root)).not.toContain("min-w-0");
+  });
+
+  it("puts no space after dodi while its status bubble is empty: the bubble carries its own", () => {
+    expect(recipes.companionCompact.root).not.toMatch(/(^|\s)gap-/);
+    expect(recipes.companionCompact.bubble).toMatch(/(^|\s)ml-/);
+  });
+
+  it("frees the row on phones: the Parent link is just the lock in the compact layout", () => {
+    // The app always renders the compact layout, so the label is web-only…
+    expect(Object.keys(recipes.kidChrome)).not.toContain("parentLinkText");
+    // …and the web hides it there too.
+    expect(classes(recipes.kidChrome.webParentLinkLabel)).toContain("compact:hidden");
+  });
+});

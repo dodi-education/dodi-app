@@ -207,11 +207,13 @@ export function KidChrome({
             <KidSwitcher />
           </div>
           {/* Full-mode game views hide the Dodi side panel below lg, so the
-              compact header avatar takes over as dodi's presence there. */}
+              compact header avatar takes over as dodi's presence there. Its
+              wrapper may shrink (the bubble text truncates), never below the
+              avatar button. */}
           {displayMode === "compact" ? (
             <DodiCompact />
           ) : isFullMode ? (
-            <div className="min-w-0 lg:hidden">
+            <div className="min-w-10 lg:hidden">
               <DodiCompact />
             </div>
           ) : null}
@@ -226,13 +228,13 @@ export function KidChrome({
           onClick={handleSwitchToParent}
           className={cn(
             kidChrome.parentLink,
-            kidChrome.parentLinkText,
+            kidChrome.webParentLinkText,
             kidChrome.webParentLink,
           )}
           aria-label={t("switchToParentView")}
         >
           <Icon name="lock" size={kidChrome.parentIcon.size} />
-          {t("parent")}
+          <span className={kidChrome.webParentLinkLabel}>{t("parent")}</span>
         </a>
       </header>
 
