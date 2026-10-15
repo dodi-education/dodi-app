@@ -15,6 +15,10 @@ import {
   CAPTCHA_PROVIDER,
   getCaptchaConfig,
 } from "@/lib/captcha";
+import {
+  sendAccountExistsNotice,
+  verifiedAccountOtpGuard,
+} from "@/lib/account-exists-notice";
 import { serviceDb } from "@/lib/db";
 import { sendEmail } from "@/lib/email";
 import {
@@ -213,6 +217,9 @@ export const auth = betterAuth({
     requireEmailVerification: true,
     minPasswordLength: 8,
     autoSignIn: false,
+    // A registered address gets no code from sign-up (the answer stays the
+    // generic success): its owner is told by email instead.
+    onExistingUserSignUp: ({ user }) => sendAccountExistsNotice(user),
   },
   emailVerification: {
     sendOnSignUp: true,
@@ -248,6 +255,7 @@ export const auth = betterAuth({
       sendVerificationOTP,
     }),
     passwordOps(),
+    verifiedAccountOtpGuard(),
     ...captchaPlugins,
   ],
 });

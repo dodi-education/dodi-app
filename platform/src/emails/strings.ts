@@ -303,3 +303,48 @@ const AUTH_CODE: Record<EmailLocale, AuthCodeCopy> = {
 export function authCodeCopy(locale: EmailLocale): AuthCodeCopy {
   return AUTH_CODE[locale] ?? AUTH_CODE.en;
 }
+
+/**
+ * "This address already has an account" notice. Sent instead of a confirm code
+ * when someone signs up, or asks for a confirm code, with an address that is
+ * already registered: the sign-up page answers the same either way (no account
+ * enumeration), so the owner learns here what happened and how to get in.
+ */
+export interface AccountExistsCopy {
+  subject: string;
+  preview: string;
+  heading: string;
+  body: string;
+  signInButton: string;
+  /** Lead-in before the reset link. */
+  forgotPassword: string;
+  resetLink: string;
+  ignore: string;
+}
+
+const ACCOUNT_EXISTS: Record<EmailLocale, AccountExistsCopy> = {
+  en: {
+    subject: "You already have a dodi account",
+    preview: "Someone tried to sign up with this address, which already has a dodi account.",
+    heading: "You already have a dodi account",
+    body: "Someone, hopefully you, just tried to create a dodi account with this email address. There already is an account for it, so no new one was created. Sign in with your password to continue.",
+    signInButton: "Sign in",
+    forgotPassword: "Forgot your password?",
+    resetLink: "Reset it here.",
+    ignore: "If this wasn't you, you can safely ignore this email. Nothing has changed on your account.",
+  },
+  de: {
+    subject: "Du hast bereits ein dodi-Konto",
+    preview: "Jemand wollte sich mit dieser Adresse registrieren, für die es bereits ein dodi-Konto gibt.",
+    heading: "Du hast bereits ein dodi-Konto",
+    body: "Jemand, hoffentlich du, wollte gerade ein dodi-Konto mit dieser E-Mail-Adresse erstellen. Für diese Adresse gibt es bereits ein Konto, daher wurde kein neues angelegt. Melde dich mit deinem Passwort an, um fortzufahren.",
+    signInButton: "Anmelden",
+    forgotPassword: "Passwort vergessen?",
+    resetLink: "Hier zurücksetzen.",
+    ignore: "Wenn du das nicht warst, kannst du diese E-Mail ignorieren. An deinem Konto hat sich nichts geändert.",
+  },
+};
+
+export function accountExistsCopy(locale: EmailLocale): AccountExistsCopy {
+  return ACCOUNT_EXISTS[locale] ?? ACCOUNT_EXISTS.en;
+}

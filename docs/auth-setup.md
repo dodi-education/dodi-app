@@ -165,6 +165,23 @@ always pass (`TURNSTILE_SITE_KEY=1x00000000000000000000AA`,
   that **every well-formed request answers `{ ok: true }`**, whether or not the
   address is already registered. Sign-up therefore cannot be used to probe for
   accounts.
+- A **registered address never receives a confirm code** from the sign-up
+  flow. Its owner gets a "you already have an account" notice instead
+  (`emails/account-exists.tsx`, sent by `lib/account-exists-notice.ts`): sign
+  in, or reset the password. Two paths send it, with answers identical to the
+  new-address case:
+  - `onExistingUserSignUp` when `/api/auth/register` hits a registered address;
+  - the register page's "Resend code" (`send-verification-otp`, type
+    `email-verification`) for an already **verified** account. A before hook
+    (`verifiedAccountOtpGuard`) answers `{ success: true }` without creating a
+    code. Without it, entering that code auto-signed the visitor in to the
+    existing account and the register page tried to store a new vault on it.
+    Unverified accounts still get their code (the login page finishing a
+    confirmation).
+
+  The notice is throttled to 3 per account per hour
+  (`account_rate_limit_windows`, bucket `account_exists_notice`), so the form
+  cannot be used to flood someone's inbox.
 - Before any user row is inserted, the **registration gate** in
   `platform/src/lib/auth.ts` reads `REGISTRATION_MODE` and validates the invite
   code via `is_invite_code_active`. It runs for **every** new user, so it cannot
