@@ -5,12 +5,12 @@
 <h1 align="center">Dodi</h1>
 
 <p align="center">
-  A personalized, AI-powered learning platform for kids — guided by <strong>Dodi</strong>, a friendly blue robot dodo bird.
+  A personalized, AI-powered learning platform for kids — guided by <strong>dodi</strong>, a friendly blue robot dodo bird.
 </p>
 
 ---
 
-## What is Dodi?
+## What is dodi?
 
 Dodi turns screen time into personalized, playful education. At its center is **Dodi**, a blue robot dodo bird companion who talks with kids (by text or voice), builds educational games tailored to each child, and adapts its language, tone, and difficulty to the child's age, skills, and interests.
 
