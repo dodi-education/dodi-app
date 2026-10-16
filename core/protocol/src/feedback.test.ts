@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  dataUrlByteLength,
+  FEEDBACK_IMAGE_MAX_BYTES,
   FEEDBACK_MESSAGE_MAX_LENGTH,
   FEEDBACK_SENDER_NAME_MAX_LENGTH,
   SendFeedbackRequestSchema,
@@ -57,5 +59,42 @@ describe("SendFeedbackRequestSchema", () => {
     expect(SendFeedbackRequestSchema.safeParse({ ...VALID, category: "praise" }).success).toBe(false);
     expect(SendFeedbackRequestSchema.safeParse({ ...VALID, clientPlatform: "tv" }).success).toBe(false);
     expect(SendFeedbackRequestSchema.safeParse({ ...VALID, gameId: "not-a-uuid" }).success).toBe(false);
+  });
+
+  it("accepts an attached JPEG, PNG or WebP data URL", () => {
+    for (const type of ["jpeg", "png", "webp"]) {
+      const image = `data:image/${type};base64,/9j/4AAQ`;
+      expect(SendFeedbackRequestSchema.parse({ ...VALID, image }).image).toBe(image);
+    }
+  });
+
+  it("refuses an SVG, a plain URL or broken base64 as the image", () => {
+    for (const image of [
+      "data:image/svg+xml;base64,PHN2Zz4=",
+      "https://example.com/a.png",
+      "data:image/png;base64,not base64!",
+      "data:image/png,rawbytes",
+    ]) {
+      expect(SendFeedbackRequestSchema.safeParse({ ...VALID, image }).success).toBe(false);
+    }
+  });
+
+  it("caps the image at the byte limit", () => {
+    // 2 MiB = 699050 full base64 groups plus one group holding two bytes.
+    const groups = Math.floor(FEEDBACK_IMAGE_MAX_BYTES / 3);
+    const fits = `data:image/jpeg;base64,${"A".repeat(groups * 4)}AAA=`;
+    expect(dataUrlByteLength(fits)).toBe(FEEDBACK_IMAGE_MAX_BYTES);
+    expect(SendFeedbackRequestSchema.safeParse({ ...VALID, image: fits }).success).toBe(true);
+    const over = `data:image/jpeg;base64,${"A".repeat((groups + 1) * 4)}`;
+    expect(dataUrlByteLength(over)).toBe(FEEDBACK_IMAGE_MAX_BYTES + 1);
+    expect(SendFeedbackRequestSchema.safeParse({ ...VALID, image: over }).success).toBe(false);
+  });
+});
+
+describe("dataUrlByteLength", () => {
+  it("counts the decoded bytes, padding included", () => {
+    expect(dataUrlByteLength("data:image/png;base64,AAAA")).toBe(3);
+    expect(dataUrlByteLength("data:image/png;base64,AAA=")).toBe(2);
+    expect(dataUrlByteLength("data:image/png;base64,AA==")).toBe(1);
   });
 });

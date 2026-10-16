@@ -15,6 +15,7 @@ const BASE: FeedbackMessageEmailProps = {
   gameId: "game-1",
   gameTitle: "Space Quiz",
   clientPlatform: "web",
+  image: null,
 };
 
 async function text(props: FeedbackMessageEmailProps): Promise<string> {
@@ -31,6 +32,12 @@ describe("FeedbackMessageEmail", () => {
     expect(body).toContain("The quiz asks about horror movies.");
     expect(body).toContain("Reply to this email to answer Sam directly.");
     expect(body).toContain("feedback-1");
+  });
+
+  it("names an attached image", async () => {
+    const body = await text({ ...BASE, image: { filename: "feedback-1a2b3c4d.jpg", byteSize: 421_888 } });
+    expect(body).toContain("Image attached: feedback-1a2b3c4d.jpg (412 KB)");
+    expect(await text(BASE)).not.toContain("Image attached");
   });
 
   it("names a private game by id only", async () => {

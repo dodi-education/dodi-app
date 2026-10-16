@@ -317,6 +317,20 @@ export interface ErrorLogs {
   user_agent: string | null;
 }
 
+export interface FeedbackMessageImages {
+  /**
+   * Size of image_bytes, at most 2 MiB.
+   */
+  byte_size: number;
+  /**
+   * image/jpeg, image/png or image/webp, as detected from the bytes (never SVG).
+   */
+  content_type: "image/jpeg" | "image/png" | "image/webp";
+  created_at: Generated<Timestamp>;
+  feedback_message_id: string;
+  image_bytes: Uint8Array;
+}
+
 export interface FeedbackMessages {
   account_id: string;
   category: "feature_request" | "bug_report" | "inappropriate_content" | "other";
@@ -798,6 +812,7 @@ export interface DB {
   companions: Companions;
   custom_tricks: CustomTricks;
   error_logs: ErrorLogs;
+  feedback_message_images: FeedbackMessageImages;
   feedback_messages: FeedbackMessages;
   friendships: Friendships;
   game_favorites: GameFavorites;

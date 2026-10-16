@@ -22,6 +22,8 @@
     "transcripts.status": "Generated<'open' | 'processed'>",
     "feedback_messages.category": "'feature_request' | 'bug_report' | 'inappropriate_content' | 'other'",
     "feedback_messages.client_platform": "'web' | 'mobile'",
+    "feedback_message_images.content_type": "'image/jpeg' | 'image/png' | 'image/webp'",
+    "feedback_message_images.image_bytes": "Uint8Array",
     "character_assets.kind": "'avatar' | 'accessory'",
     "published_character_assets.kind": "'avatar' | 'accessory'",
     "authorized_clients.kind": "'browser' | 'app' | 'robot' | 'agent'",

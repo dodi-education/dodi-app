@@ -3,6 +3,8 @@
  * `capture="environment"` camera input): photos from the camera or the
  * library as data URLs, downscaled with the studio's image ops like the web's
  * `downscaleDataUrl`. Anything unreadable is skipped silently, as on the web.
+ * `pickImageSource` hands one picked image over as it is, for callers that
+ * prepare it themselves (feedback attachments).
  */
 import * as ImagePicker from "expo-image-picker";
 import type { ImageBound } from "@dodi/studio/ports";
@@ -55,4 +57,21 @@ export async function pickImages(bound: ImageBound, limit: number): Promise<stri
   });
   if (result.canceled) return [];
   return downscaleAll(result.assets, bound);
+}
+
+/**
+ * Pick one image from the library without scaling it, with its file size when
+ * the platform reports one. Null when cancelled or unreadable.
+ */
+export async function pickImageSource(): Promise<{ dataUrl: string; byteSize: number | null } | null> {
+  const result = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ["images"],
+    base64: true,
+    quality: 0.9,
+  });
+  if (result.canceled) return null;
+  const asset = result.assets[0];
+  if (!asset || (asset.type && asset.type !== "image")) return null;
+  const dataUrl = toDataUrl(asset);
+  return dataUrl ? { dataUrl, byteSize: asset.fileSize ?? null } : null;
 }

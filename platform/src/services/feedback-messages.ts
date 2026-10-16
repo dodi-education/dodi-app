@@ -3,16 +3,24 @@
  * the ops console's inbox over them.
  *
  * A message is plaintext on purpose (the parent writes to the operator), so
- * the console may read its text. The one sealed thing it can point at is a
- * game: a title is only ever shown for plaintext games (system or Discover),
- * never a private game's ciphertext.
+ * the console may read its text, and its optional image (a screenshot, say).
+ * The one sealed thing it can point at is a game: a title is only ever shown
+ * for plaintext games (system or Discover), never a private game's ciphertext.
  */
 import { sql } from "kysely";
 import { z } from "zod/v4";
 
-import type { FeedbackCategory, FeedbackClientPlatform, FeedbackMessage } from "@dodi/types/database";
+import type {
+  FeedbackCategory,
+  FeedbackClientPlatform,
+  FeedbackImageContentType,
+  FeedbackMessage,
+} from "@dodi/types/database";
+
+import { FEEDBACK_IMAGE_MAX_BYTES } from "@dodi/protocol/feedback";
 
 import type { Db } from "@/lib/db";
+import { detectRasterImageType } from "@/lib/raster-image";
 
 import { OPS_LIST_DEFAULT_LIMIT, OPS_LIST_MAX_LIMIT } from "./ops-lists";
 
@@ -23,6 +31,28 @@ export interface FeedbackMessageInput {
   message: string;
   gameId: string | null;
   clientPlatform: FeedbackClientPlatform;
+  /** Absent or null: no image attached. */
+  image?: FeedbackImage | null;
+}
+
+/** An attached image: its bytes and the type they were detected as. */
+export interface FeedbackImage {
+  contentType: FeedbackImageContentType;
+  bytes: Uint8Array;
+}
+
+/**
+ * Decode an attached image (a data URL the request schema already bounded)
+ * and check it really is the type it claims: the bytes' own signature must be
+ * JPEG, PNG or WebP and match the label. Null for anything else.
+ */
+export function decodeFeedbackImage(dataUrl: string): FeedbackImage | null {
+  const match = /^data:(image\/[a-z]+);base64,(.*)$/s.exec(dataUrl);
+  if (!match) return null;
+  const bytes = Buffer.from(match[2], "base64");
+  if (bytes.byteLength < 1 || bytes.byteLength > FEEDBACK_IMAGE_MAX_BYTES) return null;
+  const contentType = detectRasterImageType(bytes);
+  return contentType && contentType === match[1] ? { contentType, bytes } : null;
 }
 
 /** A game id in the message that the sender cannot refer to. */
@@ -37,7 +67,8 @@ export class FeedbackTargetError extends Error {
  * Store a message. Runs on the service handle, scoped to the sender: the game
  * must be one they can see, which is their own, a system game or a live
  * Discover game (a report about a Discover game points at another family's
- * published row, which RLS would hide).
+ * published row, which RLS would hide). A message and its image are stored
+ * together or not at all.
  */
 export async function createFeedbackMessage(
   db: Db,
@@ -59,18 +90,33 @@ export async function createFeedbackMessage(
     if (!game) throw new FeedbackTargetError("Unknown game");
   }
 
-  return db
-    .insertInto("feedback_messages")
-    .values({
-      account_id: input.accountId,
-      sender_name: input.senderName,
-      category: input.category,
-      message: input.message,
-      game_id: input.gameId,
-      client_platform: input.clientPlatform,
-    })
-    .returningAll()
-    .executeTakeFirstOrThrow();
+  const insert = async (trx: Db): Promise<FeedbackMessage> => {
+    const feedback = await trx
+      .insertInto("feedback_messages")
+      .values({
+        account_id: input.accountId,
+        sender_name: input.senderName,
+        category: input.category,
+        message: input.message,
+        game_id: input.gameId,
+        client_platform: input.clientPlatform,
+      })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    if (input.image) {
+      await trx
+        .insertInto("feedback_message_images")
+        .values({
+          feedback_message_id: feedback.id,
+          content_type: input.image.contentType,
+          byte_size: input.image.bytes.byteLength,
+          image_bytes: input.image.bytes,
+        })
+        .execute();
+    }
+    return feedback;
+  };
+  return input.image ? db.transaction().execute(insert) : insert(db);
 }
 
 /**
@@ -89,8 +135,8 @@ export async function publicGameTitle(db: Db, gameId: string): Promise<string | 
 }
 
 // ---------------------------------------------------------------------------
-// Ops console: GET /api/internal/feedback (+ /counts, /[id]) and the
-// read / solve / reopen mutations. Cross-account reads on the service handle,
+// Ops console: GET /api/internal/feedback (+ /counts, /[id], /[id]/image) and
+// the read / solve / reopen mutations. Cross-account reads on the service handle,
 // so every list is bounded by the page limit.
 // ---------------------------------------------------------------------------
 
@@ -130,6 +176,8 @@ export interface OpsFeedbackRow {
   messagePreview: string;
   gameId: string | null;
   clientPlatform: FeedbackClientPlatform;
+  /** An image is attached; the bytes come from /api/internal/feedback/[id]/image. */
+  hasImage: boolean;
   createdAt: string;
   readAt: string | null;
   solvedAt: string | null;
@@ -146,10 +194,18 @@ export interface OpsFeedbackListResponse {
 }
 
 // SYNC TOUCHPOINT: dodi-com/core/ops-contract/src/platform.ts
-export interface OpsFeedbackDetail extends Omit<OpsFeedbackRow, "messagePreview"> {
+export interface OpsFeedbackImage {
+  contentType: FeedbackImageContentType;
+  byteSize: number;
+}
+
+// SYNC TOUCHPOINT: dodi-com/core/ops-contract/src/platform.ts
+export interface OpsFeedbackDetail extends Omit<OpsFeedbackRow, "messagePreview" | "hasImage"> {
   message: string;
   /** The game's public title; NULL for a private or deleted game. */
   gameTitle: string | null;
+  /** The attached image's metadata (never its bytes); NULL when there is none. */
+  image: OpsFeedbackImage | null;
 }
 
 /** The console's badge and filter numbers, in one scan. */
@@ -175,7 +231,8 @@ export async function listOpsFeedback(
 ): Promise<OpsFeedbackListResponse> {
   let base = db
     .selectFrom("feedback_messages as f")
-    .innerJoin("accounts as a", "a.id", "f.account_id");
+    .innerJoin("accounts as a", "a.id", "f.account_id")
+    .leftJoin("feedback_message_images as i", "i.feedback_message_id", "f.id");
   if (query.state === "open") base = base.where("f.solved_at", "is", null);
   if (query.state === "solved") base = base.where("f.solved_at", "is not", null);
 
@@ -192,6 +249,7 @@ export async function listOpsFeedback(
         sql<string>`left(f.message, ${PREVIEW_LENGTH})`.as("message_preview"),
         "f.game_id",
         "f.client_platform",
+        "i.byte_size as image_byte_size",
         "f.created_at",
         "f.read_at",
         "f.solved_at",
@@ -214,6 +272,7 @@ export async function listOpsFeedback(
       messagePreview: row.message_preview,
       gameId: row.game_id,
       clientPlatform: row.client_platform,
+      hasImage: row.image_byte_size !== null,
       createdAt: row.created_at,
       readAt: row.read_at,
       solvedAt: row.solved_at,
@@ -231,6 +290,7 @@ export async function getOpsFeedback(db: Db, id: string): Promise<OpsFeedbackDet
   const row = await db
     .selectFrom("feedback_messages as f")
     .innerJoin("accounts as a", "a.id", "f.account_id")
+    .leftJoin("feedback_message_images as i", "i.feedback_message_id", "f.id")
     .select([
       "f.id",
       "f.account_id",
@@ -240,6 +300,8 @@ export async function getOpsFeedback(db: Db, id: string): Promise<OpsFeedbackDet
       "f.message",
       "f.game_id",
       "f.client_platform",
+      "i.content_type as image_content_type",
+      "i.byte_size as image_byte_size",
       "f.created_at",
       "f.read_at",
       "f.solved_at",
@@ -259,11 +321,25 @@ export async function getOpsFeedback(db: Db, id: string): Promise<OpsFeedbackDet
     gameId: row.game_id,
     gameTitle: row.game_id ? await publicGameTitle(db, row.game_id) : null,
     clientPlatform: row.client_platform,
+    image:
+      row.image_content_type !== null && row.image_byte_size !== null
+        ? { contentType: row.image_content_type, byteSize: row.image_byte_size }
+        : null,
     createdAt: row.created_at,
     readAt: row.read_at,
     solvedAt: row.solved_at,
     solvedByStaffEmail: row.solved_by_staff_email,
   };
+}
+
+/** A message's attached image, bytes included, or null when there is none. */
+export async function getOpsFeedbackImage(db: Db, id: string): Promise<FeedbackImage | null> {
+  const row = await db
+    .selectFrom("feedback_message_images")
+    .select(["content_type", "image_bytes"])
+    .where("feedback_message_id", "=", id)
+    .executeTakeFirst();
+  return row ? { contentType: row.content_type, bytes: row.image_bytes } : null;
 }
 
 /** What a staff action did: anything but ok changed nothing. */

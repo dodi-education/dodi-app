@@ -6,7 +6,8 @@
  * Everything here is what the parent chose to send: their name, the category
  * and their message, plus the account email so the team can answer (the email
  * goes out with Reply-To set to it). A game title appears only for plaintext
- * games (system or Discover); a private game is named by id alone.
+ * games (system or Discover); a private game is named by id alone. An
+ * attached image travels as a file attachment of the email, named here.
  */
 import { Heading, Text } from "@react-email/components";
 
@@ -73,6 +74,12 @@ export interface FeedbackMessageEmailProps {
   /** Public title for system and Discover games; null for private games. */
   gameTitle: string | null;
   clientPlatform: FeedbackClientPlatform;
+  /** The attached image's file name and size; null when there is none. */
+  image: { filename: string; byteSize: number } | null;
+}
+
+function kilobytes(bytes: number): string {
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
 
 export function FeedbackMessageEmail({
@@ -86,6 +93,7 @@ export function FeedbackMessageEmail({
   gameId,
   gameTitle,
   clientPlatform,
+  image,
 }: FeedbackMessageEmailProps) {
   const label = FEEDBACK_CATEGORY_LABEL[category];
   return (
@@ -109,6 +117,11 @@ export function FeedbackMessageEmail({
         </Text>
       ) : null}
       <Text style={quoteStyle}>{message}</Text>
+      {image ? (
+        <Text style={metaStyle}>
+          Image attached: {image.filename} ({kilobytes(image.byteSize)})
+        </Text>
+      ) : null}
       {accountEmail ? (
         <Text style={metaStyle}>Reply to this email to answer {senderName} directly.</Text>
       ) : null}

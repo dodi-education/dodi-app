@@ -111,6 +111,15 @@ export const dialogField = {
   note: "text-xs text-muted-foreground",
 } as const;
 
+/** An image attached in a dialog (feedback): its preview, with a button that removes it. */
+export const dialogImage = {
+  box: "relative self-start",
+  image: "h-24 w-24 rounded-lg border border-border",
+  webImage: "block object-cover",
+  remove: "absolute -right-2 -top-2 h-6 w-6 items-center justify-center rounded-full bg-ink",
+  webRemove: "flex text-white transition-colors hover:bg-danger",
+} as const;
+
 /** Family / kid audience pills (share and import dialogs). */
 export const audiencePill = {
   row: "flex-row flex-wrap gap-2",

@@ -1,4 +1,4 @@
-import { TextInput, View } from "react-native";
+import { Image, Pressable, TextInput, View } from "react-native";
 import { useTranslations } from "use-intl";
 import {
   FEEDBACK_CATEGORIES,
@@ -7,27 +7,32 @@ import {
   type FeedbackCategory,
   type FeedbackDraft,
 } from "@dodi/client-state/feedback";
-import { dialogField, textarea } from "@dodi/ui-recipes";
+import { dialogField, dialogImage, textarea } from "@dodi/ui-recipes";
 
-import { Input, Select, Text } from "@/components/ui";
+import { Button, Icon, Input, Select, Text } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { fontFamilyFor } from "@/lib/fonts";
 
 const AREA_CLASS = cn(textarea.box, textarea.text);
 
 /**
- * The feedback dialog's form: the sender's name, the category and the
- * message, with the note that it reaches the team in readable form. Web:
- * components/parent/feedback-fields.
+ * The feedback dialog's form: the sender's name, the category, the message
+ * and an optional image from the photo library, with the note that it all
+ * reaches the team in readable form. Web: components/parent/feedback-fields.
  */
 export function FeedbackFields({
   draft,
   disabled,
+  isPreparingImage,
   onChange,
+  onPickImage,
 }: {
   draft: FeedbackDraft;
   disabled: boolean;
+  isPreparingImage: boolean;
   onChange: (patch: Partial<FeedbackDraft>) => void;
+  /** Picks and prepares an image, then puts it into the draft (feedback-dialog). */
+  onPickImage: () => void;
 }) {
   const t = useTranslations("feedback");
   return (
@@ -74,8 +79,45 @@ export function FeedbackFields({
           style={{ fontFamily: fontFamilyFor(AREA_CLASS) }}
           onChangeText={(message) => onChange({ message })}
         />
-        <Text className={dialogField.hint}>{t("privacyHint")}</Text>
       </View>
+      <View className={dialogField.box}>
+        <Text className={dialogField.label}>{t("imageLabel")}</Text>
+        {draft.image ? (
+          <View className={dialogImage.box}>
+            <Image
+              source={{ uri: draft.image }}
+              accessible
+              accessibilityLabel={t("imageAlt")}
+              resizeMode="cover"
+              className={dialogImage.image}
+            />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t("removeImage")}
+              disabled={disabled}
+              hitSlop={10}
+              onPress={() => onChange({ image: null })}
+              className={cn(dialogImage.remove, "active:bg-danger")}
+            >
+              <Icon name="close" size={12} stroke={3} color="primary-foreground" />
+            </Pressable>
+          </View>
+        ) : (
+          <Button
+            variant="outline"
+            size="sm"
+            icon="photo"
+            className="self-start"
+            isLoading={isPreparingImage}
+            disabled={disabled || isPreparingImage}
+            onPress={onPickImage}
+          >
+            {isPreparingImage ? t("imagePreparing") : t("attachImage")}
+          </Button>
+        )}
+        <Text className={dialogField.hint}>{t("imageHint")}</Text>
+      </View>
+      <Text className={dialogField.hint}>{t("privacyHint")}</Text>
     </>
   );
 }

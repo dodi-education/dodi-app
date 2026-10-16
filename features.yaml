@@ -276,7 +276,7 @@ features:
     title: Give feedback (feature requests, bug reports, inappropriate content, other)
     web: done
     mobile: done
-    core: [client-state, protocol]
+    core: [client-state, protocol, ui-recipes]
     web_paths:
       - "clients/web/src/components/parent/feedback-dialog.tsx"
       - "clients/web/src/components/parent/feedback-fields.tsx"
@@ -290,7 +290,10 @@ features:
       (category inappropriate content, game attached), the in-app flagging Google Play
       (AI-generated content) and the App Store (UGC) require. POST /api/feedback into
       feedback_messages, emailed to SYSTEM_NOTIFICATION_EMAIL with Reply-To set to the
-      account email, and handled in the ops console's Feedback inbox.
+      account email, and handled in the ops console's Feedback inbox. One optional image
+      (web: file picker or paste into the message; mobile: photo library), re-encoded on
+      the device by prepareFeedbackImage to a JPEG of at most 2048 px (no EXIF), at most
+      2 MiB; stored in feedback_message_images and attached to the operator email.
 
   - id: parent.event-logs
     area: parent

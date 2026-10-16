@@ -74,6 +74,9 @@ export type CharacterAssetSummary = Omit<CharacterAsset, "glb_enc" | "account_id
 export type FeedbackMessage = Row<"feedback_messages">;
 export type FeedbackCategory = FeedbackMessage["category"];
 export type FeedbackClientPlatform = FeedbackMessage["client_platform"];
+/** The optional image attached to a feedback message (plaintext, one per message). */
+export type FeedbackMessageImage = Row<"feedback_message_images">;
+export type FeedbackImageContentType = FeedbackMessageImage["content_type"];
 /**
  * A companion as embedded in the kid read shape. `name_enc` / `look_enc` are
  * enc:v1 ciphertext on the wire (NULL = the catalog model's stock name /

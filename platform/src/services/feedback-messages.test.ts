@@ -5,9 +5,11 @@ import { createTestDb, type TestDatabase } from "@/test-support/pglite-db";
 
 import {
   createFeedbackMessage,
+  decodeFeedbackImage,
   FeedbackTargetError,
   getOpsFeedback,
   getOpsFeedbackCounts,
+  getOpsFeedbackImage,
   listOpsFeedback,
   markFeedbackRead,
   publicGameTitle,
@@ -20,8 +22,9 @@ import { createKid } from "./kids";
  * Feedback messages against real PGlite: a message may name any game the
  * sender can see (own, system, live Discover), never another family's private
  * game, and private game titles never leak into the operator's view. The ops
- * inbox lists, counts and moves messages through read / solved, and the
- * migration carries the old content reports over.
+ * inbox lists, counts and moves messages through read / solved, an attached
+ * image is stored with its message or not at all, and the migration carries
+ * the old content reports over.
  */
 let t: TestDatabase;
 let seq = 0;
@@ -64,6 +67,14 @@ async function game(accountId: string, kidId: string, published = false): Promis
     .returning("id")
     .executeTakeFirstOrThrow();
   return id;
+}
+
+/** The smallest thing that passes for each type: its signature and a few bytes. */
+const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46]);
+const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]);
+
+function dataUrl(type: string, bytes: Uint8Array | string): string {
+  return `data:${type};base64,${Buffer.from(bytes).toString("base64")}`;
 }
 
 const BASE = {
@@ -176,6 +187,7 @@ describe("the ops inbox", () => {
       senderName: "Sam",
       category: "feature_request",
       clientPlatform: "web",
+      hasImage: false,
       readAt: null,
       solvedAt: null,
     });
@@ -243,6 +255,7 @@ describe("the ops inbox", () => {
       gameId: null,
       gameTitle: null,
       clientPlatform: "mobile",
+      image: null,
       createdAt: feedback.created_at,
       readAt: null,
       solvedAt: null,
@@ -307,6 +320,81 @@ describe("read, solve and reopen", () => {
   });
 });
 
+describe("decodeFeedbackImage", () => {
+  it("decodes an image whose bytes are what its label says", () => {
+    const jpeg = decodeFeedbackImage(dataUrl("image/jpeg", JPEG));
+    expect(jpeg?.contentType).toBe("image/jpeg");
+    expect([...(jpeg?.bytes ?? [])]).toEqual([...JPEG]);
+    expect(decodeFeedbackImage(dataUrl("image/png", PNG))?.contentType).toBe("image/png");
+  });
+
+  it("refuses a label the bytes do not match, and markup posing as an image", () => {
+    expect(decodeFeedbackImage(dataUrl("image/png", JPEG))).toBeNull();
+    expect(decodeFeedbackImage(dataUrl("image/jpeg", "<svg onload=alert(1)>"))).toBeNull();
+    expect(decodeFeedbackImage(dataUrl("image/webp", "<html></html>"))).toBeNull();
+    expect(decodeFeedbackImage("data:image/jpeg;base64,")).toBeNull();
+  });
+});
+
+describe("attached images", () => {
+  it("stores the image with its message and shows it to the ops console", async () => {
+    const { accountId } = await family();
+    const feedback = await createFeedbackMessage(t.serviceDb, {
+      ...BASE,
+      accountId,
+      image: { contentType: "image/jpeg", bytes: JPEG },
+    });
+    const plain = await createFeedbackMessage(t.serviceDb, { ...BASE, accountId });
+
+    const rows = (await listOpsFeedback(t.serviceDb, { state: "all", page: 1, limit: 100 })).items;
+    expect(rows.find((row) => row.id === feedback.id)?.hasImage).toBe(true);
+    expect(rows.find((row) => row.id === plain.id)?.hasImage).toBe(false);
+    expect((await getOpsFeedback(t.serviceDb, feedback.id))?.image).toEqual({
+      contentType: "image/jpeg",
+      byteSize: JPEG.byteLength,
+    });
+
+    const image = await getOpsFeedbackImage(t.serviceDb, feedback.id);
+    expect(image?.contentType).toBe("image/jpeg");
+    expect([...(image?.bytes ?? [])]).toEqual([...JPEG]);
+    expect(await getOpsFeedbackImage(t.serviceDb, plain.id)).toBeNull();
+  });
+
+  it("stores neither the message nor the image when the image is refused", async () => {
+    const { accountId } = await family();
+    const tooLarge = new Uint8Array(2 * 1024 * 1024 + 1);
+    tooLarge.set(JPEG);
+
+    await expect(
+      createFeedbackMessage(t.serviceDb, {
+        ...BASE,
+        accountId,
+        image: { contentType: "image/jpeg", bytes: tooLarge },
+      }),
+    ).rejects.toThrow();
+
+    const stored = await t.serviceDb
+      .selectFrom("feedback_messages")
+      .select("id")
+      .where("account_id", "=", accountId)
+      .execute();
+    expect(stored).toEqual([]);
+  });
+
+  it("goes with its message", async () => {
+    const { accountId } = await family();
+    const feedback = await createFeedbackMessage(t.serviceDb, {
+      ...BASE,
+      accountId,
+      image: { contentType: "image/png", bytes: PNG },
+    });
+
+    await t.serviceDb.deleteFrom("accounts").where("id", "=", accountId).execute();
+
+    expect(await getOpsFeedbackImage(t.serviceDb, feedback.id)).toBeNull();
+  });
+});
+
 describe("row-level security", () => {
   it("lets a parent send feedback for their own account only", async () => {
     const sender = await family();
@@ -349,6 +437,40 @@ describe("row-level security", () => {
       .where("id", "=", feedback.id)
       .executeTakeFirst();
     expect(Number(res.numUpdatedRows)).toBe(0);
+  });
+});
+
+describe("row-level security of attached images", () => {
+  it("lets a parent see and attach images on their own messages only", async () => {
+    const sender = await family();
+    const other = await family();
+    const mine = await createFeedbackMessage(t.serviceDb, { ...BASE, accountId: sender.accountId });
+    const theirs = await createFeedbackMessage(t.serviceDb, {
+      ...BASE,
+      accountId: other.accountId,
+      image: { contentType: "image/jpeg", bytes: JPEG },
+    });
+    const values = { content_type: "image/jpeg" as const, byte_size: JPEG.byteLength, image_bytes: JPEG };
+
+    await t
+      .scopedDb(sender.accountId)
+      .insertInto("feedback_message_images")
+      .values({ ...values, feedback_message_id: mine.id })
+      .execute();
+    await expect(
+      t
+        .scopedDb(sender.accountId)
+        .insertInto("feedback_message_images")
+        .values({ ...values, feedback_message_id: theirs.id })
+        .execute(),
+    ).rejects.toThrow();
+
+    const visible = await t
+      .scopedDb(sender.accountId)
+      .selectFrom("feedback_message_images")
+      .select("feedback_message_id")
+      .execute();
+    expect(visible.map((row) => row.feedback_message_id)).toEqual([mine.id]);
   });
 });
 

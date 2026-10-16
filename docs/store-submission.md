@@ -46,9 +46,10 @@ what is still open. The legal texts live on the marketing site
    the publication security agent.
 4. **Production platform:** apply the migrations
    `20261008120000_snapshots_sender_kid_cascade.sql`,
-   `20261008130000_content_reports.sql` and
-   `20261016100000_feedback_messages.sql` (which carries the reports over),
-   then make sure `SYSTEM_NOTIFICATION_EMAIL` is set (feedback is emailed
+   `20261008130000_content_reports.sql`,
+   `20261016100000_feedback_messages.sql` (which carries the reports over) and
+   `20261016110000_feedback_message_images.sql` (the optional image), then
+   make sure `SYSTEM_NOTIFICATION_EMAIL` is set (feedback is emailed
    there) and that team@dodi.app receives mail (deletion requests go there).
 5. **Deploy the landing site** so every URL above resolves.
 

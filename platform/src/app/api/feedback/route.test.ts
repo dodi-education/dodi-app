@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * POST /api/feedback: validates the message, caps messages per account, maps
- * a game the sender cannot refer to to 404, and emails the operator once it
- * is stored.
+ * POST /api/feedback: validates the message and its optional image (by the
+ * image's own bytes), caps messages per account, maps a game the sender cannot
+ * refer to to 404, and emails the operator once it is stored.
  */
 
 const { createMock, notifyMock, rateLimitMock } = vi.hoisted(() => ({
@@ -23,9 +23,14 @@ vi.mock("@/lib/error-logs", () => ({
 }));
 vi.mock("@/services/rate-limits", () => ({ consumeRateLimit: rateLimitMock }));
 vi.mock("@/services/feedback-notifications", () => ({ notifyFeedbackReceived: notifyMock }));
-vi.mock("@/services/feedback-messages", async () => {
+vi.mock("@/services/feedback-messages", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/services/feedback-messages")>();
   class FeedbackTargetError extends Error {}
-  return { createFeedbackMessage: createMock, FeedbackTargetError };
+  return {
+    createFeedbackMessage: createMock,
+    decodeFeedbackImage: actual.decodeFeedbackImage,
+    FeedbackTargetError,
+  };
 });
 
 import { FeedbackTargetError } from "@/services/feedback-messages";
@@ -33,13 +38,18 @@ import { FeedbackTargetError } from "@/services/feedback-messages";
 import { POST } from "./route";
 
 const GAME = "5b6f0a53-7f0a-4b53-9a53-000000000001";
+const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]);
 
-function post(body: unknown): Request {
+function post(body: unknown, headers: Record<string, string> = {}): Request {
   return new Request("https://platform.test/api/feedback", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...headers },
     body: JSON.stringify(body),
   });
+}
+
+function dataUrl(type: string, bytes: Uint8Array | string): string {
+  return `data:${type};base64,${Buffer.from(bytes).toString("base64")}`;
 }
 
 const VALID = {
@@ -69,8 +79,9 @@ describe("POST /api/feedback", () => {
       message: "The game talked about monsters under the bed.",
       gameId: GAME,
       clientPlatform: "mobile",
+      image: null,
     });
-    expect(notifyMock).toHaveBeenCalledWith({}, { id: "feedback-1" });
+    expect(notifyMock).toHaveBeenCalledWith({}, { id: "feedback-1" }, null);
   });
 
   it("stores a message without a game", async () => {
@@ -89,6 +100,34 @@ describe("POST /api/feedback", () => {
     expect((await POST(post({ ...VALID, message: "x".repeat(4001) }))).status).toBe(400);
     expect((await POST(post({ ...VALID, category: "praise" }))).status).toBe(400);
     expect((await POST(post(null))).status).toBe(400);
+    expect(createMock).not.toHaveBeenCalled();
+  });
+
+  it("stores and mails an attached image as the type its bytes show", async () => {
+    const res = await POST(post({ ...VALID, image: dataUrl("image/jpeg", JPEG) }));
+
+    expect(res.status).toBe(201);
+    const image = { contentType: "image/jpeg", bytes: expect.any(Uint8Array) };
+    expect(createMock).toHaveBeenCalledWith({}, expect.objectContaining({ image }));
+    const stored = (createMock.mock.calls[0] as unknown as [unknown, { image: { bytes: Uint8Array } }])[1];
+    expect([...stored.image.bytes]).toEqual([...JPEG]);
+    expect(notifyMock).toHaveBeenCalledWith({}, { id: "feedback-1" }, expect.objectContaining(image));
+  });
+
+  it("refuses an image whose bytes are not what its label says", async () => {
+    const mislabelled = await POST(post({ ...VALID, image: dataUrl("image/png", JPEG) }));
+    expect(mislabelled.status).toBe(400);
+    expect(await mislabelled.json()).toMatchObject({ code: "INVALID_IMAGE" });
+    expect((await POST(post({ ...VALID, image: dataUrl("image/jpeg", "<svg/>") }))).status).toBe(400);
+    expect((await POST(post({ ...VALID, image: dataUrl("image/svg+xml", "<svg/>") }))).status).toBe(400);
+    expect(createMock).not.toHaveBeenCalled();
+    expect(rateLimitMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses a body far larger than any valid message", async () => {
+    const res = await POST(post(VALID, { "content-length": String(5 * 1024 * 1024) }));
+
+    expect(res.status).toBe(413);
     expect(createMock).not.toHaveBeenCalled();
   });
 

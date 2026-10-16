@@ -76,6 +76,48 @@ describe("notifyFeedbackReceived", () => {
     });
   });
 
+  it("attaches the image as a file named after the message", async () => {
+    const bytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00]);
+    const feedback = await createFeedbackMessage(t.serviceDb, {
+      accountId,
+      senderName: "Sam",
+      category: "bug_report",
+      message: "See the screenshot.",
+      gameId: null,
+      clientPlatform: "web",
+      image: { contentType: "image/jpeg", bytes },
+    });
+
+    await notifyFeedbackReceived(t.serviceDb, feedback, { contentType: "image/jpeg", bytes });
+
+    const input = sendEmailMock.mock.calls[0]?.[0] as {
+      attachments: { filename: string; content: Uint8Array; contentType: string }[];
+      react: { props: Record<string, unknown> };
+    };
+    const filename = `feedback-${feedback.id.slice(0, 8)}.jpg`;
+    expect(input.attachments).toEqual([{ filename, content: bytes, contentType: "image/jpeg" }]);
+    expect(input.react.props).toMatchObject({ image: { filename, byteSize: 5 } });
+  });
+
+  it("sends no attachment without an image", async () => {
+    const feedback = await createFeedbackMessage(t.serviceDb, {
+      accountId,
+      senderName: "Sam",
+      category: "other",
+      message: "Hello.",
+      gameId: null,
+      clientPlatform: "web",
+    });
+
+    await notifyFeedbackReceived(t.serviceDb, feedback);
+
+    const input = sendEmailMock.mock.calls[0]?.[0] as Record<string, unknown> & {
+      react: { props: Record<string, unknown> };
+    };
+    expect(input).not.toHaveProperty("attachments");
+    expect(input.react.props).toMatchObject({ image: null });
+  });
+
   it("names a private game by id only", async () => {
     const feedback = await createFeedbackMessage(t.serviceDb, {
       accountId,

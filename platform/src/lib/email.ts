@@ -33,6 +33,14 @@ export interface SendEmailInput {
   react: ReactElement;
   /** Where a reply goes instead of the sender (e.g. the parent behind a feedback message). */
   replyTo?: string;
+  /** Files sent along (e.g. the image attached to a feedback message). */
+  attachments?: EmailAttachment[];
+}
+
+export interface EmailAttachment {
+  filename: string;
+  content: Uint8Array;
+  contentType: string;
 }
 
 /** Send one email. Returns true on success, false on any failure (never throws). */
@@ -41,6 +49,7 @@ export async function sendEmail({
   subject,
   react,
   replyTo,
+  attachments,
 }: SendEmailInput): Promise<boolean> {
   const resend = getResend();
   if (!resend) {
@@ -56,6 +65,15 @@ export async function sendEmail({
       subject,
       react,
       ...(replyTo ? { replyTo } : {}),
+      ...(attachments?.length
+        ? {
+            attachments: attachments.map((file) => ({
+              filename: file.filename,
+              content: Buffer.from(file.content),
+              contentType: file.contentType,
+            })),
+          }
+        : {}),
     });
     if (error) {
       console.error(`[email] Resend rejected "${subject}" to ${to}:`, error);
