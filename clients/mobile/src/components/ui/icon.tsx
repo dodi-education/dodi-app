@@ -27,6 +27,7 @@ const ICONS = {
   download: T.IconDownload,
   edit: T.IconPencil,
   external: T.IconExternalLink,
+  feedback: T.IconMessage2,
   friends: T.IconUsers,
   games: T.IconDeviceGamepad2,
   globe: T.IconLanguage,

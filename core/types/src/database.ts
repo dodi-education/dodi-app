@@ -70,10 +70,10 @@ export type CharacterAssetUpdate = Update<"character_assets">;
 export type CharacterAssetKind = CharacterAsset["kind"];
 /** The list / write-response shape: no sealed file (large), no account id. */
 export type CharacterAssetSummary = Omit<CharacterAsset, "glb_enc" | "account_id">;
-/** An in-app report of an AI answer or a game (plaintext, sent to the operator). */
-export type ContentReport = Row<"content_reports">;
-export type ContentReportKind = ContentReport["content_kind"];
-export type ContentReportReason = ContentReport["reason"];
+/** Feedback a parent sends the dodi team from the app (plaintext, sent to the operator). */
+export type FeedbackMessage = Row<"feedback_messages">;
+export type FeedbackCategory = FeedbackMessage["category"];
+export type FeedbackClientPlatform = FeedbackMessage["client_platform"];
 /**
  * A companion as embedded in the kid read shape. `name_enc` / `look_enc` are
  * enc:v1 ciphertext on the wire (NULL = the catalog model's stock name /

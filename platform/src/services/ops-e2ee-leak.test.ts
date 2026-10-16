@@ -5,6 +5,7 @@ import { resolveOpsRange } from "./ops-range";
 import { getOpsAiRequestShare, getOpsGameStats, getOpsKpis } from "./ops-stats";
 import { listOpsAccounts, listOpsGames } from "./ops-lists";
 import { listOpsErrorLogs } from "./error-logs";
+import { getOpsFeedback, getOpsFeedbackCounts, listOpsFeedback } from "./feedback-messages";
 
 /**
  * The end-to-end encryption tripwire for the ops console.
@@ -206,6 +207,20 @@ it("never returns encrypted content from any ops read model", async () => {
     })
     .execute();
 
+  // A feedback message about the private game: the inbox may name it by id only.
+  const feedback = await t.serviceDb
+    .insertInto("feedback_messages")
+    .values({
+      account_id: paid,
+      sender_name: "Robin",
+      category: "inappropriate_content",
+      message: "This game showed something scary.",
+      game_id: priv.id,
+      client_platform: "web",
+    })
+    .returning("id")
+    .executeTakeFirstOrThrow();
+
   const range = resolveOpsRange("30d", new Date(now));
 
   const payloads: Record<string, unknown> = {
@@ -240,6 +255,9 @@ it("never returns encrypted content from any ops read model", async () => {
       limit: 25,
     }),
     errorLogs: await listOpsErrorLogs(t.serviceDb, { type: "all", limit: 50 }),
+    feedback: await listOpsFeedback(t.serviceDb, { state: "all", page: 1, limit: 25 }),
+    feedbackCounts: await getOpsFeedbackCounts(t.serviceDb),
+    feedbackDetail: await getOpsFeedback(t.serviceDb, feedback.id),
   };
 
   // Guard the guard: if the seeding above silently stopped producing rows,
@@ -248,6 +266,8 @@ it("never returns encrypted content from any ops read model", async () => {
   expect((payloads.gamesDeclinedSoft as { items: unknown[] }).items).toHaveLength(1);
   expect((payloads.accounts as { items: unknown[] }).items.length).toBeGreaterThanOrEqual(2);
   expect((payloads.errorLogs as { items: unknown[] }).items.length).toBeGreaterThan(0);
+  expect((payloads.feedback as { items: unknown[] }).items).toHaveLength(1);
+  expect(payloads.feedbackDetail).toMatchObject({ gameId: priv.id, gameTitle: null });
   expect((payloads.gameStats as { created: { total: number } }).created.total).toBe(2);
   expect(pending.id).toBeTruthy();
 

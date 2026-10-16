@@ -63,10 +63,17 @@ signed with the debug key: fine for side-loading, rejected by the Play Store.
 **iOS (EAS, no Mac needed):**
 
 ```bash
+npx eas build -p ios --profile simulator              # release build for the iOS Simulator, no Apple account
+npx eas build -p ios --profile development-simulator  # dev client for the Simulator (loads JS from Metro)
 npx eas build -p ios --profile development   # dev client for a registered device
-npx eas build -p ios --profile preview       # TestFlight internal
-npx eas build -p ios --profile production && npx eas submit -p ios
+npx eas build -p ios --profile preview       # ad hoc, registered devices only (no EXPO_PUBLIC_* env set)
+npx eas build -p ios --profile production && npx eas submit -p ios   # App Store / TestFlight
 ```
+
+Simulator builds run on a Mac with Xcode installed (only for its Simulator):
+`npx eas-cli build:run -p ios --latest` installs the newest one, or download
+the `.tar.gz` from the build page, unpack it and drag the `.app` onto the
+Simulator window.
 
 Profiles live in `eas.json`. EAS builds contain the app code only; no user data
 leaves the device.

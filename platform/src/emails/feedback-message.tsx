@@ -1,15 +1,16 @@
 /**
- * Operator-facing email for an in-app content report, sent to the
+ * Operator-facing email for a message from "Give feedback", sent to the
  * SYSTEM_NOTIFICATION_EMAIL inbox (never to parents). English-only like the
  * publication emails: the recipient is the dodi operator.
  *
- * Everything here is what the parent chose to send: the kind, reason and their
- * own description. A game title appears only for plaintext games (system or
- * Discover); a private game is named by id alone.
+ * Everything here is what the parent chose to send: their name, the category
+ * and their message, plus the account email so the team can answer (the email
+ * goes out with Reply-To set to it). A game title appears only for plaintext
+ * games (system or Discover); a private game is named by id alone.
  */
 import { Heading, Text } from "@react-email/components";
 
-import type { ContentReportKind, ContentReportReason } from "@dodi/types/database";
+import type { FeedbackCategory, FeedbackClientPlatform } from "@dodi/types/database";
 
 import { EmailShell } from "./layout";
 import { colors, fontStack } from "./theme";
@@ -19,17 +20,11 @@ const OPERATOR_FOOTER = {
     "You are receiving this because SYSTEM_NOTIFICATION_EMAIL on the dodi platform points at this inbox.",
 } as const;
 
-const KIND_LABEL: Record<ContentReportKind, string> = {
-  companion_answer: "Something the companion said",
-  game: "A game in the family's library",
-  discover_game: "A game on Discover",
-};
-
-const REASON_LABEL: Record<ContentReportReason, string> = {
-  inappropriate: "Inappropriate for kids",
-  upsetting: "Scary or upsetting",
-  wrong: "Wrong or misleading",
-  other: "Something else",
+export const FEEDBACK_CATEGORY_LABEL: Record<FeedbackCategory, string> = {
+  feature_request: "Feature request",
+  bug_report: "Bug report",
+  inappropriate_content: "Inappropriate content",
+  other: "Other",
 };
 
 const headingStyle = {
@@ -65,49 +60,60 @@ const metaStyle = {
   color: colors.muted,
 } as const;
 
-export interface ContentReportEmailProps {
+export interface FeedbackMessageEmailProps {
   appUrl: string;
-  reportId: string;
-  contentKind: ContentReportKind;
-  reason: ContentReportReason;
-  details: string | null;
+  feedbackId: string;
+  accountId: string;
+  /** NULL when the account row is already gone; the email still goes out. */
+  accountEmail: string | null;
+  senderName: string;
+  category: FeedbackCategory;
+  message: string;
   gameId: string | null;
   /** Public title for system and Discover games; null for private games. */
   gameTitle: string | null;
-  clientPlatform: "web" | "mobile";
+  clientPlatform: FeedbackClientPlatform;
 }
 
-export function ContentReportEmail({
+export function FeedbackMessageEmail({
   appUrl,
-  reportId,
-  contentKind,
-  reason,
-  details,
+  feedbackId,
+  accountId,
+  accountEmail,
+  senderName,
+  category,
+  message,
   gameId,
   gameTitle,
   clientPlatform,
-}: ContentReportEmailProps) {
+}: FeedbackMessageEmailProps) {
+  const label = FEEDBACK_CATEGORY_LABEL[category];
   return (
     <EmailShell
-      preview={`New report: ${KIND_LABEL[contentKind]}`}
+      preview={`${label} from ${senderName}`}
       appUrl={appUrl}
       locale="en"
       footer={OPERATOR_FOOTER}
     >
       <Heading as="h1" style={headingStyle}>
-        New content report
+        New feedback: {label}
       </Heading>
       <Text style={bodyStyle}>
-        {KIND_LABEL[contentKind]}: {REASON_LABEL[reason]}.
+        From {senderName}
+        {accountEmail ? ` (${accountEmail})` : ""}
       </Text>
+      <Text style={bodyStyle}>Account: {accountId}</Text>
       {gameId ? (
         <Text style={bodyStyle}>
           Game: {gameTitle ? `“${gameTitle}” ` : ""}({gameId})
         </Text>
       ) : null}
-      {details ? <Text style={quoteStyle}>{details}</Text> : null}
+      <Text style={quoteStyle}>{message}</Text>
+      {accountEmail ? (
+        <Text style={metaStyle}>Reply to this email to answer {senderName} directly.</Text>
+      ) : null}
       <Text style={metaStyle}>
-        Report id: {reportId} · sent from {clientPlatform}
+        Feedback id: {feedbackId} · sent from {clientPlatform}
       </Text>
     </EmailShell>
   );

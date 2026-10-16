@@ -6,6 +6,11 @@ import type { ExpoConfig } from "expo/config";
 const MICROPHONE_PERMISSION =
   "Your child talks with the voice companion through the microphone. The app only listens while a conversation is on.";
 
+// Same for the camera: expo-image-picker and expo-camera both write it, and
+// the image picker's value wins, so both get this one.
+const CAMERA_PERMISSION =
+  "The camera scans a friend's code to add them, and photographs ideas and worksheets for the Game Studio.";
+
 // APP_VARIANT=development builds the dev client as its own app ("dodi dev",
 // app.dodi.dev) so it installs next to the store version: separate icon,
 // storage, keychain and URL scheme.
@@ -55,7 +60,8 @@ const config: ExpoConfig = {
   },
   plugins: [
     "expo-router",
-    "expo-secure-store",
+    // No biometric unlock: drop the plugin's generic Face ID usage string.
+    ["expo-secure-store", { faceIDPermission: false }],
     "expo-sqlite",
     "expo-localization",
     "expo-sharing",
@@ -65,18 +71,16 @@ const config: ExpoConfig = {
     [
       "expo-image-picker",
       {
-        cameraPermission: "The Game Studio uses the camera to photograph ideas and worksheets.",
+        cameraPermission: CAMERA_PERMISSION,
         photosPermission: "The Game Studio uses the photos you pick as reference images.",
         microphonePermission: MICROPHONE_PERMISSION,
       },
     ],
-    // Kid friends: scanning a friend's QR code. iOS has one camera usage
-    // string per app, so this one (applied last) covers the Game Studio too.
+    // Kid friends: scanning a friend's QR code.
     [
       "expo-camera",
       {
-        cameraPermission:
-          "The camera scans a friend's code to add them, and photographs ideas and worksheets for the Game Studio.",
+        cameraPermission: CAMERA_PERMISSION,
         microphonePermission: MICROPHONE_PERMISSION,
         recordAudioAndroid: false,
         barcodeScannerEnabled: true,

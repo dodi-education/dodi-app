@@ -1,10 +1,10 @@
-import { useRouter } from "expo-router";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { Pressable, View } from "react-native";
 import { useTranslations } from "use-intl";
 import type { DiscoverGameDetail } from "@dodi/types/games";
 import { gamePreview as g } from "@dodi/ui-recipes";
 
+import { FeedbackDialog } from "@/components/parent/feedback-dialog";
 import { Icon, Text } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { useTagLabel } from "@/lib/tag-label";
@@ -14,8 +14,8 @@ import { tagStyle } from "./tag-style";
 /** The Infos tab: the studio's settings reduced to read-only text (web: game-preview). */
 export function PreviewInfos({ detail }: { detail: DiscoverGameDetail }) {
   const t = useTranslations("gameStudio");
-  const tReport = useTranslations("report");
-  const router = useRouter();
+  const tFeedback = useTranslations("feedback");
+  const [isReportOpen, setIsReportOpen] = useState(false);
   return (
     <View className={g.infos}>
       <InfoRow label={t("learningGoal")}>
@@ -45,16 +45,19 @@ export function PreviewInfos({ detail }: { detail: DiscoverGameDetail }) {
       </InfoRow>
 
       <Pressable
-        accessibilityRole="link"
+        accessibilityRole="button"
         hitSlop={14}
-        onPress={() =>
-          router.push({ pathname: "/parent/report", params: { kind: "discover_game", game: detail.id } })
-        }
+        onPress={() => setIsReportOpen(true)}
         className="flex-row items-center gap-1.5 self-start active:opacity-70"
       >
         <Icon name="alert" size={14} color="muted-foreground" />
-        <Text className="text-[13px] font-semibold text-muted-foreground">{tReport("reportGame")}</Text>
+        <Text className="text-[13px] font-semibold text-muted-foreground">{tFeedback("reportGame")}</Text>
       </Pressable>
+      <FeedbackDialog
+        isOpen={isReportOpen}
+        onClose={() => setIsReportOpen(false)}
+        context={{ category: "inappropriate_content", gameId: detail.id }}
+      />
     </View>
   );
 }

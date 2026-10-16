@@ -1201,8 +1201,7 @@
     "closeMenu": "Menü schließen",
     "snapshots": "Knipser",
     "parentSnapshots": "Knipser",
-    "switchToParentView": "Zur Elternansicht wechseln",
-    "report": "Problem melden"
+    "switchToParentView": "Zur Elternansicht wechseln"
   },
   "usage": {
     "title": "Nutzung",
@@ -1362,35 +1361,31 @@
     "failedTitle": "Build fehlgeschlagen",
     "failedBody": "Öffne das Game Studio, um es erneut zu versuchen."
   },
-  "report": {
-    "title": "Problem melden",
-    "description": "Sag uns Bescheid, wenn etwas, das die KI gesagt oder erstellt hat, nicht in Ordnung für deine Kinder ist. Wir lesen jede Meldung und nutzen sie, um den Begleiter und das Spielestudio sicherer zu machen.",
-    "kindLabel": "Was möchtest du melden?",
-    "kinds": {
-      "companion_answer": "Etwas, das der Begleiter gesagt hat",
-      "game": "Ein Spiel in deiner Bibliothek",
-      "discover_game": "Ein Spiel auf Discover"
+  "feedback": {
+    "button": "Feedback geben",
+    "title": "Feedback geben",
+    "description": "Sag uns, was du dir wünschst, was nicht funktioniert oder was nicht in Ordnung für deine Kinder ist. Unser Team liest jede Nachricht.",
+    "nameLabel": "Dein Name",
+    "categoryLabel": "Worum geht es?",
+    "categoryPlaceholder": "Kategorie wählen",
+    "categories": {
+      "feature_request": "Funktionswunsch",
+      "bug_report": "Fehlerbericht",
+      "inappropriate_content": "Unangemessener Inhalt",
+      "other": "Sonstiges"
     },
-    "kidLabel": "Welches Kind war es?",
-    "kidNone": "Betrifft kein bestimmtes Kind",
-    "reasonLabel": "Was war nicht in Ordnung?",
-    "reasons": {
-      "inappropriate": "Nicht kindgerecht",
-      "upsetting": "Beängstigend oder verstörend",
-      "wrong": "Falsch oder irreführend",
-      "other": "Etwas anderes"
-    },
-    "detailsLabel": "Was ist passiert? (optional)",
-    "detailsPlaceholder": "Zum Beispiel, was der Begleiter gesagt oder was das Spiel gezeigt hat.",
-    "detailsHint": "Anders als die verschlüsselten Daten deiner Familie erreicht eine Meldung unser Team lesbar. Lass alles weg, was wir nicht sehen sollen.",
-    "gameAttached": "Diese Meldung betrifft das Spiel, das du geöffnet hast.",
-    "submit": "Meldung senden",
+    "messageLabel": "Deine Nachricht",
+    "messagePlaceholder": "Was ist passiert, oder was würde dir helfen?",
+    "privacyHint": "Anders als die verschlüsselten Daten deiner Familie erreicht deine Nachricht unser Team lesbar, zusammen mit deinem Namen und der E-Mail-Adresse deines Kontos, damit wir antworten können. Lass alles weg, was wir nicht sehen sollen.",
+    "gameAttached": "Diese Nachricht betrifft das Spiel, das du geöffnet hast.",
+    "submit": "Senden",
     "sending": "Wird gesendet…",
-    "sent": "Danke. Deine Meldung ist bei unserem Team angekommen, und wir nutzen sie, um die KI für Kinder sicherer zu machen.",
-    "sendAnother": "Etwas anderes melden",
-    "reasonRequired": "Wähle aus, was nicht in Ordnung war.",
-    "rateLimited": "Du hast in kurzer Zeit viele Meldungen gesendet. Bitte versuche es später erneut.",
-    "failed": "Die Meldung konnte nicht gesendet werden. Bitte versuche es erneut.",
+    "sent": "Danke. Deine Nachricht ist bei unserem Team angekommen.",
+    "nameRequired": "Gib deinen Namen ein.",
+    "categoryRequired": "Wähle eine Kategorie.",
+    "messageRequired": "Schreib eine Nachricht.",
+    "rateLimited": "Du hast in kurzer Zeit viele Nachrichten gesendet. Bitte versuche es später erneut.",
+    "failed": "Die Nachricht konnte nicht gesendet werden. Bitte versuche es erneut.",
     "reportGame": "Dieses Spiel melden"
   },
   "access": {

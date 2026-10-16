@@ -289,25 +289,6 @@ export interface Companions {
   updated_at: Generated<Timestamp>;
 }
 
-export interface ContentReports {
-  account_id: string;
-  client_platform: "web" | "mobile";
-  content_kind: "companion_answer" | "game" | "discover_game";
-  created_at: Generated<Timestamp>;
-  /**
-   * The parent's own description, plaintext, at most 2000 characters.
-   */
-  details: string | null;
-  game_id: string | null;
-  id: Generated<string>;
-  kid_id: string | null;
-  reason: "inappropriate" | "upsetting" | "wrong" | "other";
-  /**
-   * When the operator handled the report; NULL while open.
-   */
-  resolved_at: Timestamp | null;
-}
-
 export interface CustomTricks {
   account_id: string;
   companion_id: string;
@@ -334,6 +315,35 @@ export interface ErrorLogs {
   provider: string | null;
   type: "client" | "server";
   user_agent: string | null;
+}
+
+export interface FeedbackMessages {
+  account_id: string;
+  category: "feature_request" | "bug_report" | "inappropriate_content" | "other";
+  client_platform: "web" | "mobile";
+  created_at: Generated<Timestamp>;
+  game_id: string | null;
+  id: Generated<string>;
+  /**
+   * The parent's own message, plaintext, at most 4000 characters.
+   */
+  message: string;
+  /**
+   * When a staff member first opened the message in the ops console; NULL while unread.
+   */
+  read_at: Timestamp | null;
+  /**
+   * The name the parent typed into the form, at most 100 characters. NULL only on rows carried over from content_reports.
+   */
+  sender_name: string | null;
+  /**
+   * When staff marked the message solved; NULL while open.
+   */
+  solved_at: Timestamp | null;
+  /**
+   * The ops console staff email that marked the message solved.
+   */
+  solved_by_staff_email: string | null;
 }
 
 export interface Friendships {
@@ -786,9 +796,9 @@ export interface DB {
   character_asset_sharings: CharacterAssetSharings;
   character_assets: CharacterAssets;
   companions: Companions;
-  content_reports: ContentReports;
   custom_tricks: CustomTricks;
   error_logs: ErrorLogs;
+  feedback_messages: FeedbackMessages;
   friendships: Friendships;
   game_favorites: GameFavorites;
   game_plays: GamePlays;

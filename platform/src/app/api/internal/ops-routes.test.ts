@@ -15,10 +15,15 @@ vi.mock("@/services/error-logs", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/services/error-logs")>();
   return { ...actual, listOpsErrorLogs: vi.fn() };
 });
+vi.mock("@/services/feedback-messages", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/services/feedback-messages")>();
+  return { ...actual, listOpsFeedback: vi.fn(), getOpsFeedbackCounts: vi.fn() };
+});
 
 import { getOpsAiRequestShare, getOpsGameStats, getOpsKpis } from "@/services/ops-stats";
 import { listOpsAccounts, listOpsGames } from "@/services/ops-lists";
 import { listOpsErrorLogs } from "@/services/error-logs";
+import { getOpsFeedbackCounts, listOpsFeedback } from "@/services/feedback-messages";
 
 import { GET as getKpis } from "./stats/kpis/route";
 import { GET as getGameStats } from "./stats/games/route";
@@ -26,6 +31,8 @@ import { GET as getAiRequests } from "./stats/ai-requests/route";
 import { GET as getAccounts } from "./accounts/route";
 import { GET as getGames } from "./games/route";
 import { GET as getErrorLogs } from "./error-logs/route";
+import { GET as getFeedback } from "./feedback/route";
+import { GET as getFeedbackCounts } from "./feedback/counts/route";
 
 /**
  * Route-level behaviour of the ops read endpoints: the auth gate, query
@@ -50,6 +57,8 @@ const ENDPOINTS: Array<{ name: string; path: string; handler: Handler; mock: Ret
   { name: "accounts", path: "/api/internal/accounts", handler: getAccounts, mock: vi.mocked(listOpsAccounts) },
   { name: "games", path: "/api/internal/games", handler: getGames, mock: vi.mocked(listOpsGames) },
   { name: "error-logs", path: "/api/internal/error-logs", handler: getErrorLogs, mock: vi.mocked(listOpsErrorLogs) },
+  { name: "feedback", path: "/api/internal/feedback", handler: getFeedback, mock: vi.mocked(listOpsFeedback) },
+  { name: "feedback/counts", path: "/api/internal/feedback/counts", handler: getFeedbackCounts, mock: vi.mocked(getOpsFeedbackCounts) },
 ];
 
 beforeEach(() => {
@@ -130,6 +139,24 @@ describe("query handling", () => {
     const response = await getAccounts(request("/api/internal/accounts?limit=5000"));
     expect(response.status).toBe(400);
     expect(vi.mocked(listOpsAccounts)).not.toHaveBeenCalled();
+  });
+
+  it("opens the feedback inbox on the open messages", async () => {
+    await getFeedback(request("/api/internal/feedback"));
+    expect(vi.mocked(listOpsFeedback).mock.calls[0][1]).toEqual({ state: "open", page: 1, limit: 25 });
+  });
+
+  it("carries the feedback state filter and refuses an unknown one", async () => {
+    await getFeedback(request("/api/internal/feedback?state=solved&page=3"));
+    expect(vi.mocked(listOpsFeedback).mock.calls[0][1]).toMatchObject({ state: "solved", page: 3 });
+    const response = await getFeedback(request("/api/internal/feedback?state=unread"));
+    expect(response.status).toBe(400);
+  });
+
+  it("caps the feedback page size", async () => {
+    const response = await getFeedback(request("/api/internal/feedback?limit=500"));
+    expect(response.status).toBe(400);
+    expect(vi.mocked(listOpsFeedback)).not.toHaveBeenCalled();
   });
 
   it("passes the billing-only account filters through, for the empty-state answer", async () => {

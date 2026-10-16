@@ -24,7 +24,7 @@ what is still open. The legal texts live on the marketing site
 | Adult account holder, terms accepted | own terms, Gemini API terms | required checkbox on registration (`validateRegistration` → `termsRequired`) |
 | In-app account deletion | Apple 5.1.1(v), Play account deletion | Settings > General > Delete account → `DELETE /api/account` (password re-check) |
 | Web resource for deletion | Play account deletion | /delete-account (steps, email route, what is deleted and kept) |
-| Report offensive AI content in the app | Play AI-generated content | "Report a problem" in the parent menu, "Report this game" on Discover games → `POST /api/reports`, emailed to `SYSTEM_NOTIFICATION_EMAIL` |
+| Report offensive AI content in the app | Play AI-generated content | "Give feedback" at the foot of the parent menu (category "Inappropriate content"), and "Report this game" on Discover games (opens the same dialog with that category and the game attached) → `POST /api/feedback`, stored in `feedback_messages`, emailed to `SYSTEM_NOTIFICATION_EMAIL` and handled in the ops console's Feedback inbox |
 | Report and moderate user-generated content | Apple 1.2 | Discover games: AI security review before publishing, "Report this game", and the operator takes a live game down with `POST /api/internal/publications/{id}/reject` (ops console or curl with the platform `x-ops-secret`; it now also works on live games). Incoming friend requests need a parent's approval, and friends can be removed |
 | Published contact information | Apple 1.2, Austrian ECG | /imprint |
 
@@ -45,10 +45,11 @@ what is still open. The legal texts live on the marketing site
    they exist: Hetzner, Vercel, Resend, Cloudflare, plus the provider behind
    the publication security agent.
 4. **Production platform:** apply the migrations
-   `20261008120000_snapshots_sender_kid_cascade.sql` and
-   `20261008130000_content_reports.sql`, then make sure
-   `SYSTEM_NOTIFICATION_EMAIL` is set (reports are emailed there) and that
-   team@dodi.app receives mail (deletion requests go there).
+   `20261008120000_snapshots_sender_kid_cascade.sql`,
+   `20261008130000_content_reports.sql` and
+   `20261016100000_feedback_messages.sql` (which carries the reports over),
+   then make sure `SYSTEM_NOTIFICATION_EMAIL` is set (feedback is emailed
+   there) and that team@dodi.app receives mail (deletion requests go there).
 5. **Deploy the landing site** so every URL above resolves.
 
 ## Reviewer account (both stores)

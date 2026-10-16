@@ -18,7 +18,6 @@ export type ParentNavIcon =
   | "lock"
   | "sparkles"
   | "qrcode"
-  | "alert"
   | "ai";
 
 export interface ParentNavItem {
@@ -53,8 +52,6 @@ export const PARENT_NAV_GROUPS: ParentNavGroup[] = [
     items: [
       { href: "/parent/activities", labelKey: "nav.activities", icon: "activities" },
       { href: "/parent/usage", labelKey: "nav.usage", icon: "usage" },
-      // In-app flagging of AI answers and games (Google Play / App Store requirement).
-      { href: "/parent/report", labelKey: "nav.report", icon: "alert" },
     ],
   },
 ];

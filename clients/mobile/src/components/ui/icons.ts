@@ -24,6 +24,7 @@ export { default as IconLogout } from "@tabler/icons-react-native/IconLogout";
 export { default as IconLogs } from "@tabler/icons-react-native/IconLogs";
 export { default as IconMasksTheater } from "@tabler/icons-react-native/IconMasksTheater";
 export { default as IconMenu2 } from "@tabler/icons-react-native/IconMenu2";
+export { default as IconMessage2 } from "@tabler/icons-react-native/IconMessage2";
 export { default as IconPalette } from "@tabler/icons-react-native/IconPalette";
 export { default as IconWand } from "@tabler/icons-react-native/IconWand";
 export { default as IconPencil } from "@tabler/icons-react-native/IconPencil";

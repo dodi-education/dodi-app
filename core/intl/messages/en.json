@@ -1201,8 +1201,7 @@
     "closeMenu": "Close menu",
     "snapshots": "Snapshots",
     "parentSnapshots": "Snapshots",
-    "switchToParentView": "Switch to parent view",
-    "report": "Report a problem"
+    "switchToParentView": "Switch to parent view"
   },
   "usage": {
     "title": "Usage",
@@ -1362,35 +1361,31 @@
     "failedTitle": "Build failed",
     "failedBody": "Open the Game Studio to try again."
   },
-  "report": {
-    "title": "Report a problem",
-    "description": "Tell us when something the AI said or made is not okay for your kids. We read every report and use it to make the companion and Game Studio safer.",
-    "kindLabel": "What do you want to report?",
-    "kinds": {
-      "companion_answer": "Something the companion said",
-      "game": "A game in your library",
-      "discover_game": "A game on Discover"
+  "feedback": {
+    "button": "Give feedback",
+    "title": "Give feedback",
+    "description": "Tell us what you would like to see, what is not working, or what is not okay for your kids. Our team reads every message.",
+    "nameLabel": "Your name",
+    "categoryLabel": "What is it about?",
+    "categoryPlaceholder": "Choose a category",
+    "categories": {
+      "feature_request": "Feature request",
+      "bug_report": "Bug report",
+      "inappropriate_content": "Inappropriate content",
+      "other": "Other"
     },
-    "kidLabel": "Which kid was it?",
-    "kidNone": "Not about a specific kid",
-    "reasonLabel": "What was wrong?",
-    "reasons": {
-      "inappropriate": "Not okay for kids",
-      "upsetting": "Scary or upsetting",
-      "wrong": "Wrong or misleading",
-      "other": "Something else"
-    },
-    "detailsLabel": "What happened? (optional)",
-    "detailsPlaceholder": "For example what the companion said, or what the game showed.",
-    "detailsHint": "Unlike your family's encrypted data, a report reaches our team in readable form. Leave out anything you don't want us to see.",
-    "gameAttached": "This report is about the game you opened.",
-    "submit": "Send report",
+    "messageLabel": "Your message",
+    "messagePlaceholder": "What happened, or what would help you?",
+    "privacyHint": "Unlike your family's encrypted data, your message reaches our team in readable form, together with your name and your account email so we can reply. Leave out anything you don't want us to see.",
+    "gameAttached": "This message is about the game you opened.",
+    "submit": "Send",
     "sending": "Sending…",
-    "sent": "Thank you. Your report reached our team, and we use it to make the AI safer for kids.",
-    "sendAnother": "Report something else",
-    "reasonRequired": "Choose what was wrong.",
-    "rateLimited": "You sent many reports in a short time. Please try again later.",
-    "failed": "The report could not be sent. Please try again.",
+    "sent": "Thank you. Your message reached our team.",
+    "nameRequired": "Enter your name.",
+    "categoryRequired": "Choose a category.",
+    "messageRequired": "Write a message.",
+    "rateLimited": "You sent many messages in a short time. Please try again later.",
+    "failed": "The message could not be sent. Please try again.",
     "reportGame": "Report this game"
   },
   "access": {

@@ -1,7 +1,8 @@
 /**
  * Transactional email transport (Resend). This is the single place the platform
  * sends app-level email from: one-time sign-in codes, friend-request
- * approvals and publication outcomes. Templates live in `src/emails`.
+ * approvals, publication outcomes and operator notifications (such as
+ * feedback messages). Templates live in `src/emails`.
  *
  * Sends never throw: callers fire-and-forget (email delivery must not affect the
  * request that triggered it), so failures are logged and surfaced as a boolean.
@@ -30,6 +31,8 @@ export interface SendEmailInput {
   subject: string;
   /** A React Email element (see `src/emails`); Resend renders it to HTML. */
   react: ReactElement;
+  /** Where a reply goes instead of the sender (e.g. the parent behind a feedback message). */
+  replyTo?: string;
 }
 
 /** Send one email. Returns true on success, false on any failure (never throws). */
@@ -37,6 +40,7 @@ export async function sendEmail({
   to,
   subject,
   react,
+  replyTo,
 }: SendEmailInput): Promise<boolean> {
   const resend = getResend();
   if (!resend) {
@@ -46,7 +50,13 @@ export async function sendEmail({
     return false;
   }
   try {
-    const { error } = await resend.emails.send({ from: FROM, to, subject, react });
+    const { error } = await resend.emails.send({
+      from: FROM,
+      to,
+      subject,
+      react,
+      ...(replyTo ? { replyTo } : {}),
+    });
     if (error) {
       console.error(`[email] Resend rejected "${subject}" to ${to}:`, error);
       return false;

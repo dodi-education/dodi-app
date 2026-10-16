@@ -8,6 +8,8 @@ import { drawer, navGroupLabel, navItem, topBar } from "@dodi/ui-recipes";
 
 import { writeLastView } from "@/adapters/platform";
 import { AccountBadge } from "@/components/parent/account-badge";
+import { FeedbackButton } from "@/components/parent/feedback-button";
+import { FeedbackDialog } from "@/components/parent/feedback-dialog";
 import { KidViewButton } from "@/components/parent/kid-view-button";
 import { Icon, type IconName, Text } from "@/components/ui";
 import { cn } from "@/lib/cn";
@@ -27,6 +29,7 @@ export function ParentShell({ children }: { children: ReactNode }) {
   const t = useTranslations("nav");
   const insets = useSafeAreaInsets();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
   // Pull to refresh: the page's ShellContent and its parts register here.
   const refreshRegistry = useNewRefreshRegistry();
 
@@ -64,12 +67,28 @@ export function ParentShell({ children }: { children: ReactNode }) {
       <View className="flex-1" importantForAccessibility={behindDrawer}>
         <RefreshScope registry={refreshRegistry}>{children}</RefreshScope>
       </View>
-      <Drawer isOpen={isMenuOpen} onClose={() => setIsMenuOpen(false)} />
+      <Drawer
+        isOpen={isMenuOpen}
+        onClose={() => setIsMenuOpen(false)}
+        onFeedback={() => {
+          setIsMenuOpen(false);
+          setIsFeedbackOpen(true);
+        }}
+      />
+      <FeedbackDialog isOpen={isFeedbackOpen} onClose={() => setIsFeedbackOpen(false)} />
     </PageBackground>
   );
 }
 
-function Drawer({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+function Drawer({
+  isOpen,
+  onClose,
+  onFeedback,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onFeedback: () => void;
+}) {
   const t = useTranslations();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
@@ -198,6 +217,7 @@ function Drawer({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
           ))}
         </ScrollView>
         <View className={drawer.footer}>
+          <FeedbackButton onPress={onFeedback} />
           <AccountBadge />
         </View>
       </Animated.View>

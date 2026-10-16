@@ -50,6 +50,7 @@ import {
   IconWand,
   IconMathSymbols,
   IconMenu2,
+  IconMessage2,
   IconMicrophone,
   IconMicrophoneOff,
   IconMusic,
@@ -117,6 +118,7 @@ export type IconName =
   | "edit"
   | "eraser"
   | "external"
+  | "feedback"
   | "feature_games"
   | "feature_personal"
   | "feature_privacy"
@@ -212,6 +214,7 @@ const ICONS: Record<IconName, ComponentType<TablerIconProps>> = {
   edit: IconPencil,
   eraser: IconEraser,
   external: IconExternalLink,
+  feedback: IconMessage2,
   feature_games: IconDeviceGamepad2,
   feature_personal: IconPalette,
   feature_privacy: IconShieldLock,

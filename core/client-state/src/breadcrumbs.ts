@@ -135,9 +135,6 @@ export function buildCrumbs(
     case "usage":
       return [{ label: t("nav.usage") }];
 
-    case "report":
-      return [{ label: t("nav.report") }];
-
     default:
       return [];
   }

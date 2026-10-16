@@ -15,11 +15,11 @@
  * In place of the studio's active/inactive switch, the header offers
  * "Share with kids" (play-in-place — the same flow as the Discover list).
  */
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 
 import { GameStage } from "@/components/games/game-stage";
+import { FeedbackDialog } from "@/components/parent/feedback-dialog";
 import { CodeViewer } from "@/components/parent/games/code-viewer";
 import {
   DiscoverShareDialog,
@@ -49,10 +49,11 @@ export function GamePreview({
   sharing: initialSharing,
 }: GamePreviewProps) {
   const t = useTranslations("gameStudio");
-  const tReport = useTranslations("report");
+  const tFeedback = useTranslations("feedback");
   const locale = useLocale();
   const [view, setView] = useState<PreviewView>("preview");
   const [shareOpen, setShareOpen] = useState(false);
+  const [isReportOpen, setIsReportOpen] = useState(false);
   // Kept locally so a save in the dialog updates the "Added" chip and re-seeds
   // the pills on the next open.
   const [sharing, setSharing] = useState<GameSharingState>(initialSharing);
@@ -175,13 +176,14 @@ export function GamePreview({
                 </p>
               </InfoRow>
 
-              <Link
-                href={`/parent/report?kind=discover_game&game=${detail.id}`}
-                className="inline-flex items-center gap-1.5 self-start text-[13px] font-semibold text-muted-foreground hover:text-danger hover:underline"
+              <button
+                type="button"
+                onClick={() => setIsReportOpen(true)}
+                className="inline-flex cursor-pointer items-center gap-1.5 self-start text-[13px] font-semibold text-muted-foreground hover:text-danger hover:underline"
               >
                 <Icon name="alert" size={14} />
-                {tReport("reportGame")}
-              </Link>
+                {tFeedback("reportGame")}
+              </button>
             </div>
           )}
         </div>
@@ -192,6 +194,11 @@ export function GamePreview({
         game={shareTarget}
         onClose={() => setShareOpen(false)}
         onSaved={setSharing}
+      />
+      <FeedbackDialog
+        open={isReportOpen}
+        onClose={() => setIsReportOpen(false)}
+        context={{ category: "inappropriate_content", gameId: detail.id }}
       />
     </div>
   );

@@ -6,6 +6,8 @@ import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 
 import { AccountBadge } from "@/components/parent/account-badge";
+import { FeedbackButton } from "@/components/parent/feedback-button";
+import { FeedbackDialog } from "@/components/parent/feedback-dialog";
 import { KidViewButton } from "@/components/parent/kid-view-button";
 import { Icon } from "@/components/shared/icon";
 import { ParentTopBar } from "@/components/shared/parent-top-bar";
@@ -20,6 +22,7 @@ import { cn } from "@/lib/utils";
 export function ParentShell({ children }: { children: React.ReactNode }) {
   const t = useTranslations("nav");
   const [open, setOpen] = useState(false);
+  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
 
   // Nav-link taps close the drawer via onNavigate; this covers browser
   // back/forward, which also dismisses the open drawer.
@@ -106,6 +109,12 @@ export function ParentShell({ children }: { children: React.ReactNode }) {
           <SidebarNav onNavigate={() => setOpen(false)} />
         </div>
         <div className="mt-auto flex flex-col gap-2.5 pt-3">
+          <FeedbackButton
+            onClick={() => {
+              setOpen(false);
+              setIsFeedbackOpen(true);
+            }}
+          />
           <AccountBadge />
         </div>
       </aside>
@@ -133,6 +142,8 @@ export function ParentShell({ children }: { children: React.ReactNode }) {
           </div>
         </main>
       </div>
+
+      <FeedbackDialog open={isFeedbackOpen} onClose={() => setIsFeedbackOpen(false)} />
     </div>
   );
 }
