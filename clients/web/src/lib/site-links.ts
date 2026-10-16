@@ -17,7 +17,7 @@ export const GITHUB_URL = "https://github.com/dodi-education/dodi-app";
 export type SitePage =
   | "home"
   | "app"
-  | "companion"
+  | "device"
   | "pricing"
   | "about"
   | "games"
@@ -28,7 +28,7 @@ const SITE_PATHS: Record<SitePage, { en: string; de: string }> = {
   ...LEGAL_PATHS,
   home: { en: "/", de: "/de" },
   app: { en: "/app", de: "/de/app" },
-  companion: { en: "/companion", de: "/de/companion" },
+  device: { en: "/device", de: "/de/device" },
   pricing: { en: "/pricing", de: "/de/preise" },
   about: { en: "/about", de: "/de/ueber-uns" },
   games: { en: "/learning-games-for-kids", de: "/de/lernspiele-fuer-kinder" },

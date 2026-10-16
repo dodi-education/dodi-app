@@ -23,7 +23,7 @@ export function PublicFooter({ locale }: { locale: string }) {
       heading: t("footerProduct"),
       links: [
         { label: t("footerApp"), href: siteUrl("app", locale) },
-        { label: t("footerCompanion"), href: siteUrl("companion", locale) },
+        { label: t("footerDevice"), href: siteUrl("device", locale) },
         { label: t("footerOpenApp"), href: "/" },
       ],
     },
@@ -45,7 +45,7 @@ export function PublicFooter({ locale }: { locale: string }) {
         { label: t("footerStudio"), href: siteUrl("app", locale, "#games") },
         {
           label: t("footerPrivacy"),
-          href: siteUrl("companion", locale, "#privacy"),
+          href: siteUrl("device", locale, "#privacy"),
         },
       ],
     },
