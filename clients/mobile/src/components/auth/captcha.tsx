@@ -12,6 +12,8 @@ import { WebView, type WebViewMessageEvent } from "react-native-webview";
 import { useCaptchaStore } from "@/lib/client-state";
 import { CAPTCHA_ORIGIN } from "@/lib/env";
 
+import { CAPTCHA_ORIGIN_WHITELIST } from "./captcha-origins";
+
 export interface CaptchaHandle {
   /** A fresh single-use token, or null when the platform has captcha off. Rejects when it can't run. */
   getToken: () => Promise<string | null>;
@@ -133,7 +135,7 @@ export const Captcha = forwardRef<CaptchaHandle, { action: CaptchaAction }>(func
       <WebView
         ref={webRef}
         source={{ html: widgetHtml(config.siteKey, action), baseUrl: CAPTCHA_ORIGIN }}
-        originWhitelist={["https://*"]}
+        originWhitelist={CAPTCHA_ORIGIN_WHITELIST}
         onMessage={onMessage}
         style={{ backgroundColor: "transparent" }}
         scrollEnabled={false}
