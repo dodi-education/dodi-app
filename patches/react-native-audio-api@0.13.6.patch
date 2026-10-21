@@ -17,10 +17,20 @@ index 0f997f8ebaae0243057cc920be5c86a7fbf679ad..2d1a1cb4fae3e2ba8730dbab835d6923
        ->setFormat(oboe::AudioFormat::Float)
        ->setFormatConversionAllowed(true)
 diff --git a/ios/audioapi/ios/system/AudioEngine.mm b/ios/audioapi/ios/system/AudioEngine.mm
-index d0e77d89c1d26f721e093702b2fd75e02339a86e..afeadee4dab19642dd531ce2b6d99401ed1fde1a 100644
+index d0e77d89c1d26f721e093702b2fd75e02339a86e..7e28b770a80c1ee974e95ce6ad30e035071148a5 100644
 --- a/ios/audioapi/ios/system/AudioEngine.mm
 +++ b/ios/audioapi/ios/system/AudioEngine.mm
-@@ -59,6 +59,18 @@ static AudioEngine *_sharedInstance = nil;
+@@ -42,6 +42,9 @@
+ - (void)materializeTrackedNodesIfNeeded;
+ 
+ - (AVAudioFormat *)liveInputFormat;
++- (BOOL)usesMatchedVoiceProcessingFormat;
++- (AVAudioFormat *)matchedVoiceProcessingFormat;
++- (void)connectMatchedOutputFormatIfNeeded;
+ - (void)resetInputNode;
+ - (void)rebuildAudioEngineAndResumeIfNeeded;
+ - (void)notifyConfigurationChanges;
+@@ -59,6 +62,22 @@ static AudioEngine *_sharedInstance = nil;
    }
  
    self.audioEngine = [[AVAudioEngine alloc] init];
@@ -31,7 +41,11 @@ index d0e77d89c1d26f721e093702b2fd75e02339a86e..afeadee4dab19642dd531ce2b6d99401
 +  // AVAudioEngine. It has to be set on a stopped engine, before any input format
 +  // is read (voice processing changes it), so it is enabled here, once, at
 +  // creation. A failure (e.g. no record-capable session yet, simulator) only
-+  // logs: audio still works, without echo cancellation.
++  // logs: audio still works, without echo cancellation. On a Mac (iOS app on
++  // Apple silicon) success is not enough: the macOS voice processor also needs
++  // the engine's input and output formats to match, or the engine never starts
++  // and both playback and recording stay silent. usesMatchedVoiceProcessingFormat
++  // and connectMatchedOutputFormatIfNeeded below handle that case.
 +  NSError *voiceProcessingError = nil;
 +  if (![self.audioEngine.inputNode setVoiceProcessingEnabled:YES error:&voiceProcessingError]) {
 +    NSLog(@"AudioEngine: voice processing not enabled: %@", [voiceProcessingError debugDescription]);
@@ -39,3 +53,93 @@ index d0e77d89c1d26f721e093702b2fd75e02339a86e..afeadee4dab19642dd531ce2b6d99401
  }
  
  - (void)destroyAudioEngine
+@@ -163,6 +182,58 @@ static AudioEngine *_sharedInstance = nil;
+   [self.audioEngine connect:sourceNode to:self.audioEngine.mainMixerNode format:format];
+ }
+ 
++// dodi patch: an iOS app running on an Apple silicon Mac gets the macOS voice
++// processor, which only initializes when the engine's client-side input and
++// output formats match (else error -10875 and the engine never starts). With
++// voice processing on, the input node delivers 7 channels at 48 kHz while the
++// main mixer feeds the speaker in its default format (e.g. 2 channels at
++// 44.1 kHz). In that case the mic is tapped and the speaker is fed in one
++// matched format: mono float at the input node's sample rate. On a real iPhone
++// or iPad nothing changes. The helpers take no lock themselves: they are
++// called with _engineLock held (a recursive mutex).
++- (BOOL)usesMatchedVoiceProcessingFormat
++{
++  if (self.audioEngine == nil || ![[NSProcessInfo processInfo] isiOSAppOnMac]) {
++    return NO;
++  }
++
++  return [self.audioEngine.inputNode isVoiceProcessingEnabled];
++}
++
++- (AVAudioFormat *)matchedVoiceProcessingFormat
++{
++  AVAudioFormat *inputFormat = [self.audioEngine.inputNode outputFormatForBus:0];
++
++  if (inputFormat == nil || inputFormat.sampleRate <= 0) {
++    return nil;
++  }
++
++  return [[AVAudioFormat alloc] initStandardFormatWithSampleRate:inputFormat.sampleRate
++                                                        channels:1];
++}
++
++// dodi patch: runs before every prepare/start so a rebuilt engine gets it too.
++// It needs no sink attached: playback can start before the recorder, and the
++// speaker alone also needs the matched output format to start. A running
++// engine is never rewired (it was connected before it started).
++- (void)connectMatchedOutputFormatIfNeeded
++{
++  if (![self usesMatchedVoiceProcessingFormat] || [self.audioEngine isRunning]) {
++    return;
++  }
++
++  AVAudioFormat *matchedFormat = [self matchedVoiceProcessingFormat];
++
++  if (matchedFormat == nil) {
++    NSLog(@"AudioEngine: no input sample rate yet, output format left unmatched");
++    return;
++  }
++
++  [self.audioEngine connect:self.audioEngine.mainMixerNode
++                         to:self.audioEngine.outputNode
++                     format:matchedFormat];
++}
++
+ - (AVAudioFormat *)liveInputFormat
+ {
+   std::scoped_lock lock(_engineLock);
+@@ -183,6 +254,14 @@ static AudioEngine *_sharedInstance = nil;
+     return nil;
+   }
+ 
++  // dodi patch: on a Mac the mic is tapped in the matched mono format (see
++  // usesMatchedVoiceProcessingFormat). This one method feeds both the sink
++  // connection and the recorder (getLiveInputFormat sizes its buffers and
++  // converter), so both see the same mono format.
++  if ([self usesMatchedVoiceProcessingFormat]) {
++    return [self matchedVoiceProcessingFormat];
++  }
++
+   return inputFormat;
+ }
+ 
+@@ -394,6 +473,7 @@ static AudioEngine *_sharedInstance = nil;
+     return;
+   }
+ 
++  [self connectMatchedOutputFormatIfNeeded];
+   [self.audioEngine prepare];
+   [self.audioEngine startAndReturnError:&error];
+ 
+@@ -491,6 +571,7 @@ static AudioEngine *_sharedInstance = nil;
+     return false;
+   }
+ 
++  [self connectMatchedOutputFormatIfNeeded];
+   [self.audioEngine prepare];
+   [self.audioEngine startAndReturnError:&error];
+ 
