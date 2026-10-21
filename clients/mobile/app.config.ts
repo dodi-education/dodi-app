@@ -36,7 +36,12 @@ const config: ExpoConfig = {
     bundleIdentifier: BUNDLE_ID,
     supportsTablet: true,
     deploymentTarget: "17.0",
-    config: { usesNonExemptEncryption: true },
+    // ITSAppUsesNonExemptEncryption is deliberately unset, not false: the app
+    // uses non-exempt encryption (its E2EE, standard algorithms). Setting it to
+    // true without the ITSEncryptionExportComplianceCode that App Store Connect
+    // issues for approved encryption documentation makes App Store processing
+    // reject the build (ITMS-90592). Unset, App Store Connect asks the export
+    // compliance questions for each build instead.
     infoPlist: {
       // Game Studio builds keep running as BGContinuedProcessingTask (iOS 26+);
       // the module registers one identifier per build under this prefix
