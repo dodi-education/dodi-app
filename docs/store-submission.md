@@ -30,10 +30,10 @@ what is still open. The legal texts live on the marketing site
 
 ## Before the first submission
 
-1. **Fill in the operator details** in `dodi-com/landing/src/lib/legal.ts`:
-   `city` (place of residence, required by MedienG § 25) and
-   `hostingLocation` (the Hetzner server location). Until then the imprint and
-   privacy policy show "[to be added]" and the build prints a warning.
+1. **Operator details** in `dodi-com/landing/src/lib/legal.ts`: `city`
+   (place of residence, required by MedienG § 25) and `hostingLocation` are
+   filled in (2026-10-20). Unset, the imprint and privacy policy show
+   "[to be added]" and the build prints a warning.
    `street`, `register` and `vatId` are left out while unset; they become
    mandatory once dodi is run commercially (ECG § 5: geographic address), and
    Google Play shows a physical address for monetized apps. If Hiveport GmbH is
@@ -66,10 +66,11 @@ needs working AI. The open beta has no dodi AI, so it runs on a key of ours:
    consent). Don't use a Gemini key (see "Open decisions"). Revoke the key
    after review.
 4. Parent PIN: leave it unset, or set it and put it in the review notes.
-6. Review notes: email + password; "the app is used by a parent, who opens
-   Kid view for the child; tap the companion and allow the microphone to talk";
-   where Delete account and Report a problem are; that AI answers come from
-   third-party providers; that the app sells nothing in-app.
+5. Review notes: email + password; "the app is used by a parent, who opens
+   Kid View for the child; tap the companion and allow the microphone to talk";
+   where Delete account and Give feedback are; that AI answers come from
+   third-party providers; that the app sells nothing in-app. The App Store
+   text is under "App Store listing text" below.
 
 ## Google Play Console
 
@@ -101,11 +102,111 @@ needs working AI. The open beta has no dodi AI, so it runs on a key of ours:
   tracking.
 - **Age rating:** answer the questionnaire for user-generated content
   (Discover) and AI-generated content.
-- **Export compliance:** `ios.config.usesNonExemptEncryption` is `true`
-  (custom E2EE), so App Store Connect asks the export questions on upload, and
-  the US annual self-classification report applies.
+- **Export compliance:** the app uses non-exempt encryption (its E2EE, standard
+  algorithms), but `ITSAppUsesNonExemptEncryption` is deliberately left out of
+  `app.config.ts`: set to `true` without the `ITSEncryptionExportComplianceCode`
+  that App Store Connect issues for approved encryption documentation, Apple
+  drops the build during processing (ITMS-90592, build 2 on 2026-10-19). Each
+  build therefore shows "Missing Compliance" in TestFlight; answer: uses
+  encryption, standard algorithms, not available in France. To skip the
+  per-build questions, file the encryption documentation in App Store Connect
+  and put both keys in `ios.infoPlist`. The US annual self-classification
+  report applies either way.
 - **Payments:** the app sells nothing today. If credits become purchasable in
   the iOS app, that must use In-App Purchase (guideline 3.1.1).
+- **EU trader status (DSA):** declared **not a trader** (2026-10-20): dodi runs
+  as a hobby project with no paid plans, so the EU product page shows no
+  address or phone number. Switch to trader (address, phone and email go on
+  the EU product page) before anything is sold, whether paid plans, dodi AI
+  credits or a company running the app.
+- **Icon:** `assets/images/icon.png` is 512×512 and Expo scales it to the
+  1024×1024 store icon. There is no larger source of the colored icon
+  (`assets/reference/dodi_icon.svg` is the black line drawing); export a
+  1024 version from the original artwork when it is redrawn.
+
+### App Store listing text
+
+Metadata outside the Kids Category must not say "for kids" or "for
+children" (guideline 2.3.8), so the text speaks to parents. Field limits:
+name and subtitle 30 characters, promotional text 170, keywords 100.
+
+- **Name:** dodi: AI learning app
+- **Subtitle:** Learning games for families
+- **Promotional text:** Talk, play and build learning games together. You
+  choose the AI provider, personal data is end-to-end encrypted, and there are
+  no ads.
+- **Keywords:** `education,game maker,tutor,homework,family,parents,voice,companion,math,reading,school,open source`
+  (the words of the name are indexed already)
+- **Support URL / marketing URL:** https://www.dodi.app
+- **Privacy policy URL:** https://www.dodi.app/privacy
+- **Copyright:** 2026 Alexander Birke
+
+**Description:**
+
+```text
+Meet dodi, an AI learning companion your family talks and plays with. It gets to know each child and helps you invent learning games made just for them.
+
+TALK AND PLAY
+Your child simply talks, and dodi listens, chats back and turns curiosity into play. No keyboard, no menus full of buttons. A friendly 3D companion greets your child on the home screen.
+
+LEARNS ALONG THE WAY
+After every chat, dodi updates what it knows and gently adapts to your child's pace and language. Everything it remembers is written in plain language, so parents can read, edit or erase it at any time.
+
+BUILD YOUR OWN LEARNING GAMES
+In Game Studio, describe a game idea or photograph a worksheet, and dodi builds a playable learning game. Find more games in Discover, where every published game passes a safety review first, and share snapshots of game moments with friends.
+
+PARENTS STAY IN CHARGE
+Parents create the profiles, approve friend requests, see activities and usage, and choose the AI provider. The parent area can be locked with a PIN.
+
+PRIVACY BY DESIGN
+• Profiles, memories and your family's games are end-to-end encrypted on your device before they are stored
+• Bring your own AI: conversations go from the device straight to the provider you chose, never through our servers
+• No ads, no tracking, nothing for sale
+• Open source: anyone can read and audit the code
+
+To get started, add an API key from a supported AI provider under Settings > AI providers. The provider bills its usage directly.
+
+Privacy policy: https://www.dodi.app/privacy
+Terms of use: https://www.dodi.app/terms
+```
+
+**App Review notes** (fill in the reviewer account from "Reviewer account"
+above):
+
+```text
+Sign-in: <email> / <password>
+The account has a kid profile ("Mia") and an AI provider key set up.
+
+The app is used by a parent, who manages the family. To see what the child sees, tap "Kid View" in the top bar. On the home screen, tap the companion and allow the microphone to talk with it. Game Studio (menu > Games) builds a learning game from a short description.
+
+Delete account: menu > Settings > General > Delete account.
+Report content: "Give feedback" at the bottom of the menu (category "Inappropriate content"); games in Discover also have "Report this game".
+Privacy policy and terms: menu > Settings > General > Legal.
+
+AI answers come from the third-party AI provider whose API key the parent adds; the parent gives consent before a key is added. The app sells nothing and shows no ads.
+```
+
+### Screenshots
+
+Required: iPhone 6.9" (1320×2868) and iPad 13" (2064×2752), up to 10 each,
+portrait. Take them in the Simulator from a `simulator` profile build (release
+config against production, `eas build -p ios --profile simulator`), signed in
+with the reviewer account so the screens show content:
+
+```bash
+xcrun simctl list devicetypes | grep -E "Pro Max|iPad Pro 13"   # exact device names
+xcrun simctl create shots-iphone "<iPhone … Pro Max>"
+xcrun simctl create shots-ipad "<iPad Pro 13-inch …>"
+xcrun simctl boot shots-iphone && open -a DeviceHub
+xcrun simctl install shots-iphone dodi.app
+xcrun simctl status_bar shots-iphone override --time 9:41 \
+  --batteryState charged --batteryLevel 100 --wifiBars 3 --cellularBars 4
+xcrun simctl io shots-iphone screenshot iphone-01-home.png
+```
+
+Repeat with `shots-ipad`. Suggested set: Kid View home with the companion,
+a game being played, Game Studio building a game, the memory page, Discover,
+and Settings > AI providers. Captions, if any, follow the 2.3.8 rule above.
 
 ## Open decisions and follow-ups
 
