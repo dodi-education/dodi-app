@@ -191,22 +191,21 @@ AI answers come from the third-party AI provider whose API key the parent adds; 
 Required: iPhone 6.9" (1320×2868) and iPad 13" (2064×2752), up to 10 each,
 portrait. Take them in the Simulator from a `simulator` profile build (release
 config against production, `eas build -p ios --profile simulator`), signed in
-with the reviewer account so the screens show content:
+with the reviewer account so the screens show content. On the Mac:
 
 ```bash
-xcrun simctl list devicetypes | grep -E "Pro Max|iPad Pro 13"   # exact device names
-xcrun simctl create shots-iphone "<iPhone … Pro Max>"
-xcrun simctl create shots-ipad "<iPad Pro 13-inch …>"
-xcrun simctl boot shots-iphone && open -a DeviceHub
-xcrun simctl install shots-iphone dodi.app
-xcrun simctl status_bar shots-iphone override --time 9:41 \
-  --batteryState charged --batteryLevel 100 --wifiBars 3 --cellularBars 4
-xcrun simctl io shots-iphone screenshot iphone-01-home.png
+bash clients/mobile/scripts/store-screenshots.sh [build .tar.gz URL or path]
 ```
 
-Repeat with `shots-ipad`. Suggested set: Kid View home with the companion,
-a game being played, Game Studio building a game, the memory page, Discover,
-and Settings > AI providers. Captions, if any, follow the 2.3.8 rule above.
+It installs the build into an iPhone Pro Max and an iPad Pro 13-inch
+Simulator, sets a 9:41 status bar, and walks through the set: Kid View home
+with the companion, a game being played, Game Studio, the memory page,
+Discover, and Settings > AI providers. You sign in once per device and set
+each screen up; it opens the screen by deep link where one exists, captures
+it and checks the size. Output: `~/dodi-screenshots/{iphone,ipad}`. Without
+an argument it uses the `simulator` build from 2026-10-20; for a newer one,
+pass its download URL from the build page on expo.dev. Captions, if any, follow the
+2.3.8 rule above.
 
 ## Open decisions and follow-ups
 
