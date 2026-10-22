@@ -35,39 +35,67 @@ interface SessionUser {
   email: string;
 }
 
+/**
+ * Outcome of validating the session cookie against the platform:
+ * - `signed-in`: the platform confirmed the bearer.
+ * - `signed-out`: definitive. `isStale` is true when the platform rejected the
+ *   bearer (JSON `null`, 401/403) so the response drops the cookie, false when
+ *   there was simply no cookie to check.
+ * - `unknown`: the platform could not answer (rate limit, other non-ok status,
+ *   network error, unparsable body). The cookie is kept and the request is
+ *   treated optimistically as signed in (see `updateSession`).
+ */
 type SessionLookup =
-  | { user: SessionUser; isStale: false }
-  | { user: null; isStale: boolean };
+  | { state: "signed-in"; user: SessionUser }
+  | { state: "signed-out"; isStale: boolean }
+  | { state: "unknown" };
 
 /**
- * Validate the bearer from the cookie mirror against the platform. A definitive
- * "no session" (JSON `null`, 401/403) marks the cookie stale so the response can
- * drop it; a transport failure or 5xx is treated as anonymous for this request
- * only, leaving the cookie for the next one.
+ * The browser's address as the edge proxy saw it. Caddy stamps it into
+ * `x-forwarded-for` (Next only fills that from the socket when absent); only
+ * the leftmost entry is kept, since Better Auth rejects a multi-entry header
+ * without trustedProxies. Null when the address is unknown.
  */
-async function lookupSession(token: string): Promise<SessionLookup> {
+function clientIp(request: NextRequest): string | null {
+  const first = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  return first || null;
+}
+
+/**
+ * Validate the bearer from the cookie mirror against the platform. The platform
+ * rate-limits get-session per client IP + path, so the browser's address is
+ * forwarded; without it every visitor would share the middleware's bucket. Only
+ * a definitive "no session" (JSON `null`, 401/403) is `signed-out`; a 429, any
+ * other non-ok status, a transport failure or an unparsable body is `unknown`.
+ */
+async function lookupSession(
+  token: string,
+  ip: string | null,
+): Promise<SessionLookup> {
+  const headers: Record<string, string> = { authorization: `Bearer ${token}` };
+  if (ip) headers["x-forwarded-for"] = ip;
   try {
     const res = await fetch(`${apiBaseUrl()}/api/auth/get-session`, {
-      headers: { authorization: `Bearer ${token}` },
+      headers,
       cache: "no-store",
     });
     if (res.status === 401 || res.status === 403) {
-      return { user: null, isStale: true };
+      return { state: "signed-out", isStale: true };
     }
-    if (!res.ok) return { user: null, isStale: false };
+    if (!res.ok) return { state: "unknown" };
     const body = (await res.json()) as {
       user?: { id?: unknown; email?: unknown } | null;
     } | null;
     const user = body?.user;
     if (user && typeof user.id === "string") {
       return {
+        state: "signed-in",
         user: { id: user.id, email: typeof user.email === "string" ? user.email : "" },
-        isStale: false,
       };
     }
-    return { user: null, isStale: true };
+    return { state: "signed-out", isStale: true };
   } catch {
-    return { user: null, isStale: false };
+    return { state: "unknown" };
   }
 }
 
@@ -172,38 +200,45 @@ export async function updateSession(
   // branch need it); without a cookie there is nothing to look up.
   const token = request.cookies.get(SESSION_COOKIE_NAME)?.value ?? "";
   const lookup: SessionLookup = token
-    ? await lookupSession(token)
-    : { user: null, isStale: false };
-  const { user } = lookup;
+    ? await lookupSession(token, clientIp(request))
+    : { state: "signed-out", isStale: false };
+  // When the platform cannot answer (`unknown`, e.g. its rate limit) we fail
+  // open: a cookie is present, so the request is treated as signed in rather
+  // than bouncing a parent to /login. Nothing leaks, because every platform
+  // data call authenticates the bearer itself. Only a confirmed session
+  // (`isSignedIn`) drives the reverse guard away from the auth pages.
+  const isSignedIn = lookup.state === "signed-in";
+  const hasSession = lookup.state !== "signed-out";
+  const isStale = lookup.state === "signed-out" && lookup.isStale;
 
   // Redirect unauthenticated users from protected routes to login, carrying
   // the target (with its query, e.g. the agent approval link's ?code=) so a
   // successful login can return to it (deep links).
-  if (!user && !isPublicRoute) {
+  if (!hasSession && !isPublicRoute) {
     const url = request.nextUrl.clone();
     const target = `${pathname}${request.nextUrl.search}`;
     url.pathname = "/login";
     url.search = "";
     url.searchParams.set("next", target);
-    return clearStaleSession(NextResponse.redirect(url), lookup.isStale);
+    return clearStaleSession(NextResponse.redirect(url), isStale);
   }
 
   // The marketing site is a separate deployment; this app has no landing page,
-  // so the root always routes into the app: signed-in users to /home, everyone
-  // else (including direct/localhost access) to /login. For a signed-in user we
-  // also prime the active kid + locale so /home renders the right kid in the
-  // right language instead of "No kid selected".
+  // so the root always routes into the app: signed-in users (confirmed or not)
+  // to /home, everyone else (including direct/localhost access) to /login. For
+  // a signed-in user we also prime the active kid + locale so /home renders the
+  // right kid in the right language instead of "No kid selected".
   if (pathname === "/") {
     const url = request.nextUrl.clone();
-    url.pathname = user ? "/home" : "/login";
+    url.pathname = hasSession ? "/home" : "/login";
     const redirect = NextResponse.redirect(url);
     const kidCookies =
-      user && !request.cookies.get("dodi-active-kid")?.value
+      hasSession && !request.cookies.get("dodi-active-kid")?.value
         ? await firstKidCookies(token)
         : null;
     return clearStaleSession(
       primeRedirect(redirect, kidCookies ?? []),
-      lookup.isStale,
+      isStale,
     );
   }
 
@@ -213,7 +248,7 @@ export async function updateSession(
   // same result as the parent→kid switch, now also from "/" and direct links.
   // Once the cookie is set this is skipped, so there is no redirect loop.
   if (
-    user &&
+    hasSession &&
     isKidRoute(pathname) &&
     !request.cookies.get("dodi-active-kid")?.value
   ) {
@@ -225,7 +260,7 @@ export async function updateSession(
   }
 
   if (
-    user &&
+    isSignedIn &&
     (pathname === "/login" ||
       pathname === "/register" ||
       pathname === "/reset-password")
@@ -237,13 +272,14 @@ export async function updateSession(
 
   // Forward the resolved auth state to server components — the (kid) layout
   // and the game page branch between the kid and the public experience on it.
+  // An unconfirmed session counts as authed so the kid chrome still renders.
   const finalHeaders = forwardedHeaders();
-  finalHeaders.set("x-dodi-authed", user ? "1" : "0");
+  finalHeaders.set("x-dodi-authed", hasSession ? "1" : "0");
   const response = NextResponse.next({ request: { headers: finalHeaders } });
-  if (!user) {
+  if (!hasSession) {
     // Response marker for the service worker: an anonymous render must never
     // be cached as the offline kid shell (see public/sw.js).
     response.headers.set("x-dodi-anon", "1");
   }
-  return clearStaleSession(response, lookup.isStale);
+  return clearStaleSession(response, isStale);
 }

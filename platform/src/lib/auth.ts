@@ -27,6 +27,7 @@ import {
 } from "@/services/registration";
 
 import { passwordOps } from "./auth-password-plugin";
+import { AUTH_RATE_LIMIT } from "./auth-rate-limit";
 
 /**
  * Authentication for platform.dodi.app: Better Auth (MIT, self-hosted), tables
@@ -233,17 +234,7 @@ export const auth = betterAuth({
       },
     },
   },
-  rateLimit: {
-    enabled: true,
-    customRules: {
-      "/sign-in/email": { window: 60, max: 10 },
-      "/sign-in/email-otp": { window: 60, max: 10 },
-      "/email-otp/send-verification-otp": { window: 3600, max: 6 },
-      "/email-otp/verify-email": { window: 60, max: 10 },
-      "/password/verify": { window: 60, max: 10 },
-      "/password/set": { window: 60, max: 10 },
-    },
-  },
+  rateLimit: AUTH_RATE_LIMIT,
   plugins: [
     bearer(),
     emailOTP({
