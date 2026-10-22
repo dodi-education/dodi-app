@@ -188,8 +188,10 @@ AI answers come from the third-party AI provider whose API key the parent adds; 
 
 ### Screenshots
 
-Required: iPhone 6.9" (1320×2868) and iPad 13" (2064×2752), up to 10 each,
-portrait. Take them in the Simulator from a `simulator` profile build (release
+Required: iPhone and iPad 13" (2064×2752), 1 to 10 each,
+portrait. The iPhone slot is "iPhone with Dynamic Island (medium display)"
+(2026): it accepted 1206×2622 and rejected 1242×2688 from a model without
+a Dynamic Island. Take them in the Simulator from a `simulator` profile build (release
 config against production, `eas build -p ios --profile simulator`), signed in
 with the reviewer account so the screens show content. On the Mac:
 

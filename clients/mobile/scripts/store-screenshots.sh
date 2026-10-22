@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # App Store screenshots (macOS, Xcode): installs a `simulator` profile build
-# into an iPhone 6.9" and an iPad 13" Simulator, sets a clean status bar and
+# into an iPhone 17 Pro and an iPad 13" Simulator, sets a clean status bar and
 # walks through the shot list. You sign in once per device and set each
 # screen up; the script opens the screen by deep link where it can, captures
 # it and checks the pixel size App Store Connect expects.
@@ -25,7 +25,7 @@ SHOTS=(
 )
 
 # Accepted sizes (portrait) per display class in App Store Connect.
-IPHONE_SIZES="1320x2868 1290x2796 1260x2736"
+IPHONE_SIZES="1206x2622"
 IPAD_SIZES="2064x2752 2048x2732"
 
 command -v xcrun >/dev/null || { echo "xcrun not found: install Xcode first"; exit 1; }
@@ -110,7 +110,7 @@ shoot_device() {
   xcrun simctl status_bar "$udid" clear || true
 }
 
-shoot_device iphone "iPhone [0-9]+ Pro Max" "$IPHONE_SIZES"
+shoot_device iphone "iPhone [0-9]+ Pro \(" "$IPHONE_SIZES"
 shoot_device ipad "iPad Pro 13-inch" "$IPAD_SIZES"
 
 echo
