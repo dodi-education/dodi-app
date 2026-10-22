@@ -6,8 +6,8 @@
  * E2EE boundary, deliberately narrow:
  *  - Accounts carry only plaintext operational columns (email, Better Auth
  *    display name, plan, counts, timestamps). Never the vault (`vault_keys`,
- *    `encrypted_api_keys`, `parent_pin_enc`) and never anything from `kids`
- *    beyond a row count.
+ *    `encrypted_api_keys`, `parent_pin_enc`) and never anything from `kids` or
+ *    a private game beyond a row count.
  *  - Games are restricted to the PLAINTEXT rows: `is_system = true` OR
  *    `publication_requested_at IS NOT NULL`. A private game's title and
  *    description are ciphertext and are never selected, searched or ordered by.
@@ -64,6 +64,8 @@ export interface OpsAccountRow {
   };
   status: "paid" | "free";
   mrrEur: number;
+  /** Games the family made: system rows and publication copies excluded. */
+  gamesCount: number;
   kidsCount: number;
   aiProviders: {
     voice: string | null;
@@ -233,6 +235,7 @@ interface AccountSqlRow {
   plan_handle: string;
   plan_title: string | null;
   price_eur_month: number;
+  games_count: number;
   kids_count: number;
   last_active_at: string | null;
 }
@@ -311,6 +314,12 @@ export async function listOpsAccounts(
              auth_users.name as auth_name,
              platform_plans.title as plan_title,
              coalesce(platform_plans.price_eur_month, 0)::float8 as price_eur_month,
+             -- Same rule as the parent dashboard: a publication copy duplicates
+             -- a game the parent already made.
+             (select count(*) from games g
+               where g.account_id = accounts.id
+                 and g.is_system = false
+                 and g.publication_requested_at is null)::int as games_count,
              (select count(*) from kids k where k.account_id = accounts.id)::int
                as kids_count,
              -- greatest() skips NULLs, so an account with only sessions (or
@@ -348,6 +357,7 @@ export async function listOpsAccounts(
         },
         status: price > 0 ? ("paid" as const) : ("free" as const),
         mrrEur: price,
+        gamesCount: Number(row.games_count),
         kidsCount: Number(row.kids_count),
         aiProviders,
         aiSummary: summarizeProviders([

@@ -234,6 +234,8 @@ describe("listOpsAccounts", () => {
       plan: { handle: "hatchling", title: "Hatchling", priceEurMonth: 9 },
       status: "paid",
       mrrEur: 9,
+      // The private game only: its two publication copies are not new games.
+      gamesCount: 1,
       kidsCount: 1,
       aiProviders: {
         voice: "dodi",
@@ -256,6 +258,14 @@ describe("listOpsAccounts", () => {
     expect(byId.get(underscoreAccount)?.aiSummary).toBe("unset");
     expect(byId.get(underscoreAccount)?.lastActiveAt).toBeNull();
     expect(byId.get(freeAccount)?.name).toBe("");
+  });
+
+  it("counts only the games a family made, never publication copies", async () => {
+    const page = await listOpsAccounts(t.serviceDb, accountsQuery());
+    const byId = new Map(page.items.map((item) => [item.id, item]));
+    // Both of this account's rows are publication copies.
+    expect(byId.get(freeAccount)?.gamesCount).toBe(0);
+    expect(byId.get(underscoreAccount)?.gamesCount).toBe(0);
   });
 
   it("orders newest first and pages", async () => {

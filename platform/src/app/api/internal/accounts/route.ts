@@ -8,7 +8,7 @@ import { OpsAccountsQuerySchema, listOpsAccounts } from "@/services/ops-lists";
 /**
  * One page of accounts for the ops console. Ops m2m only — /api/internal auth,
  * see lib/internal-auth. Plaintext operational columns only: no vault material
- * and nothing from `kids` beyond a row count.
+ * and nothing from `kids` or a private game beyond a row count.
  */
 export async function GET(request: Request): Promise<NextResponse> {
   if (!isInternalAuthorized(request)) {
