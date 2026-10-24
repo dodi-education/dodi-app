@@ -4,6 +4,7 @@
  */
 export * from "./types";
 export * from "./account-keys";
+export * from "./member-keys";
 export * from "./device-keystore";
 export * from "./session";
 export * from "./kid-crypto";

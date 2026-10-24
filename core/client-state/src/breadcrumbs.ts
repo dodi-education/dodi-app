@@ -42,6 +42,9 @@ export function buildCrumbs(
     case "dashboard":
       return [{ label: t("nav.dashboard") }];
 
+    case "profile":
+      return [{ label: t("nav.profile") }];
+
     case "kids": {
       const crumbs: Crumb[] = [{ label: t("nav.kids"), href: "/parent/kids" }];
       const id = seg[1];

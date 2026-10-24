@@ -156,6 +156,26 @@ export interface MemorySourceEntryRef {
 export interface MemorySourceWithEntry extends MemorySource {
   entry: MemorySourceEntryRef | null;
 }
+/** A login's membership in a family (n:m): who may act as which account. */
+export type AccountMember = Row<"account_members">;
+export type AccountMemberRole = AccountMember["role"];
+
+/**
+ * The caller's own side of the family they act as (GET /api/account,
+ * `member`): their role and the settings that belong to the person rather
+ * than the family. Null for device requests.
+ */
+export interface AccountMemberView {
+  user_id: string;
+  role: AccountMemberRole;
+  /** Role `member` only: what they may do (agent scope vocabulary). */
+  scopes: string[];
+  /** The person's UI and email language (user_settings). */
+  language: string;
+  /** The person's email toggles for this family. */
+  notification_preferences: Json;
+}
+
 /** Something that can open the family vault: a browser, the app, the robot or an agent. */
 export type AuthorizedClient = Row<"authorized_clients">;
 export type AuthorizedClientInsert = Insert<"authorized_clients">;

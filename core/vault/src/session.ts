@@ -6,6 +6,7 @@
  */
 import {
   type Argon2Params,
+  type KemWrappedKey,
   type PasswordWrappedKey,
   decryptField,
   encryptField,
@@ -14,6 +15,11 @@ import {
 } from "@dodi/crypto";
 
 import { addDeviceToVault, type DeviceRegistration } from "./account-keys";
+import {
+  type CreatedInvite,
+  createInviteWrap,
+  wrapVaultKeyForMember,
+} from "./member-keys";
 import type { StoredVaultKeys } from "./types";
 
 export class VaultSession {
@@ -81,6 +87,21 @@ export class VaultSession {
   ): StoredVaultKeys {
     if (!this.#vmk) throw new Error("Vault is locked");
     return addDeviceToVault(storedKeys, this.#vmk, device);
+  }
+
+  /**
+   * Seal the in-memory VMK for an invitation link (see member-keys). Only the
+   * sealed copy goes to the server; the secret goes into the link.
+   */
+  createInvite(): CreatedInvite {
+    if (!this.#vmk) throw new Error("Vault is locked");
+    return createInviteWrap(this.#vmk);
+  }
+
+  /** Wrap the in-memory VMK to a member's personal KEM key. */
+  wrapForMember(memberKemPublicKey: string): KemWrappedKey {
+    if (!this.#vmk) throw new Error("Vault is locked");
+    return wrapVaultKeyForMember(this.#vmk, memberKemPublicKey);
   }
 
   /** Zero and drop the key from memory. */

@@ -17,9 +17,18 @@ function fakeApi(response: Response | Error): PlatformApi & { request: ReturnTyp
   };
 }
 
-function fakeAccount(): { account: AccountStore; patchLocal: ReturnType<typeof vi.fn> } {
+function fakeAccount(): {
+  account: AccountStore;
+  patchLocal: ReturnType<typeof vi.fn>;
+  patchMember: ReturnType<typeof vi.fn>;
+} {
   const patchLocal = vi.fn();
-  return { account: createStore(() => ({ patchLocal })) as unknown as AccountStore, patchLocal };
+  const patchMember = vi.fn();
+  return {
+    account: createStore(() => ({ patchLocal, patchMember })) as unknown as AccountStore,
+    patchLocal,
+    patchMember,
+  };
 }
 
 function fakeVault(hasSession: boolean): VaultStore {
@@ -32,7 +41,7 @@ const INPUT = { dateStyle: "dmy_dot", timeStyle: "24h", timeZone: "auto", langua
 describe("saving the account preferences", () => {
   it("saves an automatic timezone as nothing, and mirrors the row", async () => {
     const api = fakeApi(new Response("{}", { status: 200 }));
-    const { account, patchLocal } = fakeAccount();
+    const { account, patchLocal, patchMember } = fakeAccount();
     await expect(
       saveAccountPreferences({ api, account, vault: fakeVault(false) }, INPUT),
     ).resolves.toBeNull();
@@ -41,7 +50,9 @@ describe("saving the account preferences", () => {
     expect(init.method).toBe("PATCH");
     const preferences = { dateStyle: "dmy_dot", timeStyle: "24h", timeZoneEnc: null };
     expect(JSON.parse(init.body as string)).toEqual({ datePreferences: preferences, language: "de" });
-    expect(patchLocal).toHaveBeenCalledWith({ date_preferences: preferences, language: "de" });
+    // The date format is the family's; the language is the person's.
+    expect(patchLocal).toHaveBeenCalledWith({ date_preferences: preferences });
+    expect(patchMember).toHaveBeenCalledWith({ language: "de" });
   });
 
   it("seals an explicit timezone so the server never sees it", async () => {
@@ -70,7 +81,7 @@ describe("saving the account preferences", () => {
 
   it("reports failed saves without touching the cache", async () => {
     for (const response of [new Response("", { status: 500 }), new Error("offline")]) {
-      const { account, patchLocal } = fakeAccount();
+      const { account, patchLocal, patchMember } = fakeAccount();
       await expect(
         saveAccountPreferences({ api: fakeApi(response), account, vault: fakeVault(true) }, INPUT),
       ).resolves.toBe("saveFailed");
@@ -80,13 +91,13 @@ describe("saving the account preferences", () => {
 });
 
 describe("persisting the language", () => {
-  it("patches the account and mirrors it on success only", async () => {
+  it("patches the person's language and mirrors it on success only", async () => {
     const ok = fakeAccount();
     await persistLanguage({ api: fakeApi(new Response("{}")), account: ok.account }, "de");
-    expect(ok.patchLocal).toHaveBeenCalledWith({ language: "de" });
+    expect(ok.patchMember).toHaveBeenCalledWith({ language: "de" });
 
     const failed = fakeAccount();
     await persistLanguage({ api: fakeApi(new Error("401")), account: failed.account }, "de");
-    expect(failed.patchLocal).not.toHaveBeenCalled();
+    expect(failed.patchMember).not.toHaveBeenCalled();
   });
 });

@@ -32,18 +32,21 @@ afterAll(async () => {
   await t?.close();
 });
 
-/** Reset the plaintext account fields a test may have changed. */
+/** Reset the family owner's language and toggles a test may have changed. */
 async function setAccount(
   id: string,
   fields: { language?: string; notification_preferences?: Json },
 ): Promise<void> {
   await t.serviceDb
-    .updateTable("accounts")
-    .set({
-      language: fields.language ?? "en",
-      notification_preferences: fields.notification_preferences ?? {},
-    })
-    .where("id", "=", id)
+    .updateTable("user_settings")
+    .set({ language: fields.language ?? "en" })
+    .where("user_id", "=", id)
+    .execute();
+  await t.serviceDb
+    .updateTable("account_members")
+    .set({ notification_preferences: fields.notification_preferences ?? {} })
+    .where("account_id", "=", id)
+    .where("user_id", "=", id)
     .execute();
 }
 
@@ -193,5 +196,39 @@ describe("notifyPendingApproval", () => {
       ),
     ).resolves.toBeUndefined();
     expect(sendEmailMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("notifyPendingApproval with several parents", () => {
+  it("mails every owner and co-parent in their own language, honouring each toggle", async () => {
+    const family = await t.createAccount("multi-owner@example.com");
+    const coParent = await t.createAccount("multi-coparent@example.com");
+    const optedOut = await t.createAccount("multi-optout@example.com");
+    const scoped = await t.createAccount("multi-member@example.com");
+    await t.addMember(family, coParent, "co_parent");
+    await t.addMember(family, optedOut, "co_parent", {
+      notification_preferences: { friend_approval_email: false },
+    });
+    await t.addMember(family, scoped, "member");
+    await t.serviceDb
+      .updateTable("user_settings")
+      .set({ language: "de" })
+      .where("user_id", "=", coParent)
+      .execute();
+    sendEmailMock.mockReset();
+
+    await notifyPendingApproval(
+      t.serviceDb,
+      friendship({ requester_account_id: family, requester_parent_ok: false }),
+    );
+
+    const sends = sendEmailMock.mock.calls.map(([input]) => input as { to: string; subject: string });
+    expect(sends.map((send) => send.to).sort()).toEqual([
+      "multi-coparent@example.com",
+      "multi-owner@example.com",
+    ]);
+    expect(sends.find((send) => send.to === "multi-coparent@example.com")?.subject).toBe(
+      friendApprovalCopy("de").subject,
+    );
   });
 });

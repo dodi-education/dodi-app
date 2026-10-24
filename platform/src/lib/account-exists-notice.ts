@@ -22,6 +22,7 @@ import { accountExistsCopy, normalizeEmailLocale } from "@/emails/strings";
 import { serviceDb } from "@/lib/db";
 import { sendEmail } from "@/lib/email";
 import { logServerError } from "@/lib/error-logs";
+import { firstAccountOf, getUserLanguage } from "@/services/account-members";
 import { consumeRateLimit } from "@/services/rate-limits";
 
 /**
@@ -41,17 +42,17 @@ export const ACCOUNT_EXISTS_NOTICE_LIMIT = {
  */
 export async function sendAccountExistsNotice(user: { id: string; email: string }): Promise<void> {
   try {
+    // Counted against the login's (first) family: the limiter is per account.
+    // A login that has no family yet (an invitee who has not joined) gets no
+    // notice rather than an unlimited one.
+    const accountId = await firstAccountOf(serviceDb, user.id);
+    if (!accountId) return;
     const { allowed } = await consumeRateLimit(serviceDb, {
-      accountId: user.id,
+      accountId,
       ...ACCOUNT_EXISTS_NOTICE_LIMIT,
     });
     if (!allowed) return;
-    const account = await serviceDb
-      .selectFrom("accounts")
-      .select("language")
-      .where("id", "=", user.id)
-      .executeTakeFirst();
-    const locale = normalizeEmailLocale(account?.language);
+    const locale = normalizeEmailLocale(await getUserLanguage(serviceDb, user.id));
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://app.dodi.app";
     // sendEmail logs a failed delivery itself and never throws.
     await sendEmail({

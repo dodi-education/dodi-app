@@ -26,6 +26,8 @@ export interface OfflineCache {
   readKidRows<T>(): Promise<T[] | null>;
   writeGameRows(kidId: string, rows: unknown[]): Promise<void>;
   readGameRows<T>(kidId: string): Promise<T[] | null>;
+  /** Wipe everything cached (sign-out, another family on this device). */
+  clearAll(): Promise<void>;
 }
 
 /**

@@ -10,7 +10,7 @@ import { listAuthorizedClients } from "@/services/authorized-clients";
  * family's vault, plus signed-in sessions that never unlocked it.
  */
 export async function GET(request: Request): Promise<Response> {
-  const auth = await requireAuth(request);
+  const auth = await requireAuth(request, { roles: ["owner", "co_parent"] });
   if (auth instanceof Response) return auth;
   const currentDevice = request.headers.get("x-dodi-device-id");
   try {

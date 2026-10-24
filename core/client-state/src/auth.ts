@@ -79,7 +79,7 @@ export interface AuthApi {
    * well-formed email (new or registered), so nothing leaks account existence.
    */
   register(
-    input: { email: string; password: string; inviteCode?: string },
+    input: { email: string; password: string; inviteCode?: string; familyInvitationId?: string },
     headers: Record<string, string>,
   ): Promise<{ error: { message: string; code?: string } | null }>;
   registrationMode(): Promise<RegistrationMode>;
@@ -146,6 +146,8 @@ export interface AuthFlowDeps {
 export type SignInOutcome =
   /** Signed in and the vault is open. `isNewVault`: show the account key next. */
   | { kind: "signed_in"; isNewVault: boolean; language: string | null }
+  /** Signed in, but the login belongs to no family (removed, or never joined). */
+  | { kind: "no_family" }
   /** The account never confirmed its email; the platform emailed a fresh code. */
   | { kind: "needs_code" }
   /** Show this message: a key, or the server's own text for credential errors. */
@@ -173,9 +175,13 @@ export async function completeSignIn(
     return {
       kind: "signed_in",
       isNewVault: created,
-      language: deps.account.getState().account?.language ?? null,
+      language:
+        deps.account.getState().member?.language ??
+        deps.account.getState().account?.language ??
+        null,
     };
   } catch {
+    if (deps.vault.getState().status === "no-family") return { kind: "no_family" };
     return { kind: "error", key: "unlockAfterLoginFailed" };
   }
 }

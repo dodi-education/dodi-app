@@ -19,7 +19,7 @@ import { clientState, useAccountStore } from "@/lib/client-state";
  */
 export default function NotificationsSettingsScreen() {
   const t = useTranslations("settings");
-  const prefs = useAccountStore((s) => notificationPreferencesOf(s.account));
+  const prefs = useAccountStore((s) => notificationPreferencesOf(s.member));
   const isLoaded = useAccountStore((s) => s.loaded);
   const load = useAccountStore((s) => s.load);
   const [isSaving, setIsSaving] = useState(false);

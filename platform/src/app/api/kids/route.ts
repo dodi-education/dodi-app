@@ -16,13 +16,14 @@ const CreateKidSchema = z.object({
 });
 
 export async function GET(request: Request): Promise<NextResponse> {
-  // Agents get a projection (ids, plus sealed name/birthdate with kids:basic).
-  const auth = await requireAuth(request, { agentScope: "any" });
+  // Agents and scoped members get a projection (ids, plus sealed
+  // name/birthdate with kids:basic, memory with kids:memory).
+  const auth = await requireAuth(request, { agentScope: "any", memberScope: "any" });
   if (auth instanceof Response) return auth;
   const { accountId, db } = auth;
 
   try {
-    if (auth.via === "agent") {
+    if (auth.via === "agent" || auth.role === "member") {
       const includeBasic = auth.scopes?.has("kids:basic") ?? false;
       const includeMemory = auth.scopes?.has("kids:memory") ?? false;
       return NextResponse.json(

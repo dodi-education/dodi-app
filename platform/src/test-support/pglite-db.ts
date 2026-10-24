@@ -29,13 +29,23 @@ export type TestDb = Kysely<Database>;
 export interface TestDatabase {
   /** BYPASSRLS handle (owner) — seed rows, assert on state. */
   serviceDb: TestDb;
-  /** RLS-enforced handle acting as `accountId` (role dodi_app). */
-  scopedDb: (accountId: string) => TestDb;
+  /** RLS-enforced handle acting as `accountId` (and `userId`) (role dodi_app). */
+  scopedDb: (accountId: string, userId?: string | null) => TestDb;
   /** Insert an auth user (+ account via handle_new_user) and return its id. */
   createAccount: (
     email: string,
     options?: { inviteCode?: string; emailVerified?: boolean },
   ) => Promise<string>;
+  /**
+   * Add `userId` to the family `accountId` as a non-owner (with a placeholder
+   * key wrap: the server never reads it).
+   */
+  addMember: (
+    accountId: string,
+    userId: string,
+    role?: "co_parent" | "member",
+    extra?: { notification_preferences?: Record<string, boolean> },
+  ) => Promise<void>;
   /**
    * Apply the remaining migrations (and the seed) on a database created with
    * `upTo`. A no-op on a fully migrated one.
@@ -52,11 +62,12 @@ export interface CreateTestDbOptions {
   upTo?: string;
 }
 
-/** Sets role + account on the single PGlite connection for the scoped handle. */
+/** Sets role + account (+ user) on the single PGlite connection for the scoped handle. */
 class ScopedTestDriver implements Driver {
   constructor(
     private readonly inner: Driver,
     private readonly accountId: string,
+    private readonly userId: string | null,
   ) {}
 
   init(): Promise<void> {
@@ -67,9 +78,10 @@ class ScopedTestDriver implements Driver {
     const connection = await this.inner.acquireConnection();
     await connection.executeQuery(CompiledQuery.raw("set role dodi_app"));
     await connection.executeQuery(
-      CompiledQuery.raw("select set_config('app.account_id', $1, false)", [
-        this.accountId,
-      ]),
+      CompiledQuery.raw(
+        "select set_config('app.account_id', $1, false), set_config('app.user_id', $2, false)",
+        [this.accountId, this.userId ?? ""],
+      ),
     );
     return connection;
   }
@@ -88,6 +100,7 @@ class ScopedTestDriver implements Driver {
 
   async releaseConnection(connection: DatabaseConnection): Promise<void> {
     await connection.executeQuery(CompiledQuery.raw("reset app.account_id"));
+    await connection.executeQuery(CompiledQuery.raw("reset app.user_id"));
     await connection.executeQuery(CompiledQuery.raw("reset role"));
     await this.inner.releaseConnection(connection);
   }
@@ -96,6 +109,16 @@ class ScopedTestDriver implements Driver {
     return Promise.resolve();
   }
 }
+
+/** A structurally valid KEM wrap for test members; never opened. */
+export const PLACEHOLDER_MEMBER_WRAP = {
+  v: 1,
+  scheme: "kem",
+  alg: "ml-kem-768",
+  kemCiphertext: "c",
+  nonce: "n",
+  ciphertext: "x",
+};
 
 export async function createTestDb(
   options: CreateTestDbOptions = {},
@@ -121,11 +144,11 @@ export async function createTestDb(
     await migrateToLatest();
   }
 
-  const scopedDb = (accountId: string): TestDb =>
+  const scopedDb = (accountId: string, userId: string | null = null): TestDb =>
     new Kysely<Database>({
       dialect: {
         ...dialect,
-        createDriver: () => new ScopedTestDriver(dialect.createDriver(), accountId),
+        createDriver: () => new ScopedTestDriver(dialect.createDriver(), accountId, userId),
         createQueryCompiler: () => dialect.createQueryCompiler(),
         createAdapter: () => dialect.createAdapter(),
         createIntrospector: (db) => dialect.createIntrospector(db),
@@ -146,10 +169,26 @@ export async function createTestDb(
     return id;
   };
 
+  const addMember: TestDatabase["addMember"] = async (accountId, userId, role, extra) => {
+    await serviceDb
+      .insertInto("account_members")
+      .values({
+        account_id: accountId,
+        user_id: userId,
+        role: role ?? "co_parent",
+        member_vmk_wrap: PLACEHOLDER_MEMBER_WRAP,
+        ...(extra?.notification_preferences
+          ? { notification_preferences: extra.notification_preferences }
+          : {}),
+      })
+      .execute();
+  };
+
   return {
     serviceDb,
     scopedDb,
     createAccount,
+    addMember,
     migrateToLatest,
     close: async () => {
       await serviceDb.destroy();

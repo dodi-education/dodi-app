@@ -6,7 +6,6 @@ import { createStore } from "zustand/vanilla";
 import { bindStore } from "@dodi/client-state/react";
 
 import { loadAccessToken, signOut as revokeSession } from "@/adapters/auth";
-import { offlineCache } from "@/adapters/offline-cache";
 import { clientState } from "@/lib/client-state";
 
 interface SessionState {
@@ -36,16 +35,7 @@ export function markSignedIn(): void {
  * vault keys), revoke, lock the vault, and drop every cached plaintext.
  */
 export async function signOut(): Promise<void> {
-  await offlineCache.clearAll();
+  await clientState.dropFamilyData();
   await revokeSession();
-  clientState.vault.getState().lock();
-  clientState.kids.getState().invalidate();
-  clientState.games.getState().invalidate();
-  clientState.account.getState().reset();
-  clientState.providers.getState().invalidate();
-  clientState.characterAssets.getState().invalidate();
-  clientState.assetPublications.getState().reset();
-  clientState.discoverAssets.getState().invalidate();
-  clientState.dodiAIKeys.getState().clear();
   sessionStore.setState({ isSignedIn: false });
 }

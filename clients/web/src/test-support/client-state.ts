@@ -27,6 +27,7 @@ const noOfflineCache: OfflineCache = {
   readKidRows: async () => null,
   writeGameRows: async () => {},
   readGameRows: async () => null,
+  clearAll: async () => {},
 };
 
 export function testClientState(opts: {

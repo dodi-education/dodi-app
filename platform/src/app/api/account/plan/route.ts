@@ -11,7 +11,7 @@ const SelectPlanSchema = z.object({ handle: z.string().min(1) });
  * onto the account. Used by the onboarding plan picker and later plan changes.
  */
 export async function POST(request: Request): Promise<Response> {
-  const auth = await requireAuth(request);
+  const auth = await requireAuth(request, { memberScope: "any" });
   if (auth instanceof Response) return auth;
   const { accountId, db } = auth;
 

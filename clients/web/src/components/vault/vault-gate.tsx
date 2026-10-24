@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 
 import { useVaultStore } from "@/stores/vault-store";
 
+import { NoFamilyNotice } from "./no-family-notice";
 import { VaultUnlockPrompt } from "./vault-unlock-prompt";
 
 /**
@@ -39,6 +40,10 @@ export function VaultGate({ children }: { children: React.ReactNode }) {
 
   if (status === "locked") {
     return <VaultUnlockPrompt />;
+  }
+
+  if (status === "no-family") {
+    return <NoFamilyNotice />;
   }
 
   // idle | working | needs-setup (redirecting) — nothing to interact with yet

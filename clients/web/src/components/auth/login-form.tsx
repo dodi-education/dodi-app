@@ -25,7 +25,7 @@ import { clientState } from "@/lib/client-state";
 
 /**
  * Adopt the account's stored UI language onto this device by seeding the
- * `NEXT_LOCALE` cookie from `accounts.language`. The cookie is only a
+ * `NEXT_LOCALE` cookie from the person's saved language. The cookie is only a
  * per-device cache; re-seeding it at login lets the parent's saved preference
  * follow them to new browsers/devices.
  */
@@ -90,6 +90,12 @@ export function LoginForm({ next }: LoginFormProps) {
       if (outcome.key === "unlockAfterLoginFailed") setStep("form");
       setLoading(false);
       return message;
+    }
+    if (outcome.kind === "no_family") {
+      // The vault gate explains it and offers a family of their own.
+      router.push("/parent/dashboard");
+      router.refresh();
+      return null;
     }
     seedLocale(outcome.language);
     const target = safeNextPath(next);

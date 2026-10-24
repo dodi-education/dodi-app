@@ -296,7 +296,9 @@ export async function listOpsAccounts(
 
   const joins = sql`
     from accounts
-    left join auth_users on auth_users.id = accounts.id
+    left join account_members owner_member
+      on owner_member.account_id = accounts.id and owner_member.role = 'owner'
+    left join auth_users on auth_users.id = owner_member.user_id
     left join platform_plans on platform_plans.handle = accounts.subscribed_plan
     where ${where}
   `;
@@ -328,7 +330,7 @@ export async function listOpsAccounts(
                (select max(ac.occurred_at) from activities ac
                  where ac.account_id = accounts.id),
                (select max(s.updated_at) from auth_sessions s
-                 where s.user_id = accounts.id)
+                 where s.active_account_id = accounts.id)
              ) as last_active_at
       ${joins}
       order by accounts.created_at desc, accounts.id asc

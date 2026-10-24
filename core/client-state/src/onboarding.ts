@@ -66,8 +66,8 @@ export async function saveAccountPreferences(
   }
   deps.account.getState().patchLocal({
     date_preferences: datePreferences as unknown as Json,
-    language: input.language,
   });
+  deps.account.getState().patchMember({ language: input.language });
   return null;
 }
 
@@ -86,7 +86,7 @@ export async function persistLanguage(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ language }),
     });
-    if (res.ok) deps.account.getState().patchLocal({ language });
+    if (res.ok) deps.account.getState().patchMember({ language });
   } catch {
     // Device-local only.
   }

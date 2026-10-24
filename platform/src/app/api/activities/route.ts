@@ -88,6 +88,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         parsed.data.personaId ?? kid.active_persona?.id ?? null,
       event: parsed.data.event,
       message: parsed.data.message,
+      actor_user_id: auth.userId ?? null,
     });
 
     return NextResponse.json({ success: true }, { status: 201 });

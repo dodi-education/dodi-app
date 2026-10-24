@@ -3,11 +3,12 @@ import { useState } from "react";
 import { Pressable } from "react-native";
 import { useTranslations } from "use-intl";
 import { enterKidView } from "@dodi/client-state/kid-view";
+import { canUseKidView } from "@dodi/client-state/parent-nav";
 import { kidViewButton as styles } from "@dodi/ui-recipes";
 
 import { mobilePlatform } from "@/adapters/platform";
 import { Icon, Text } from "@/components/ui";
-import { clientState } from "@/lib/client-state";
+import { clientState, useParentAccess } from "@/lib/client-state";
 import { cn } from "@/lib/cn";
 import { MAX_FONT_SCALE } from "@/lib/font-scale";
 
@@ -20,6 +21,9 @@ export function KidViewButton() {
   const t = useTranslations("nav");
   const router = useRouter();
   const [isBusy, setIsBusy] = useState(false);
+  // The kid view runs on the family's kids and their data: owner and
+  // co-parents only.
+  const isAllowed = canUseKidView(useParentAccess());
 
   async function switchToKid(): Promise<void> {
     if (isBusy) return;
@@ -39,6 +43,8 @@ export function KidViewButton() {
       setIsBusy(false);
     }
   }
+
+  if (!isAllowed) return null;
 
   return (
     <Pressable

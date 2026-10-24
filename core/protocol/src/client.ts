@@ -32,6 +32,26 @@ export class NpubConflictError extends Error {
   }
 }
 
+/**
+ * The signed-in person is a family member other than the owner: they open the
+ * family's vault with their own keys (GET /api/vault/unlock-keys), not the
+ * family's blob.
+ */
+export class MemberVaultError extends Error {
+  constructor() {
+    super("Family members open the vault with their own keys");
+    this.name = "MemberVaultError";
+  }
+}
+
+/** The signed-in login belongs to no family (removed, or never finished joining). */
+export class NoFamilyError extends Error {
+  constructor() {
+    super("This login is not a member of a family");
+    this.name = "NoFamilyError";
+  }
+}
+
 async function toError(res: Response, action: string): Promise<Error> {
   let detail = "";
   try {
@@ -75,6 +95,11 @@ export class DodiClient {
 
   async getVaultKeys(): Promise<StoredVaultKeys | null> {
     const res = await this.request("/api/vault/keys", { method: "GET" });
+    if (res.status === 403) {
+      const body = (await res.clone().json().catch(() => null)) as { code?: string } | null;
+      if (body?.code === "MEMBER_VAULT") throw new MemberVaultError();
+      if (body?.code === "NO_FAMILY") throw new NoFamilyError();
+    }
     if (!res.ok) throw await toError(res, "load vault keys");
     const data = (await res.json()) as { vaultKeys: StoredVaultKeys | null };
     return data.vaultKeys ?? null;

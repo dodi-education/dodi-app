@@ -12,7 +12,7 @@ const CLAIM_LIMIT = { bucket: "device_claim", limit: 20, windowMs: 3_600_000 };
  *  so the client can wrap the VMK to it before calling /activate, and for an
  *  agent the name and scopes it asks for (shown on the approval screen). */
 export async function POST(request: Request): Promise<Response> {
-  const auth = await requireAuth(request);
+  const auth = await requireAuth(request, { roles: ["owner", "co_parent"] });
   if (auth instanceof Response) return auth;
   const limit = await consumeRateLimit(serviceDb, {
     accountId: auth.accountId,
@@ -39,6 +39,7 @@ export async function POST(request: Request): Promise<Response> {
       deviceId: d.device_id,
       kemPublicKey: d.kem_public_key,
       signPublicKey: d.sign_public_key,
+      kemKeySignature: d.kem_key_signature,
       name: d.name,
       kind: d.kind,
       requestedScopes: requestedScopes(d),

@@ -207,11 +207,16 @@ describe("processPendingPublications", () => {
       .set({
         publication_handle: "fun_games",
         flagged_for_review_at: null,
-        language: "en",
-        notification_preferences:
-          options.notificationPreferences ?? { friend_approval_email: true },
       } as never)
       .where("id", "=", accountId)
+      .execute();
+    await t.serviceDb
+      .updateTable("account_members")
+      .set({
+        notification_preferences:
+          options.notificationPreferences ?? { friend_approval_email: true },
+      })
+      .where("account_id", "=", accountId)
       .execute();
 
     // The private source game the publication forked from.

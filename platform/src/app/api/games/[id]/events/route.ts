@@ -76,6 +76,7 @@ export async function POST(
       event: event,
       message,
       game_id: game.id,
+      actor_user_id: auth.userId ?? null,
       ...(occurredAt ? { occurred_at: occurredAt } : {}),
     });
 

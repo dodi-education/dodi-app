@@ -65,6 +65,25 @@ export async function removeDeviceWrap(
 }
 
 /**
+ * Add (or replace) one device's wrap of the family's VMK. Structural only:
+ * the wrap was made by a member's browser. Lets a co-parent pair an agent or
+ * the robot without rewriting the whole blob, which also holds the owner's
+ * password wrap and which only the owner writes. False without a vault.
+ */
+export async function appendDeviceWrap(
+  db: Db,
+  accountId: string,
+  wrap: StoredVaultKeys["deviceWraps"][number],
+): Promise<boolean> {
+  const keys = await getStoredVaultKeys(db, accountId);
+  if (!keys) return false;
+  const deviceWraps = keys.deviceWraps.filter((entry) => entry.deviceId !== wrap.deviceId);
+  deviceWraps.push(wrap);
+  await setStoredVaultKeys(db, accountId, { ...keys, deviceWraps });
+  return true;
+}
+
+/**
  * The part of the vault-keys blob an agent device may see: its own wrap and
  * the check record. Never the password wrap (an offline guessing target) or
  * the other devices' wraps.

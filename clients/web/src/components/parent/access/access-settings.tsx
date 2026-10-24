@@ -9,11 +9,13 @@ import { accessDeps, currentDeviceId } from "@/components/parent/access/access-d
 import { AgentStarter } from "@/components/parent/access/agent-starter";
 import { ClientSection } from "@/components/parent/access/client-section";
 import { ConnectCodeForm } from "@/components/parent/access/connect-code-form";
+import { PeopleSection } from "@/components/parent/access/people-section";
 import { Icon } from "@/components/shared/icon";
 import { Button } from "@/components/ui/button";
 import { dodi } from "@/lib/api";
 import { endSession } from "@/lib/auth/end-session";
 import { cn } from "@/lib/utils";
+import { useAccountStore } from "@/stores/account-store";
 import {
   groupAccess,
   loadAuthorizedClients,
@@ -26,10 +28,12 @@ import { access } from "@dodi/ui-recipes";
 export type AccessResult = "allowed" | "allowedAgent" | "declined";
 
 /**
- * Settings > Access: everything that can open the family vault, in this order:
- * agents and access keys (with Get started), the robot, this browser, other
- * browsers and the app. Each entry has its status and a one-step Revoke.
- * Revoking this very browser signs it out.
+ * Settings > Access: the family's people, then everything that can open the
+ * family vault, in this order: agents and access keys (with Get started), the
+ * robot, this browser, other browsers and the app. Each entry has its status
+ * and a one-step Revoke. Revoking this very browser signs it out. A scoped
+ * family member sees the people only (devices are for the owner and
+ * co-parents).
  */
 export function AccessSettings({ result }: { result: AccessResult | null }) {
   const t = useTranslations("access");
@@ -40,16 +44,19 @@ export function AccessSettings({ result }: { result: AccessResult | null }) {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(result ? t(result) : null);
   const [isKeyDialogOpen, setIsKeyDialogOpen] = useState(false);
+  const role = useAccountStore((s) => s.member?.role ?? null);
+  const isScopedMember = role === "member";
 
   const load = useCallback(async () => {
     setClients(await loadAuthorizedClients(dodi, await currentDeviceId()));
   }, []);
 
   useEffect(() => {
+    if (isScopedMember) return;
     // Deferred a microtask so the fetch's setState doesn't run synchronously on
     // the effect tick (cascading-render lint).
     void Promise.resolve().then(load);
-  }, [load]);
+  }, [load, isScopedMember]);
 
   async function signOut() {
     await endSession();
@@ -87,6 +94,9 @@ export function AccessSettings({ result }: { result: AccessResult | null }) {
           {error ?? notice}
         </p>
       ) : null}
+      <PeopleSection />
+      {isScopedMember ? null : (
+      <>
       <ClientSection
         title={t("agentsTitle")}
         desc={t("agentsDesc")}
@@ -133,6 +143,8 @@ export function AccessSettings({ result }: { result: AccessResult | null }) {
         emptyText={t("browsersEmpty")}
         {...rowProps}
       />
+      </>
+      )}
     </>
   );
 }

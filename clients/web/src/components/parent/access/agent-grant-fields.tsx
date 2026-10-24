@@ -21,19 +21,25 @@ interface AgentGrantFieldsProps {
   scopes: readonly AgentScope[];
   selected: readonly AgentScope[];
   onSelectedChange: (selected: AgentScope[]) => void;
-  /** Days; null = never expires. */
-  expiresInDays: number | null;
-  onExpiresInDaysChange: (days: number | null) => void;
+  /** Days; null = never expires. Agents only: a family member has no expiry. */
+  expiresInDays?: number | null;
+  onExpiresInDaysChange?: (days: number | null) => void;
+  /** Who gets the access: an agent (default) or a family member. */
+  audience?: "agent" | "member";
 }
 
-/** Scope toggles and the expiry choice, shared by the approval card and the access key form. */
+/**
+ * Scope toggles (and, for an agent, the expiry choice), shared by the approval
+ * card, the access key form and a family member's access.
+ */
 export function AgentGrantFields({
   idPrefix,
   scopes,
   selected,
   onSelectedChange,
-  expiresInDays,
+  expiresInDays = null,
   onExpiresInDaysChange,
+  audience = "agent",
 }: AgentGrantFieldsProps) {
   const t = useTranslations("access");
   const hasStudio = scopes.includes("studio");
@@ -51,10 +57,13 @@ export function AgentGrantFields({
   }, [hasStudio]);
 
   function warningFor(scope: AgentScope): string | null {
-    if (SENSITIVE_AGENT_SCOPES.includes(scope)) return t("sensitiveWarning");
+    const isMember = audience === "member";
+    if (SENSITIVE_AGENT_SCOPES.includes(scope)) {
+      return t(isMember ? "memberSensitiveWarning" : "sensitiveWarning");
+    }
     if (scope !== "studio" || studioProviders === null) return null;
     return studioProviders.length
-      ? t("studioWarning", { providers: studioProviders.join(", ") })
+      ? t(isMember ? "memberStudioWarning" : "studioWarning", { providers: studioProviders.join(", ") })
       : t("studioNoProviders");
   }
 
@@ -65,7 +74,9 @@ export function AgentGrantFields({
 
   return (
     <>
-      <div className="px-5 pt-4 pb-2 text-sm font-semibold">{t("scopesLabel")}</div>
+      <div className="px-5 pt-4 pb-2 text-sm font-semibold">
+        {t(audience === "member" ? "memberScopesLabel" : "scopesLabel")}
+      </div>
       {scopes.map((scope) => {
         const keys = AGENT_SCOPE_LABEL_KEYS[scope];
         const warning = warningFor(scope);
@@ -95,6 +106,7 @@ export function AgentGrantFields({
           </FieldRow>
         );
       })}
+      {onExpiresInDaysChange ? (
       <FieldRow label={t("expiry")} htmlFor={`${idPrefix}-expiry`}>
         <select
           id={`${idPrefix}-expiry`}
@@ -111,6 +123,7 @@ export function AgentGrantFields({
           ))}
         </select>
       </FieldRow>
+      ) : null}
     </>
   );
 }

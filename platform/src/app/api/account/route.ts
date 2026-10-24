@@ -9,12 +9,14 @@ import { requireAuth } from "@/lib/resolve-auth";
 import { deleteAccount } from "@/services/account-deletion";
 import {
   getAccount,
+  getMemberView,
   updateAccountDatePreferences,
   updateAccountGameScreenshotService,
   updateAccountInterfacePreferences,
   updateAccountLanguage,
-  updateAccountNotificationPreferences,
   updateAccountParentPin,
+  updateMemberNotificationPreferences,
+  updateUserLanguage,
 } from "@/services/accounts";
 import { consumeRateLimit } from "@/services/rate-limits";
 import { GameScreenshotServiceSettingsSchema } from "@dodi/games/screenshot-contract";
@@ -59,19 +61,30 @@ const UpdateAccountSchema = z.object({
   interfacePreferences: InterfacePreferencesSchema.optional(),
 });
 
-/** User-authed: the caller's account (subscribed plan, entitlements, preferences). */
+/**
+ * User-authed: the family's account (subscribed plan, entitlements, family
+ * preferences) and, for a person, `member`: their role and own settings
+ * (language, email toggles).
+ */
 export async function GET(request: Request): Promise<Response> {
-  const auth = await requireAuth(request);
+  const auth = await requireAuth(request, { memberScope: "any" });
   if (auth instanceof Response) return auth;
-  const account = await getAccount(auth.db, auth.accountId);
-  return NextResponse.json({ account });
+  const [account, member] = await Promise.all([
+    getAccount(auth.db, auth.accountId),
+    auth.userId ? getMemberView(auth.db, auth.accountId, auth.userId) : null,
+  ]);
+  return NextResponse.json({ account, member });
 }
 
-/** User-authed: update account-level preferences (date/time display, UI language, interface). */
+/**
+ * User-authed: update preferences. Family-level: date/time display, interface,
+ * parent PIN, screenshot service. Person-level: UI language (the owner's also
+ * becomes the family's language for devices) and email toggles.
+ */
 export async function PATCH(request: Request): Promise<Response> {
-  const auth = await requireAuth(request);
+  const auth = await requireAuth(request, { memberScope: "any" });
   if (auth instanceof Response) return auth;
-  const { accountId, db } = auth;
+  const { accountId, db, userId, role } = auth;
 
   const body: unknown = await request.json();
   const result = UpdateAccountSchema.safeParse(body);
@@ -91,23 +104,48 @@ export async function PATCH(request: Request): Promise<Response> {
     interfacePreferences,
   } = result.data;
 
+  // A scoped member changes only their own settings, never the family's.
+  const isFamilyChange =
+    datePreferences !== undefined ||
+    parentPinEnc !== undefined ||
+    gameScreenshotService !== undefined ||
+    interfacePreferences !== undefined;
+  if (role === "member" && isFamilyChange) {
+    return NextResponse.json(
+      { error: "Only the family's parents change these settings" },
+      { status: 403 },
+    );
+  }
+
+  if (notificationPreferences && !userId) {
+    return NextResponse.json(
+      { error: "Email preferences belong to a person" },
+      { status: 403 },
+    );
+  }
+
   try {
     const savedDatePreferences = datePreferences
       ? await updateAccountDatePreferences(db, accountId, datePreferences)
       : undefined;
     if (language !== undefined) {
-      await updateAccountLanguage(db, accountId, language);
+      if (userId) await updateUserLanguage(db, userId, language);
+      if (!userId || role === "owner") {
+        await updateAccountLanguage(db, accountId, language);
+      }
     }
     if (parentPinEnc !== undefined) {
       await updateAccountParentPin(db, accountId, parentPinEnc);
     }
-    const savedNotificationPreferences = notificationPreferences
-      ? await updateAccountNotificationPreferences(
-          db,
-          accountId,
-          notificationPreferences,
-        )
-      : undefined;
+    const savedNotificationPreferences =
+      notificationPreferences && userId
+        ? await updateMemberNotificationPreferences(
+            serviceDb,
+            accountId,
+            userId,
+            notificationPreferences,
+          )
+        : undefined;
     const savedGameScreenshotService = gameScreenshotService
       ? await updateAccountGameScreenshotService(db, accountId, gameScreenshotService)
       : undefined;
@@ -137,16 +175,17 @@ const DeleteAccountSchema = z.object({
 const DELETE_ATTEMPT_LIMIT = { bucket: "account_delete", limit: 5, windowMs: 15 * 60 * 1000 };
 
 /**
- * User-authed: permanently delete the caller's account and all family data
- * (see services/account-deletion). Requires the account password, and only a
- * signed-in parent session can do it: device tokens (headless agents) cannot.
- * Every session ends with the account, so clients sign out locally afterwards.
+ * User-authed, owner only: permanently delete the account and all its data
+ * (see services/account-deletion). Profiles stay, the owner's included: every
+ * session using the account loses it, and a person deletes their own profile
+ * separately (DELETE /api/me). Requires the password, and only a signed-in
+ * owner session can do it: device tokens (headless agents) cannot.
  */
 export async function DELETE(request: Request): Promise<Response> {
-  const auth = await requireAuth(request);
+  const auth = await requireAuth(request, { roles: ["owner"] });
   if (auth instanceof Response) return auth;
-  const { accountId, via } = auth;
-  if (via !== "user") {
+  const { accountId, via, userId } = auth;
+  if (via !== "user" || !userId) {
     return NextResponse.json(
       { error: "Only a signed-in parent can delete the account" },
       { status: 403 },

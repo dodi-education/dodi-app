@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MEMBER_KEYS_MISSING } from "@dodi/client-state";
 import { useVaultStore } from "@/stores/vault-store";
 
 /**
@@ -25,6 +26,9 @@ export function VaultUnlockPrompt() {
   const router = useRouter();
   const status = useVaultStore((s) => s.status);
   const needsSetup = status === "needs-setup";
+  // Family members other than the owner have no recovery key of their own.
+  const isMember = useVaultStore((s) => s.kind === "member");
+  const storeError = useVaultStore((s) => s.error);
 
   const [mode, setMode] = useState<"password" | "nsec">("password");
   const [password, setPassword] = useState("");
@@ -48,7 +52,8 @@ export function VaultUnlockPrompt() {
         await useVaultStore.getState().unlockWithNsec(nsec);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("unlockFailed"));
+      const message = err instanceof Error ? err.message : "";
+      setError(message === MEMBER_KEYS_MISSING ? t("memberKeysMissing") : message || t("unlockFailed"));
       setBusy(false);
     }
   }
@@ -97,7 +102,11 @@ export function VaultUnlockPrompt() {
                 />
               </div>
             )}
-            {error && <p className="text-sm text-destructive">{error}</p>}
+            {error ? (
+              <p className="text-sm text-destructive">{error}</p>
+            ) : storeError === MEMBER_KEYS_MISSING ? (
+              <p className="text-sm text-destructive">{t("memberKeysMissing")}</p>
+            ) : null}
             <Button type="submit" disabled={busy} className="w-full">
               {busy
                 ? t("unlocking")
@@ -106,7 +115,7 @@ export function VaultUnlockPrompt() {
                   : t("unlock")}
             </Button>
           </form>
-          {!needsSetup && (
+          {!needsSetup && !isMember && (
             <button
               type="button"
               onClick={() => {

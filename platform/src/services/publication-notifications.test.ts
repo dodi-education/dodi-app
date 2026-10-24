@@ -68,18 +68,21 @@ function publication(overrides: Partial<Game> = {}): Game {
   } as Game;
 }
 
-/** Override the publisher's plaintext columns (language/prefs) per test. */
+/** Override the publisher's (the family owner's) language and toggles per test. */
 async function setAccount(fields: {
   language?: string;
   notification_preferences?: Json;
 }): Promise<void> {
   await t.serviceDb
-    .updateTable("accounts")
-    .set({
-      language: fields.language ?? "en",
-      notification_preferences: fields.notification_preferences ?? {},
-    })
-    .where("id", "=", account)
+    .updateTable("user_settings")
+    .set({ language: fields.language ?? "en" })
+    .where("user_id", "=", account)
+    .execute();
+  await t.serviceDb
+    .updateTable("account_members")
+    .set({ notification_preferences: fields.notification_preferences ?? {} })
+    .where("account_id", "=", account)
+    .where("user_id", "=", account)
     .execute();
 }
 

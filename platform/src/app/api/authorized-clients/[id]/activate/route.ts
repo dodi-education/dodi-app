@@ -22,7 +22,7 @@ const ActivateSchema = z.object({
  * `{ scopes, expiresInDays }`. Devices and agents can't allow anything.
  */
 export async function POST(request: Request, context: Ctx): Promise<Response> {
-  const auth = await requireAuth(request);
+  const auth = await requireAuth(request, { roles: ["owner", "co_parent"] });
   if (auth instanceof Response) return auth;
   if (auth.via !== "user") {
     return NextResponse.json(

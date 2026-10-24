@@ -1,13 +1,13 @@
 import { type Href, Link, Slot, usePathname } from "expo-router";
 import { Pressable, ScrollView, View } from "react-native";
 import { useTranslations } from "use-intl";
-import { isNavItemActive, SETTINGS_NAV } from "@dodi/client-state/parent-nav";
+import { isNavItemActive, settingsNavFor } from "@dodi/client-state/parent-nav";
 import { settingsTab } from "@dodi/ui-recipes";
 
 import { BackLink } from "@/components/parent/back-link";
 import { ShellContent } from "@/components/shared/shell-content";
 import { Text } from "@/components/ui";
-import { clientState } from "@/lib/client-state";
+import { clientState, useParentAccess } from "@/lib/client-state";
 import { cn } from "@/lib/cn";
 
 /**
@@ -18,6 +18,7 @@ import { cn } from "@/lib/cn";
 export default function SettingsLayout() {
   const t = useTranslations();
   const pathname = usePathname();
+  const settingsNav = settingsNavFor(useParentAccess());
 
   // Pull to refresh on every tab: the account (plan, interface, date/time,
   // notifications, parent PIN, screenshot service); tabs with more data
@@ -34,7 +35,7 @@ export default function SettingsLayout() {
           contentContainerClassName={cn(settingsTab.strip.replace("-mx-4", ""))}
           accessibilityRole="tablist"
         >
-          {SETTINGS_NAV.map((item) => {
+          {settingsNav.map((item) => {
             const isActive = isNavItemActive(item, pathname);
             return (
               <Link key={item.href} href={item.href as Href} asChild>

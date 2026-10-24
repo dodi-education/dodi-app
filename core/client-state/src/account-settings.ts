@@ -5,7 +5,7 @@
  * ./onboarding.) Clients render the controls
  * and map the outcomes to copy.
  */
-import type { Account, InterfacePreferences, Json } from "@dodi/types/database";
+import type { AccountMemberView, InterfacePreferences } from "@dodi/types/database";
 
 import {
   type AccountStore,
@@ -49,9 +49,11 @@ export async function saveInterfacePreferences(
   }
 }
 
-/** The account's stored notification toggles (null while unloaded / unset). */
-export function notificationPreferencesOf(account: Account | null): NotificationPreferences | null {
-  return (account?.notification_preferences ?? null) as NotificationPreferences | null;
+/** The signed-in person's stored email toggles (null while unloaded / unset). */
+export function notificationPreferencesOf(
+  member: AccountMemberView | null,
+): NotificationPreferences | null {
+  return (member?.notification_preferences ?? null) as NotificationPreferences | null;
 }
 
 /** Each email toggle as shown: opt-out, so absent reads as on. */
@@ -74,8 +76,8 @@ export async function saveNotificationPreferences(
   patch: NotificationPreferences,
 ): Promise<boolean> {
   const setPrefs = (next: NotificationPreferences) =>
-    deps.account.getState().patchLocal({ notification_preferences: next as Json });
-  const previous = notificationPreferencesOf(deps.account.getState().account) ?? {};
+    deps.account.getState().patchMember({ notification_preferences: { ...next } });
+  const previous = notificationPreferencesOf(deps.account.getState().member) ?? {};
   setPrefs({ ...previous, ...patch }); // optimistic
   try {
     const res = await patchAccount(deps.api, { notificationPreferences: patch });

@@ -167,4 +167,7 @@ describe("activeKidId", () => {
     expect(activeKidId("/parent/kids/new")).toBeNull();
     expect(activeKidId("/parent/personas/abc")).toBeNull();
   });
+  it("names the person's profile page", () => {
+    expect(buildCrumbs("/parent/profile", t)).toEqual([{ label: "nav.profile" }]);
+  });
 });

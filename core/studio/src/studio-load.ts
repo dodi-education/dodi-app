@@ -68,8 +68,8 @@ export interface LoadStudioGameDeps {
   api: StudioApi;
   /** The decrypted row from the client's game cache (null when missing). */
   loadGame(id: string): Promise<Game | null>;
-  /** The signed-in account's id (null when signed out). */
-  sessionUserId(): Promise<string | null>;
+  /** The id of the family the signed-in login acts as (null when signed out). */
+  activeAccountId(): Promise<string | null>;
 }
 
 /**
@@ -81,12 +81,12 @@ export async function loadStudioGame(
   deps: LoadStudioGameDeps,
   id: string,
 ): Promise<StudioGame | null> {
-  const [userId, game, sharingRes] = await Promise.all([
-    deps.sessionUserId(),
+  const [accountId, game, sharingRes] = await Promise.all([
+    deps.activeAccountId(),
     deps.loadGame(id),
     deps.api.request(`/api/games/${id}/sharing`),
   ]);
-  if (!game || !userId || game.account_id !== userId) return null;
+  if (!game || !accountId || game.account_id !== accountId) return null;
   const sharing = sharingRes.ok ? ((await sharingRes.json()) as StudioGameSharing) : NO_SHARING;
   return studioGameFromRow(game, sharing);
 }

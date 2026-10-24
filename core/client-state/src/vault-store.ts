@@ -8,12 +8,24 @@
  *  - app load  → unlockSilently(): device key unwraps the VMK with no prompt
  *  - new device→ unlockWithPassword / unlockWithNsec (then self-registers)
  *
+ * The owner unlocks the family's own blob (accounts.vault_keys). Any other
+ * family member unlocks their personal key the same way (password, device)
+ * and opens the family's key wrapped to it (see @dodi/vault member-keys); the
+ * platform tells them apart (`MemberVaultError`). Members never write the
+ * family's blob: their device and password wraps go to their personal key.
+ *
  * Argon2id runs wherever the client routed it (`setArgon2idExecutor`): a Web
  * Worker in the browser, a native module on mobile.
  */
 import { createStore, type StoreApi } from "zustand/vanilla";
 
-import { deriveVaultMasterKeyFromNsec, nsecToNpubHex, toBase64Url } from "@dodi/crypto";
+import {
+  type KemWrappedKey,
+  deriveVaultMasterKeyFromNsec,
+  nsecToNpubHex,
+  toBase64Url,
+} from "@dodi/crypto";
+import { MemberVaultError, NoFamilyError } from "@dodi/protocol/client";
 import {
   type DeviceKeystore,
   type DeviceRegistration,
@@ -23,6 +35,7 @@ import {
   addDeviceToVault,
   createAccountVault,
   getOrCreateDevice,
+  openMemberVaultKey,
   removeDeviceFromVault,
   setVaultPassword,
   unlockVaultWithDevice,
@@ -31,13 +44,33 @@ import {
 } from "@dodi/vault";
 
 import type { ConnectivityStore } from "./connectivity-store";
+import {
+  type MemberUnlockKeys,
+  appendFamilyDeviceWrap,
+  fetchMemberUnlockKeys,
+  fetchUserKeys,
+  putUserVaultKeys,
+  removeFamilyDeviceWrap,
+} from "./member-vault";
 import type { OfflineCache, ParentLock, PlatformApi, SealedSecretSlot } from "./platform";
 
-export type VaultStatus = "idle" | "working" | "unlocked" | "locked" | "needs-setup";
+/** `no-family`: signed in, but the login belongs to no family (nothing to unlock). */
+export type VaultStatus = "idle" | "working" | "unlocked" | "locked" | "needs-setup" | "no-family";
+
+/**
+ * Whose keys opened the vault: `account` = the family's own (the owner),
+ * `member` = the person's personal key (every other family member).
+ */
+export type VaultKind = "account" | "member";
+
+/** A member whose family has not handed them its key (or whose keys are gone). */
+export const MEMBER_KEYS_MISSING = "member-keys-missing";
 
 export interface VaultState {
   status: VaultStatus;
   session: VaultSession | null;
+  /** Set once unlocked (null before): members have no recovery key of their own. */
+  kind: VaultKind | null;
   /** Set after bootstrap; shown once on the account-key screen, then cleared. */
   pendingNsec: string | null;
   /**
@@ -97,6 +130,19 @@ export interface VaultState {
   addDevice: (device: DeviceRegistration) => Promise<void>;
   /** Revoke a device's vault access: drop its wrap and persist (no VMK needed). */
   removeDevice: (deviceId: string) => Promise<void>;
+  /**
+   * A member's forgotten password: from a device that still opens their
+   * personal key, verify it, run `onVerified` (the auth password update), and
+   * re-wrap the personal key under the new password. Throws
+   * `MEMBER_KEYS_MISSING` when this device cannot open it (the family must
+   * invite them again).
+   */
+  resetMemberPassword: (newPassword: string, onVerified: () => Promise<void>) => Promise<void>;
+  /**
+   * After joining a family: start the session with the family's key and keep
+   * the personal key it was wrapped to (both just opened by the join flow).
+   */
+  adoptMemberVault: (vmk: Uint8Array, seed: Uint8Array) => void;
   acknowledgeNsec: () => void;
   lock: () => void;
 }
@@ -119,6 +165,39 @@ export interface VaultStoreDeps {
 
 export type VaultStore = StoreApi<VaultState>;
 
+/**
+ * What this person unlocks with. `keys` wraps the root: the family's VMK for
+ * the owner, the personal key for a member (whose VMK is then opened from
+ * `memberWrap`).
+ */
+type Keyring =
+  | { kind: "account"; keys: StoredVaultKeys }
+  | {
+      kind: "member";
+      keys: StoredVaultKeys;
+      memberWrap: KemWrappedKey;
+      familyVmkCheck: string | null;
+    };
+
+function memberKeyring(unlock: MemberUnlockKeys): Keyring {
+  if (!unlock.userKeys || !unlock.memberWrap) throw new Error(MEMBER_KEYS_MISSING);
+  return {
+    kind: "member",
+    keys: unlock.userKeys.vaultKeys,
+    memberWrap: unlock.memberWrap,
+    familyVmkCheck: unlock.familyVmkCheck,
+  };
+}
+
+/** The offline copy: the family's blob (owners, and older copies) or a member's unlock keys. */
+function keyringFromCache(cached: unknown): Keyring | null {
+  if (!cached || typeof cached !== "object") return null;
+  if ((cached as { kind?: unknown }).kind === "member") {
+    return memberKeyring(cached as MemberUnlockKeys);
+  }
+  return { kind: "account", keys: cached as StoredVaultKeys };
+}
+
 export function createVaultStore(deps: VaultStoreDeps): VaultStore {
   const { api, offlineCache, registrationSeal, parentLock, connectivity } = deps;
   const loadDevice = (): Promise<StoredDevice> => getOrCreateDevice(deps.deviceKeystore);
@@ -126,30 +205,72 @@ export function createVaultStore(deps: VaultStoreDeps): VaultStore {
   const saveVaultKeys = (keys: StoredVaultKeys, opts?: { npub?: string }): Promise<void> =>
     api.putVaultKeys(keys, opts);
 
-  /** Authorize this device against the vault if it isn't already (so next load unlocks silently). */
+  /** In memory while a member's vault is open: their personal key (for password and device wraps). */
+  let memberSeed: Uint8Array | null = null;
+  const dropMemberSeed = (): void => {
+    memberSeed?.fill(0);
+    memberSeed = null;
+  };
+
+  /**
+   * The person's keyring. Null: the owner has no vault yet (bootstrap). A
+   * member's unlock keys come along with the offline write-through copy.
+   */
+  const fetchKeyring = async (options: { cacheOffline?: boolean } = {}): Promise<Keyring | null> => {
+    try {
+      const keys = await fetchVaultKeys();
+      if (keys && options.cacheOffline) void offlineCache.writeVaultKeys(keys);
+      return keys ? { kind: "account", keys } : null;
+    } catch (error) {
+      if (!(error instanceof MemberVaultError)) throw error;
+      const unlock = await fetchMemberUnlockKeys(api);
+      if (options.cacheOffline) void offlineCache.writeVaultKeys(unlock);
+      return memberKeyring(unlock);
+    }
+  };
+
+  /** Persist new wraps of the keyring's root where they belong. */
+  const saveKeyring = (ring: Keyring, keys: StoredVaultKeys, opts?: { npub?: string }): Promise<void> =>
+    ring.kind === "account" ? saveVaultKeys(keys, opts) : putUserVaultKeys(api, keys);
+
+  /** The family's VMK from the keyring's root. */
+  const vmkFromRoot = (ring: Keyring, root: Uint8Array): Uint8Array =>
+    ring.kind === "account"
+      ? root
+      : openMemberVaultKey(root, ring.memberWrap, ring.familyVmkCheck ?? undefined);
+
+  /** Authorize this device against the keyring if it isn't already (so next load unlocks silently). */
   const ensureDeviceRegistered = async (
-    keys: StoredVaultKeys,
-    vmk: Uint8Array,
+    ring: Keyring,
+    root: Uint8Array,
     opts?: { npub?: string },
   ): Promise<void> => {
     const device = await loadDevice();
-    if (keys.deviceWraps.some((d) => d.deviceId === device.deviceId)) return;
-    await saveVaultKeys(addDeviceToVault(keys, vmk, deviceRegistration(device)), opts);
+    if (ring.keys.deviceWraps.some((d) => d.deviceId === device.deviceId)) return;
+    await saveKeyring(ring, addDeviceToVault(ring.keys, root, deviceRegistration(device)), opts);
   };
 
   return createStore<VaultState>()((set, get) => {
+    /** Open the session from a keyring's root (owner: the VMK itself). */
+    const openSession = (ring: Keyring, root: Uint8Array): void => {
+      const vmk = vmkFromRoot(ring, root);
+      dropMemberSeed();
+      if (ring.kind === "member") memberSeed = root;
+      set({ session: new VaultSession(vmk), status: "unlocked", kind: ring.kind });
+    };
+
     /**
-     * Shared password-unlock tail (login + unlock prompt): unwrap the VMK and
+     * Shared password-unlock tail (login + unlock prompt): unwrap the root and
      * activate the session. Device registration only matters for the NEXT
      * visit's silent unlock, so it runs in the background instead of gating the
      * login on its extra round trip — if it fails, the next load just asks for
      * the password again.
      */
-    const unlockWithKeys = async (keys: StoredVaultKeys, password: string): Promise<void> => {
+    const unlockWithKeys = async (ring: Keyring, password: string): Promise<void> => {
       try {
-        const vmk = await unlockVaultWithPassword(keys, password);
-        void ensureDeviceRegistered(keys, vmk).catch(() => {});
-        set({ session: new VaultSession(vmk), status: "unlocked" });
+        const root = await unlockVaultWithPassword(ring.keys, password);
+        openSession(ring, root);
+        void ensureDeviceRegistered(ring, root).catch(() => {});
         // Strong-auth (password/phrase) ⇒ open the parent area for this session.
         parentLock.markUnlocked();
       } catch (error) {
@@ -159,9 +280,28 @@ export function createVaultStore(deps: VaultStoreDeps): VaultStore {
       }
     };
 
+    /**
+     * After an owner's password change: the login's personal key (it joined
+     * another family) follows along when this device can open it; otherwise
+     * it keeps the old password until it is opened next.
+     */
+    const rewrapOwnUserKeys = async (newPassword: string): Promise<void> => {
+      const userKeys = await fetchUserKeys(api);
+      if (!userKeys) return;
+      const device = await loadDevice();
+      if (!userKeys.vaultKeys.deviceWraps.some((d) => d.deviceId === device.deviceId)) return;
+      const seed = unlockVaultWithDevice(userKeys.vaultKeys, device.deviceId, device.kem.secretKey);
+      try {
+        await putUserVaultKeys(api, await setVaultPassword(userKeys.vaultKeys, seed, newPassword));
+      } finally {
+        seed.fill(0);
+      }
+    };
+
     return {
       status: "idle",
       session: null,
+      kind: null,
       pendingNsec: null,
       pendingVault: null,
       error: null,
@@ -176,10 +316,12 @@ export function createVaultStore(deps: VaultStoreDeps): VaultStore {
             importedNsec,
           });
           await saveVaultKeys(storedKeys, { npub: npubHex });
+          dropMemberSeed();
           set({
             session: new VaultSession(vmk),
             pendingNsec: nsec,
             status: "unlocked",
+            kind: "account",
           });
           parentLock.markUnlocked();
         } catch (error) {
@@ -228,10 +370,12 @@ export function createVaultStore(deps: VaultStoreDeps): VaultStore {
           // is deterministic and cheap), avoiding a repeat of Argon2id.
           const vmk = deriveVaultMasterKeyFromNsec(data.nsec);
           await registrationSeal.clear();
+          dropMemberSeed();
           set({
             session: new VaultSession(vmk),
             pendingNsec: data.nsec,
             status: "unlocked",
+            kind: "account",
             pendingVault: null,
           });
           parentLock.markUnlocked();
@@ -249,8 +393,14 @@ export function createVaultStore(deps: VaultStoreDeps): VaultStore {
       },
 
       unlockOrBootstrap: async (password, email) => {
-        const keys = await fetchVaultKeys();
-        if (!keys) {
+        let ring: Keyring | null;
+        try {
+          ring = await fetchKeyring();
+        } catch (error) {
+          if (error instanceof NoFamilyError) set({ status: "no-family", error: null });
+          throw error;
+        }
+        if (!ring) {
           // No vault stored yet. Registration may have sealed one on this device
           // (with an imported nsec) that never got persisted because the code was
           // entered later. Consume the seal either way so it cannot linger.
@@ -281,19 +431,19 @@ export function createVaultStore(deps: VaultStoreDeps): VaultStore {
         }
         // Reuse the keys we just fetched — no second round trip.
         set({ status: "working", error: null });
-        await unlockWithKeys(keys, password);
+        await unlockWithKeys(ring, password);
         return { created: false };
       },
 
       unlockWithPassword: async (password) => {
         set({ status: "working", error: null });
         try {
-          const keys = await fetchVaultKeys();
-          if (!keys) {
+          const ring = await fetchKeyring();
+          if (!ring) {
             set({ status: "needs-setup" });
             throw new Error("No vault to unlock");
           }
-          await unlockWithKeys(keys, password);
+          await unlockWithKeys(ring, password);
         } catch (error) {
           const message = error instanceof Error ? error.message : "Unlock failed";
           set({ status: "locked", error: message });
@@ -304,19 +454,22 @@ export function createVaultStore(deps: VaultStoreDeps): VaultStore {
       unlockWithNsec: async (nsec) => {
         set({ status: "working", error: null });
         try {
-          const keys = await fetchVaultKeys();
-          if (!keys) {
+          const ring = await fetchKeyring();
+          if (!ring) {
             set({ status: "needs-setup" });
             throw new Error("No vault to unlock");
           }
-          const vmk = unlockVaultWithNsec(keys, nsec);
+          if (ring.kind === "member") {
+            throw new Error("The recovery key belongs to the family's owner");
+          }
+          const vmk = unlockVaultWithNsec(ring.keys, nsec);
           // Background for the same reason as the password path: registration
           // only serves the next visit's silent unlock. The npub rides along as a
           // set-once bind (no-op when already bound; heals pre-npub accounts).
-          void ensureDeviceRegistered(keys, vmk, {
+          void ensureDeviceRegistered(ring, vmk, {
             npub: nsecToNpubHex(nsec),
           }).catch(() => {});
-          set({ session: new VaultSession(vmk), status: "unlocked" });
+          openSession(ring, vmk);
           // Strong-auth (password/nsec) ⇒ open the parent area for this session.
           parentLock.markUnlocked();
         } catch (error) {
@@ -331,29 +484,33 @@ export function createVaultStore(deps: VaultStoreDeps): VaultStore {
         set({ status: "working", error: null });
         try {
           const device = await loadDevice();
-          let keys: StoredVaultKeys | null;
+          let ring: Keyring | null;
           try {
-            keys = await fetchVaultKeys();
             // Write-through (sealed at rest by the platform's offline cache) so
             // the next cold start can unlock offline.
-            if (keys) void offlineCache.writeVaultKeys(keys);
+            ring = await fetchKeyring({ cacheOffline: true });
           } catch (error) {
+            if (error instanceof NoFamilyError) {
+              set({ status: "no-family", error: null });
+              return false;
+            }
+            if (error instanceof Error && error.message === MEMBER_KEYS_MISSING) throw error;
             // Network failure → sealed offline copy. `needs-setup` stays
             // online-authoritative: only a real server `null` reaches it below.
-            keys = await offlineCache.readVaultKeys<StoredVaultKeys>();
-            if (!keys) throw error;
+            ring = keyringFromCache(await offlineCache.readVaultKeys<unknown>());
+            if (!ring) throw error;
             connectivity.getState().reportOffline();
           }
-          if (!keys) {
+          if (!ring) {
             set({ status: "needs-setup" });
             return false;
           }
-          if (!keys.deviceWraps.some((d) => d.deviceId === device.deviceId)) {
-            set({ status: "locked" });
+          if (!ring.keys.deviceWraps.some((d) => d.deviceId === device.deviceId)) {
+            set({ status: "locked", kind: ring.kind });
             return false;
           }
-          const vmk = unlockVaultWithDevice(keys, device.deviceId, device.kem.secretKey);
-          set({ session: new VaultSession(vmk), status: "unlocked" });
+          const root = unlockVaultWithDevice(ring.keys, device.deviceId, device.kem.secretKey);
+          openSession(ring, root);
           return true;
         } catch (error) {
           const message = error instanceof Error ? error.message : "Silent unlock failed";
@@ -366,6 +523,7 @@ export function createVaultStore(deps: VaultStoreDeps): VaultStore {
         set({ status: "working", error: null });
         try {
           const keys = await fetchVaultKeys();
+          // (A member never gets here: their GET answers MemberVaultError.)
           if (!keys) {
             // Account predates the vault — nothing to re-wrap. Update the auth
             // password; the vault bootstraps on next authenticated entry.
@@ -381,8 +539,9 @@ export function createVaultStore(deps: VaultStoreDeps): VaultStore {
           // Set-once npub bind rides along: a no-op on a bound account, and it
           // self-heals accounts whose bootstrap predates the npub column.
           await saveVaultKeys(updated, { npub: nsecToNpubHex(nsec) });
-          await ensureDeviceRegistered(updated, vmk);
-          set({ session: new VaultSession(vmk), status: "unlocked" });
+          const ring: Keyring = { kind: "account", keys: updated };
+          await ensureDeviceRegistered(ring, vmk);
+          openSession(ring, vmk);
           parentLock.markUnlocked();
         } catch (error) {
           const message = error instanceof Error ? error.message : "Password reset failed";
@@ -394,32 +553,88 @@ export function createVaultStore(deps: VaultStoreDeps): VaultStore {
       changePassword: async (newPassword) => {
         const session = get().session;
         if (!session) throw new Error("Vault is locked");
-        const keys = await fetchVaultKeys();
-        if (!keys) throw new Error("No vault to update");
+        const ring = await fetchKeyring();
+        if (!ring) throw new Error("No vault to update");
+        if (ring.kind === "member") {
+          if (!memberSeed) throw new Error("Vault is locked");
+          await putUserVaultKeys(api, await setVaultPassword(ring.keys, memberSeed, newPassword));
+          return;
+        }
         await saveVaultKeys({
-          ...keys,
+          ...ring.keys,
           passwordWrap: await session.rewrapPassword(newPassword),
         });
+        await rewrapOwnUserKeys(newPassword).catch(() => {});
       },
 
       addDevice: async (device) => {
         const session = get().session;
         if (!session) throw new Error("Vault is locked");
+        if (get().kind === "member") {
+          // Never rewrite the owner's blob: add just this device's wrap.
+          await appendFamilyDeviceWrap(api, {
+            ...device,
+            wrapped: session.wrapForMember(device.deviceKemPublicKey),
+          });
+          return;
+        }
         const keys = await fetchVaultKeys();
         if (!keys) throw new Error("No vault to update");
         await saveVaultKeys(session.addDevice(keys, device));
       },
 
       removeDevice: async (deviceId) => {
+        if (get().kind === "member") {
+          await removeFamilyDeviceWrap(api, deviceId);
+          return;
+        }
         const keys = await fetchVaultKeys();
         if (!keys) throw new Error("No vault to update");
         await saveVaultKeys(removeDeviceFromVault(keys, deviceId));
+      },
+
+      resetMemberPassword: async (newPassword, onVerified) => {
+        // Not a member, or this device can't open their key: nothing changes
+        // here (the caller resets the sign-in password alone).
+        let ring: Keyring | null;
+        try {
+          ring = await fetchKeyring();
+        } catch {
+          throw new Error(MEMBER_KEYS_MISSING);
+        }
+        if (!ring || ring.kind !== "member") throw new Error(MEMBER_KEYS_MISSING);
+        const device = await loadDevice();
+        if (!ring.keys.deviceWraps.some((d) => d.deviceId === device.deviceId)) {
+          throw new Error(MEMBER_KEYS_MISSING);
+        }
+        set({ status: "working", error: null });
+        try {
+          const seed = unlockVaultWithDevice(ring.keys, device.deviceId, device.kem.secretKey);
+          // Proves this device still opens the family before the password moves.
+          vmkFromRoot(ring, seed);
+          await onVerified();
+          await putUserVaultKeys(api, await setVaultPassword(ring.keys, seed, newPassword));
+          openSession(ring, seed);
+          parentLock.markUnlocked();
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Password reset failed";
+          set({ status: "locked", error: message });
+          throw error;
+        }
+      },
+
+      adoptMemberVault: (vmk, seed) => {
+        dropMemberSeed();
+        memberSeed = seed;
+        set({ session: new VaultSession(vmk), status: "unlocked", kind: "member", error: null });
+        parentLock.markUnlocked();
       },
 
       acknowledgeNsec: () => set({ pendingNsec: null }),
 
       lock: () => {
         get().session?.lock();
+        dropMemberSeed();
         set({ session: null, status: "locked" });
         parentLock.clear();
       },

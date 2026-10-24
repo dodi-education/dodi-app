@@ -2,8 +2,10 @@
  * The app's instance of the shared client state, plus React bindings with the
  * same names the web uses (`useVaultStore`, `useKidStore`, …).
  */
+import { useMemo } from "react";
 import { AppState } from "react-native";
 import { createClientState } from "@dodi/client-state";
+import type { ParentAccess } from "@dodi/client-state/parent-nav";
 import { bindStore } from "@dodi/client-state/react";
 import { startReconnectProbe } from "@dodi/client-state/reconnect-probe";
 
@@ -41,3 +43,12 @@ export const useCustomTricksStore = bindStore(clientState.customTricks);
 export const useCharacterAssetStore = bindStore(clientState.characterAssets);
 export const useAssetPublicationStore = bindStore(clientState.assetPublications);
 export const useDiscoverAssetStore = bindStore(clientState.discoverAssets);
+
+const NO_SCOPES: readonly string[] = [];
+
+/** The signed-in person's role and scopes (what the parent area shows them; web: stores/account-store). */
+export function useParentAccess(): ParentAccess {
+  const role = useAccountStore((s) => s.member?.role ?? null);
+  const scopes = useAccountStore((s) => s.member?.scopes ?? NO_SCOPES);
+  return useMemo(() => ({ role, scopes }), [role, scopes]);
+}

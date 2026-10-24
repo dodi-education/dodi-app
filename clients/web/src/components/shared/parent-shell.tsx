@@ -115,7 +115,7 @@ export function ParentShell({ children }: { children: React.ReactNode }) {
               setIsFeedbackOpen(true);
             }}
           />
-          <AccountBadge />
+          <AccountBadge onNavigate={() => setOpen(false)} />
         </div>
       </aside>
 

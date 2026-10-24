@@ -18,6 +18,12 @@ import { getCaptchaConfig, verifyCaptchaRequest } from "@/lib/captcha";
  * INVITE_CODE_REQUIRED, INVITE_CODE_INVALID) are real user errors and are
  * surfaced as-is; they never reveal whether the email exists.
  *
+ * `familyInvitationId`: signing up from a family invitation. The pending
+ * invitation for this address stands in for the registration mode and invite
+ * code, and the new login gets no family of its own (it joins the inviting
+ * one once its email is verified). A missing, used or foreign invitation is a
+ * 400 INVITATION_INVALID.
+ *
  * When Turnstile is configured the request must carry a valid
  * `x-captcha-response` token (400 MISSING_RESPONSE / 403 VERIFICATION_FAILED).
  * The check lives here because `auth.api.signUpEmail` runs in-process, where
@@ -27,6 +33,7 @@ const BodySchema = z.object({
   email: z.string().trim().email().max(254),
   password: z.string().min(8).max(128),
   inviteCode: z.string().trim().max(64).optional(),
+  familyInvitationId: z.string().uuid().optional(),
 });
 
 export async function POST(request: Request): Promise<NextResponse> {
@@ -54,7 +61,8 @@ export async function POST(request: Request): Promise<NextResponse> {
         email: body.email,
         password: body.password,
         name: body.email,
-        inviteCode: body.inviteCode ?? null,
+        inviteCode: body.familyInvitationId ? null : (body.inviteCode ?? null),
+        familyInvitationId: body.familyInvitationId ?? null,
       },
       headers: request.headers,
     });

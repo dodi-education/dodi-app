@@ -135,7 +135,7 @@ describe("deleteKid", () => {
   it("does not block deleting the sender's whole account either", async () => {
     const { senderAccount, receivedId } = await sentSnapshotToFriend();
 
-    await t.serviceDb.deleteFrom("auth_users").where("id", "=", senderAccount).execute();
+    await t.serviceDb.deleteFrom("accounts").where("id", "=", senderAccount).execute();
 
     expect(await snapshotExists(receivedId)).toBe(false);
   });

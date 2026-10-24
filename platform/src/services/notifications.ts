@@ -2,8 +2,9 @@
  * Domain-level notifications: decides *who* to email and *whether* to, then
  * hands off to the email transport. Kept separate from request handling so the
  * trigger (an API route) can fire-and-forget. Everything here is server-blind —
- * no child/friend names, only plaintext account fields (email, language,
- * notification_preferences).
+ * no child/friend names, only plaintext fields of the family's adults (email,
+ * language, notification_preferences). Every owner and co-parent is mailed
+ * separately, honouring their own toggles and language.
  */
 import { createElement } from "react";
 
@@ -13,6 +14,8 @@ import { FriendApprovalEmail } from "@/emails/friend-approval";
 import { friendApprovalCopy, normalizeEmailLocale } from "@/emails/strings";
 import type { Db } from "@/lib/db";
 import { sendEmail } from "@/lib/email";
+
+import { listFamilyRecipients, type FamilyRecipient } from "./account-members";
 
 /** The fields of a friendship needed to decide who to notify. */
 type ApprovalFriendship = Pick<
@@ -32,11 +35,11 @@ function wantsFriendApprovalEmail(prefs: unknown): boolean {
 }
 
 /**
- * Email the parent account(s) whose approval a friendship is now waiting on.
- * Call this only once a row has entered `awaiting_parent`; it emails the
- * requester's parent iff `requester_parent_ok === false` and the addressee's
- * parent iff `addressee_parent_ok === false` (deduped, covering the rare
- * same-account sibling case). Never throws — email must not affect the caller.
+ * Email the parents whose approval a friendship is now waiting on. Call this
+ * only once a row has entered `awaiting_parent`; it emails the requester's
+ * family iff `requester_parent_ok === false` and the addressee's family iff
+ * `addressee_parent_ok === false` (deduped, covering the rare same-account
+ * sibling case). Never throws — email must not affect the caller.
  */
 export async function notifyPendingApproval(
   db: Db,
@@ -52,21 +55,15 @@ export async function notifyPendingApproval(
     }
     if (targetIds.size === 0) return;
 
-    let accounts: {
-      id: string;
-      email: string | null;
-      language: string | null;
-      notification_preferences: unknown;
-    }[];
+    let recipients: FamilyRecipient[];
     try {
-      accounts = await db
-        .selectFrom("accounts")
-        .select(["id", "email", "language", "notification_preferences"])
-        .where("id", "in", [...targetIds])
-        .execute();
+      const perFamily = await Promise.all(
+        [...targetIds].map((accountId) => listFamilyRecipients(db, accountId)),
+      );
+      recipients = perFamily.flat();
     } catch (error) {
       console.error(
-        "[notify] failed to load accounts for approval email:",
+        "[notify] failed to load family members for approval email:",
         error instanceof Error ? error.message : error,
       );
       return;
@@ -78,12 +75,11 @@ export async function notifyPendingApproval(
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://app.dodi.app";
 
     await Promise.all(
-      accounts.map(async (row) => {
-        if (!row.email) return;
-        if (!wantsFriendApprovalEmail(row.notification_preferences)) return;
-        const locale = normalizeEmailLocale(row.language);
+      recipients.map(async (recipient) => {
+        if (!wantsFriendApprovalEmail(recipient.notificationPreferences)) return;
+        const locale = normalizeEmailLocale(recipient.language);
         await sendEmail({
-          to: row.email,
+          to: recipient.email,
           subject: friendApprovalCopy(locale).subject,
           react: createElement(FriendApprovalEmail, { appUrl, locale }),
         });

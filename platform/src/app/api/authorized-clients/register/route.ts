@@ -18,7 +18,7 @@ const RegisterSchema = z.object({
  * the Access list and can be revoked.
  */
 export async function POST(request: Request): Promise<Response> {
-  const auth = await requireAuth(request);
+  const auth = await requireAuth(request, { memberScope: "any" });
   if (auth instanceof Response) return auth;
   if (auth.via !== "user") {
     return NextResponse.json(
@@ -39,6 +39,7 @@ export async function POST(request: Request): Promise<Response> {
     await registerOwnClient(auth.db, auth.accountId, {
       ...parsed.data,
       sessionId: auth.sessionId ?? null,
+      userId: auth.userId ?? null,
     });
     return NextResponse.json({ ok: true });
   } catch (error) {

@@ -4,6 +4,7 @@ import { parseGameScreenshotServiceSettings } from "@dodi/games/screenshot-contr
 import type { StoredDatePreferences } from "@dodi/intl";
 import type {
   Account,
+  AccountMemberView,
   Database,
   GameScreenshotServiceSettings,
   InterfacePreferences,
@@ -41,10 +42,8 @@ export async function updateAccount(
 }
 
 /**
- * Persist the parent's UI language (BCP-47 short code, e.g. "en"/"de"). This is
- * the durable source of truth; the client caches it in the `NEXT_LOCALE` cookie
- * and re-seeds that cookie from here at login so the choice follows the parent
- * across devices.
+ * The family's language: what devices and agents of the family speak. The
+ * owner's own language choice keeps it in step (see the account route).
  */
 export async function updateAccountLanguage(
   db: Db,
@@ -56,6 +55,51 @@ export async function updateAccountLanguage(
     .set({ language })
     .where("id", "=", accountId)
     .execute();
+}
+
+/**
+ * Persist a person's UI language (BCP-47 short code, e.g. "en"/"de"). This is
+ * the durable source of truth; the client caches it in the `NEXT_LOCALE`
+ * cookie and re-seeds that cookie from here at login so the choice follows the
+ * person across devices. Emails to the person use it too. `db` acts as the
+ * login (RLS: own settings row only).
+ */
+export async function updateUserLanguage(
+  db: Db,
+  userId: string,
+  language: string,
+): Promise<void> {
+  await db
+    .insertInto("user_settings")
+    .values({ user_id: userId, language })
+    .onConflict((oc) => oc.column("user_id").doUpdateSet({ language }))
+    .execute();
+}
+
+/**
+ * The caller's own side of the family: role, language and email toggles.
+ * `db` acts as the login (RLS shows its own membership and settings).
+ */
+export async function getMemberView(
+  db: Db,
+  accountId: string,
+  userId: string,
+): Promise<AccountMemberView | null> {
+  const row = await db
+    .selectFrom("account_members as m")
+    .leftJoin("user_settings as s", "s.user_id", "m.user_id")
+    .select(["m.user_id", "m.role", "m.scopes", "s.language", "m.notification_preferences"])
+    .where("m.account_id", "=", accountId)
+    .where("m.user_id", "=", userId)
+    .executeTakeFirst();
+  if (!row) return null;
+  return {
+    user_id: row.user_id,
+    role: row.role,
+    scopes: row.scopes,
+    language: row.language ?? "en",
+    notification_preferences: row.notification_preferences,
+  };
 }
 
 /**
@@ -77,9 +121,10 @@ export async function updateAccountDatePreferences(
 }
 
 /**
- * Plaintext account-level notification toggles (opt-out; unset ⇒ on). Kept
- * plaintext deliberately: the server reads these to decide whether to send
- * transactional email. Extend this shape as more notification types are added.
+ * Plaintext notification toggles of one member for one family (opt-out;
+ * unset ⇒ on). Kept plaintext deliberately: the server reads these to decide
+ * whether to send transactional email. Extend this shape as more notification
+ * types are added.
  */
 export interface NotificationPreferences {
   friend_approval_email?: boolean;
@@ -88,28 +133,33 @@ export interface NotificationPreferences {
 }
 
 /**
- * Merge partial notification toggles into the account's stored preferences (so
+ * Merge partial notification toggles into a member's stored preferences (so
  * updating one toggle never clobbers the others) and return the merged result.
+ * Service handle: members have no write access to their membership row (it
+ * also holds their role); the query is bound to the caller's own row.
  */
-export async function updateAccountNotificationPreferences(
-  db: Db,
+export async function updateMemberNotificationPreferences(
+  serviceDb: Db,
   accountId: string,
+  userId: string,
   prefs: NotificationPreferences,
 ): Promise<NotificationPreferences> {
-  const existing = await db
-    .selectFrom("accounts")
+  const existing = await serviceDb
+    .selectFrom("account_members")
     .select("notification_preferences")
-    .where("id", "=", accountId)
+    .where("account_id", "=", accountId)
+    .where("user_id", "=", userId)
     .executeTakeFirstOrThrow();
 
   const current = (existing.notification_preferences ??
     {}) as NotificationPreferences;
   const merged: NotificationPreferences = { ...current, ...prefs };
 
-  await db
-    .updateTable("accounts")
+  await serviceDb
+    .updateTable("account_members")
     .set({ notification_preferences: merged as unknown as Json })
-    .where("id", "=", accountId)
+    .where("account_id", "=", accountId)
+    .where("user_id", "=", userId)
     .execute();
 
   return merged;

@@ -21,11 +21,13 @@ import type { Database } from "@dodi/types/database";
  *                         operations, device-authenticated requests, jobs. Every
  *                         query MUST be scoped to the resolved account in app
  *                         code, exactly like the former service-role client.
- *  - `scopedDb(account)`  runs as `dodi_app` (RLS enforced). Each checked-out
- *                         connection carries `app.account_id`, which the RLS
- *                         policies read through `app.current_account_id()`, so
- *                         user-authenticated queries stay isolated per account
- *                         without an explicit account filter on every query.
+ *  - `scopedDb(account, user?)`  runs as `dodi_app` (RLS enforced). Each
+ *                         checked-out connection carries `app.account_id` (and
+ *                         `app.user_id` for a person's request), which the RLS
+ *                         policies read through `app.current_account_id()` /
+ *                         `app.current_user_id()`, so user-authenticated
+ *                         queries stay isolated per account without an
+ *                         explicit account filter on every query.
  *
  * Wire shapes match what PostgREST used to return: timestamps are ISO strings,
  * bigints (count(*)) and numerics are JS numbers.
@@ -77,18 +79,20 @@ function pool(envName: string): Pool {
 }
 
 /**
- * Driver wrapper that stamps `app.account_id` onto every connection it hands
- * out and clears it on release, so pooled connections never leak an identity
+ * Driver wrapper that stamps `app.account_id` and `app.user_id` onto every
+ * connection it hands out and clears them on release, so pooled connections never leak an identity
  * into the next request. A failed reset destroys the connection instead of
  * returning it to the pool.
  */
 class ScopedPostgresDriver implements Driver {
   readonly #inner: Driver;
   readonly #accountId: string;
+  readonly #userId: string;
 
-  constructor(inner: Driver, accountId: string) {
+  constructor(inner: Driver, accountId: string, userId: string | null) {
     this.#inner = inner;
     this.#accountId = accountId;
+    this.#userId = userId ?? "";
   }
 
   init(): Promise<void> {
@@ -99,9 +103,10 @@ class ScopedPostgresDriver implements Driver {
     const connection = await this.#inner.acquireConnection();
     try {
       await connection.executeQuery(
-        CompiledQuery.raw("select set_config('app.account_id', $1, false)", [
-          this.#accountId,
-        ]),
+        CompiledQuery.raw(
+          "select set_config('app.account_id', $1, false), set_config('app.user_id', $2, false)",
+          [this.#accountId, this.#userId],
+        ),
       );
     } catch (error) {
       await this.#inner.releaseConnection(connection);
@@ -128,6 +133,7 @@ class ScopedPostgresDriver implements Driver {
   async releaseConnection(connection: DatabaseConnection): Promise<void> {
     try {
       await connection.executeQuery(CompiledQuery.raw("reset app.account_id"));
+      await connection.executeQuery(CompiledQuery.raw("reset app.user_id"));
     } catch {
       // The connection is in an unknown state: drop it rather than pool it.
       // pg's client-level error handling closes it on the next failure; force
@@ -161,12 +167,16 @@ function postgresDialect(envName: string): Dialect {
   };
 }
 
-/** Dialect for the RLS-enforced `dodi_app` pool, stamped with one account. */
-export function scopedDialect(accountId: string): Dialect {
+/**
+ * Dialect for the RLS-enforced `dodi_app` pool, stamped with one account and,
+ * for a person's request, the login acting as it.
+ */
+export function scopedDialect(accountId: string, userId: string | null = null): Dialect {
   const base = postgresDialect("DATABASE_URL_APP");
   return {
     ...base,
-    createDriver: () => new ScopedPostgresDriver(base.createDriver(), accountId),
+    createDriver: () =>
+      new ScopedPostgresDriver(base.createDriver(), accountId, userId),
   };
 }
 
@@ -178,12 +188,18 @@ export function serviceDialect(): Dialect {
 /** BYPASSRLS connection for cross-account, device and job work. */
 export const serviceDb: Db = new Kysely<Database>({ dialect: serviceDialect() });
 
-/** RLS-enforced connection acting as `accountId` (a Better Auth user id). */
-export function scopedDb(accountId: string): Db {
+/**
+ * RLS-enforced connection acting as the family `accountId`. `userId` is the
+ * login behind a person's request (an account member); devices pass none.
+ */
+export function scopedDb(accountId: string, userId: string | null = null): Db {
   if (!UUID_RE.test(accountId)) {
     throw new Error("scopedDb: accountId must be a UUID");
   }
-  return new Kysely<Database>({ dialect: scopedDialect(accountId) });
+  if (userId !== null && !UUID_RE.test(userId)) {
+    throw new Error("scopedDb: userId must be a UUID");
+  }
+  return new Kysely<Database>({ dialect: scopedDialect(accountId, userId) });
 }
 
 /** Close all pools (tests, graceful shutdown). */

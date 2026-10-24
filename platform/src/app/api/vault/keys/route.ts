@@ -3,6 +3,10 @@
  * PUT  /api/vault/keys — store them (bootstrap, password change, add/remove
  *      device), optionally binding the account's npub (set-once, at bootstrap).
  *
+ * The blob is the owner's: other family members open the vault through their
+ * own keys (GET /api/vault/unlock-keys) and get a 403 `MEMBER_VAULT` here, so
+ * an older client never mistakes their personal key for the family's.
+ *
  * The server validates only the STRUCTURE of the blob and stores it verbatim —
  * it never inspects or decrypts the key material, and never sees the nsec
  * (the body schema has no such field; only the public npub travels).
@@ -26,9 +30,15 @@ const log = createLogger("vault-keys");
 
 export async function GET(request: Request): Promise<NextResponse> {
   // Agents read only their own wrap (see agentVaultKeys); PUT stays user-only.
-  const auth = await requireAuth(request, { agentScope: "any" });
+  const auth = await requireAuth(request, { agentScope: "any", memberScope: "any" });
   if (auth instanceof Response) return auth;
   const { accountId, db } = auth;
+  if (auth.via === "user" && auth.role !== "owner") {
+    return NextResponse.json(
+      { error: "Family members open the vault with their own keys", code: "MEMBER_VAULT" },
+      { status: 403 },
+    );
+  }
 
   try {
     const stored = await getStoredVaultKeys(db, accountId);
@@ -48,7 +58,7 @@ export async function GET(request: Request): Promise<NextResponse> {
 }
 
 export async function PUT(request: Request): Promise<NextResponse> {
-  const auth = await requireAuth(request);
+  const auth = await requireAuth(request, { roles: ["owner"] });
   if (auth instanceof Response) return auth;
   const { accountId, db } = auth;
 

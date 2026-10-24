@@ -1,5 +1,6 @@
 import { Redirect, Slot, useGlobalSearchParams, usePathname } from "expo-router";
 
+import { ParentAccessGuard } from "@/components/parent/parent-access-guard";
 import { ParentPinGate } from "@/components/parent/parent-pin-gate";
 import { ParentShell } from "@/components/shared/parent-shell";
 import { VaultGate } from "@/components/vault/vault-gate";
@@ -8,7 +9,8 @@ import { useSession } from "@/lib/session";
 /**
  * The parent area (web: app/parent/layout): signed in, vault open, parent PIN
  * (if set) solved, then the web's phone shell (top bar + drawer). No tab bar,
- * no native headers.
+ * no native headers. ParentAccessGuard keeps scoped family members on the
+ * pages they were granted.
  */
 export default function ParentLayout() {
   const isSignedIn = useSession((s) => s.isSignedIn);
@@ -27,7 +29,9 @@ export default function ParentLayout() {
     <VaultGate>
       <ParentPinGate>
         <ParentShell>
-          <Slot />
+          <ParentAccessGuard>
+            <Slot />
+          </ParentAccessGuard>
         </ParentShell>
       </ParentPinGate>
     </VaultGate>

@@ -101,6 +101,19 @@ export function unlockVaultWithDevice(
 }
 
 /**
+ * Whether `vmk` is the key `vmkCheck` was sealed under: lets a key that came
+ * from somewhere other than this vault's own wraps (an invitation link) be
+ * verified before it is trusted.
+ */
+export function isVaultMasterKeyFor(vmkCheck: string, vmk: Uint8Array): boolean {
+  try {
+    return decryptField(vmk, vmkCheck) === VMK_CHECK_PLAINTEXT;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Recover with the nsec account key (forgot password / new device).
  * Verifies the derived VMK against `vmkCheck` so a wrong-but-valid nsec is
  * rejected immediately rather than silently producing an unusable key.
@@ -110,13 +123,7 @@ export function unlockVaultWithNsec(
   nsec: string,
 ): Uint8Array {
   const vmk = deriveVaultMasterKeyFromNsec(nsec);
-  let matches = false;
-  try {
-    matches = decryptField(vmk, storedKeys.vmkCheck) === VMK_CHECK_PLAINTEXT;
-  } catch {
-    matches = false;
-  }
-  if (!matches) {
+  if (!isVaultMasterKeyFor(storedKeys.vmkCheck, vmk)) {
     throw new Error("Incorrect account key");
   }
   return vmk;

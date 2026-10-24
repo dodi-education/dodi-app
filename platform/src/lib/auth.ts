@@ -21,6 +21,7 @@ import {
 } from "@/lib/account-exists-notice";
 import { serviceDb } from "@/lib/db";
 import { sendEmail } from "@/lib/email";
+import { isInvitationOpenFor } from "@/services/account-invitations";
 import {
   getRegistrationMode,
   isInviteCodeActive,
@@ -38,9 +39,11 @@ import { AUTH_RATE_LIMIT } from "./auth-rate-limit";
  * it against `GET /api/auth/get-session` here.
  *
  * Account provisioning stays in SQL: `handle_new_user()` fires on
- * `auth_users` insert and creates `public.accounts` (+ records the invite
- * redemption), atomically with the user row. This module only gates the
- * insert (REGISTRATION_MODE / invite code) and sends the one-time codes.
+ * `auth_users` insert and creates `public.accounts` with the owner membership
+ * (+ records the invite redemption), atomically with the user row; a login
+ * signing up from a family invitation gets no family of its own. This module
+ * only gates the insert (REGISTRATION_MODE / invite code / family invitation)
+ * and sends the one-time codes.
  *
  * Everything outside this file talks to auth through `resolveAuth` and the
  * routes under /api/auth, so the library stays swappable (later: npub login).
@@ -59,6 +62,7 @@ export function allowedOrigins(): string[] {
 interface UserCreateInput {
   email: string;
   inviteCode?: string | null;
+  familyInvitationId?: string | null;
 }
 
 /**
@@ -69,6 +73,17 @@ interface UserCreateInput {
  * errors from the parent.
  */
 async function registrationGate<T extends UserCreateInput>(user: T): Promise<{ data: T }> {
+  // Invited into a family: the invitation is the admission, whatever the mode.
+  if (user.familyInvitationId) {
+    const isOpen = await isInvitationOpenFor(serviceDb, user.familyInvitationId, user.email);
+    if (!isOpen) {
+      throw new APIError("BAD_REQUEST", {
+        code: "INVITATION_INVALID",
+        message: "This invitation is no longer valid for this email address.",
+      });
+    }
+    return { data: { ...user, inviteCode: null } };
+  }
   const mode = getRegistrationMode();
   if (mode === "closed") {
     throw new APIError("BAD_REQUEST", {
@@ -109,12 +124,13 @@ async function sendVerificationOTP(input: {
   type: string;
 }): Promise<void> {
   const kind = OTP_KIND[input.type] ?? "sign-in";
-  const account = await serviceDb
-    .selectFrom("accounts")
-    .select("language")
-    .where("email", "=", input.email)
+  const user = await serviceDb
+    .selectFrom("auth_users as u")
+    .leftJoin("user_settings as s", "s.user_id", "u.id")
+    .select("s.language")
+    .where("u.email", "=", input.email)
     .executeTakeFirst();
-  const locale = normalizeEmailLocale(account?.language);
+  const locale = normalizeEmailLocale(user?.language);
   const copy = authCodeCopy(locale)[kind];
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://app.dodi.app";
   const sent = await sendEmail({
@@ -171,6 +187,14 @@ export const auth = betterAuth({
         required: false,
         input: true,
         fieldName: "invite_code",
+      },
+      // Signed up from a family invitation: no family of its own
+      // (handle_new_user), the gate checks the invitation instead.
+      familyInvitationId: {
+        type: "string",
+        required: false,
+        input: true,
+        fieldName: "family_invitation_id",
       },
     },
   },

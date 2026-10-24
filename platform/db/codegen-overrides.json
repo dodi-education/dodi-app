@@ -1,5 +1,7 @@
 {
   "columns": {
+    "account_members.role": "'owner' | 'co_parent' | 'member'",
+    "account_invitations.role": "'co_parent' | 'member'",
     "accounts.memory_tier": "Generated<'basic' | 'advanced' | 'full'>",
     "platform_plans.memory_tier": "'basic' | 'advanced' | 'full'",
     "ai_usage_logs.event_type": "'game_create' | 'game_edit' | 'game_plan' | 'game_analysis' | 'game_text_generation' | 'game_translation' | 'memory_update' | 'custom_trick' | 'voice_minutes'",

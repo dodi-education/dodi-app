@@ -22,7 +22,7 @@ import {
 
 export default function NotificationsSettingsPage() {
   const t = useTranslations("settings");
-  const prefs = useAccountStore((s) => notificationPreferencesOf(s.account));
+  const prefs = useAccountStore((s) => notificationPreferencesOf(s.member));
   const loaded = useAccountStore((s) => s.loaded);
   const load = useAccountStore((s) => s.load);
   const [saving, setSaving] = useState(false);

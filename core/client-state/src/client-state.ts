@@ -27,7 +27,7 @@ import { createExecutionResolver, type ExecutionResolver } from "./resolve-execu
 import { createVaultStore, type VaultStore } from "./vault-store";
 import { watchClientRegistration } from "./authorized-clients";
 
-import type { VaultSession } from "@dodi/vault";
+import type { DeviceKeystore, VaultSession } from "@dodi/vault";
 
 export interface ClientState {
   connectivity: ConnectivityStore;
@@ -57,6 +57,15 @@ export interface ClientState {
   /** Avatars and accessories on Discover (add / remove for the family). */
   discoverAssets: DiscoverAssetStore;
   captcha: CaptchaStore;
+  /** This device's identity (its vault wraps are made to it). */
+  deviceKeystore: DeviceKeystore;
+  /**
+   * Forget the family in use: lock the vault, drop every decrypted cache and
+   * wipe the offline cache. Before signing out, and when this device moves to
+   * another family (switching, joining, leaving), so nothing of one family
+   * ever shows in another's session.
+   */
+  dropFamilyData(): Promise<void>;
 }
 
 export function createClientState(platform: ClientPlatform): ClientState {
@@ -89,28 +98,52 @@ export function createClientState(platform: ClientPlatform): ClientState {
   const dodiAIDefaults = createDodiAIDefaultsStore(api);
   const account = createAccountStore(api);
   const characterAssets = createCharacterAssetStore({ api, vault });
+  const kids = createKidStore(dataDeps);
+  const games = createGameStore(dataDeps);
+  const dodiAIBilling = createDodiAIBillingStore(dodiAI);
+  const customTricks = createCustomTricksStore({ api, vault });
+  const assetPublications = createAssetPublicationStore({ api, account, characterAssets });
+  const discoverAssets = createDiscoverAssetStore({ api, characterAssets });
+
+  const dropFamilyData = async (): Promise<void> => {
+    vault.getState().lock();
+    account.getState().reset();
+    kids.getState().invalidate();
+    games.getState().invalidate();
+    providers.getState().invalidate();
+    customTricks.getState().invalidate();
+    characterAssets.getState().invalidate();
+    assetPublications.getState().reset();
+    discoverAssets.getState().invalidate();
+    dodiAIKeys.getState().clear();
+    dodiAIBilling.getState().clear();
+    // Persisted ciphertext rows and the sealed vault keys are this family's.
+    await offlineCache.clearAll();
+  };
 
   return {
     connectivity,
     vault,
     awaitSession: () => awaitSession(vault),
     account,
-    kids: createKidStore(dataDeps),
-    games: createGameStore(dataDeps),
+    kids,
+    games,
     gameCrypto: createGameCrypto(vault),
     providers,
     dodiAI,
     dodiAIKeys,
     dodiAIDefaults,
-    dodiAIBilling: createDodiAIBillingStore(dodiAI),
+    dodiAIBilling,
     execution: createExecutionResolver({ api, dodiAI, dodiAIDefaults, dodiAIKeys, providers }),
     activeKid: createActiveKidStore(platform.activeKid),
     companionVolume: createCompanionVolumeStore(platform.preferences),
     companionStage: createCompanionStageStore(),
-    customTricks: createCustomTricksStore({ api, vault }),
+    customTricks,
     characterAssets,
-    assetPublications: createAssetPublicationStore({ api, account, characterAssets }),
-    discoverAssets: createDiscoverAssetStore({ api, characterAssets }),
+    assetPublications,
+    discoverAssets,
     captcha: createCaptchaStore(api),
+    deviceKeystore: platform.deviceKeystore,
+    dropFamilyData,
   };
 }

@@ -187,9 +187,15 @@ always pass (`TURNSTILE_SITE_KEY=1x00000000000000000000AA`,
   code via `is_invite_code_active`. It runs for **every** new user, so it cannot
   be bypassed. Failures come back as HTTP 400 with a message (codes
   `REGISTRATION_CLOSED`, `INVITE_CODE_REQUIRED`, `INVITE_CODE_INVALID`).
+- A sign-up from a **family invitation** (`/join/{id}`, field
+  `familyInvitationId`) skips the mode and invite code: a pending invitation
+  for exactly that address is the admission (else 400 `INVITATION_INVALID`).
+  Such a login gets no family of its own; it joins the inviting family once
+  its email is verified (see `services/account-invitations.ts`).
 - On allow, the user row is written and the SQL trigger `handle_new_user()` on
-  `auth_users` creates the `public.accounts` row and records the invite
-  redemption, in the same transaction as the insert.
+  `auth_users` creates the `public.accounts` row with its owner membership
+  (`account_members`) and records the invite redemption, in the same
+  transaction as the insert.
 - A **6-digit code** is emailed. The user enters it on `/register` in the same
   tab: `emailOtp.verifyEmail` marks the address verified and signs them in. The
   E2EE vault, built in memory at signup and sealed under a non-extractable

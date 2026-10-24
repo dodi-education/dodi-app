@@ -7,6 +7,7 @@ import { CenteredPage } from "@/components/auth/centered-page";
 import { Text } from "@/components/ui";
 import { useVaultStore } from "@/lib/client-state";
 
+import { NoFamilyNotice } from "./no-family-notice";
 import { VaultUnlockPrompt } from "./vault-unlock-prompt";
 
 /**
@@ -26,6 +27,7 @@ export function VaultGate({ children }: { children: ReactNode }) {
 
   if (status === "unlocked") return <>{children}</>;
   if (status === "locked") return <VaultUnlockPrompt />;
+  if (status === "no-family") return <NoFamilyNotice />;
   if (status === "needs-setup") return <Redirect href="/finish-setup" />;
   // idle | working: nothing to interact with yet.
   return (

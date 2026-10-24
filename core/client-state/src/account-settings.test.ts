@@ -19,9 +19,9 @@ function fakeApi(response: Response | Error): PlatformApi & { request: ReturnTyp
   };
 }
 
-function loadedAccount(fields: Record<string, unknown>): AccountStore {
+function loadedAccount(fields: Record<string, unknown>, member: Record<string, unknown> = {}): AccountStore {
   const store = createAccountStore(fakeApi(new Error("unused")));
-  store.setState({ account: fields, loaded: true } as unknown as Partial<AccountState>);
+  store.setState({ account: fields, member, loaded: true } as unknown as Partial<AccountState>);
   return store;
 }
 
@@ -63,7 +63,8 @@ describe("notification preferences", () => {
   });
 
   it("saves optimistically and reverts on a network error", async () => {
-    const account = loadedAccount({ notification_preferences: { publication_outcome_email: false } });
+    // Email toggles are the person's (their membership), not the family's.
+    const account = loadedAccount({}, { notification_preferences: { publication_outcome_email: false } });
     const ok = fakeApi(new Response("{}"));
     await expect(
       saveNotificationPreferences({ api: ok, account }, { friend_approval_email: false }),
@@ -71,7 +72,7 @@ describe("notification preferences", () => {
     expect(JSON.parse(ok.request.mock.calls[0][1].body)).toEqual({
       notificationPreferences: { friend_approval_email: false },
     });
-    expect(account.getState().account?.notification_preferences).toEqual({
+    expect(account.getState().member?.notification_preferences).toEqual({
       publication_outcome_email: false,
       friend_approval_email: false,
     });
@@ -80,7 +81,7 @@ describe("notification preferences", () => {
     await expect(
       saveNotificationPreferences({ api: offline, account }, { friend_approval_email: true }),
     ).resolves.toBe(false);
-    expect(account.getState().account?.notification_preferences).toEqual({
+    expect(account.getState().member?.notification_preferences).toEqual({
       publication_outcome_email: false,
       friend_approval_email: false,
     });

@@ -10,7 +10,7 @@
 import { hostname } from "node:os";
 
 import { generateDeviceKeyPairs, randomBytes, toBase64Url } from "@dodi/crypto";
-import { deviceFingerprint } from "@dodi/protocol/agent-key";
+import { deviceFingerprint, signDeviceKeys } from "@dodi/protocol/agent-key";
 import { AGENT_SCOPES, DEFAULT_AGENT_SCOPES, isAgentScope, type AgentScope } from "@dodi/protocol/agent-scopes";
 import { DodiClient } from "@dodi/protocol/client";
 
@@ -174,6 +174,8 @@ export async function runLogin(argv: string[], out: Output, env: NodeJS.ProcessE
         deviceId,
         kemPublicKey: toBase64Url(keys.kem.publicKey),
         signPublicKey: toBase64Url(keys.sign.publicKey),
+        // Binds the KEM key to the signing key the parent compares by fingerprint.
+        kemKeySignature: signDeviceKeys(keys.sign.secretKey, deviceId, toBase64Url(keys.kem.publicKey)),
         name,
         kind: "agent",
         scopes,

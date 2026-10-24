@@ -69,6 +69,12 @@ export function ClientRow({ client, isRevoking, onRevoke }: ClientRowProps) {
         <RowMeta>
           {t(CLIENT_KIND_KEYS[client.kind])}
           <DotSep />
+          {client.user_email ? (
+            <>
+              {client.user_email}
+              <DotSep />
+            </>
+          ) : null}
           {isAgent ? (
             <>
               {client.expires_at

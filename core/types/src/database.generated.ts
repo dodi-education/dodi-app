@@ -25,6 +25,49 @@ export type Numeric = ColumnType<number, number | string, number | string>;
 
 export type Timestamp = ColumnType<string, Date | string, Date | string>;
 
+export interface AccountInvitations {
+  accepted_at: Timestamp | null;
+  accepted_by_user_id: string | null;
+  account_id: string;
+  created_at: Generated<Timestamp>;
+  expires_at: Timestamp;
+  id: Generated<string>;
+  invited_by_user_id: string | null;
+  invited_email: string;
+  revoked_at: Timestamp | null;
+  role: "co_parent" | "member";
+  /**
+   * Role member only: the scopes the invited person gets on joining.
+   */
+  scopes: Generated<string[]>;
+  vmk_invite_wrap: string | null;
+}
+
+export interface AccountMembers {
+  account_id: string;
+  created_at: Generated<Timestamp>;
+  id: Generated<string>;
+  invited_by_user_id: string | null;
+  /**
+   * Non-owners: the family's vault key wrapped (ML-KEM) to the member's user_keys.kem_public_key. Opaque to the server.
+   */
+  member_vmk_wrap: Json | null;
+  /**
+   * Plaintext opt-out email toggles of this member for this family ({ friend_approval_email, publication_outcome_email }). Read server-side to decide whether to send.
+   */
+  notification_preferences: Generated<Json>;
+  /**
+   * owner = created the family; co_parent = another adult with full access; member = another adult limited to granted scopes.
+   */
+  role: "owner" | "co_parent" | "member";
+  /**
+   * Role member only: what this person may read and write (agent scope vocabulary). Empty for owner and co-parents, who have full access.
+   */
+  scopes: Generated<string[]>;
+  updated_at: Generated<Timestamp>;
+  user_id: string;
+}
+
 export interface AccountRateLimitWindows {
   account_id: string;
   /**
@@ -107,6 +150,10 @@ export interface Accounts {
 
 export interface Activities {
   account_id: string;
+  /**
+   * The parent (login) who caused the activity, when a person did; NULL for kids' devices.
+   */
+  actor_user_id: string | null;
   created_at: Generated<Timestamp>;
   event: string;
   /**
@@ -172,6 +219,10 @@ export interface AuthorizedClients {
    */
   expires_at: Timestamp | null;
   id: Generated<string>;
+  /**
+   * ML-DSA signature (base64url) by the device's signing key over its device id and KEM key; verified client-side before the vault key is wrapped to it.
+   */
+  kem_key_signature: string | null;
   kem_public_key: string;
   /**
    * browser | app (signed in, registered when adding its own wrap) | robot | agent (paired via enroll/claim/activate; agents are scoped).
@@ -203,9 +254,17 @@ export interface AuthorizedClients {
   sign_public_key: string | null;
   status: Generated<"pending" | "active" | "revoked">;
   updated_at: Generated<Timestamp>;
+  /**
+   * Browsers and apps: the login whose device it is. NULL for the robot and agents.
+   */
+  user_id: string | null;
 }
 
 export interface AuthSessions {
+  /**
+   * The family this login session acts as; checked against account_members on every request.
+   */
+  active_account_id: string | null;
   created_at: Generated<Timestamp>;
   expires_at: Timestamp;
   id: Generated<string>;
@@ -220,6 +279,7 @@ export interface AuthUsers {
   created_at: Generated<Timestamp>;
   email: string;
   email_verified: boolean;
+  family_invitation_id: string | null;
   id: Generated<string>;
   image: string | null;
   invite_code: string | null;
@@ -350,6 +410,10 @@ export interface FeedbackMessages {
    * The name the parent typed into the form, at most 100 characters. NULL only on rows carried over from content_reports.
    */
   sender_name: string | null;
+  /**
+   * The login that wrote the message (Reply-To goes to its email); NULL for carried-over reports.
+   */
+  sender_user_id: string | null;
   /**
    * When staff marked the message solved; NULL while open.
    */
@@ -797,7 +861,28 @@ export interface Transcripts {
   updated_at: Generated<Timestamp>;
 }
 
+export interface UserKeys {
+  created_at: Generated<Timestamp>;
+  kem_public_key: string;
+  sign_public_key: string;
+  updated_at: Generated<Timestamp>;
+  user_id: string;
+  vault_keys: Json;
+}
+
+export interface UserSettings {
+  created_at: Generated<Timestamp>;
+  /**
+   * The person's UI and email language (BCP-47 short code, e.g. en/de).
+   */
+  language: Generated<string>;
+  updated_at: Generated<Timestamp>;
+  user_id: string;
+}
+
 export interface DB {
+  account_invitations: AccountInvitations;
+  account_members: AccountMembers;
   account_rate_limit_windows: AccountRateLimitWindows;
   accounts: Accounts;
   activities: Activities;
@@ -836,4 +921,6 @@ export interface DB {
   published_character_assets: PublishedCharacterAssets;
   transcript_entries: TranscriptEntries;
   transcripts: Transcripts;
+  user_keys: UserKeys;
+  user_settings: UserSettings;
 }

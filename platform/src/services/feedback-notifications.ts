@@ -1,7 +1,8 @@
 /**
  * Operator notification for "Give feedback" messages (SYSTEM_NOTIFICATION_EMAIL,
- * English-only). Reply-To is the sender's account email, so the team answers
- * with a plain reply. An attached image goes along as a file attachment. Fire-and-forget like every notifier: mail never affects
+ * English-only). Reply-To is the email of the login that wrote it (the
+ * family's email for carried-over reports), so the team answers with a plain
+ * reply. An attached image goes along as a file attachment. Fire-and-forget like every notifier: mail never affects
  * the request that stored the message.
  */
 import { createElement } from "react";
@@ -26,12 +27,21 @@ export async function notifyFeedbackReceived(
       console.warn("[notify] SYSTEM_NOTIFICATION_EMAIL is not set, skipping feedback notification");
       return;
     }
-    const account = await db
-      .selectFrom("accounts")
-      .select("email")
-      .where("id", "=", feedback.account_id)
-      .executeTakeFirst();
-    const accountEmail = account?.email ?? null;
+    const sender = feedback.sender_user_id
+      ? await db
+          .selectFrom("auth_users")
+          .select("email")
+          .where("id", "=", feedback.sender_user_id)
+          .executeTakeFirst()
+      : undefined;
+    const account = sender
+      ? undefined
+      : await db
+          .selectFrom("accounts")
+          .select("email")
+          .where("id", "=", feedback.account_id)
+          .executeTakeFirst();
+    const accountEmail = sender?.email ?? account?.email ?? null;
     const gameTitle = feedback.game_id ? await publicGameTitle(db, feedback.game_id) : null;
     // New messages always carry a name; only carried-over reports lack one.
     const senderName = feedback.sender_name ?? "a parent";

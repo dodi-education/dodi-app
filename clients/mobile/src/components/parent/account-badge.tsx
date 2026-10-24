@@ -1,7 +1,8 @@
-import { useRouter } from "expo-router";
+import { type Href, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { Pressable, View } from "react-native";
 import { useTranslations } from "use-intl";
+import { PROFILE_HREF } from "@dodi/client-state/parent-nav";
 import { accountBadge as styles } from "@dodi/ui-recipes";
 
 import { mobileAuthApi } from "@/adapters/auth";
@@ -9,7 +10,7 @@ import { Icon, Text } from "@/components/ui";
 import { useAccountStore } from "@/lib/client-state";
 import { signOut } from "@/lib/session";
 
-/** The drawer footer, as on the web: initial, email, plan, sign out. */
+/** The drawer footer, as on the web: initial, email and plan (opening the profile), sign out. */
 export function AccountBadge() {
   const t = useTranslations();
   const router = useRouter();
@@ -29,17 +30,24 @@ export function AccountBadge() {
   if (!email) return null;
   return (
     <View className={styles.row}>
-      <View className={styles.avatar}>
-        <Text className={styles.avatarText}>{email.charAt(0).toUpperCase()}</Text>
-      </View>
-      <View className="min-w-0 flex-1">
-        <Text className={styles.email} numberOfLines={1}>
-          {email}
-        </Text>
-        <Text className={styles.tier}>
-          {t("settings.tierLabel", { tier: tier.charAt(0).toUpperCase() + tier.slice(1) })}
-        </Text>
-      </View>
+      <Pressable
+        accessibilityRole="link"
+        accessibilityLabel={`${t("nav.openProfile")}: ${email}`}
+        onPress={() => router.push(PROFILE_HREF as Href)}
+        className="-m-1 min-w-0 flex-1 flex-row items-center gap-2 rounded-md p-1 active:bg-foreground/5"
+      >
+        <View className={styles.avatar}>
+          <Text className={styles.avatarText}>{email.charAt(0).toUpperCase()}</Text>
+        </View>
+        <View className="min-w-0 flex-1">
+          <Text className={styles.email} numberOfLines={1}>
+            {email}
+          </Text>
+          <Text className={styles.tier}>
+            {t("settings.tierLabel", { tier: tier.charAt(0).toUpperCase() + tier.slice(1) })}
+          </Text>
+        </View>
+      </Pressable>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={t("common.signOut")}

@@ -74,6 +74,7 @@ describe("POST /api/feedback", () => {
     expect(await res.json()).toEqual({ id: "feedback-1" });
     expect(createMock).toHaveBeenCalledWith({}, {
       accountId: "acc-1",
+      senderUserId: null,
       senderName: "Sam",
       category: "inappropriate_content",
       message: "The game talked about monsters under the bed.",

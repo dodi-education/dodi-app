@@ -3,7 +3,7 @@ import { type ReactNode, useEffect, useState } from "react";
 import { Animated, BackHandler, Image, Pressable, ScrollView, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTranslations } from "use-intl";
-import { isNavItemActive, PARENT_NAV_GROUPS } from "@dodi/client-state/parent-nav";
+import { isNavItemActive, parentNavFor } from "@dodi/client-state/parent-nav";
 import { drawer, navGroupLabel, navItem, topBar } from "@dodi/ui-recipes";
 
 import { writeLastView } from "@/adapters/platform";
@@ -12,6 +12,7 @@ import { FeedbackButton } from "@/components/parent/feedback-button";
 import { FeedbackDialog } from "@/components/parent/feedback-dialog";
 import { KidViewButton } from "@/components/parent/kid-view-button";
 import { Icon, type IconName, Text } from "@/components/ui";
+import { useParentAccess } from "@/lib/client-state";
 import { cn } from "@/lib/cn";
 import { RefreshScope, useNewRefreshRegistry } from "@/lib/refresh-scope";
 import { isReduceMotionOn } from "@/lib/use-reduce-motion";
@@ -89,6 +90,7 @@ function Drawer({
   onClose: () => void;
   onFeedback: () => void;
 }) {
+  const navGroups = parentNavFor(useParentAccess());
   const t = useTranslations();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
@@ -186,7 +188,7 @@ function Drawer({
           </View>
         </View>
         <ScrollView className="flex-1" contentContainerClassName="gap-0.5">
-          {PARENT_NAV_GROUPS.map((group, gi) => (
+          {navGroups.map((group, gi) => (
             <View key={group.labelKey} className="gap-0.5">
               <Text className={cn(navGroupLabel.text, gi === 0 ? navGroupLabel.first : navGroupLabel.rest)}>
                 {t(group.labelKey)}

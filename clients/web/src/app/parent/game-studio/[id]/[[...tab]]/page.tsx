@@ -5,8 +5,9 @@ import { useEffect, useState } from "react";
 
 import { GameStudio } from "@/components/parent/games/game-studio";
 import { dodi } from "@/lib/api";
-import { getSessionUser } from "@/lib/auth/client";
+import { clientState } from "@/lib/client-state";
 import { useGameStore } from "@/stores/game-store";
+import { activeAccountIdOf } from "@dodi/client-state";
 import { isStudioView, type StudioGame, type StudioView } from "@dodi/studio/studio-game";
 import { loadStudioGame } from "@dodi/studio/studio-load";
 
@@ -37,7 +38,7 @@ export default function EditGameStudioPage() {
       {
         api: dodi,
         loadGame: (gameId) => useGameStore.getState().loadOne(gameId),
-        sessionUserId: async () => (await getSessionUser())?.id ?? null,
+        activeAccountId: () => activeAccountIdOf(clientState.account),
       },
       id,
     )

@@ -54,6 +54,12 @@ export default function LoginScreen() {
       setIsLoading(false);
       return outcome.key ? t(outcome.key) : (outcome.message ?? "");
     }
+    if (outcome.kind === "no_family") {
+      // The vault gate explains it and offers a family of their own.
+      router.replace("/parent/dashboard");
+      markSignedIn();
+      return null;
+    }
     // The account's saved language is applied by the locale provider.
     router.replace(outcome.isNewVault ? "/vault-setup" : ((next ?? "/parent/dashboard") as "/parent/dashboard"));
     markSignedIn();

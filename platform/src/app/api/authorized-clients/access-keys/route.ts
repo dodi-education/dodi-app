@@ -32,7 +32,7 @@ const AccessKeySchema = z.object({
  * seed that derives the agent's keys never leaves the browser.
  */
 export async function POST(request: Request): Promise<Response> {
-  const auth = await requireAuth(request);
+  const auth = await requireAuth(request, { roles: ["owner", "co_parent"] });
   if (auth instanceof Response) return auth;
   if (auth.via !== "user") {
     return NextResponse.json(

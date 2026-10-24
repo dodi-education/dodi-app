@@ -186,7 +186,7 @@ describe("registering an address that already has an account", () => {
     const { accountExistsCopy } = await import("@/emails/strings");
     const email = "parent+deutsch@example.com";
     const id = await t.createAccount(email, { emailVerified: true });
-    await t.serviceDb.updateTable("accounts").set({ language: "de" }).where("id", "=", id).execute();
+    await t.serviceDb.updateTable("user_settings").set({ language: "de" }).where("user_id", "=", id).execute();
 
     await register(registerRequest(email, OTHER_PASSWORD));
     expect(sent.filter((m) => m.to === email)).toEqual([

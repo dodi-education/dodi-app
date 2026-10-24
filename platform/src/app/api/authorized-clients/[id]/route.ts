@@ -18,7 +18,7 @@ export async function DELETE(
   request: Request,
   context: Ctx,
 ): Promise<Response> {
-  const auth = await requireAuth(request);
+  const auth = await requireAuth(request, { roles: ["owner", "co_parent"] });
   if (auth instanceof Response) return auth;
   const { id } = await context.params;
   try {

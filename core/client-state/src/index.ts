@@ -19,3 +19,5 @@ export * from "./companion-session";
 export * from "./client-state";
 export * from "./captcha-store";
 export * from "./auth";
+export * from "./family-members";
+export * from "./member-vault";

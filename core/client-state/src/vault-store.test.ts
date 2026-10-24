@@ -7,11 +7,12 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { sealedRef, saveVaultKeysMock, fetchVaultKeysMock, offlineCacheMock } =
+const { sealedRef, saveVaultKeysMock, fetchVaultKeysMock, requestMock, offlineCacheMock } =
   vi.hoisted(() => ({
     sealedRef: { current: null as string | null },
     saveVaultKeysMock: vi.fn(),
     fetchVaultKeysMock: vi.fn(),
+    requestMock: vi.fn(),
     // Controllable stand-in for the IndexedDB offline cache (absent in node).
     offlineCacheMock: {
       writeVaultKeys: vi.fn(async () => {}),
@@ -26,7 +27,11 @@ vi.mock("@dodi/vault", () => ({
   VaultSession: class {
     constructor(public vmk: Uint8Array) {}
     lock() {}
+    wrapForMember(pk: string) {
+      return { wrappedFor: pk };
+    }
   },
+  openMemberVaultKey: vi.fn(() => new Uint8Array([4, 4, 4])),
   createAccountVault: vi.fn(({ device }: { device: { deviceId: string } }) => ({
     nsec: "nsec1mockmockmockmockmockmockmockmockmockmock",
     npubHex: "ab".repeat(32),
@@ -55,7 +60,13 @@ vi.mock("@dodi/crypto", () => ({
   nsecToNpubHex: vi.fn(() => "ab".repeat(32)),
 }));
 
-import { unlockVaultWithDevice, unlockVaultWithPassword } from "@dodi/vault";
+import { MemberVaultError } from "@dodi/protocol/client";
+import {
+  openMemberVaultKey,
+  setVaultPassword,
+  unlockVaultWithDevice,
+  unlockVaultWithPassword,
+} from "@dodi/vault";
 
 import { createConnectivityStore, type ConnectivityStore } from "./connectivity-store";
 import { createVaultStore, type VaultStore } from "./vault-store";
@@ -68,7 +79,7 @@ beforeEach(() => {
   connectivity = createConnectivityStore(true);
   store = createVaultStore({
     api: {
-      request: () => Promise.reject(new Error("unused")),
+      request: requestMock,
       getVaultKeys: fetchVaultKeysMock,
       putVaultKeys: saveVaultKeysMock,
     },
@@ -95,6 +106,8 @@ beforeEach(() => {
   saveVaultKeysMock.mockResolvedValue(undefined);
   fetchVaultKeysMock.mockReset();
   fetchVaultKeysMock.mockResolvedValue(null);
+  requestMock.mockReset();
+  requestMock.mockRejectedValue(new Error("unused"));
   store.setState({
     status: "idle",
     session: null,
@@ -342,5 +355,135 @@ describe("unlockOrBootstrap adopts an interrupted registration", () => {
 
     expect(created).toBe(false);
     expect(saveVaultKeysMock).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * A family member other than the owner: the platform answers their GET of the
+ * family's blob with MemberVaultError; they unlock their personal key and open
+ * the family's key wrapped to it, and never write the family's blob.
+ */
+describe("vault-store for family members", () => {
+  const userVaultKeys = (deviceIds: string[] = []) => ({
+    deviceWraps: deviceIds.map((deviceId) => ({ deviceId })),
+    passwordWrap: { scheme: "password", salt: "s" },
+    vmkCheck: "enc:v1:user",
+  });
+  const unlockKeys = (deviceIds: string[] = []) => ({
+    kind: "member",
+    userKeys: { kemPublicKey: "kem", signPublicKey: "sign", vaultKeys: userVaultKeys(deviceIds) },
+    memberWrap: { scheme: "kem" },
+    familyVmkCheck: "enc:v1:family",
+  });
+  const json = (body: unknown) =>
+    new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+
+  beforeEach(() => {
+    fetchVaultKeysMock.mockRejectedValue(new MemberVaultError());
+    vi.mocked(unlockVaultWithPassword).mockReset();
+    vi.mocked(unlockVaultWithPassword).mockResolvedValue(new Uint8Array([5, 5, 5]));
+    vi.mocked(unlockVaultWithDevice).mockReset();
+    vi.mocked(unlockVaultWithDevice).mockReturnValue(new Uint8Array([5, 5, 5]));
+    vi.mocked(openMemberVaultKey).mockClear();
+    offlineCacheMock.writeVaultKeys.mockClear();
+  });
+
+  it("unlocks the personal key with the password and opens the family's key", async () => {
+    const calls: string[] = [];
+    requestMock.mockImplementation(async (path: string, init?: RequestInit) => {
+      calls.push(`${init?.method ?? "GET"} ${path}`);
+      return path === "/api/vault/unlock-keys" ? json(unlockKeys()) : json({ ok: true });
+    });
+
+    const { created } = await store.getState().unlockOrBootstrap("pw");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(created).toBe(false);
+    expect(store.getState()).toMatchObject({ status: "unlocked", kind: "member" });
+    expect(openMemberVaultKey).toHaveBeenCalledWith(
+      new Uint8Array([5, 5, 5]),
+      { scheme: "kem" },
+      "enc:v1:family",
+    );
+    // This device's wrap goes to the personal key, never the family's blob.
+    expect(calls).toContain("PUT /api/user-keys");
+    expect(saveVaultKeysMock).not.toHaveBeenCalled();
+  });
+
+  it("unlocks silently with this device and keeps the unlock keys for offline use", async () => {
+    const keys = unlockKeys(["dev-1"]);
+    requestMock.mockResolvedValue(json(keys));
+
+    await expect(store.getState().unlockSilently()).resolves.toBe(true);
+    expect(store.getState().kind).toBe("member");
+    expect(offlineCacheMock.writeVaultKeys).toHaveBeenCalledWith(keys);
+  });
+
+  it("adds a paired device with one wrap, without rewriting the family's blob", async () => {
+    requestMock.mockImplementation(async (path: string) =>
+      path === "/api/vault/unlock-keys" ? json(unlockKeys(["dev-1"])) : json({ ok: true }),
+    );
+    await store.getState().unlockSilently();
+    requestMock.mockClear();
+
+    await store.getState().addDevice({ deviceId: "agent-1", deviceKemPublicKey: "agent-kem" });
+
+    expect(requestMock).toHaveBeenCalledWith(
+      "/api/vault/device-wraps",
+      expect.objectContaining({ method: "POST" }),
+    );
+    const body = JSON.parse((requestMock.mock.calls[0]?.[1] as RequestInit).body as string);
+    expect(body).toEqual({
+      deviceId: "agent-1",
+      deviceKemPublicKey: "agent-kem",
+      wrapped: { wrappedFor: "agent-kem" },
+    });
+    expect(saveVaultKeysMock).not.toHaveBeenCalled();
+  });
+
+  it("never takes the owner's recovery key", async () => {
+    requestMock.mockResolvedValue(json(unlockKeys()));
+    await expect(store.getState().unlockWithNsec("nsec1x")).rejects.toThrow(
+      "The recovery key belongs to the family's owner",
+    );
+  });
+
+  it("moves a forgotten password onto the personal key from a device that opens it", async () => {
+    const calls: string[] = [];
+    requestMock.mockImplementation(async (path: string, init?: RequestInit) => {
+      calls.push(`${init?.method ?? "GET"} ${path}`);
+      return path === "/api/vault/unlock-keys" ? json(unlockKeys(["dev-1"])) : json({ ok: true });
+    });
+    vi.mocked(setVaultPassword).mockResolvedValue(userVaultKeys(["dev-1"]) as never);
+    const onVerified = vi.fn(async () => {});
+
+    await store.getState().resetMemberPassword("new-password", onVerified);
+
+    expect(onVerified).toHaveBeenCalledOnce();
+    expect(setVaultPassword).toHaveBeenCalledWith(
+      expect.objectContaining({ vmkCheck: "enc:v1:user" }),
+      new Uint8Array([5, 5, 5]),
+      "new-password",
+    );
+    expect(calls).toContain("PUT /api/user-keys");
+    expect(store.getState()).toMatchObject({ status: "unlocked", kind: "member" });
+  });
+
+  it("leaves everything as it is when this device can't open the personal key", async () => {
+    requestMock.mockResolvedValue(json(unlockKeys(["another-device"])));
+    const onVerified = vi.fn(async () => {});
+    store.setState({ status: "idle" });
+
+    await expect(store.getState().resetMemberPassword("new-password", onVerified)).rejects.toThrow(
+      "member-keys-missing",
+    );
+    expect(onVerified).not.toHaveBeenCalled();
+    expect(store.getState().status).toBe("idle");
+  });
+
+  it("locks when the family has not handed over its key", async () => {
+    requestMock.mockResolvedValue(json({ ...unlockKeys(), memberWrap: null }));
+    await expect(store.getState().unlockSilently()).resolves.toBe(false);
+    expect(store.getState().status).toBe("locked");
   });
 });

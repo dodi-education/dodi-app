@@ -308,7 +308,7 @@ features:
 
   - id: settings.general
     area: settings
-    title: General settings (language, date format, interface)
+    title: General settings of the account (role, plan, interface, date format)
     web: done
     mobile: done
     core: [intl, client-state]
@@ -332,21 +332,50 @@ features:
 
   - id: settings.delete-account
     area: settings
-    title: Delete account (password re-check, erases all family data, wipes the device)
+    title: Delete the account (owner, password re-check, erases all its data) or leave it (everyone else)
     web: done
     mobile: done
     core: [client-state]
     web_paths:
       - "clients/web/src/components/parent/delete-account.tsx"
-      - "clients/web/src/lib/auth/end-session.ts"
+      - "clients/web/src/components/parent/leave-account.tsx"
+      - "clients/web/src/components/parent/password-confirm-dialog.tsx"
     mobile_paths:
       - "clients/mobile/src/components/settings/delete-account.tsx"
+      - "clients/mobile/src/components/settings/leave-account.tsx"
+      - "clients/mobile/src/components/settings/password-confirm-dialog.tsx"
+    notes: >-
+      Required by Google Play and the App Store, together with
+      settings.profile (deleting the profile). DELETE /api/account
+      (platform/src/services/account-deletion.ts) erases the account only;
+      every profile stays and lands in another account or on the "no account"
+      screen. Logic in core/client-state/src/account-deletion.ts.
+
+  - id: settings.profile
+    area: settings
+    title: "Profile page (from the email at the foot of the menu): email, language, password, your accounts, delete profile"
+    web: done
+    mobile: done
+    core: [client-state]
+    notes: >-
+      What belongs to the person rather than the account. Deleting the
+      profile (DELETE /api/me) is refused while it owns an account; the "no
+      account" screen offers it too. Every session ends, so the device signs
+      out and is wiped.
+    web_paths:
+      - "clients/web/src/app/parent/profile/page.tsx"
+      - "clients/web/src/components/parent/account-badge.tsx"
+      - "clients/web/src/components/parent/profile/delete-profile.tsx"
+      - "clients/web/src/lib/auth/end-session.ts"
+    mobile_paths:
+      - "clients/mobile/src/app/parent/profile.tsx"
+      - "clients/mobile/src/components/parent/account-badge.tsx"
+      - "clients/mobile/src/components/profile/delete-profile.tsx"
       - "clients/mobile/src/adapters/device-wipe.ts"
-    notes: Required by Google Play and the App Store. DELETE /api/account (platform/src/services/account-deletion.ts).
 
   - id: settings.security
     area: settings
-    title: Security (password, account key, parent PIN)
+    title: Security (the account's parent PIN; the password is on the profile page)
     web: done
     mobile: done
     core: [client-state, vault]
@@ -385,13 +414,77 @@ features:
       redirects to /parent/authorize (behind the vault and PIN gates), and the
       web middleware keeps ?code= through login. The card shows name and
       fingerprint, and for an agent the scopes (kids:memory off by default) and
-      expiry.
+      expiry. Before the vault key is wrapped, the device's signature binding
+      its KEM key to the fingerprinted signing key is verified (agents must
+      send it; an unsigned robot may still pair).
     web_paths:
       - "clients/web/src/app/parent/authorize/page.tsx"
       - "clients/web/src/app/authorize/page.tsx"
     mobile_paths:
       - "clients/mobile/src/app/parent/authorize.tsx"
       - "clients/mobile/src/app/authorize.tsx"
+
+  - id: settings.family-members
+    area: settings
+    title: "Account members: invite other adults (co-parent or limited), change their access, remove, leave"
+    web: done
+    mobile: done
+    core: [client-state, protocol, vault]
+    notes: >-
+      The People section of Settings > Access. Inviting seals the family's key
+      under a one-time link secret (in the #fragment); the inviter sends the
+      link themselves (mail app, share sheet, copy), so the platform never
+      sees it. Limited members get agent-style scopes and no kid view or
+      family settings; the parent area hides what they may not open
+      (core/client-state/src/parent-nav.ts). Logic in
+      core/client-state/src/family-members.ts, crypto in core/vault/src/member-keys.ts.
+    web_paths:
+      - "clients/web/src/components/parent/access/people-section.tsx"
+      - "clients/web/src/components/parent/access/invite-dialog.tsx"
+      - "clients/web/src/components/parent/access/member-access-dialog.tsx"
+      - "clients/web/src/components/parent/parent-access-guard.tsx"
+    mobile_paths:
+      - "clients/mobile/src/components/parent/access/people-section.tsx"
+      - "clients/mobile/src/components/parent/access/invite-dialog.tsx"
+      - "clients/mobile/src/components/parent/access/member-access-dialog.tsx"
+      - "clients/mobile/src/components/parent/parent-access-guard.tsx"
+
+  - id: auth.join-family
+    area: auth
+    title: Join an account from an invitation link (new profile or existing one, email code, own key)
+    web: done
+    mobile: done
+    core: [client-state, vault]
+    notes: >-
+      /join/{id}#k={secret}. The invited address signs up (no family of its
+      own) or signs in, confirms the address with the emailed code, and the
+      password seals the person's own key; the family's key is wrapped to it.
+      Nobody else has to be online. Public route (web middleware). The app
+      route sits outside (auth) (that layout redirects signed-in users); invite
+      links (https://app.dodi.app/join/...) open the web until the app gets
+      universal/app links for /join/*.
+    web_paths:
+      - "clients/web/src/app/(auth)/join/[id]/page.tsx"
+      - "clients/web/src/components/auth/join/join-family.tsx"
+    mobile_paths:
+      - "clients/mobile/src/app/join/[id].tsx"
+
+  - id: settings.family-switch
+    area: settings
+    title: Switch between accounts and create one of your own (a profile in several accounts)
+    web: done
+    mobile: done
+    core: [client-state]
+    notes: >-
+      Profile > Your accounts, and the "no account" screen of the vault gate
+      (left, removed, or the account was deleted). Switching drops the
+      device's caches of the old account (ClientState.dropFamilyData).
+    web_paths:
+      - "clients/web/src/components/parent/profile/account-switcher.tsx"
+      - "clients/web/src/components/vault/no-family-notice.tsx"
+    mobile_paths:
+      - "clients/mobile/src/components/profile/account-switcher.tsx"
+      - "clients/mobile/src/components/vault/no-family-notice.tsx"
 
   - id: settings.ai-providers
     area: settings

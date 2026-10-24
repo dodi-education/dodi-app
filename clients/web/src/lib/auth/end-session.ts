@@ -1,33 +1,17 @@
 import { signOut } from "@/lib/auth/client";
-import { offlineCache } from "@/lib/offline/offline-cache";
+import { clientState } from "@/lib/client-state";
 import { clearParentUnlocked } from "@/lib/parent-lock";
-import { useAccountStore } from "@/stores/account-store";
-import { useAssetPublicationStore, useCharacterAssetStore } from "@/stores/character-asset-store";
-import { useDiscoverAssetStore } from "@/stores/discover-asset-store";
-import { useDodiAIBillingStore } from "@/stores/dodi-ai-billing-store";
-import { useDodiAIKeyStore } from "@/stores/dodi-ai-key-store";
-import { useKidStore } from "@/stores/kid-store";
 
 /**
- * Sign out of this browser: drop the in-memory caches (sign-out is an SPA
- * navigation, so a later login, possibly of another account, must never see
- * stale data), wipe the offline cache, then revoke the session and drop the
- * token. Shared by the Sign out button and account deletion.
+ * Sign out of this browser: lock the vault and drop the in-memory caches
+ * (sign-out is an SPA navigation, so a later login, possibly of another
+ * account, must never see stale data), wipe the offline cache, then revoke
+ * the session and drop the token. Shared by the Sign out button and account
+ * deletion.
  */
 export async function endSession(): Promise<void> {
   clearParentUnlocked();
-  useAccountStore.getState().reset();
-  useKidStore.getState().invalidate();
-  // Decrypted avatar/accessory names and files, and their Discover state.
-  useCharacterAssetStore.getState().invalidate();
-  useAssetPublicationStore.getState().reset();
-  useDiscoverAssetStore.getState().invalidate();
-  // dodi AI session credentials live in memory only: drop them with the session.
-  useDodiAIKeyStore.getState().clear();
-  useDodiAIBillingStore.getState().clear();
-  // Offline caches persist in IndexedDB: wipe them so another account on this
-  // device never inherits cached (ciphertext) rows or vault keys.
-  await offlineCache.clearAll();
+  await clientState.dropFamilyData();
   await signOut();
 }
 

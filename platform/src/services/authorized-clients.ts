@@ -13,6 +13,7 @@ import type {
 
 import type { Db } from "@/lib/db";
 
+import { removeUserDeviceWrap } from "./user-keys";
 import { removeDeviceWrap } from "./vault-keys";
 
 /**
@@ -27,6 +28,8 @@ export interface EnrollInput {
   deviceId: string;
   kemPublicKey: string;
   signPublicKey: string;
+  /** The device's signature binding its KEM key to its signing key (see agent-key). */
+  kemKeySignature?: string | null;
   name?: string | null;
   /** "agent" for the dodi CLI; robots omit it. */
   kind?: "robot" | "agent";
@@ -92,6 +95,8 @@ export interface AuthorizedClientView {
   has_vault_access: boolean;
   /** The client making this request. */
   is_current: boolean;
+  /** Browsers and apps: the email of the person whose device it is. */
+  user_email: string | null;
 }
 
 /** Create a pending (unclaimed) robot or agent with a short pairing code. Service-role. */
@@ -107,6 +112,7 @@ export async function createPendingClient(
       device_id: input.deviceId,
       kem_public_key: input.kemPublicKey,
       sign_public_key: input.signPublicKey,
+      kem_key_signature: input.kemKeySignature ?? null,
       name: input.name?.slice(0, 80) ?? null,
       status: "pending",
       pairing_code: pairingCode,
@@ -289,6 +295,8 @@ export interface RegisterOwnClientInput {
   kind: "browser" | "app";
   label: string | null;
   sessionId: string | null;
+  /** The person (login) whose browser or app it is. */
+  userId?: string | null;
 }
 
 /**
@@ -307,6 +315,7 @@ export async function registerOwnClient(
     kem_public_key: input.kemPublicKey,
     label: input.label?.slice(0, 80) ?? null,
     session_id: input.sessionId,
+    user_id: input.userId ?? null,
     status: "active" as const,
     last_seen_at: now.toISOString(),
   };
@@ -330,8 +339,8 @@ export async function registerOwnClient(
 /**
  * The Access list: every client that is not revoked, plus login sessions
  * that never registered (signed in but never unlocked: no vault access).
- * `serviceDb` reads the account's own sessions (auth tables have no RLS
- * policies for the app role); `db` reads the clients through RLS.
+ * `serviceDb` reads the sessions acting as the account (auth tables have no
+ * RLS policies for the app role); `db` reads the clients through RLS.
  */
 export async function listAuthorizedClients(
   db: Db,
@@ -350,14 +359,30 @@ export async function listAuthorizedClients(
     .execute();
   const sessions = await serviceDb
     .selectFrom("auth_sessions")
-    .select(["id", "user_agent", "created_at", "updated_at"])
-    .where("user_id", "=", accountId)
+    .select(["id", "user_id", "user_agent", "created_at", "updated_at"])
+    .where("active_account_id", "=", accountId)
     .where("expires_at", ">", now.toISOString())
     .orderBy("updated_at", "desc")
     .limit(100)
     .execute();
   const sessionsById = new Map(sessions.map((s) => [s.id, s]));
   const linked = new Set(rows.map((row) => row.session_id).filter(Boolean));
+  const userIds = [
+    ...new Set(
+      [...rows.map((row) => row.user_id), ...sessions.map((s) => s.user_id)].filter(
+        (id): id is string => id !== null,
+      ),
+    ),
+  ];
+  const users =
+    userIds.length > 0
+      ? await serviceDb
+          .selectFrom("auth_users")
+          .select(["id", "email"])
+          .where("id", "in", userIds)
+          .execute()
+      : [];
+  const emailOf = new Map(users.map((user) => [user.id, user.email]));
 
   const clients: AuthorizedClientView[] = rows.map((row) => {
     const session = row.session_id
@@ -379,6 +404,7 @@ export async function listAuthorizedClients(
       is_current:
         (current.deviceId != null && row.device_id === current.deviceId) ||
         (current.sessionId != null && row.session_id === current.sessionId),
+      user_email: row.user_id ? (emailOf.get(row.user_id) ?? null) : null,
     };
   });
   for (const session of sessions) {
@@ -395,6 +421,7 @@ export async function listAuthorizedClients(
       created_at: session.created_at,
       has_vault_access: false,
       is_current: current.sessionId === session.id,
+      user_email: emailOf.get(session.user_id) ?? null,
     });
   }
   return clients;
@@ -417,7 +444,7 @@ export async function revokeClient(
 ): Promise<RevokeOutcome> {
   const client = await db
     .selectFrom("authorized_clients")
-    .select(["id", "device_id", "status", "session_id"])
+    .select(["id", "device_id", "status", "session_id", "user_id"])
     .where("id", "=", id)
     .where("account_id", "=", accountId)
     .executeTakeFirst();
@@ -426,7 +453,7 @@ export async function revokeClient(
     const ended = await serviceDb
       .deleteFrom("auth_sessions")
       .where("id", "=", id)
-      .where("user_id", "=", accountId)
+      .where("active_account_id", "=", accountId)
       .executeTakeFirst();
     return Number(ended.numDeletedRows) > 0
       ? { revoked: true, wasCurrent: current.sessionId === id }
@@ -443,8 +470,12 @@ export async function revokeClient(
   }
 
   // Wrap first: once it is gone the client cannot open the vault, whatever
-  // happens to the rest.
+  // happens to the rest. A family member's device holds a wrap of their
+  // personal key instead of the family's.
   await removeDeviceWrap(db, accountId, client.device_id);
+  if (client.user_id) {
+    await removeUserDeviceWrap(serviceDb, client.user_id, client.device_id);
+  }
   await db
     .updateTable("authorized_clients")
     .set({ status: "revoked", session_id: null })
@@ -455,7 +486,7 @@ export async function revokeClient(
     await serviceDb
       .deleteFrom("auth_sessions")
       .where("id", "=", client.session_id)
-      .where("user_id", "=", accountId)
+      .where("active_account_id", "=", accountId)
       .execute();
   }
   return {

@@ -95,6 +95,7 @@ export function PublishDialog({ open, gameId, built, onClose }: PublishDialogPro
   const t = useTranslations("gameStudio");
   const router = useRouter();
   const account = useAccountStore((s) => s.account);
+  const member = useAccountStore((s) => s.member);
   const loadAccount = useAccountStore((s) => s.load);
 
   const [publication, setPublication] = useState<Game | null>(null);
@@ -254,7 +255,7 @@ export function PublishDialog({ open, gameId, built, onClose }: PublishDialogPro
       ? parseRejectionReasons(publication?.rejection_reasons ?? null)
       : [];
   const isEditedSinceSubmit = isEditedSince(publication, sourceVersionId);
-  const prefs = (account?.notification_preferences ?? null) as NotificationPreferences | null;
+  const prefs = (member?.notification_preferences ?? null) as NotificationPreferences | null;
   const isOutcomeEmailOn = prefs?.publication_outcome_email !== false;
   const monthlyLimit = account?.monthly_game_publication_limit ?? 0;
 

@@ -1,6 +1,9 @@
 // Shared logic: @dodi/client-state. This module binds the browser instance
 // (lib/client-state.ts) to React and keeps the app-facing names.
+import { useMemo } from "react";
+
 import { bindStore } from "@dodi/client-state/react";
+import type { ParentAccess } from "@dodi/client-state/parent-nav";
 
 import { clientState } from "@/lib/client-state";
 
@@ -27,6 +30,15 @@ export function patchGameScreenshotService(settings: GameScreenshotServiceSettin
 /** Mirror saved interface toggles into the cached account. */
 export function patchInterfacePreferences(prefs: InterfacePreferences): void {
   patchPreferences(clientState.account, prefs);
+}
+
+const NO_SCOPES: readonly string[] = [];
+
+/** The signed-in person's role and scopes (what the parent area shows them). */
+export function useParentAccess(): ParentAccess {
+  const role = useAccountStore((s) => s.member?.role ?? null);
+  const scopes = useAccountStore((s) => s.member?.scopes ?? NO_SCOPES);
+  return useMemo(() => ({ role, scopes }), [role, scopes]);
 }
 
 /** Whether dodi renders as the 3D character. Opt-out: on unless turned off. */

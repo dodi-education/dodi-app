@@ -19,6 +19,7 @@
     "./client-headers": "./src/client-headers.ts",
     "./agent-provider-keys": "./src/agent-provider-keys.ts",
     "./feedback": "./src/feedback.ts",
+    "./family-members": "./src/family-members.ts",
     "./client": "./src/client.ts"
   },
   "main": "./src/index.ts",

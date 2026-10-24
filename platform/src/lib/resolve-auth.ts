@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 
-import type { AgentScope } from "@dodi/protocol/agent-scopes";
+import { normalizeAgentScopes, type AgentScope } from "@dodi/protocol/agent-scopes";
+import type { AccountMemberRole } from "@dodi/types/database";
 
+import { resolveActiveMembership } from "@/services/account-members";
 import { getActiveAgentClient } from "@/services/authorized-clients";
 
 import { auth } from "./auth";
@@ -11,6 +13,7 @@ import { verifyDeviceBearer } from "./device-token";
 export type AuthVia = "user" | "robot" | "agent";
 
 export interface AuthContext {
+  /** The family the request acts as. */
   accountId: string;
   /**
    * Database handle for this request:
@@ -21,14 +24,19 @@ export interface AuthContext {
   db: Db;
   via: AuthVia;
   /**
-   * What an agent device was granted; null for users and robots, which are
-   * not scope-limited.
+   * What an agent device or a scoped family member (role `member`) was
+   * granted; null for the owner, co-parents and robots, which are not
+   * scope-limited.
    */
   scopes: ReadonlySet<AgentScope> | null;
   /** The device id a robot or agent bearer belongs to. */
   deviceId?: string;
   /** The login session of a user request (browsers and the app). */
   sessionId?: string;
+  /** The login (auth user) behind a user request; one of the family's members. */
+  userId?: string;
+  /** That login's role in the family. */
+  role?: AccountMemberRole;
 }
 
 /**
@@ -38,6 +46,19 @@ export interface AuthContext {
  */
 export interface AuthOptions {
   agentScope?: AgentScope | "any";
+  /**
+   * Scoped family members (role `member`) are refused everywhere unless the
+   * route opts in, like agents: `"any"` for routes every member needs (their
+   * account view, their keys, leaving), otherwise the scope they must hold.
+   * Without it, a route's concrete `agentScope` applies to members too (an
+   * `"any"` agent route is agent plumbing and stays closed to them).
+   */
+  memberScope?: AgentScope | "any";
+  /**
+   * A person's request: the roles allowed (default: every member). Device
+   * requests are not affected; routes that must refuse them check `via`.
+   */
+  roles?: readonly AccountMemberRole[];
 }
 
 /** Thrown when a request can't be authenticated; carries the HTTP status. */
@@ -52,9 +73,12 @@ export class AuthError extends Error {
 /** Authenticated, but this caller may not use the route (an agent outside its scopes). */
 export class ForbiddenError extends AuthError {
   override readonly status = 403;
-  constructor(message = "Forbidden") {
+  /** Machine-readable reason clients branch on (e.g. NO_FAMILY). */
+  readonly code: string | undefined;
+  constructor(message = "Forbidden", code?: string) {
     super(message);
     this.name = "ForbiddenError";
+    this.code = code;
   }
 }
 
@@ -67,7 +91,9 @@ function readBearer(request: Request): string | null {
  * Bearer-only auth for every client. Resolves the request to an account and a
  * database handle:
  *  - user (web/native) → Better Auth session token (bearer plugin), looked up
- *    in auth_sessions; queries run as the user (RLS enforced).
+ *    in auth_sessions, then the family the session acts as (account_members,
+ *    re-checked on every request); queries run as that family and login (RLS
+ *    enforced).
  *  - robot             → platform-signed device token; queries run via the
  *    service handle scoped to the account in app code.
  *  - agent (dodi CLI)   → the same device token, for a device paired as an
@@ -126,20 +152,88 @@ export async function resolveAuth(
   const session = await auth.api.getSession({ headers: request.headers });
   if (!session) throw new AuthError("Invalid or expired token");
 
+  const userId = session.user.id;
+  const membership = await resolveActiveMembership(
+    serviceDb,
+    userId,
+    session.session.id,
+  );
+  if (!membership) {
+    throw new ForbiddenError("This login is not a member of a family", "NO_FAMILY");
+  }
+  if (options.roles && !options.roles.includes(membership.role)) {
+    throw new ForbiddenError("Your role in this family cannot do this");
+  }
+  let memberScopes: ReadonlySet<AgentScope> | null = null;
+  if (membership.role === "member") {
+    memberScopes = new Set(normalizeAgentScopes(membership.scopes));
+    const wanted =
+      options.memberScope ??
+      (options.agentScope && options.agentScope !== "any" ? options.agentScope : undefined);
+    if (!wanted) throw new ForbiddenError("Your access to this family does not include this");
+    if (wanted !== "any" && !memberScopes.has(wanted)) {
+      throw new ForbiddenError(`Your access to this family does not include "${wanted}"`);
+    }
+  }
+
   return {
-    accountId: session.user.id,
-    db: scopedDb(session.user.id),
+    accountId: membership.accountId,
+    db: scopedDb(membership.accountId, userId),
     via: "user",
-    scopes: null,
+    scopes: memberScopes,
     sessionId: session.session.id,
+    userId,
+    role: membership.role,
   };
+}
+
+/** A person's login, whether or not it belongs to a family yet (joining one). */
+export interface LoginContext {
+  userId: string;
+  sessionId: string;
+  email: string;
+  emailVerified: boolean;
+}
+
+/**
+ * Resolve a login session without requiring a family: for the routes that
+ * let a login join one. Device bearers are refused.
+ */
+export async function resolveLogin(request: Request): Promise<LoginContext> {
+  const token = readBearer(request);
+  if (!token) throw new AuthError("Missing bearer token");
+  if (verifyDeviceBearer(token)) {
+    throw new ForbiddenError("Only a person's login can do this");
+  }
+  const session = await auth.api.getSession({ headers: request.headers });
+  if (!session) throw new AuthError("Invalid or expired token");
+  return {
+    userId: session.user.id,
+    sessionId: session.session.id,
+    email: session.user.email,
+    emailVerified: session.user.emailVerified,
+  };
+}
+
+/** Route helper for resolveLogin: the login or a 401/403 Response. */
+export async function requireLogin(
+  request: Request,
+): Promise<LoginContext | NextResponse> {
+  try {
+    return await resolveLogin(request);
+  } catch (error) {
+    const res = unauthorizedResponse(error);
+    if (res) return res;
+    throw error;
+  }
 }
 
 /** Helper: turn an AuthError into a JSON 401 (403 for ForbiddenError), rethrow anything else. */
 export function unauthorizedResponse(error: unknown): NextResponse | null {
   if (error instanceof AuthError) {
+    const code = error instanceof ForbiddenError ? error.code : undefined;
     return NextResponse.json(
-      { error: error.message },
+      code ? { error: error.message, code } : { error: error.message },
       { status: error.status },
     );
   }

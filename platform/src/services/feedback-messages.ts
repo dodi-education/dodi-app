@@ -26,6 +26,8 @@ import { OPS_LIST_DEFAULT_LIMIT, OPS_LIST_MAX_LIMIT } from "./ops-lists";
 
 export interface FeedbackMessageInput {
   accountId: string;
+  /** The login that wrote it (Reply-To goes there); null for a device. */
+  senderUserId?: string | null;
   senderName: string;
   category: FeedbackCategory;
   message: string;
@@ -95,6 +97,7 @@ export async function createFeedbackMessage(
       .insertInto("feedback_messages")
       .values({
         account_id: input.accountId,
+        sender_user_id: input.senderUserId ?? null,
         sender_name: input.senderName,
         category: input.category,
         message: input.message,

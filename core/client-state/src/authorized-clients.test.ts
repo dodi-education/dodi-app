@@ -1,5 +1,5 @@
 import { toBase64Url } from "@dodi/crypto";
-import { agentKeyPairs, parseAgentAccessKey } from "@dodi/protocol/agent-key";
+import { agentKeyPairs, parseAgentAccessKey, signDeviceKeys } from "@dodi/protocol/agent-key";
 import { openAgentProviderKeys } from "@dodi/protocol/agent-provider-keys";
 import { createDevice, type DeviceKeystore } from "@dodi/vault";
 import { describe, expect, it, vi } from "vitest";
@@ -61,12 +61,15 @@ function fakeProviders(keys: Record<string, string> = {}): ProvidersStore {
   return createStore(() => ({ providers, load: async () => providers })) as unknown as ProvidersStore;
 }
 
-const SIGN_PUB = toBase64Url(agentKeyPairs({ deviceId: "x", seed: new Uint8Array(32) }).sign.publicKey);
+const AGENT_KEYS = agentKeyPairs({ deviceId: "x", seed: new Uint8Array(32) });
+const SIGN_PUB = toBase64Url(AGENT_KEYS.sign.publicKey);
+const KEM_PUB = toBase64Url(AGENT_KEYS.kem.publicKey);
 const CLAIMED_AGENT = {
   id: "row-1",
   deviceId: "dev-1",
-  kemPublicKey: "kem",
+  kemPublicKey: KEM_PUB,
   signPublicKey: SIGN_PUB,
+  kemKeySignature: signDeviceKeys(AGENT_KEYS.sign.secretKey, "dev-1", KEM_PUB),
   name: "Claude Code",
   kind: "agent",
   requestedScopes: ["games", "kids:memory", "nonsense"],
@@ -85,6 +88,7 @@ function view(patch: Partial<AuthorizedClientView>): AuthorizedClientView {
     created_at: "2026-10-09T00:00:00Z",
     has_vault_access: true,
     is_current: false,
+    user_email: null,
     ...patch,
   };
 }
@@ -125,6 +129,25 @@ describe("Access", () => {
     expect(typeof request === "object" && request.fingerprint).toMatch(/^[0-9A-F]{4}-[0-9A-F]{4}$/);
   });
 
+  it("refuses a request whose KEM key the fingerprint's key did not sign", async () => {
+    const swapped = toBase64Url(agentKeyPairs({ deviceId: "y", seed: new Uint8Array(32).fill(9) }).kem.publicKey);
+    const unsigned = { ...CLAIMED_AGENT, kemKeySignature: null };
+    const forged = { ...CLAIMED_AGENT, kemPublicKey: swapped };
+    for (const body of [unsigned, forged]) {
+      const { api } = routedApi({ "/api/authorized-clients/claim": json(body) });
+      expect(await claimAccessRequest({ api }, "x")).toBe("unverified");
+    }
+    // A robot that predates signing may still pair; a bad signature never passes.
+    const { api: robotApi } = routedApi({
+      "/api/authorized-clients/claim": json({ ...unsigned, kind: "robot", requestedScopes: [] }),
+    });
+    expect(await claimAccessRequest({ api: robotApi }, "x")).toMatchObject({ kind: "robot" });
+    const { api: forgedRobotApi } = routedApi({
+      "/api/authorized-clients/claim": json({ ...forged, kind: "robot", requestedScopes: [] }),
+    });
+    expect(await claimAccessRequest({ api: forgedRobotApi }, "x")).toBe("unverified");
+  });
+
   it("claims a robot without scopes", async () => {
     const { api } = routedApi({ "/api/authorized-clients/claim": json({ ...CLAIMED_AGENT, kind: "robot", requestedScopes: [] }) });
     expect(await claimAccessRequest({ api }, "x")).toMatchObject({ kind: "robot", requestedScopes: [] });
@@ -142,7 +165,7 @@ describe("Access", () => {
       grant: { scopes: ["games"], expiresInDays: 30 },
     });
     expect(outcome).toBe("ok");
-    expect(addDevice).toHaveBeenCalledWith({ deviceId: "dev-1", deviceKemPublicKey: "kem" });
+    expect(addDevice).toHaveBeenCalledWith({ deviceId: "dev-1", deviceKemPublicKey: KEM_PUB });
     expect(calls[0].body).toEqual({ scopes: ["games"], expiresInDays: 30 });
   });
 

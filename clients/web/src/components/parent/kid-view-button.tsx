@@ -2,14 +2,19 @@
 
 import { useTranslations } from "next-intl";
 import { enterKidView } from "@dodi/client-state/kid-view";
+import { canUseKidView } from "@dodi/client-state/parent-nav";
 
 import { Icon } from "@/components/shared/icon";
 import { readActiveKidCookie, writeActiveKidCookies } from "@/lib/active-kid";
 import { clientState } from "@/lib/client-state";
 import { clearParentUnlocked, markParentUnlocked } from "@/lib/parent-lock";
+import { useParentAccess } from "@/stores/account-store";
 
 export function KidViewButton({ compact = false }: { compact?: boolean }) {
   const t = useTranslations("nav");
+  // The kid view runs on the family's kids and their data: owner and
+  // co-parents only.
+  const isAllowed = canUseKidView(useParentAccess());
 
   async function handleSwitchToKid(e: React.MouseEvent<HTMLAnchorElement>) {
     // Let the browser handle modified clicks (ctrl/cmd-click, middle-click,
@@ -40,6 +45,8 @@ export function KidViewButton({ compact = false }: { compact?: boolean }) {
     // locale, so the kid's language takes effect.
     window.location.assign("/home");
   }
+
+  if (!isAllowed) return null;
 
   if (compact) {
     return (

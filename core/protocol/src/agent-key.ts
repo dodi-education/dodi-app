@@ -13,10 +13,14 @@
  */
 import {
   DEVICE_SEED_LENGTH,
+  concatBytes,
   deriveDeviceKeyPairsFromSeed,
   fromBase64Url,
   sha256Digest,
+  sign,
   toBase64Url,
+  utf8ToBytes,
+  verify,
   type DeviceKeyPairs,
 } from "@dodi/crypto";
 
@@ -69,4 +73,47 @@ export function deviceFingerprint(signPublicKeyBase64Url: string): string {
     .join("")
     .toUpperCase();
   return `${hex.slice(0, 4)}-${hex.slice(4)}`;
+}
+
+/**
+ * What a pairing device signs to bind its KEM key (what the vault key gets
+ * wrapped to) to its signing key (what the parent compares by fingerprint).
+ * Without it, a server could pass the real signing key with its own KEM key
+ * and receive the vault key.
+ */
+function deviceKeysMessage(deviceId: string, kemPublicKeyBase64Url: string): Uint8Array {
+  return concatBytes(
+    utf8ToBytes("dodi/device-keys/v1"),
+    new Uint8Array([0]),
+    utf8ToBytes(deviceId),
+    new Uint8Array([0]),
+    fromBase64Url(kemPublicKeyBase64Url),
+  );
+}
+
+/** The device's signature over its id and KEM key (base64url), sent when it enrolls. */
+export function signDeviceKeys(
+  signSecretKey: Uint8Array,
+  deviceId: string,
+  kemPublicKeyBase64Url: string,
+): string {
+  return toBase64Url(sign(signSecretKey, deviceKeysMessage(deviceId, kemPublicKeyBase64Url)));
+}
+
+/** Whether the KEM key really belongs to the device whose signing key the parent compared. */
+export function verifyDeviceKeys(input: {
+  deviceId: string;
+  kemPublicKey: string;
+  signPublicKey: string;
+  signature: string;
+}): boolean {
+  try {
+    return verify(
+      fromBase64Url(input.signPublicKey),
+      deviceKeysMessage(input.deviceId, input.kemPublicKey),
+      fromBase64Url(input.signature),
+    );
+  } catch {
+    return false;
+  }
 }

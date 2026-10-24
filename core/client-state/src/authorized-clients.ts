@@ -13,7 +13,12 @@
  *    shows the key once (see @dodi/protocol/agent-key).
  */
 import { randomBytes, toBase64Url } from "@dodi/crypto";
-import { agentKeyPairs, deviceFingerprint, formatAgentAccessKey } from "@dodi/protocol/agent-key";
+import {
+  agentKeyPairs,
+  deviceFingerprint,
+  formatAgentAccessKey,
+  verifyDeviceKeys,
+} from "@dodi/protocol/agent-key";
 import {
   agentBuildProviders,
   sealAgentProviderKeys,
@@ -56,6 +61,8 @@ export interface AuthorizedClientView {
   created_at: string;
   has_vault_access: boolean;
   is_current: boolean;
+  /** Browsers and apps: whose device it is (several adults may share a family). */
+  user_email: string | null;
 }
 
 /** The Access screen's sections. */
@@ -84,7 +91,8 @@ export interface AgentGrant {
   expiresInDays: number | null;
 }
 
-export type AccessRequestError = "not_found" | "rate_limited" | "failed";
+/** `unverified`: the device's KEM key is not signed by the key behind its fingerprint. */
+export type AccessRequestError = "not_found" | "rate_limited" | "failed" | "unverified";
 export type AllowOutcome = "ok" | "no_build_keys" | "failed";
 
 /** The header that tells the list which client is asking (marks `is_current`). */
@@ -191,11 +199,27 @@ export async function claimAccessRequest(
       deviceId: string;
       kemPublicKey: string;
       signPublicKey: string;
+      kemKeySignature: string | null;
       name: string | null;
       kind: string;
       requestedScopes: unknown;
     };
     if (claimed.kind !== "agent" && claimed.kind !== "robot") return "failed";
+    // The vault key will be wrapped to kemPublicKey: it must be signed by the
+    // key whose fingerprint the parent compares. Agents always sign; a robot
+    // whose firmware predates signing may not, but a bad signature never passes.
+    const isSigned = claimed.kemKeySignature != null;
+    if (
+      (claimed.kind === "agent" || isSigned) &&
+      !verifyDeviceKeys({
+        deviceId: claimed.deviceId,
+        kemPublicKey: claimed.kemPublicKey,
+        signPublicKey: claimed.signPublicKey,
+        signature: claimed.kemKeySignature ?? "",
+      })
+    ) {
+      return "unverified";
+    }
     return {
       id: claimed.id,
       deviceId: claimed.deviceId,
@@ -438,6 +462,7 @@ export const ACCESS_REQUEST_ERROR_KEYS: Record<AccessRequestError, string> = {
   not_found: "errorNotFound",
   rate_limited: "errorRateLimited",
   failed: "errorFailed",
+  unverified: "errorUnverified",
 };
 export const ALLOW_ERROR_KEYS: Record<Exclude<AllowOutcome, "ok">, string> = {
   no_build_keys: "errorNoBuildKeys",

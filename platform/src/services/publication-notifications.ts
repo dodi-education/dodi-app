@@ -28,6 +28,8 @@ import {
 import type { Db } from "@/lib/db";
 import { sendEmail } from "@/lib/email";
 
+import { listFamilyRecipients } from "./account-members";
+
 function operatorEmail(): string | null {
   const to = process.env.SYSTEM_NOTIFICATION_EMAIL;
   if (!to) {
@@ -132,41 +134,33 @@ interface Publisher {
 }
 
 /**
- * Resolve the game's publisher into a deliverable recipient: their plaintext
- * account email + language, honouring the opt-out toggle. Returns null (skip)
- * when there is no account, no email on file, or the toggle is off. Never
- * throws — a lookup failure just means no publisher mail.
+ * Resolve the game's publishing family into deliverable recipients: each
+ * owner and co-parent with their own email and language, honouring their own
+ * opt-out toggle. Empty (skip) when there is no family or everyone opted out.
+ * Never throws — a lookup failure just means no publisher mail.
  */
-async function loadPublisher(
+async function loadPublishers(
   db: Db,
   publication: Game,
-): Promise<Publisher | null> {
+): Promise<Publisher[]> {
   const accountId =
     publication.published_by_account_id ?? publication.account_id;
-  if (!accountId) return null;
-  let row:
-    | {
-        email: string | null;
-        language: string | null;
-        notification_preferences: unknown;
-      }
-    | undefined;
+  if (!accountId) return [];
   try {
-    row = await db
-      .selectFrom("accounts")
-      .select(["email", "language", "notification_preferences"])
-      .where("id", "=", accountId)
-      .executeTakeFirst();
+    const recipients = await listFamilyRecipients(db, accountId);
+    return recipients
+      .filter((recipient) => wantsOutcomeEmail(recipient.notificationPreferences))
+      .map((recipient) => ({
+        email: recipient.email,
+        locale: normalizeEmailLocale(recipient.language),
+      }));
   } catch (error) {
     console.error(
-      "[notify] failed to load publisher account:",
+      "[notify] failed to load publisher family:",
       error instanceof Error ? error.message : error,
     );
-    return null;
+    return [];
   }
-  if (!row?.email) return null;
-  if (!wantsOutcomeEmail(row.notification_preferences)) return null;
-  return { email: row.email, locale: normalizeEmailLocale(row.language) };
 }
 
 /** Tell the publisher their game passed review and is live on Discover. */
@@ -175,20 +169,23 @@ export async function notifyPublisherApproved(
   publication: Game,
 ): Promise<void> {
   try {
-    const publisher = await loadPublisher(db, publication);
-    if (!publisher) return;
-    await sendEmail({
-      to: publisher.email,
-      subject: publicationOutcomeCopy(publisher.locale).approvedSubject,
-      react: createElement(PublicationOutcomeEmail, {
-        appUrl: appUrl(),
-        locale: publisher.locale,
-        title: publication.title,
-        outcome: "approved",
-        sourceGameId: publication.source_game_id,
-        reasons: [],
-      }),
-    });
+    const publishers = await loadPublishers(db, publication);
+    await Promise.all(
+      publishers.map((publisher) =>
+        sendEmail({
+          to: publisher.email,
+          subject: publicationOutcomeCopy(publisher.locale).approvedSubject,
+          react: createElement(PublicationOutcomeEmail, {
+            appUrl: appUrl(),
+            locale: publisher.locale,
+            title: publication.title,
+            outcome: "approved",
+            sourceGameId: publication.source_game_id,
+            reasons: [],
+          }),
+        }),
+      ),
+    );
   } catch (err) {
     console.error("[notify] notifyPublisherApproved failed:", err);
   }
@@ -207,21 +204,24 @@ export async function notifyPublisherRejected(
   reasons: PublicationRejectionReason[],
 ): Promise<void> {
   try {
-    const publisher = await loadPublisher(db, publication);
-    if (!publisher) return;
-    const copy = publicationOutcomeCopy(publisher.locale);
-    await sendEmail({
-      to: publisher.email,
-      subject: kind === "soft" ? copy.softSubject : copy.hardSubject,
-      react: createElement(PublicationOutcomeEmail, {
-        appUrl: appUrl(),
-        locale: publisher.locale,
-        title: publication.title,
-        outcome: kind,
-        sourceGameId: publication.source_game_id,
-        reasons: kind === "soft" ? reasons : [],
+    const publishers = await loadPublishers(db, publication);
+    await Promise.all(
+      publishers.map((publisher) => {
+        const copy = publicationOutcomeCopy(publisher.locale);
+        return sendEmail({
+          to: publisher.email,
+          subject: kind === "soft" ? copy.softSubject : copy.hardSubject,
+          react: createElement(PublicationOutcomeEmail, {
+            appUrl: appUrl(),
+            locale: publisher.locale,
+            title: publication.title,
+            outcome: kind,
+            sourceGameId: publication.source_game_id,
+            reasons: kind === "soft" ? reasons : [],
+          }),
+        });
       }),
-    });
+    );
   } catch (err) {
     console.error("[notify] notifyPublisherRejected failed:", err);
   }

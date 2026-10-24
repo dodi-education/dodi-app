@@ -33,6 +33,7 @@ import { gameFlowDeps, translateGameForPublication } from "@/lib/game-flow-deps"
 export function usePublishFlow({ isOpen, gameId, isBuilt }: { isOpen: boolean; gameId: string | null; isBuilt: boolean }) {
   const t = useTranslations("gameStudio");
   const account = useAccountStore((s) => s.account);
+  const member = useAccountStore((s) => s.member);
   const loadAccount = useAccountStore((s) => s.load);
 
   const [publication, setPublication] = useState<Game | null>(null);
@@ -148,7 +149,7 @@ export function usePublishFlow({ isOpen, gameId, isBuilt }: { isOpen: boolean; g
     }
   }, [gameId, t]);
 
-  const prefs = (account?.notification_preferences ?? null) as NotificationPreferences | null;
+  const prefs = (member?.notification_preferences ?? null) as NotificationPreferences | null;
 
   return {
     publication,

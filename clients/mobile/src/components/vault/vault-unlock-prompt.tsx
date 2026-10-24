@@ -2,6 +2,7 @@ import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, View } from "react-native";
 import { useTranslations } from "use-intl";
+import { MEMBER_KEYS_MISSING } from "@dodi/client-state";
 
 import { AuthLayout } from "@/components/shared/auth-layout";
 import {
@@ -27,6 +28,9 @@ export function VaultUnlockPrompt() {
   const router = useRouter();
   const status = useVaultStore((s) => s.status);
   const needsSetup = status === "needs-setup";
+  // Family members other than the owner have no recovery key of their own.
+  const isMember = useVaultStore((s) => s.kind === "member");
+  const storeError = useVaultStore((s) => s.error);
   const [mode, setMode] = useState<"password" | "nsec">("password");
   const [password, setPassword] = useState("");
   const [nsec, setNsec] = useState("");
@@ -46,7 +50,8 @@ export function VaultUnlockPrompt() {
       if (mode === "password") await vault.unlockWithPassword(password);
       else await vault.unlockWithNsec(nsec.trim());
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("unlockFailed"));
+      const message = err instanceof Error ? err.message : "";
+      setError(message === MEMBER_KEYS_MISSING ? t("memberKeysMissing") : message || t("unlockFailed"));
       setIsBusy(false);
     }
   }
@@ -98,12 +103,16 @@ export function VaultUnlockPrompt() {
                 />
               </View>
             )}
-            {error ? <Text className="text-sm text-destructive">{error}</Text> : null}
+            {error ? (
+              <Text className="text-sm text-destructive">{error}</Text>
+            ) : storeError === MEMBER_KEYS_MISSING ? (
+              <Text className="text-sm text-destructive">{t("memberKeysMissing")}</Text>
+            ) : null}
             <Button onPress={() => void submit()} disabled={isBusy} className="w-full">
               {isBusy ? t("unlocking") : needsSetup ? t("createVault") : t("unlock")}
             </Button>
           </View>
-          {!needsSetup ? (
+          {!needsSetup && !isMember ? (
             <Pressable
               accessibilityRole="button"
               onPress={() => {

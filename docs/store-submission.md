@@ -22,7 +22,7 @@ what is still open. The legal texts live on the marketing site
 | Privacy policy linked in the app | Apple 5.1.1(i), Play User Data | Settings > General > Legal; sign-in screens (footer); registration consent |
 | Explicit permission before personal data goes to a third-party AI | Apple 5.1.2(i) | required checkbox in "Add provider" (`ai-sharing-consent.tsx`, web + mobile; also on "Turn on dodi AI" once dodi AI is offered) |
 | Adult account holder, terms accepted | own terms, Gemini API terms | required checkbox on registration (`validateRegistration` → `termsRequired`) |
-| In-app account deletion | Apple 5.1.1(v), Play account deletion | Settings > General > Delete account → `DELETE /api/account` (password re-check) |
+| In-app account deletion | Apple 5.1.1(v), Play account deletion | Settings > General > Delete account → `DELETE /api/account` (password re-check), then "Delete my profile" on the "no account" screen (or the profile page from the email at the foot of the menu) → `DELETE /api/me` |
 | Web resource for deletion | Play account deletion | /delete-account (steps, email route, what is deleted and kept) |
 | Report offensive AI content in the app | Play AI-generated content | "Give feedback" at the foot of the parent menu (category "Inappropriate content"), and "Report this game" on Discover games (opens the same dialog with that category and the game attached) → `POST /api/feedback`, stored in `feedback_messages`, emailed to `SYSTEM_NOTIFICATION_EMAIL` and handled in the ops console's Feedback inbox |
 | Report and moderate user-generated content | Apple 1.2 | Discover games: AI security review before publishing, "Report this game", and the operator takes a live game down with `POST /api/internal/publications/{id}/reject` (ops console or curl with the platform `x-ops-secret`; it now also works on live games). Incoming friend requests need a parent's approval, and friends can be removed |
@@ -179,7 +179,7 @@ The account has a kid profile ("Mia") and an AI provider key set up.
 
 The app is used by a parent, who manages the family. To see what the child sees, tap "Kid View" in the top bar. On the home screen, tap the companion and allow the microphone to talk with it. Game Studio (menu > Games) builds a learning game from a short description.
 
-Delete account: menu > Settings > General > Delete account.
+Delete account: menu > Settings > General > Delete account. Then "Delete my profile" on the screen that follows removes the sign-in too (also available by tapping the email address at the bottom of the menu).
 Report content: "Give feedback" at the bottom of the menu (category "Inappropriate content"); games in Discover also have "Report this game".
 Privacy policy and terms: menu > Settings > General > Legal.
 

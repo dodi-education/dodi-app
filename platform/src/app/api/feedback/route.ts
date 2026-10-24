@@ -28,9 +28,9 @@ const MAX_BODY_BYTES = 4 * 1024 * 1024;
  * operator, the image as an attachment.
  */
 export async function POST(request: Request): Promise<Response> {
-  const auth = await requireAuth(request);
+  const auth = await requireAuth(request, { memberScope: "any" });
   if (auth instanceof Response) return auth;
-  const { accountId } = auth;
+  const { accountId, userId } = auth;
 
   if (Number(request.headers.get("content-length")) > MAX_BODY_BYTES) {
     return NextResponse.json({ error: "Request too large" }, { status: 413 });
@@ -63,6 +63,7 @@ export async function POST(request: Request): Promise<Response> {
 
     const feedback = await createFeedbackMessage(serviceDb, {
       accountId,
+      senderUserId: userId ?? null,
       senderName: input.senderName,
       category: input.category,
       message: input.message,

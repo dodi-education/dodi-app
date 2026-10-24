@@ -18,22 +18,26 @@ interface AgentGrantFieldsProps {
   scopes: readonly AgentScope[];
   selected: readonly AgentScope[];
   onSelectedChange: (selected: AgentScope[]) => void;
-  /** Days; null = never expires. */
-  expiresInDays: number | null;
-  onExpiresInDaysChange: (days: number | null) => void;
+  /** Days; null = never expires. Agents only: a family member has no expiry. */
+  expiresInDays?: number | null;
+  onExpiresInDaysChange?: (days: number | null) => void;
+  /** Who gets the access: an agent (default) or a family member. */
+  audience?: "agent" | "member";
 }
 
 /**
- * Scope toggles and the expiry choice, shared by the approval card and the
- * access key form (web: access/agent-grant-fields). Every row carries the
+ * Scope toggles (and, for an agent, the expiry choice), shared by the approval
+ * card, the access key form and a family member's access (web:
+ * access/agent-grant-fields). Every row carries the
  * section divider, as the web's card draws one between its children.
  */
 export function AgentGrantFields({
   scopes,
   selected,
   onSelectedChange,
-  expiresInDays,
+  expiresInDays = null,
   onExpiresInDaysChange,
+  audience = "agent",
 }: AgentGrantFieldsProps) {
   const t = useTranslations("access");
   const hasStudio = scopes.includes("studio");
@@ -51,10 +55,13 @@ export function AgentGrantFields({
   }, [hasStudio]);
 
   function warningFor(scope: AgentScope): string | null {
-    if (SENSITIVE_AGENT_SCOPES.includes(scope)) return t("sensitiveWarning");
+    const isMember = audience === "member";
+    if (SENSITIVE_AGENT_SCOPES.includes(scope)) {
+      return t(isMember ? "memberSensitiveWarning" : "sensitiveWarning");
+    }
     if (scope !== "studio" || studioProviders === null) return null;
     return studioProviders.length
-      ? t("studioWarning", { providers: studioProviders.join(", ") })
+      ? t(isMember ? "memberStudioWarning" : "studioWarning", { providers: studioProviders.join(", ") })
       : t("studioNoProviders");
   }
 
@@ -71,7 +78,9 @@ export function AgentGrantFields({
   return (
     <>
       <View className={section.divider}>
-        <Text className="px-5 pt-4 pb-2 text-sm font-semibold">{t("scopesLabel")}</Text>
+        <Text className="px-5 pt-4 pb-2 text-sm font-semibold">
+          {t(audience === "member" ? "memberScopesLabel" : "scopesLabel")}
+        </Text>
       </View>
       {scopes.map((scope) => {
         const keys = AGENT_SCOPE_LABEL_KEYS[scope];
@@ -101,14 +110,16 @@ export function AgentGrantFields({
           </FieldRow>
         );
       })}
-      <FieldRow label={t("expiry")} className={section.divider}>
-        <Select
-          label={t("expiry")}
-          value={expiresInDays === null ? "never" : String(expiresInDays)}
-          options={expiryOptions}
-          onValueChange={(value) => onExpiresInDaysChange(value === "never" ? null : Number(value))}
-        />
-      </FieldRow>
+      {onExpiresInDaysChange ? (
+        <FieldRow label={t("expiry")} className={section.divider}>
+          <Select
+            label={t("expiry")}
+            value={expiresInDays === null ? "never" : String(expiresInDays)}
+            options={expiryOptions}
+            onValueChange={(value) => onExpiresInDaysChange(value === "never" ? null : Number(value))}
+          />
+        </FieldRow>
+      ) : null}
     </>
   );
 }

@@ -123,7 +123,20 @@ export async function updatePassword(
         .getState()
         .resetPasswordWithNsec(input.nsec, input.password, updateAuthPassword);
     } else {
-      await updateAuthPassword();
+      // A family member other than the owner has no family vault of their
+      // own: on a device that still opens their personal key, it follows the
+      // new password. Otherwise only the sign-in password changes, and the
+      // family invites them again to restore their access.
+      let isAuthUpdated = false;
+      try {
+        await deps.vault.getState().resetMemberPassword(input.password, async () => {
+          await updateAuthPassword();
+          isAuthUpdated = true;
+        });
+      } catch (error) {
+        if (error instanceof PasswordSetError) throw error;
+        if (!isAuthUpdated) await updateAuthPassword();
+      }
     }
     return { kind: "done" };
   } catch (error) {

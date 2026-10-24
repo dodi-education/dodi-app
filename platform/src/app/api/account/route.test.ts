@@ -1,14 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * DELETE /api/account: only a parent session can delete, the password is
+ * DELETE /api/account: only the owner's session can delete, the password is
  * re-checked (with a per-account attempt limit, since the in-process check
  * skips Better Auth's own limiter), and a deleted live Discover game rebuilds
  * the marketing site's catalogue.
  */
 
-const { requireAuthMock, verifyPasswordMock, deleteAccountMock, rateLimitMock, rebuildMock } =
-  vi.hoisted(() => ({
+const {
+  requireAuthMock,
+  verifyPasswordMock,
+  deleteAccountMock,
+  rateLimitMock,
+  rebuildMock,
+} = vi.hoisted(() => ({
     requireAuthMock: vi.fn(),
     verifyPasswordMock: vi.fn(),
     deleteAccountMock: vi.fn(),
@@ -41,7 +46,9 @@ function deleteRequest(body: unknown): Request {
 
 describe("DELETE /api/account", () => {
   beforeEach(() => {
-    requireAuthMock.mockReset().mockResolvedValue({ accountId: "acc-1", db: {}, via: "user" });
+    requireAuthMock
+      .mockReset()
+      .mockResolvedValue({ accountId: "acc-1", db: {}, via: "user", userId: "acc-1", role: "owner" });
     verifyPasswordMock.mockReset().mockResolvedValue(true);
     deleteAccountMock.mockReset().mockResolvedValue({ hadLivePublications: false });
     rateLimitMock
@@ -55,6 +62,7 @@ describe("DELETE /api/account", () => {
 
     expect(res.status).toBe(200);
     expect(verifyPasswordMock).toHaveBeenCalledWith(expect.any(Headers), "correct horse");
+    expect(requireAuthMock).toHaveBeenCalledWith(expect.any(Request), { roles: ["owner"] });
     expect(deleteAccountMock).toHaveBeenCalledWith({}, "acc-1");
     expect(rebuildMock).not.toHaveBeenCalled();
   });
@@ -116,5 +124,16 @@ describe("DELETE /api/account", () => {
     const res = await DELETE(deleteRequest({ password: "correct horse" }));
 
     expect(res.status).toBe(404);
+  });
+
+  it("refuses anyone but the owner", async () => {
+    requireAuthMock.mockResolvedValue(
+      new Response(JSON.stringify({ error: "role" }), { status: 403 }),
+    );
+
+    const res = await DELETE(deleteRequest({ password: "correct horse" }));
+
+    expect(res.status).toBe(403);
+    expect(deleteAccountMock).not.toHaveBeenCalled();
   });
 });

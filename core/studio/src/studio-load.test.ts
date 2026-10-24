@@ -83,7 +83,7 @@ describe("loadStudioGame", () => {
   it("opens the account's own game with its sharing", async () => {
     const request = sharing({ family: false, kidIds: ["k1"] });
     const game = await loadStudioGame(
-      { api: { request }, loadGame: async () => row(), sessionUserId: async () => "acct-1" },
+      { api: { request }, loadGame: async () => row(), activeAccountId: async () => "acct-1" },
       "game-1",
     );
     expect(request).toHaveBeenCalledWith("/api/games/game-1/sharing");
@@ -95,7 +95,7 @@ describe("loadStudioGame", () => {
       {
         api: { request: sharing({}, false) },
         loadGame: async () => row(),
-        sessionUserId: async () => "acct-1",
+        activeAccountId: async () => "acct-1",
       },
       "game-1",
     );
@@ -106,13 +106,13 @@ describe("loadStudioGame", () => {
   it("is null for a missing game, another account's game, or no session", async () => {
     const api = { request: sharing({ family: true, kidIds: [] }) };
     expect(
-      await loadStudioGame({ api, loadGame: async () => null, sessionUserId: async () => "acct-1" }, "x"),
+      await loadStudioGame({ api, loadGame: async () => null, activeAccountId: async () => "acct-1" }, "x"),
     ).toBeNull();
     expect(
-      await loadStudioGame({ api, loadGame: async () => row(), sessionUserId: async () => "other" }, "x"),
+      await loadStudioGame({ api, loadGame: async () => row(), activeAccountId: async () => "other" }, "x"),
     ).toBeNull();
     expect(
-      await loadStudioGame({ api, loadGame: async () => row(), sessionUserId: async () => null }, "x"),
+      await loadStudioGame({ api, loadGame: async () => row(), activeAccountId: async () => null }, "x"),
     ).toBeNull();
   });
 });

@@ -8,6 +8,7 @@
     ".": "./src/index.ts",
     "./types": "./src/types.ts",
     "./account-keys": "./src/account-keys.ts",
+    "./member-keys": "./src/member-keys.ts",
     "./device-keystore": "./src/device-keystore.ts",
     "./session": "./src/session.ts",
     "./kid-crypto": "./src/kid-crypto.ts",

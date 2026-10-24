@@ -1,9 +1,9 @@
 import { Redirect } from "expo-router";
 import { useEffect, useState } from "react";
+import { activeAccountIdOf } from "@dodi/client-state";
 import { isStudioView, type StudioGame } from "@dodi/studio/studio-game";
 import { loadStudioGame } from "@dodi/studio/studio-load";
 
-import { mobileAuthApi } from "@/adapters/auth";
 import { api } from "@/adapters/platform";
 import { clientState } from "@/lib/client-state";
 
@@ -24,7 +24,7 @@ export function EditGameStudio({ id, tab }: { id: string; tab?: string }) {
       {
         api,
         loadGame: (gameId) => clientState.games.getState().loadOne(gameId),
-        sessionUserId: async () => (await mobileAuthApi.sessionUser())?.id ?? null,
+        activeAccountId: () => activeAccountIdOf(clientState.account),
       },
       id,
     )

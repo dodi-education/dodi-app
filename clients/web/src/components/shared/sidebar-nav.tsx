@@ -1,6 +1,6 @@
 "use client";
 
-import { isNavItemActive, PARENT_NAV_GROUPS } from "@dodi/client-state/parent-nav";
+import { PROFILE_HREF, isNavItemActive, parentNavFor } from "@dodi/client-state/parent-nav";
 import { navGroupLabel, navItem } from "@dodi/ui-recipes";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -8,6 +8,7 @@ import { useTranslations } from "next-intl";
 
 import { Icon, type IconName } from "@/components/shared/icon";
 import { cn } from "@/lib/utils";
+import { useParentAccess } from "@/stores/account-store";
 
 interface NavItem {
   href: string;
@@ -24,7 +25,8 @@ interface NavGroup {
 /** The shared parent navigation (@dodi/client-state/parent-nav), localized. */
 export function useNavGroups(): NavGroup[] {
   const t = useTranslations();
-  return PARENT_NAV_GROUPS.map((group) => ({
+  const access = useParentAccess();
+  return parentNavFor(access).map((group) => ({
     label: t(group.labelKey),
     items: group.items.map((item) => ({
       href: item.href,
@@ -43,6 +45,7 @@ export function useCurrentNavLabel(): string | null {
   const pathname = usePathname();
   const groups = useNavGroups();
   if (pathname.startsWith("/parent/settings")) return t("settings");
+  if (pathname.startsWith(PROFILE_HREF)) return t("profile");
   for (const group of groups) {
     const match = group.items.find((item) => navItemActive(item, pathname));
     if (match) return match.label;

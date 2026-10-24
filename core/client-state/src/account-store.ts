@@ -1,7 +1,8 @@
 /**
  * Client cache of the caller's account row: one `/api/account` fetch shared by
  * every consumer (parent-PIN gate, date prefs, notification prefs, plan badge)
- * instead of a store per field. Sensitive fields stay sealed here (`enc:v1:`
+ * instead of a store per field. `account` is the family; `member` is the
+ * signed-in person's side of it (role, own language, own email toggles). Sensitive fields stay sealed here (`enc:v1:`
  * blobs) — decryption happens at the consumer, where the VaultSession lives.
  * Mutations PATCH the API themselves and mirror the change via `patchLocal`.
  */
@@ -10,6 +11,7 @@ import { createStore, type StoreApi } from "zustand/vanilla";
 import { parseGameScreenshotServiceSettings } from "@dodi/games/screenshot-contract";
 import type {
   Account,
+  AccountMemberView,
   GameScreenshotServiceSettings,
   InterfacePreferences,
   Json,
@@ -18,7 +20,8 @@ import type {
 import type { PlatformApi } from "./platform";
 
 /** Plaintext (opt-out; unset ⇒ on) toggles the server reads to decide whether
- *  to send transactional email. Stored in accounts.notification_preferences. */
+ *  to send transactional email. Per person and family
+ *  (account_members.notification_preferences). */
 export interface NotificationPreferences {
   friend_approval_email?: boolean;
   publication_outcome_email?: boolean;
@@ -26,12 +29,16 @@ export interface NotificationPreferences {
 
 export interface AccountState {
   account: Account | null;
+  /** The signed-in person's membership view (null for devices / before load). */
+  member: AccountMemberView | null;
   loaded: boolean;
   /** True when the last load failed (network/offline) — the PIN gate fails open. */
   loadFailed: boolean;
   load: (force?: boolean) => Promise<void>;
   /** Optimistic merge after a settings form PATCHes the account. */
   patchLocal: (patch: Partial<Account>) => void;
+  /** Optimistic merge after a settings form PATCHes the person's own settings. */
+  patchMember: (patch: Partial<AccountMemberView>) => void;
   /** Drop the cache (sign-out / account switch). */
   reset: () => void;
 }
@@ -45,6 +52,7 @@ export function createAccountStore(api: PlatformApi): AccountStore {
 
   return createStore<AccountState>()((set, get) => ({
     account: null,
+    member: null,
     loaded: false,
     loadFailed: false,
 
@@ -63,9 +71,13 @@ export function createAccountStore(api: PlatformApi): AccountStore {
             set({ loaded: true, loadFailed: true });
             return;
           }
-          const data = (await res.json()) as { account?: Account | null };
+          const data = (await res.json()) as {
+            account?: Account | null;
+            member?: AccountMemberView | null;
+          };
           set({
             account: data.account ?? null,
+            member: data.member ?? null,
             loaded: true,
             loadFailed: false,
           });
@@ -88,8 +100,31 @@ export function createAccountStore(api: PlatformApi): AccountStore {
         account: state.account ? { ...state.account, ...patch } : state.account,
       })),
 
-    reset: () => set({ account: null, loaded: false, loadFailed: false }),
+    patchMember: (patch) =>
+      set((state) => ({
+        member: state.member ? { ...state.member, ...patch } : state.member,
+      })),
+
+    reset: () => set({ account: null, member: null, loaded: false, loadFailed: false }),
   }));
+}
+
+/** The signed-in person's role and scopes, for what the parent area shows them. */
+export function parentAccessOf(member: AccountMemberView | null): {
+  role: AccountMemberView["role"] | null;
+  scopes: readonly string[];
+} {
+  return { role: member?.role ?? null, scopes: member?.scopes ?? [] };
+}
+
+/**
+ * The id of the family the signed-in login acts as (null when signed out or
+ * unreachable). Not the login's own user id: a family member's login differs
+ * from the family's account id.
+ */
+export async function activeAccountIdOf(store: AccountStore): Promise<string | null> {
+  await store.getState().load();
+  return store.getState().account?.id ?? null;
 }
 
 /**

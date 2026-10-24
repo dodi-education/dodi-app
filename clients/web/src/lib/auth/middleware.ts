@@ -189,9 +189,11 @@ export async function updateSession(
   const isPublicGamePage = new RegExp(
     `^/(?:(?:${locales.join("|")})/)?games/[^/]+$`,
   ).test(pathname);
+  // A family invitation link: the invited person may not have a login yet.
   const isPublicRoute =
     publicRoutes.includes(pathname) ||
     pathname.startsWith("/auth/") ||
+    pathname.startsWith("/join/") ||
     isPublicGamePage;
 
   // The auth state comes from the bearer mirrored into the `dodi-session`

@@ -6,18 +6,27 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
  * device row on every request, and a revoked or expired agent is a 401.
  */
 
-const { getActiveAgentClientMock, getSessionMock } = vi.hoisted(() => ({
-  getActiveAgentClientMock: vi.fn(),
-  getSessionMock: vi.fn(),
-}));
+const { getActiveAgentClientMock, getSessionMock, resolveActiveMembershipMock } =
+  vi.hoisted(() => ({
+    getActiveAgentClientMock: vi.fn(),
+    getSessionMock: vi.fn(),
+    resolveActiveMembershipMock: vi.fn(),
+  }));
 
 vi.mock("@/services/authorized-clients", () => ({
   getActiveAgentClient: getActiveAgentClientMock,
 }));
+vi.mock("@/services/account-members", () => ({
+  resolveActiveMembership: resolveActiveMembershipMock,
+}));
 vi.mock("./auth", () => ({ auth: { api: { getSession: getSessionMock } } }));
 vi.mock("./db", () => ({
   serviceDb: { role: "service" },
-  scopedDb: (accountId: string) => ({ role: "scoped", accountId }),
+  scopedDb: (accountId: string, userId: string | null = null) => ({
+    role: "scoped",
+    accountId,
+    userId,
+  }),
 }));
 
 import { issueDeviceBearer } from "./device-token";
@@ -41,6 +50,7 @@ beforeAll(() => {
 beforeEach(() => {
   getActiveAgentClientMock.mockReset();
   getSessionMock.mockReset();
+  resolveActiveMembershipMock.mockReset();
 });
 
 describe("resolveAuth for agents", () => {
@@ -80,7 +90,7 @@ describe("resolveAuth for agents", () => {
     expect(auth.via).toBe("agent");
     expect(auth.accountId).toBe("acc-1");
     expect(auth.deviceId).toBe("dev-1");
-    expect(auth.db).toEqual({ role: "scoped", accountId: "acc-1" });
+    expect(auth.db).toEqual({ role: "scoped", accountId: "acc-1", userId: null });
     expect([...auth.scopes!]).toEqual(["games"]);
   });
 
@@ -115,6 +125,10 @@ describe("resolveAuth for agents", () => {
       user: { id: "acc-2" },
       session: { id: "sess-2" },
     });
+    resolveActiveMembershipMock.mockResolvedValue({
+      accountId: "acc-2",
+      role: "owner",
+    });
     const user = await resolveAuth(requestWith("session-token"));
     expect(user.via).toBe("user");
     expect(user.scopes).toBeNull();
@@ -125,5 +139,95 @@ describe("resolveAuth for agents", () => {
     await expect(
       resolveAuth(new Request("https://platform.test/")),
     ).rejects.toBeInstanceOf(AuthError);
+  });
+});
+
+describe("resolveAuth for people", () => {
+  it("acts as the family the session's membership resolves to", async () => {
+    getSessionMock.mockResolvedValue({
+      user: { id: "user-1" },
+      session: { id: "sess-1" },
+    });
+    resolveActiveMembershipMock.mockResolvedValue({
+      accountId: "family-1",
+      role: "co_parent",
+    });
+    const auth = await resolveAuth(requestWith("session-token"));
+    expect(resolveActiveMembershipMock).toHaveBeenCalledWith(
+      { role: "service" },
+      "user-1",
+      "sess-1",
+    );
+    expect(auth.accountId).toBe("family-1");
+    expect(auth.userId).toBe("user-1");
+    expect(auth.role).toBe("co_parent");
+    expect(auth.db).toEqual({
+      role: "scoped",
+      accountId: "family-1",
+      userId: "user-1",
+    });
+  });
+
+  it("is a 403 for a login that belongs to no family", async () => {
+    getSessionMock.mockResolvedValue({
+      user: { id: "user-1" },
+      session: { id: "sess-1" },
+    });
+    resolveActiveMembershipMock.mockResolvedValue(null);
+    const res = await requireAuth(requestWith("session-token"));
+    expect((res as Response).status).toBe(403);
+  });
+
+  it("is a 401 for an unknown session, before any membership lookup", async () => {
+    getSessionMock.mockResolvedValue(null);
+    const res = await requireAuth(requestWith("session-token"));
+    expect((res as Response).status).toBe(401);
+    expect(resolveActiveMembershipMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("resolveAuth for scoped family members", () => {
+  function asMember(scopes: string[]) {
+    getSessionMock.mockResolvedValue({ user: { id: "user-3" }, session: { id: "sess-3" } });
+    resolveActiveMembershipMock.mockResolvedValue({ accountId: "family-1", role: "member", scopes });
+  }
+
+  it("refuses a member on a route that doesn't open to members", async () => {
+    asMember(["games"]);
+    const res = await requireAuth(requestWith("session-token"));
+    expect((res as Response).status).toBe(403);
+  });
+
+  it("applies a route's concrete agent scope to members too", async () => {
+    asMember(["games"]);
+    const auth = await resolveAuth(requestWith("session-token"), { agentScope: "games" });
+    expect(auth.role).toBe("member");
+    expect([...auth.scopes!]).toEqual(["games"]);
+    await expect(
+      resolveAuth(requestWith("session-token"), { agentScope: "kids:memory" }),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+  });
+
+  it("keeps agent plumbing (agentScope any) closed, opens memberScope any", async () => {
+    asMember(["games"]);
+    await expect(
+      resolveAuth(requestWith("session-token"), { agentScope: "any" }),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+    const auth = await resolveAuth(requestWith("session-token"), { memberScope: "any" });
+    expect(auth.accountId).toBe("family-1");
+  });
+
+  it("never lets a member through a role-restricted route", async () => {
+    asMember(["games"]);
+    await expect(
+      resolveAuth(requestWith("session-token"), { roles: ["owner", "co_parent"], memberScope: "any" }),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+  });
+
+  it("leaves owners and co-parents unscoped", async () => {
+    getSessionMock.mockResolvedValue({ user: { id: "user-2" }, session: { id: "sess-2" } });
+    resolveActiveMembershipMock.mockResolvedValue({ accountId: "family-1", role: "co_parent", scopes: [] });
+    const auth = await resolveAuth(requestWith("session-token"));
+    expect(auth.scopes).toBeNull();
   });
 });

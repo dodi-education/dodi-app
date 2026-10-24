@@ -1,6 +1,6 @@
 "use client";
 
-import { SETTINGS_NAV } from "@dodi/client-state/parent-nav";
+import { settingsNavFor } from "@dodi/client-state/parent-nav";
 import { settingsTab } from "@dodi/ui-recipes";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -10,6 +10,7 @@ import { AccountBadge } from "@/components/parent/account-badge";
 import { BackLink } from "@/components/parent/back-link";
 import { Icon, type IconName } from "@/components/shared/icon";
 import { cn } from "@/lib/utils";
+import { useParentAccess } from "@/stores/account-store";
 
 interface SettingsNavItem {
   href: string;
@@ -19,7 +20,8 @@ interface SettingsNavItem {
 
 function useSettingsNav(): SettingsNavItem[] {
   const t = useTranslations();
-  return SETTINGS_NAV.map((item) => ({ href: item.href, label: t(item.labelKey), icon: item.icon }));
+  const access = useParentAccess();
+  return settingsNavFor(access).map((item) => ({ href: item.href, label: t(item.labelKey), icon: item.icon }));
 }
 
 /** Active/inactive tokens mirror SidebarNav so the two rails read identically. */

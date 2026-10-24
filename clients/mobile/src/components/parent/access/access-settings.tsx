@@ -12,6 +12,7 @@ import { access } from "@dodi/ui-recipes";
 
 import { api } from "@/adapters/platform";
 import { Button, Dialog, Text } from "@/components/ui";
+import { useAccountStore } from "@/lib/client-state";
 import { useRefreshOnPull } from "@/lib/refresh-scope";
 import { signOut } from "@/lib/session";
 
@@ -20,15 +21,17 @@ import { AccessKeyDialog } from "./access-key-dialog";
 import { AgentStarter } from "./agent-starter";
 import { ClientSection } from "./client-section";
 import { ConnectCodeForm } from "./connect-code-form";
+import { PeopleSection } from "./people-section";
 
 /** What "Allow access" reports back after the parent decided (`result` param). */
 export type AccessResult = "allowed" | "allowedAgent" | "declined";
 
 /**
- * Settings > Access (web: access/access-settings): everything that can open
- * the family vault, in the web's order (agents and access keys with Get
- * started, robot, this device, browsers and apps), each with its status and a
- * one-step Revoke. Revoking this very app signs it out.
+ * Settings > Access (web: access/access-settings): the family's people, then
+ * everything that can open the family vault, in the web's order (agents and
+ * access keys with Get started, robot, this device, browsers and apps), each
+ * with its status and a one-step Revoke. Revoking this very app signs it out.
+ * A scoped family member sees the people only.
  */
 export function AccessSettings({ result }: { result: AccessResult | null }) {
   const t = useTranslations("access");
@@ -40,10 +43,12 @@ export function AccessSettings({ result }: { result: AccessResult | null }) {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(result ? t(result) : null);
   const [isKeyDialogOpen, setIsKeyDialogOpen] = useState(false);
+  const isScopedMember = useAccountStore((s) => s.member?.role === "member");
 
   const reload = useCallback(async () => {
+    if (isScopedMember) return;
     setClients(await loadAuthorizedClients(api, await currentDeviceId()));
-  }, []);
+  }, [isScopedMember]);
   // Pull to refresh (the settings page): the list and its last-used times.
   useRefreshOnPull("access", reload);
 
@@ -86,6 +91,9 @@ export function AccessSettings({ result }: { result: AccessResult | null }) {
           {error ?? notice}
         </Text>
       ) : null}
+      <PeopleSection />
+      {isScopedMember ? null : (
+        <>
       <ClientSection
         title={t("agentsTitle")}
         desc={t("agentsDesc")}
@@ -130,6 +138,8 @@ export function AccessSettings({ result }: { result: AccessResult | null }) {
         emptyText={t("browsersEmpty")}
         {...rowProps}
       />
+        </>
+      )}
 
       {/* web: window.confirm(confirmRevoke) */}
       <Dialog

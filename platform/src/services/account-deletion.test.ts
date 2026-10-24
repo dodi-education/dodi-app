@@ -3,13 +3,14 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { createTestDb, type TestDatabase } from "@/test-support/pglite-db";
 
-import { deleteAccount } from "./account-deletion";
+import { deleteAccount, deleteLogin } from "./account-deletion";
 import { createKid } from "./kids";
 
 /**
  * Account deletion against real PGlite: the whole erase is the cascade from
- * `auth_users`, so these tests check that it actually reaches every family
- * table, signs out every session, and leaves other families intact.
+ * `accounts`, so these tests check that it actually reaches every account
+ * table, keeps the owner's profile (deleted separately, once it owns no
+ * account), and leaves other accounts intact.
  */
 let t: TestDatabase;
 let seq = 0;
@@ -75,14 +76,49 @@ async function count(
 }
 
 describe("deleteAccount", () => {
-  it("erases the account, its family data and every session", async () => {
-    const { accountId, email, kidId } = await family();
+  it("erases the account and its data, keeping the owner's profile without an account", async () => {
+    const { accountId, kidId } = await family();
     await game(accountId, kidId);
+    const sessionToken = `token-${seq}`;
     await t.serviceDb
       .insertInto("auth_sessions")
       .values({
         user_id: accountId,
-        token: `token-${seq}`,
+        token: sessionToken,
+        expires_at: new Date(Date.now() + 3_600_000).toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .execute();
+
+    const result = await deleteAccount(t.serviceDb, accountId);
+
+    expect(result).toEqual({ hadLivePublications: false });
+    expect(await count("accounts", "id", accountId)).toBe(0);
+    expect(await count("kids", "account_id", accountId)).toBe(0);
+    expect(await count("games", "account_id", accountId)).toBe(0);
+    // The profile and its session stay, now without an account.
+    expect(await count("auth_users", "id", accountId)).toBe(1);
+    const session = await t.serviceDb
+      .selectFrom("auth_sessions")
+      .select("active_account_id")
+      .where("token", "=", sessionToken)
+      .executeTakeFirstOrThrow();
+    expect(session.active_account_id).toBeNull();
+    const memberships = await t.serviceDb
+      .selectFrom("account_members")
+      .select("account_id")
+      .where("user_id", "=", accountId)
+      .execute();
+    expect(memberships).toEqual([]);
+  });
+
+  it("deletes a profile once it owns no account, with its sessions and sign-in codes", async () => {
+    const { accountId: userId, email } = await family();
+    await t.serviceDb
+      .insertInto("auth_sessions")
+      .values({
+        user_id: userId,
+        token: `token-profile-${seq}`,
         expires_at: new Date(Date.now() + 3_600_000).toISOString(),
         updated_at: new Date().toISOString(),
       })
@@ -96,20 +132,22 @@ describe("deleteAccount", () => {
       })
       .execute();
 
-    const result = await deleteAccount(t.serviceDb, accountId);
+    // Still the owner of its account: refused.
+    await expect(deleteLogin(t.serviceDb, userId)).rejects.toMatchObject({ code: "owns_account" });
+    expect(await count("auth_users", "id", userId)).toBe(1);
 
-    expect(result).toEqual({ hadLivePublications: false });
-    expect(await count("auth_users", "id", accountId)).toBe(0);
-    expect(await count("accounts", "id", accountId)).toBe(0);
-    expect(await count("auth_sessions", "user_id", accountId)).toBe(0);
-    expect(await count("kids", "account_id", accountId)).toBe(0);
-    expect(await count("games", "account_id", accountId)).toBe(0);
+    await deleteAccount(t.serviceDb, userId);
+    expect(await deleteLogin(t.serviceDb, userId)).toBe(true);
+
+    expect(await count("auth_users", "id", userId)).toBe(0);
+    expect(await count("auth_sessions", "user_id", userId)).toBe(0);
     const otp = await t.serviceDb
       .selectFrom("auth_verifications")
       .select("id")
       .where("identifier", "=", `sign-in-otp-${email}`)
       .execute();
     expect(otp).toEqual([]);
+    expect(await deleteLogin(t.serviceDb, userId)).toBe(false);
   });
 
   it("reports a live Discover game and cleans up other families' links to it", async () => {
