@@ -15,13 +15,16 @@ import { createCompanionSources, type CompanionSourceDeps } from "./companion-so
 
 const MODEL_CONFIG = { voiceProvider: "gemini", voiceModel: "gemini-live-2.5", voiceName: "Puck" };
 
-function setup(apiKey: string | null): {
+function setup(
+  apiKey: string | null,
+  modelConfig: Record<string, string> = MODEL_CONFIG,
+): {
   sources: ReturnType<typeof createCompanionSources>;
   request: ReturnType<typeof vi.fn>;
   resolveExecution: ReturnType<typeof vi.fn>;
 } {
   const request = vi.fn(async (url: string) => {
-    if (url === "/api/ai/config") return new Response(JSON.stringify(MODEL_CONFIG));
+    if (url === "/api/ai/config") return new Response(JSON.stringify(modelConfig));
     if (url === "/api/personas") {
       return new Response(JSON.stringify([{ id: "p", is_system_default: true, soul: "enc" }]));
     }
@@ -64,6 +67,12 @@ describe("companion sources", () => {
   it("throws a clear client error when the vault has no key", async () => {
     const { sources } = setup(null);
     await expect(sources.resolveVoice()).rejects.toThrow("No API key configured for gemini");
+  });
+
+  it("throws a setup error when the account has no voice (a voiceless provider like Venice)", async () => {
+    const { sources, resolveExecution } = setup("k", { thinkingProvider: "venice", thinkingModel: "m" });
+    await expect(sources.resolveVoice()).rejects.toThrow("No voice provider configured");
+    expect(resolveExecution).not.toHaveBeenCalled();
   });
 
   it("falls back to the system default persona and decrypts its soul", async () => {

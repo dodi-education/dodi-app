@@ -18,6 +18,7 @@ describe("companionErrorKind", () => {
   it("asks for a grown-up when the account has no voice provider or key", () => {
     expect(companionErrorKind("No API key configured for xai")).toBe("needsSetup");
     expect(companionErrorKind("No AI provider configured")).toBe("needsSetup");
+    expect(companionErrorKind("No voice provider configured")).toBe("needsSetup");
     expect(companionErrorKind("Vault is locked")).toBe("needsSetup");
   });
 

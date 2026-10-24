@@ -14,17 +14,30 @@ import type { AccountModelConfig } from "@dodi/types/ai";
 // provider + dodi-minted key); it is a valid *selection*, never a vault key.
 const providerEnum = z.enum(["gemini", "openai", "anthropic", "xai", "venice", "dodi"]);
 
-const UpdateConfigSchema = z.object({
-  voiceProvider: providerEnum,
-  voiceModel: z.string().min(1),
-  voiceName: z.string().min(1),
-  thinkingProvider: providerEnum.optional(),
-  thinkingModel: z.string().min(1).optional(),
-  gameProvider: providerEnum.optional(),
-  gameModel: z.string().min(1).optional(),
-  imageProvider: providerEnum.optional(),
-  imageModel: z.string().min(1).optional(),
-});
+const UpdateConfigSchema = z
+  .object({
+    voiceProvider: providerEnum.optional(),
+    voiceModel: z.string().min(1).optional(),
+    voiceName: z.string().min(1).optional(),
+    thinkingProvider: providerEnum.optional(),
+    thinkingModel: z.string().min(1).optional(),
+    gameProvider: providerEnum.optional(),
+    gameModel: z.string().min(1).optional(),
+    imageProvider: providerEnum.optional(),
+    imageModel: z.string().min(1).optional(),
+  })
+  // Voice is optional (voiceless providers such as Venice), but all-or-nothing.
+  .refine(
+    (c) => {
+      const set = [c.voiceProvider, c.voiceModel, c.voiceName].filter((v) => v !== undefined);
+      return set.length === 0 || set.length === 3;
+    },
+    { message: "voiceProvider, voiceModel and voiceName must be set together", path: ["voiceProvider"] },
+  )
+  .refine(
+    (c) => Boolean(c.voiceProvider || c.thinkingProvider || c.gameProvider || c.imageProvider),
+    { message: "At least one category must be configured" },
+  );
 
 export async function GET(request: Request): Promise<NextResponse> {
   const auth = await requireAuth(request, { agentScope: "studio" });

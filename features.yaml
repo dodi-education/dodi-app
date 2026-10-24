@@ -514,6 +514,10 @@ features:
 
   - id: settings.notifications
     area: settings
+      Voice is optional (all-or-nothing, "Select provider/model" clears it),
+      so a Venice-only account can save. Every added key seeds its default
+      model per supported capability into the categories still unset
+      (core: seedModelConfig + fillUnsetCategories), on both clients.
     title: Email notification preferences
     web: done
     mobile: done

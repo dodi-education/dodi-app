@@ -7,6 +7,7 @@ import {
   byokProviderOptions,
   clearModelConfig,
   defaultModelFor,
+  fillUnsetCategories,
   isDodiSelectable,
   isDraftSavable,
   loadModelConfigDraft,
@@ -40,6 +41,12 @@ const XAI_VOICE: DraftModelConfig = {
   voiceName: "ara",
 };
 
+const VENICE_THINKING: DraftModelConfig = {
+  ...EMPTY_DRAFT,
+  thinkingProvider: "venice",
+  thinkingModel: "claude-opus-5-5",
+};
+
 describe("loading", () => {
   it("loads the vault's providers first, then maps the saved config to a draft", async () => {
     const load = vi.fn(async () => ({}));
@@ -69,6 +76,23 @@ describe("saving", () => {
     expect(isDraftSavable({ ...XAI_VOICE, gameProvider: "anthropic" })).toBe(false);
   });
 
+  it("saves a config without voice (a voiceless provider like Venice)", () => {
+    // Reported bug: with only a Venice key, Save stayed disabled after picking a model.
+    expect(isDraftSavable(VENICE_THINKING)).toBe(true);
+  });
+
+  it("refuses a half-set voice config", () => {
+    expect(isDraftSavable({ ...VENICE_THINKING, voiceProvider: "xai" })).toBe(false);
+    expect(isDraftSavable({ ...VENICE_THINKING, voiceProvider: "xai", voiceModel: "grok-voice-latest" })).toBe(false);
+  });
+
+  it("sends a voiceless config without voice fields", async () => {
+    const api = fakeApi(new Response("{}"));
+    await expect(saveModelConfig(api, VENICE_THINKING)).resolves.toBe(true);
+    const [, init] = api.request.mock.calls[0];
+    expect(JSON.parse(init.body)).toEqual({ thinkingProvider: "venice", thinkingModel: "claude-opus-5-5" });
+  });
+
   it("sends unset categories as absent", async () => {
     const api = fakeApi(new Response("{}"));
     await expect(saveModelConfig(api, { ...XAI_VOICE, thinkingModel: "stale" })).resolves.toBe(true);
@@ -78,9 +102,10 @@ describe("saving", () => {
     expect(JSON.parse(init.body)).toEqual({ voiceProvider: "xai", voiceModel: "grok-voice-latest", voiceName: "ara" });
   });
 
-  it("refuses an incomplete voice config without a request", async () => {
+  it("refuses an empty or half-set config without a request", async () => {
     const api = fakeApi(new Response("{}"));
     await expect(saveModelConfig(api, EMPTY_DRAFT)).resolves.toBe(false);
+    await expect(saveModelConfig(api, { ...EMPTY_DRAFT, voiceProvider: "xai" })).resolves.toBe(false);
     expect(api.request).not.toHaveBeenCalled();
   });
 
@@ -120,5 +145,32 @@ describe("picker options", () => {
     expect(modelOptionsFor("", "voice")).toEqual([]);
     expect(voiceProviderPatch("xai")).toEqual({ voiceProvider: "xai", voiceModel: "grok-voice-latest", voiceName: "ara" });
     expect(voiceProviderPatch("dodi")).toMatchObject({ voiceProvider: "dodi", voiceModel: "default" });
+  });
+});
+
+describe("seeding", () => {
+  const XAI_SEED: Partial<DraftModelConfig> = {
+    voiceProvider: "xai",
+    voiceModel: "grok-voice-latest",
+    voiceName: "ara",
+    thinkingProvider: "xai",
+    thinkingModel: "grok-4.7",
+  };
+
+  it("fills an empty draft with the seed", () => {
+    expect(fillUnsetCategories(EMPTY_DRAFT, XAI_SEED)).toEqual({ ...EMPTY_DRAFT, ...XAI_SEED });
+  });
+
+  it("never overwrites a category the parent already chose", () => {
+    expect(fillUnsetCategories(VENICE_THINKING, XAI_SEED)).toEqual({
+      ...VENICE_THINKING,
+      voiceProvider: "xai",
+      voiceModel: "grok-voice-latest",
+      voiceName: "ara",
+    });
+  });
+
+  it("is a no-op without a seed", () => {
+    expect(fillUnsetCategories(VENICE_THINKING, null)).toEqual(VENICE_THINKING);
   });
 });

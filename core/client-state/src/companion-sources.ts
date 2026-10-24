@@ -68,10 +68,15 @@ export function createCompanionSources(deps: CompanionSourceDeps): CompanionSour
     /**
      * Voice provider/model/voice/key, with "dodi" mapped to its real upstream
      * and the "default" model sentinel resolved. The returned provider is
-     * always a real one; the voice client factory never sees "dodi".
+     * always a real one; the voice client factory never sees "dodi". Throws
+     * when the account has no voice (e.g. only a voiceless provider such as
+     * Venice): the kid screens show it as a setup problem.
      */
     resolveVoice: async (): Promise<ResolvedVoice> => {
       const config = await getModelConfig();
+      if (!config.voiceProvider || !config.voiceModel || !config.voiceName) {
+        throw new Error("No voice provider configured");
+      }
       const resolved = await deps.execution.resolveExecution({
         provider: config.voiceProvider,
         category: "voice",

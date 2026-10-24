@@ -47,9 +47,9 @@ export interface ProviderOption {
 
 export function draftFromConfig(cfg: AccountModelConfig): DraftModelConfig {
   return {
-    voiceProvider: cfg.voiceProvider,
-    voiceModel: cfg.voiceModel,
-    voiceName: cfg.voiceName,
+    voiceProvider: cfg.voiceProvider ?? "",
+    voiceModel: cfg.voiceModel ?? "",
+    voiceName: cfg.voiceName ?? "",
     thinkingProvider: cfg.thinkingProvider ?? "",
     thinkingModel: cfg.thinkingModel ?? "",
     gameProvider: cfg.gameProvider ?? "",
@@ -79,26 +79,36 @@ export async function loadModelConfigDraft(deps: {
   }
 }
 
-/** A draft can be saved once voice is complete and every chosen category has a model. */
-export function isDraftSavable(draft: DraftModelConfig): boolean {
-  return (
-    Boolean(draft.voiceProvider && draft.voiceModel && draft.voiceName) &&
-    !(draft.thinkingProvider && !draft.thinkingModel) &&
-    !(draft.gameProvider && !draft.gameModel) &&
-    !(draft.imageProvider && !draft.imageModel)
-  );
+function isVoiceSet(draft: DraftModelConfig): boolean {
+  return Boolean(draft.voiceProvider && draft.voiceModel && draft.voiceName);
 }
 
-/** PATCH the full config; false when voice is incomplete or the save fails. */
+function isVoiceEmpty(draft: DraftModelConfig): boolean {
+  return !draft.voiceProvider && !draft.voiceModel && !draft.voiceName;
+}
+
+/**
+ * A draft can be saved when voice is all-or-nothing (a voiceless provider such
+ * as Venice leaves it empty), every chosen category has a model, and at least
+ * one category is set.
+ */
+export function isDraftSavable(draft: DraftModelConfig): boolean {
+  if (!isVoiceSet(draft) && !isVoiceEmpty(draft)) return false;
+  if (CATEGORY_FIELDS.some((f) => draft[f.provider] && !draft[f.model])) return false;
+  return isVoiceSet(draft) || CATEGORY_FIELDS.some((f) => Boolean(draft[f.provider]));
+}
+
+/** PATCH the full config (unset categories absent); false when not savable or the save fails. */
 export async function saveModelConfig(api: PlatformApi, next: DraftModelConfig): Promise<boolean> {
-  if (!next.voiceProvider || !next.voiceModel || !next.voiceName) return false;
+  if (!isDraftSavable(next)) return false;
+  const voice = isVoiceSet(next)
+    ? { voiceProvider: next.voiceProvider, voiceModel: next.voiceModel, voiceName: next.voiceName }
+    : {};
   const res = await api.request("/api/ai/config", {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      voiceProvider: next.voiceProvider,
-      voiceModel: next.voiceModel,
-      voiceName: next.voiceName,
+      ...voice,
       thinkingProvider: next.thinkingProvider || undefined,
       thinkingModel: next.thinkingProvider ? next.thinkingModel : undefined,
       gameProvider: next.gameProvider || undefined,
@@ -108,6 +118,34 @@ export async function saveModelConfig(api: PlatformApi, next: DraftModelConfig):
     }),
   });
   return res.ok;
+}
+
+/**
+ * Apply a new key's seed to the draft, filling only the categories still
+ * unset (no provider picked): voice (provider, model, voice) is one group,
+ * each of thinking / game / image (provider + model) another. A category the
+ * parent chose is never overwritten.
+ */
+export function fillUnsetCategories(
+  draft: DraftModelConfig,
+  seed: Partial<DraftModelConfig> | null,
+): DraftModelConfig {
+  if (!seed) return draft;
+  const next = { ...draft };
+  if (!draft.voiceProvider && seed.voiceProvider && seed.voiceModel && seed.voiceName) {
+    next.voiceProvider = seed.voiceProvider;
+    next.voiceModel = seed.voiceModel;
+    next.voiceName = seed.voiceName;
+  }
+  for (const f of CATEGORY_FIELDS) {
+    const provider = seed[f.provider];
+    const model = seed[f.model];
+    if (!draft[f.provider] && provider && model) {
+      next[f.provider] = provider;
+      next[f.model] = model;
+    }
+  }
+  return next;
 }
 
 /** DELETE the config: the account returns to unconfigured. */

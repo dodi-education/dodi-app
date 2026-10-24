@@ -43,8 +43,11 @@ import type { DraftModelConfig } from "@dodi/client-state/model-config";
 import type { AIProviderId } from "@dodi/types/ai";
 
 interface ByokKeysPanelProps {
-  /** First key added on an unconfigured account seeds a default voice config. */
-  onFirstKeySeeded?: (patch: Partial<DraftModelConfig>) => void;
+  /**
+   * Every added key seeds its provider's default models (per supported
+   * capability); the page fills the categories still unset with them.
+   */
+  onKeySeeded?: (seed: Partial<DraftModelConfig>) => void;
 }
 
 /**
@@ -53,7 +56,7 @@ interface ByokKeysPanelProps {
  * them. Managed providers (dodi AI) never appear here: they have no key to
  * paste.
  */
-export function ByokKeysPanel({ onFirstKeySeeded }: ByokKeysPanelProps) {
+export function ByokKeysPanel({ onKeySeeded }: ByokKeysPanelProps) {
   const t = useTranslations("settings");
   const locale = useLocale();
   const { formatDate } = useDateFormat();
@@ -103,8 +106,8 @@ export function ByokKeysPanel({ onFirstKeySeeded }: ByokKeysPanelProps) {
       },
     );
     if (outcome.kind === "added") {
-      // First provider: seed a default voice config (model_config is plaintext).
-      if (outcome.seed && onFirstKeySeeded) onFirstKeySeeded(outcome.seed);
+      // The key's default models fill the unset categories (model_config is plaintext).
+      if (outcome.seed && onKeySeeded) onKeySeeded(outcome.seed);
       setDialogOpen(false);
       resetDialog();
     } else {

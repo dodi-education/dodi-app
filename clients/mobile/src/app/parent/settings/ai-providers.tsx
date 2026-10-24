@@ -7,7 +7,9 @@ import {
   clearModelConfig,
   type DraftModelConfig,
   EMPTY_DRAFT,
+  fillUnsetCategories,
   isDodiSelectable,
+  isDraftSavable,
   loadModelConfigDraft,
   saveModelConfig,
 } from "@dodi/client-state/model-config";
@@ -72,6 +74,22 @@ export default function AiProvidersSettingsScreen() {
     return true;
   }
 
+  /**
+   * A new key's defaults fill only the categories still unset (web: the same
+   * in ai-provider-config). Saved right away when complete; otherwise, or when
+   * the save fails, it stays in the draft for the parent to finish.
+   */
+  function handleKeySeeded(seed: Partial<DraftModelConfig>): void {
+    const next = fillUnsetCategories(config, seed);
+    if (!isDraftSavable(next)) {
+      setConfig(next);
+      return;
+    }
+    void persist(next).then((ok) => {
+      if (!ok) setConfig(next);
+    });
+  }
+
   async function clearConfig(): Promise<boolean> {
     if (!(await clearModelConfig(api))) return false;
     setConfig(EMPTY_DRAFT);
@@ -111,7 +129,7 @@ export default function AiProvidersSettingsScreen() {
         isSaved={isSaved}
       />
     ) : null;
-  const byokPanel = <ByokKeysPanel onFirstKeySeeded={(patch) => void persist({ ...config, ...patch })} />;
+  const byokPanel = <ByokKeysPanel onKeySeeded={handleKeySeeded} />;
 
   // Self-host: no dodi AI anywhere, the page is the own-keys experience.
   if (!isDodiConfigured) {

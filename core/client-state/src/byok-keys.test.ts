@@ -42,17 +42,52 @@ describe("BYOK keys", () => {
     expect(addKey).toHaveBeenCalledWith("xai", "k");
     expect(outcome).toEqual({
       kind: "added",
-      seed: { voiceProvider: "xai", voiceModel: "grok-voice-latest", voiceName: "ara" },
+      seed: {
+        voiceProvider: "xai",
+        voiceModel: "grok-voice-latest",
+        voiceName: "ara",
+        thinkingProvider: "xai",
+        thinkingModel: "grok-4.7",
+        gameProvider: "xai",
+        gameModel: "grok-4.7",
+        imageProvider: "xai",
+        imageModel: expect.any(String),
+      },
     });
   });
 
-  it("seeds nothing once a key exists", async () => {
-    const { providers } = fakeProviders({ gemini: {} });
+  it("seeds the default model for every capability a voiceless provider supports", async () => {
+    // Reported bug: a first Venice key (no voice) selected no defaults at all.
+    const { providers } = fakeProviders();
     const outcome = await addProviderKey(
       { providers, validateKey: async () => ({ valid: true }) },
-      { providerId: "anthropic", apiKey: "k" },
+      { providerId: "venice", apiKey: "k" },
     );
-    expect(outcome).toEqual({ kind: "added", seed: null });
+    expect(outcome).toEqual({
+      kind: "added",
+      seed: {
+        thinkingProvider: "venice",
+        thinkingModel: "claude-opus-5-5",
+        gameProvider: "venice",
+        gameModel: "claude-opus-5-5",
+        imageProvider: "venice",
+        imageModel: "grok-imagine-image",
+      },
+    });
+  });
+
+  it("seeds a later key too (the page fills only the categories still unset)", async () => {
+    const { providers } = fakeProviders({ venice: {} });
+    const outcome = await addProviderKey(
+      { providers, validateKey: async () => ({ valid: true }) },
+      { providerId: "xai", apiKey: "k" },
+    );
+    expect(outcome.kind).toBe("added");
+    expect(outcome.kind === "added" && outcome.seed).toMatchObject({
+      voiceProvider: "xai",
+      voiceModel: "grok-voice-latest",
+      voiceName: "ara",
+    });
   });
 
   it("never stores a rejected key", async () => {

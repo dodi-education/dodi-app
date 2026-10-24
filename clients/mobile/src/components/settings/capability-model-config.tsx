@@ -92,11 +92,17 @@ export function CapabilityModelConfig({
     <>
       <Section title={t("voiceConfig")} desc={t("voiceConfigDescription")}>
         <FieldRow label={t("voiceProvider")}>
-          <Select<AIProviderId | "">
+          <Select<string>
             label={t("voiceProvider")}
-            value={config.voiceProvider}
-            options={toOptions(providerOptionsFor("voice", byokProviders, dodiLabel))}
-            onValueChange={(id) => id && onChange(voiceProviderPatch(id))}
+            value={config.voiceProvider || PROVIDER_NONE}
+            options={[
+              { value: PROVIDER_NONE, label: t("voiceProviderFallback") },
+              ...toOptions(providerOptionsFor("voice", byokProviders, dodiLabel)),
+            ]}
+            onValueChange={(value) => {
+              if (value === PROVIDER_NONE) return onChange({ voiceProvider: "", voiceModel: "", voiceName: "" });
+              onChange(voiceProviderPatch(value as AIProviderId));
+            }}
           />
         </FieldRow>
         {voices && isVoiceOnDodi ? (

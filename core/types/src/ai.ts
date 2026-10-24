@@ -70,9 +70,12 @@ export interface StoredAPIKeys {
 
 // Shape stored in accounts.model_config (JSONB)
 export interface AccountModelConfig {
-  voiceProvider: AIProviderId;
-  voiceModel: string;
-  voiceName: string;
+  // Voice is all-or-nothing: either all three are set or none (an account on
+  // a voiceless provider such as Venice has no voice; the companion then
+  // can't start a voice session).
+  voiceProvider?: AIProviderId;
+  voiceModel?: string;
+  voiceName?: string;
   thinkingProvider?: AIProviderId;
   thinkingModel?: string;
   // Game generation (creation/editing, success-definition mapping). Runs the

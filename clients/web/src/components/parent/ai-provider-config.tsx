@@ -18,7 +18,9 @@ import {
   clearModelConfig,
   type DraftModelConfig,
   EMPTY_DRAFT,
+  fillUnsetCategories,
   isDodiSelectable,
+  isDraftSavable,
   loadModelConfigDraft,
   saveModelConfig,
 } from "@dodi/client-state/model-config";
@@ -74,6 +76,23 @@ export function AIProviderConfig() {
     return true;
   }
 
+  /**
+   * A new key's defaults fill only the categories still unset, so a later key
+   * never overrides a choice. Saved right away when the result is complete;
+   * otherwise (or when the save fails) it stays in the draft for the parent
+   * to finish and save.
+   */
+  function handleKeySeeded(seed: Partial<DraftModelConfig>) {
+    const next = fillUnsetCategories(config, seed);
+    if (!isDraftSavable(next)) {
+      setConfig(next);
+      return;
+    }
+    void persist(next).then((ok) => {
+      if (!ok) setConfig(next);
+    });
+  }
+
   async function clearConfig(): Promise<boolean> {
     if (!(await clearModelConfig(dodi))) return false;
     setConfig(EMPTY_DRAFT);
@@ -121,7 +140,7 @@ export function AIProviderConfig() {
   if (!dodiConfigured) {
     return (
       <>
-        <ByokKeysPanel onFirstKeySeeded={(patch) => void persist({ ...config, ...patch })} />
+        <ByokKeysPanel onKeySeeded={handleKeySeeded} />
         {capabilityConfig}
       </>
     );
@@ -148,7 +167,7 @@ export function AIProviderConfig() {
       </TabsContent>
 
       <TabsContent value="byok">
-        <ByokKeysPanel onFirstKeySeeded={(patch) => void persist({ ...config, ...patch })} />
+        <ByokKeysPanel onKeySeeded={handleKeySeeded} />
       </TabsContent>
     </Tabs>
   );

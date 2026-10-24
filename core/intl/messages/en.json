@@ -277,6 +277,7 @@
     "voiceConfig": "Voice Configuration",
     "voiceConfigDescription": "Choose your voice and speaking style.",
     "voiceProvider": "Voice provider",
+    "voiceProviderFallback": "Select provider/model",
     "voiceModel": "Voice model",
     "voiceName": "Voice",
     "thinkingProvider": "Thinking model provider",

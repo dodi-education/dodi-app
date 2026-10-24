@@ -26,10 +26,13 @@ import { useLocaleSetting } from "@/lib/intl";
 const BYOK_HELP_PATH = { en: "/blog/how-does-byok-work", de: "/de/blog/wie-funktioniert-byok" };
 
 export function ByokKeysPanel({
-  onFirstKeySeeded,
+  onKeySeeded,
 }: {
-  /** The first key on an unconfigured account seeds a default voice config. */
-  onFirstKeySeeded?: (patch: Partial<DraftModelConfig>) => void;
+  /**
+   * Every added key seeds its provider's default models (per supported
+   * capability); the screen fills the categories still unset with them.
+   */
+  onKeySeeded?: (seed: Partial<DraftModelConfig>) => void;
 }) {
   const t = useTranslations("settings");
   const tc = useTranslations("common");
@@ -76,7 +79,7 @@ export function ByokKeysPanel({
       },
     );
     if (outcome.kind === "added") {
-      if (outcome.seed && onFirstKeySeeded) onFirstKeySeeded(outcome.seed);
+      if (outcome.seed && onKeySeeded) onKeySeeded(outcome.seed);
       closeDialog();
       return;
     }

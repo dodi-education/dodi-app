@@ -131,13 +131,20 @@ export function CapabilityModelConfig({
       <Section title={t("voiceConfig")} desc={t("voiceConfigDescription")}>
         <FieldRow label={t("voiceProvider")}>
           <Select
-            value={config.voiceProvider}
-            onValueChange={(value) => onChange(voiceProviderPatch(value as AIProviderId))}
+            value={config.voiceProvider || PROVIDER_NONE}
+            onValueChange={(value) => {
+              if (value === PROVIDER_NONE) {
+                onChange({ voiceProvider: "", voiceModel: "", voiceName: "" });
+                return;
+              }
+              onChange(voiceProviderPatch(value as AIProviderId));
+            }}
           >
             <SelectTrigger className="w-full sm:w-[260px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value={PROVIDER_NONE}>{t("voiceProviderFallback")}</SelectItem>
               {voiceProviders.map((p) => (
                 <SelectItem key={p.id} value={p.id}>
                   {p.name}
