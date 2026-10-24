@@ -8,6 +8,7 @@ import {
   formatDateOnly,
   formatDateTime,
   formatElapsed,
+  formatMessageTime,
   formatTime,
   parseDateField,
 } from "./format";
@@ -143,6 +144,36 @@ describe("formatTime", () => {
     expect(norm(formatTime(instant, { locale: "en", pref: pref({ timeStyle: "12h" }) }))).toBe(
       "02:30 PM",
     );
+  });
+});
+
+describe("formatMessageTime", () => {
+  it("today: the time only", () => {
+    const now = new Date("2026-06-24T21:00:00Z");
+    expect(formatMessageTime(instant, { locale: "de", pref: pref({}) }, now)).toBe("14:30");
+  });
+
+  it("an earlier day: date and time", () => {
+    const now = new Date("2026-06-25T08:00:00Z");
+    expect(formatMessageTime(instant, { locale: "de", pref: pref({}) }, now)).toBe("24.06.2026, 14:30");
+  });
+
+  it("decides today in the preferred zone", () => {
+    // 23:30 UTC on the 24th is already the 25th in Berlin.
+    const late = "2026-06-24T23:30:00Z";
+    const now = new Date("2026-06-25T08:00:00Z");
+    const berlin = pref({ timeZone: "Europe/Berlin" });
+    expect(formatMessageTime(late, { locale: "de", pref: berlin }, now)).toBe("01:30");
+    expect(formatMessageTime(late, { locale: "de", pref: pref({}) }, now)).toBe("24.06.2026, 23:30");
+  });
+
+  it("keeps a time when the time style is none", () => {
+    const now = new Date("2026-06-24T21:00:00Z");
+    expect(formatMessageTime(instant, { locale: "de", pref: pref({ timeStyle: "none" }) }, now)).toBe("14:30");
+  });
+
+  it("empty for a missing stamp", () => {
+    expect(formatMessageTime(undefined, { locale: "en", pref: pref({}) })).toBe("");
   });
 });
 

@@ -18,6 +18,28 @@ export interface StudioChatMessage {
   hasCodeChange?: boolean;
   /** What the game agent did for this reply (display only, never fed to the model). */
   run?: AgentRunLog;
+  /** When it was said (ISO 8601). Transcripts sealed before timestamps have none. */
+  at?: string;
+}
+
+/** The parent's turn, stamped with when it was sent. */
+export function userTurn(text: string, images: string[], at: string): StudioChatMessage {
+  return { role: "user", text, ...(images.length ? { images } : {}), at };
+}
+
+/**
+ * Whether dodi has read the parent's turn at `index`: a reply follows it
+ * (later turns carry it as history), or dodi is working on it right now. A
+ * turn nothing ran for (no provider set up) stays unread.
+ */
+export function isReadByDodi(
+  messages: StudioChatMessage[],
+  index: number,
+  isWorking: boolean,
+): boolean {
+  if (messages[index]?.role !== "user") return false;
+  if (messages.slice(index + 1).some((m) => m.role === "assistant")) return true;
+  return isWorking && index === messages.length - 1;
 }
 
 /** Sealed-transcript guard: only this many trailing messages keep their images. */

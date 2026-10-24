@@ -95,6 +95,7 @@ export async function runPlanTurn(
   options: PlanTurnOptions = {},
 ): Promise<PlanTurnOutcome> {
   const now = ports.now ?? Date.now;
+  const stampNow = (): string => new Date(now()).toISOString();
   const { kids, primaryKidId, text, attachments, texts } = input;
   const startedAt = now();
   let execution: ResolvedExecution | null = null;
@@ -146,11 +147,11 @@ export async function runPlanTurn(
     return {
       kind: "replied",
       plan: result.plan ? result.plan.summary : null,
-      reply: replyText ? { role: "assistant", text: replyText + note } : null,
+      reply: replyText ? { role: "assistant", text: replyText + note, at: stampNow() } : null,
     };
   } catch (err) {
     if (err instanceof AgentAbortedError || options.signal?.aborted) {
-      return { kind: "stopped", reply: { role: "assistant", text: texts.stopped } };
+      return { kind: "stopped", reply: { role: "assistant", text: texts.stopped, at: stampNow() } };
     }
     ports.telemetry.reportError({
       context: "game_plan",
@@ -169,6 +170,7 @@ export async function runPlanTurn(
       reply: {
         role: "assistant",
         text: reason === "ai_unavailable" ? texts.aiUnavailable : texts.planFailed,
+        at: stampNow(),
       },
     };
   }

@@ -5,7 +5,7 @@
  */
 import { useMemo } from "react";
 import { readStoredDatePref } from "@dodi/client-state/date-preferences";
-import { formatDate, formatDateOnly, formatDateTime } from "@dodi/intl/format";
+import { formatDate, formatDateOnly, formatDateTime, formatMessageTime } from "@dodi/intl/format";
 import { type DateFormatPref, resolvePref, type StoredDatePreferences } from "@dodi/intl/prefs";
 
 import { useAccountStore, useVaultStore } from "@/lib/client-state";
@@ -17,6 +17,8 @@ export interface AccountDateFormat {
   pref: DateFormatPref;
   formatDateTime: (value: DateInput) => string;
   formatDate: (value: DateInput) => string;
+  /** A chat message's stamp: the time today, date and time before. */
+  formatMessageTime: (value: DateInput) => string;
   /** A calendar date (`YYYY-MM-DD`, no timezone shift), null when unset. */
   formatDateOnly: (value: string | null | undefined) => string | null;
   locale: string;
@@ -35,6 +37,7 @@ export function useAccountDateFormat(): AccountDateFormat {
       pref,
       formatDateTime: (value) => formatDateTime(value, { locale, pref }),
       formatDate: (value) => formatDate(value, { locale, pref }),
+      formatMessageTime: (value) => formatMessageTime(value, { locale, pref }),
       formatDateOnly: (value) => formatDateOnly(value, { locale, dateStyle: pref.dateStyle }),
       locale,
     };

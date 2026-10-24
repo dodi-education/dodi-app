@@ -3,8 +3,9 @@ import { useTranslations } from "use-intl";
 import type { StudioChatMessage } from "@dodi/studio/transcript";
 import { chatMessage as styles } from "@dodi/ui-recipes";
 
-import { Text } from "@/components/ui";
+import { Icon, Text } from "@/components/ui";
 import { cn } from "@/lib/cn";
+import { useAccountDateFormat } from "@/lib/date-format";
 
 import { AgentRunHistory } from "./agent-run-history";
 import { RichText } from "./rich-text";
@@ -17,11 +18,11 @@ interface TurnLinksProps {
   isRevertDisabled: boolean;
 }
 
-/** "Show changes | Revert" under the last code-changing reply. */
+/** "Show changes | Revert" under the last code-changing reply (inside its links row). */
 function TurnLinks({ onShowChanges, onRevert, isReverted, isRevertDisabled }: TurnLinksProps) {
   const t = useTranslations("gameStudio");
   return (
-    <View className={styles.links}>
+    <>
       <Pressable
         accessibilityRole="button"
         onPress={onShowChanges}
@@ -42,19 +43,23 @@ function TurnLinks({ onShowChanges, onRevert, isReverted, isRevertDisabled }: Tu
       >
         <Text className={styles.linksText}>{isReverted ? t("restoreVersion") : t("revertVersion")}</Text>
       </Pressable>
-    </View>
+    </>
   );
 }
 
 interface ChatMessageItemProps {
   message: StudioChatMessage;
+  /** The parent's turns: dodi has read it (replied, or is working on it). */
+  isRead: boolean;
   /** The turn links, on the last code-changing reply only. */
   links?: TurnLinksProps;
 }
 
 /** One turn of the thread: dodi's reply (with its run log), or the parent's bubble. */
-export function ChatMessageItem({ message, links }: ChatMessageItemProps) {
+export function ChatMessageItem({ message, isRead, links }: ChatMessageItemProps) {
   const t = useTranslations("gameStudio");
+  const { formatMessageTime } = useAccountDateFormat();
+  const stamp = message.at ? formatMessageTime(message.at) : "";
   if (message.role === "assistant") {
     return (
       <View className={styles.row}>
@@ -69,7 +74,17 @@ export function ChatMessageItem({ message, links }: ChatMessageItemProps) {
         <View className={styles.body}>
           <RichText text={message.text} textClassName={styles.bodyText} />
           {message.run ? <AgentRunHistory run={message.run} /> : null}
-          {links ? <TurnLinks {...links} /> : null}
+          {stamp || links ? (
+            <View className={styles.links}>
+              {stamp ? <Text className={cn(styles.linksText, styles.replyStamp)}>{stamp}</Text> : null}
+              {stamp && links ? (
+                <Text className={styles.linksText} accessibilityElementsHidden importantForAccessibility="no">
+                  ·
+                </Text>
+              ) : null}
+              {links ? <TurnLinks {...links} /> : null}
+            </View>
+          ) : null}
         </View>
       </View>
     );
@@ -93,6 +108,14 @@ export function ChatMessageItem({ message, links }: ChatMessageItemProps) {
           </View>
         ) : null}
         <RichText text={message.text} textClassName={styles.bubbleText} />
+        <View
+          className={styles.bubbleMeta}
+          accessible
+          accessibilityLabel={[stamp, t(isRead ? "readByDodi" : "sentToDodi")].filter(Boolean).join(", ")}
+        >
+          {stamp ? <Text className={styles.stamp}>{stamp}</Text> : null}
+          <Icon name={isRead ? "checks" : "check"} size={14} stroke={2} color={isRead ? "primary" : "faint"} />
+        </View>
       </View>
     </View>
   );

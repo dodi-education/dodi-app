@@ -41,7 +41,7 @@ import {
   type PlanTurnTexts,
 } from "./studio-plan";
 import { mapSettingsSuccessDefinition, patchGameSettings } from "./studio-settings";
-import { restoreTranscript, type StudioChatMessage } from "./transcript";
+import { restoreTranscript, type StudioChatMessage, userTurn } from "./transcript";
 
 /** A build client's ports plus what the editor steps need (sealing while unlocked, list invalidation). */
 export interface StudioSessionPorts extends Omit<StudioPorts, "games"> {
@@ -185,6 +185,7 @@ export async function planTurn(
   const history = snapshot?.transcript ?? [];
   const primaryKidId = resolvePrimaryKidId(game, ctx.kids);
   const images = input.images ?? [];
+  const sentAt = new Date((ports.now ?? Date.now)()).toISOString();
   let gameId = input.gameId;
 
   const outcome = await runPlanTurn(
@@ -206,9 +207,9 @@ export async function planTurn(
     return { kind: "no_provider", gameId, reply: null, plan: planning.summary };
   }
 
-  const userTurn: StudioChatMessage = { role: "user", text: input.text, ...(images.length ? { images } : {}) };
+  const sentTurn = userTurn(input.text, images, sentAt);
   const reply = outcome.reply;
-  const transcript = reply ? [...history, userTurn, reply] : [...history, userTurn];
+  const transcript = reply ? [...history, sentTurn, reply] : [...history, sentTurn];
   const nextPlanning: PlanningState =
     outcome.kind === "replied" && outcome.plan !== null ? { ...planning, summary: outcome.plan } : planning;
 

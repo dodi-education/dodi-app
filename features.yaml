@@ -214,6 +214,21 @@ features:
       starts at half the desktop height and remembers its own size
       (core: studio/composer-height).
 
+  - id: parent.game-studio.chat-stamps
+    area: parent
+    title: Studio chat shows when each turn was said, and "Read by dodi" ticks
+    web: done
+    mobile: done
+    core: [studio, intl, ui-recipes]
+    web_paths:
+      - "clients/web/src/components/parent/games/chat-bubble-meta.tsx"
+    mobile_paths:
+      - "clients/mobile/src/components/studio/chat-message.tsx"
+    notes: >-
+      Turns carry `at` in the sealed transcript (core: studio/transcript);
+      turns sealed before that show no time. A parent's turn is read once
+      dodi replied or is working on it (isReadByDodi).
+
   - id: parent.game-studio.resume
     area: parent
     title: Resume an interrupted build from its on-device checkpoint
@@ -499,6 +514,10 @@ features:
       Open beta: dodi AI is switched off (IS_DODI_AI_OFFERED in
       core/client-state/src/dodi-ai.ts), so both clients show own keys only,
       untabbed, as in self-host mode.
+      Voice is optional (all-or-nothing, "Select provider/model" clears it),
+      so a Venice-only account can save. Every added key seeds its default
+      model per supported capability into the categories still unset
+      (core: seedModelConfig + fillUnsetCategories), on both clients.
     web_paths: ["clients/web/src/app/parent/settings/ai-providers/page.tsx"]
     mobile_paths:
       - "clients/mobile/src/app/parent/settings/ai-providers.tsx"
@@ -514,10 +533,6 @@ features:
 
   - id: settings.notifications
     area: settings
-      Voice is optional (all-or-nothing, "Select provider/model" clears it),
-      so a Venice-only account can save. Every added key seeds its default
-      model per supported capability into the categories still unset
-      (core: seedModelConfig + fillUnsetCategories), on both clients.
     title: Email notification preferences
     web: done
     mobile: done

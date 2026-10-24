@@ -20,7 +20,7 @@ import {
   type StudioBuildTexts,
 } from "./build-runner";
 import type { StudioPorts } from "./ports";
-import type { StudioChatMessage } from "./transcript";
+import { type StudioChatMessage, userTurn } from "./transcript";
 
 export interface ActiveBuild {
   gameId: string;
@@ -77,23 +77,19 @@ export function createBuildManager(ports: StudioPorts): BuildManager {
   };
 
   const run = async (
-    input: StudioBuildInput,
+    unstampedInput: StudioBuildInput,
     resumeFrom?: StudioBuildCheckpoint,
   ): Promise<StudioBuildOutcome | null> => {
     if (store.getState().active) return null;
+    // One stamp for the parent's turn: the live thread, the checkpoint and the outcome.
+    const sentAt = unstampedInput.sentAt ?? new Date(now()).toISOString();
+    const input: StudioBuildInput = { ...unstampedInput, sentAt };
     controller = new AbortController();
     isPauseRequested = false;
     store.setState({
       active: {
         gameId: input.gameId,
-        transcript: [
-          ...input.history,
-          {
-            role: "user",
-            text: input.text,
-            ...(input.images.length ? { images: input.images } : {}),
-          },
-        ],
+        transcript: [...input.history, userTurn(input.text, input.images, sentAt)],
         step: null,
         narration: "",
         writeChars: 0,

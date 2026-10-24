@@ -754,6 +754,8 @@
     "copy": "Kopieren",
     "copied": "Kopiert",
     "showChanges": "Änderungen anzeigen",
+    "readByDodi": "Von dodi gelesen",
+    "sentToDodi": "Gesendet",
     "revertVersion": "Zurücksetzen",
     "restoreVersion": "Wiederherstellen",
     "noPreviousVersion": "Noch keine vorherige Version zum Vergleichen",

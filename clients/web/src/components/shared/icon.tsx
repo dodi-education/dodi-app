@@ -15,6 +15,7 @@ import {
   IconChartBar,
   IconReceipt2,
   IconCheck,
+  IconChecks,
   IconChevronDown,
   IconChevronRight,
   IconChevronUp,
@@ -103,6 +104,7 @@ export type IconName =
   | "calendar"
   | "camera"
   | "check"
+  | "checks"
   | "chevron_down"
   | "chevron_right"
   | "chevron_up"
@@ -199,6 +201,7 @@ const ICONS: Record<IconName, ComponentType<TablerIconProps>> = {
   calendar: IconCalendar,
   camera: IconCamera,
   check: IconCheck,
+  checks: IconChecks,
   chevron_down: IconChevronDown,
   chevron_right: IconChevronRight,
   chevron_up: IconChevronUp,

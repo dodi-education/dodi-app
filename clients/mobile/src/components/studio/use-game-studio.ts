@@ -37,7 +37,7 @@ import { gameAfterBuild } from "@dodi/studio/studio-outcome";
 import { type PlanSurface, resolveStudioPanes, type StudioTab } from "@dodi/studio/studio-panes";
 import { applyPlanSettings, derivePlanSettingsForStudio, runPlanTurn } from "@dodi/studio/studio-plan";
 import { createGameFromSettings, mapSettingsSuccessDefinition, patchGameSettings } from "@dodi/studio/studio-settings";
-import { restoreTranscript, type StudioChatMessage } from "@dodi/studio/transcript";
+import { restoreTranscript, type StudioChatMessage, userTurn } from "@dodi/studio/transcript";
 import type { AgentStep } from "@dodi/types/agent-progress";
 
 import { mobileStudioEditorPorts as editorPorts } from "@/adapters/studio-ports";
@@ -347,10 +347,7 @@ export function useGameStudio({ initialGame, initialView }: GameStudioInput) {
     setHasUnsentPlanImage(false);
 
     const history = messages;
-    const withUser: StudioChatMessage[] = [
-      ...history,
-      { role: "user", text, ...(attachments.length ? { images: attachments } : {}) },
-    ];
+    const withUser: StudioChatMessage[] = [...history, userTurn(text, attachments, new Date().toISOString())];
     setMessages(withUser);
     setIsLocalBusy(true);
     setNarration("");
@@ -562,7 +559,8 @@ export function useGameStudio({ initialGame, initialView }: GameStudioInput) {
       void studioBuildStore.discardResumable(game.id);
     }
     const history = messages;
-    setMessages([...history, { role: "user", text, ...(attachments.length ? { images: attachments } : {}) }]);
+    const sentAt = new Date().toISOString();
+    setMessages([...history, userTurn(text, attachments, sentAt)]);
     setIsStartingBuildRun(true);
 
     // Edits attach a screenshot of the game as it is. Best effort: text-only otherwise.
@@ -582,6 +580,7 @@ export function useGameStudio({ initialGame, initialView }: GameStudioInput) {
       game,
       text,
       images: attachments,
+      sentAt,
       isAgreedPlan: opts?.isAgreedPlan,
       screenshot,
       history,

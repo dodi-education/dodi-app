@@ -31,6 +31,9 @@ const USAGE = { inputTokens: 10, outputTokens: 5, cacheWriteTokens: 0, cacheRead
 
 let session: VaultSession;
 let isUnlocked: boolean;
+/** Replies are stamped with the ports clock (`now: () => 1_000`). */
+const REPLY_AT = new Date(1_000).toISOString();
+
 let calls: Array<{ path: string; method: string; body: Record<string, unknown> }>;
 let ports: StudioEditorPorts & {
   telemetry: {
@@ -125,7 +128,7 @@ describe("runPlanTurn when the provider account is out of funds (402)", () => {
     await expect(runPlanTurn(ports, turn())).resolves.toEqual({
       kind: "failed",
       reason: "ai_unavailable",
-      reply: { role: "assistant", text: "dodi AI unavailable." },
+      reply: { role: "assistant", text: "dodi AI unavailable.", at: REPLY_AT },
     });
     expect(ports.telemetry.reportError).toHaveBeenCalled();
   });
@@ -148,7 +151,7 @@ describe("runPlanTurn", () => {
     expect(outcome).toEqual({
       kind: "replied",
       plan: "Count rockets",
-      reply: { role: "assistant", text: "Here's a plan.\n\n(plan updated)" },
+      reply: { role: "assistant", text: "Here's a plan.\n\n(plan updated)", at: REPLY_AT },
     });
     const params = agent.mock.calls[0][0];
     expect(params).toMatchObject({
@@ -189,7 +192,7 @@ describe("runPlanTurn", () => {
     agent.mockRejectedValue(new AgentAbortedError());
     await expect(runPlanTurn(ports, turn())).resolves.toEqual({
       kind: "stopped",
-      reply: { role: "assistant", text: "Stopped." },
+      reply: { role: "assistant", text: "Stopped.", at: REPLY_AT },
     });
     expect(ports.telemetry.reportError).not.toHaveBeenCalled();
 
@@ -197,7 +200,7 @@ describe("runPlanTurn", () => {
     await expect(runPlanTurn(ports, turn())).resolves.toEqual({
       kind: "failed",
       reason: "failed",
-      reply: { role: "assistant", text: "Plan failed." },
+      reply: { role: "assistant", text: "Plan failed.", at: REPLY_AT },
     });
     expect(ports.telemetry.reportError).toHaveBeenCalledWith(
       expect.objectContaining({

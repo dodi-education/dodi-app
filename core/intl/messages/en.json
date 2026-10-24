@@ -754,6 +754,8 @@
     "copy": "Copy",
     "copied": "Copied",
     "showChanges": "Show changes",
+    "readByDodi": "Read by dodi",
+    "sentToDodi": "Sent",
     "revertVersion": "Revert",
     "restoreVersion": "Restore",
     "noPreviousVersion": "No previous version to compare yet",

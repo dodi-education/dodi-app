@@ -21,6 +21,7 @@ import {
   formatDateOnly,
   formatDateTime,
   formatElapsed,
+  formatMessageTime,
   formatTime,
   resolvePref,
   type DateFormatPref,
@@ -38,6 +39,8 @@ export interface DateFormatApi {
   formatDateTime: (value: DateInput) => string;
   formatDate: (value: DateInput) => string;
   formatTime: (value: DateInput) => string;
+  /** A chat message's stamp: the time today, date and time before. */
+  formatMessageTime: (value: DateInput) => string;
   /** Birthdate-safe date-only formatting; defaults to the resolved date style. */
   formatDateOnly: (
     value: string | null | undefined,
@@ -107,6 +110,7 @@ export function DateFormatProvider({ children }: { children: React.ReactNode }) 
       formatDateTime: (value) => formatDateTime(value, { locale, pref }),
       formatDate: (value) => formatDate(value, { locale, pref }),
       formatTime: (value) => formatTime(value, { locale, pref }),
+      formatMessageTime: (value) => formatMessageTime(value, { locale, pref }),
       formatDateOnly: (value, opts) =>
         formatDateOnly(value, {
           locale,

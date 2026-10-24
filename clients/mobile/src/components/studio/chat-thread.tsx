@@ -3,7 +3,7 @@ import { useEffect, useRef } from "react";
 import { Image, ScrollView, View } from "react-native";
 import { useTranslations } from "use-intl";
 import type { AgentRunLog } from "@dodi/studio/agent-run-log";
-import type { StudioChatMessage } from "@dodi/studio/transcript";
+import { isReadByDodi, type StudioChatMessage } from "@dodi/studio/transcript";
 import type { AgentStep } from "@dodi/types/agent-progress";
 import { chatMessage, chatThinking, chatThread, chatWelcome } from "@dodi/ui-recipes";
 
@@ -115,6 +115,7 @@ export function ChatThread({
           <ChatMessageItem
             key={i}
             message={m}
+            isRead={isReadByDodi(messages, i, isThinking)}
             links={i === linksIndex ? { onShowChanges, onRevert, isReverted, isRevertDisabled } : undefined}
           />
         ))

@@ -188,6 +188,13 @@ export const chatMessage = {
   webUserRow: "flex",
   bubble: "max-w-[88%] rounded-2xl rounded-tr-[5px] bg-primary-soft px-3.5 py-2.5",
   bubbleText: "text-sm font-medium leading-[1.6] text-ink",
+  /** Inside the parent's bubble, bottom right (WhatsApp-style): the time, then the read ticks. */
+  bubbleMeta: "-mb-1 mt-0.5 flex-row items-center justify-end gap-1",
+  webBubbleMeta: "flex",
+  /** The time on either side; the read ticks take `primary` (read) or `faint` (sent). */
+  stamp: "text-[10.5px] font-medium tabular-nums text-faint",
+  /** dodi's reply time, in its links row (which sets the size and color). */
+  replyStamp: "tabular-nums",
   images: "mb-2 flex-row flex-wrap gap-1.5",
   webImages: "flex",
   image: "h-16 w-16 rounded-lg border border-border",

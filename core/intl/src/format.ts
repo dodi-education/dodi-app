@@ -137,6 +137,26 @@ export function formatTime(
 }
 
 /**
+ * A chat message's stamp: the time for today's messages, date and time for
+ * older ones (WhatsApp-style). Always shows a time, even with the time style
+ * "none". Empty string for invalid input.
+ */
+export function formatMessageTime(
+  value: string | number | Date | null | undefined,
+  ctx: FmtCtx,
+  now: Date = new Date(),
+): string {
+  const date = toDate(value);
+  if (!date) return "";
+  const zone = zoneOf(ctx.pref);
+  const time = timePortion(date, ctx.locale, zone, ctx.pref.timeStyle);
+  const day = dateParts(date, zone);
+  const today = dateParts(now, zone);
+  const isToday = day.day === today.day && day.month === today.month && day.year === today.year;
+  return isToday ? time : `${datePortion(date, ctx.locale, zone, ctx.pref.dateStyle)}, ${time}`;
+}
+
+/**
  * Format a date-only value (e.g. a birthdate) as a floating calendar date.
  *
  * A bare `YYYY-MM-DD` (or the date portion of an ISO timestamp) is read as

@@ -35,6 +35,7 @@ import { PlanSurface } from "@/components/parent/games/plan-surface";
 import { ReferenceImageSheet } from "@/components/parent/games/reference-image-sheet";
 import { RichText } from "@/components/parent/games/rich-text";
 import { AgentRunHistory } from "@/components/parent/games/agent-run-history";
+import { ChatBubbleMeta, ChatReplyStamp } from "@/components/parent/games/chat-bubble-meta";
 import { isComposerSendKey } from "@/components/parent/games/composer-keys";
 import { AgentRunTimeline } from "@/components/parent/games/agent-run-timeline";
 import type { ResumableBuild } from "@dodi/studio/build-manager";
@@ -102,7 +103,7 @@ import {
   restoreGameVersion,
   saveCodeEdit,
 } from "@dodi/studio/studio-versions";
-import { restoreTranscript, type StudioChatMessage } from "@dodi/studio/transcript";
+import { isReadByDodi, restoreTranscript, type StudioChatMessage, userTurn } from "@dodi/studio/transcript";
 import { cn } from "@/lib/utils";
 import {
   activeToggle,
@@ -1101,10 +1102,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     setHasUnsentPlanImage(false);
 
     const history = messages;
-    const withUser: ChatMessage[] = [
-      ...history,
-      { role: "user", text, ...(attachments.length ? { images: attachments } : {}) },
-    ];
+    const withUser: ChatMessage[] = [...history, userTurn(text, attachments, new Date().toISOString())];
     setMessages(withUser);
     setThinking(true);
     setNarration("");
@@ -1348,10 +1346,8 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
     // Show the new turn right away; the build's own thread takes over once
     // it runs, and the outcome's replaces both.
     const history = messages;
-    setMessages([
-      ...history,
-      { role: "user", text, ...(attachments.length ? { images: attachments } : {}) },
-    ]);
+    const sentAt = new Date().toISOString();
+    setMessages([...history, userTurn(text, attachments, sentAt)]);
     setIsStartingBuildRun(true);
 
     // Edit tasks attach a screenshot of the current game so the model sees what
@@ -1375,6 +1371,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
       game,
       text,
       images: attachments,
+      sentAt,
       isAgreedPlan: opts?.isAgreedPlan,
       screenshot,
       history,
@@ -2228,24 +2225,30 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
                       <div className={cn(chatMessage.body, chatMessage.bodyText)}>
                         <RichText text={m.text} />
                         {m.run && <AgentRunHistory run={m.run} />}
-                        {i === lastChangeIndex && (canDiff || reverted) && (
+                        {(m.at || (i === lastChangeIndex && (canDiff || reverted))) && (
                           <div className={cn(chatMessage.webLinks, chatMessage.links, chatMessage.linksText)}>
-                            <button
-                              type="button"
-                              onClick={openChanges}
-                              className={chatMessage.webLink}
-                            >
-                              {t("showChanges")}
-                            </button>
-                            <span aria-hidden>|</span>
-                            <button
-                              type="button"
-                              onClick={() => void revertCode()}
-                              disabled={reverting || thinking}
-                              className={cn(chatMessage.webLink, chatMessage.webLinkDisableable)}
-                            >
-                              {reverted ? t("restoreVersion") : t("revertVersion")}
-                            </button>
+                            {m.at && <ChatReplyStamp at={m.at} />}
+                            {i === lastChangeIndex && (canDiff || reverted) && (
+                              <>
+                                {m.at && <span aria-hidden>·</span>}
+                                <button
+                                  type="button"
+                                  onClick={openChanges}
+                                  className={chatMessage.webLink}
+                                >
+                                  {t("showChanges")}
+                                </button>
+                                <span aria-hidden>|</span>
+                                <button
+                                  type="button"
+                                  onClick={() => void revertCode()}
+                                  disabled={reverting || thinking}
+                                  className={cn(chatMessage.webLink, chatMessage.webLinkDisableable)}
+                                >
+                                  {reverted ? t("restoreVersion") : t("revertVersion")}
+                                </button>
+                              </>
+                            )}
                           </div>
                         )}
                       </div>
@@ -2268,6 +2271,7 @@ export function GameStudio({ initialGame, initialView }: GameStudioProps) {
                           </div>
                         )}
                         <RichText text={m.text} />
+                        <ChatBubbleMeta at={m.at} isRead={isReadByDodi(messages, i, thinking)} />
                       </div>
                     </div>
                   ),

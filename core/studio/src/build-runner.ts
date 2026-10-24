@@ -47,7 +47,7 @@ import {
 import { failureReason, type StudioFailureReason } from "./failure-reason";
 import { readError } from "./http";
 import type { BuildRenderer, ImageOps, ResolvedExecution, StudioPorts } from "./ports";
-import { sealTranscript, type StudioChatMessage, toPriorTurns } from "./transcript";
+import { sealTranscript, type StudioChatMessage, toPriorTurns, userTurn } from "./transcript";
 
 /** The studio's view of the game that a build reads as its baseline. */
 export interface StudioBuildGame {
@@ -133,6 +133,8 @@ export interface StudioBuildInput {
   text: string;
   /** Reference images attached to this message (downscaled data URLs). */
   images: string[];
+  /** When the parent sent it (ISO 8601); the build stamps it when unset. */
+  sentAt?: string;
   /** The message is a plan the parent approved — build it, don't reinterpret it. */
   isAgreedPlan?: boolean;
   /** Edits only: a capture of the game as it looks now (taken by the UI). */
@@ -391,7 +393,7 @@ export async function runStudioBuild(
   const isUpdate = game.built;
   const withUser: StudioChatMessage[] = [
     ...input.history,
-    { role: "user", text: input.text, ...(input.images.length ? { images: input.images } : {}) },
+    userTurn(input.text, input.images, input.sentAt ?? new Date(now()).toISOString()),
   ];
 
   // Record what the agent does this build (steps, narration, screenshot
@@ -403,7 +405,16 @@ export async function runStudioBuild(
     initial: resumeFrom?.runLog,
   });
   const reply = (text: string, outcome: AgentRunOutcome, extra: Partial<StudioChatMessage> = {}) =>
-    [...withUser, { role: "assistant" as const, text, ...extra, run: recorder.finish(outcome) }];
+    [
+      ...withUser,
+      {
+        role: "assistant" as const,
+        text,
+        ...extra,
+        run: recorder.finish(outcome),
+        at: new Date(now()).toISOString(),
+      },
+    ];
 
   // Failure telemetry inputs: the loop runs entirely on the device, so the
   // report below is the only trace a failed build leaves anywhere.

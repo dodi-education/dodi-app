@@ -12,6 +12,7 @@ export { default as IconSwitchVertical } from "@tabler/icons-react-native/IconSw
 export { default as IconCamera } from "@tabler/icons-react-native/IconCamera";
 export { default as IconChartBar } from "@tabler/icons-react-native/IconChartBar";
 export { default as IconCheck } from "@tabler/icons-react-native/IconCheck";
+export { default as IconChecks } from "@tabler/icons-react-native/IconChecks";
 export { default as IconChevronDown } from "@tabler/icons-react-native/IconChevronDown";
 export { default as IconChevronRight } from "@tabler/icons-react-native/IconChevronRight";
 export { default as IconDeviceGamepad2 } from "@tabler/icons-react-native/IconDeviceGamepad2";

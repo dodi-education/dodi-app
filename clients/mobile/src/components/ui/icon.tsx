@@ -15,6 +15,7 @@ const ICONS = {
   calendar: T.IconCalendar,
   camera: T.IconCamera,
   check: T.IconCheck,
+  checks: T.IconChecks,
   chevron_down: T.IconChevronDown,
   chevron_right: T.IconChevronRight,
   clock: T.IconClock,
